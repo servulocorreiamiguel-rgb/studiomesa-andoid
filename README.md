@@ -1,6 +1,6 @@
 # StudioMesa Android — três demos instaláveis
 
-Aplicação Android nativa para demonstrações presenciais a restaurantes. As variantes **Essencial**, **Profissional** e **Premium** usam o mesmo design-base, identificam o plano e instalam-se como apps separadas para não substituir a aplicação original.
+Aplicação Android nativa com identidade visual de restaurante e ícone StudioMesa, para demonstrações presenciais. As variantes **Essencial**, **Profissional** e **Premium** usam o mesmo design-base, identificam o plano e instalam-se como apps separadas para não substituir a aplicação original.
 
 ## Variantes de demonstração
 

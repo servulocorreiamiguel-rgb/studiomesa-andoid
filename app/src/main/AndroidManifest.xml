@@ -3,6 +3,8 @@
     <application
         android:allowBackup="true"
         android:label="${appLabel}"
+        android:icon="@drawable/ic_studiomesa"
+        android:roundIcon="@drawable/ic_studiomesa"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity

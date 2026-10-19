@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    name: Compile debug APK
+    name: Build three StudioMesa demo APKs
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
