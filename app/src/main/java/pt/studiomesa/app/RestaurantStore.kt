@@ -27,7 +27,10 @@ class RestaurantStore(context: Context) {
                     MenuEntry(
                         item.optString("name"),
                         item.optDouble("price", 0.0),
-                        item.optDouble("cost", 0.0)
+                        item.optDouble("cost", 0.0),
+                        item.optString("category", "Prato principal"),
+                        item.optString("description", ""),
+                        item.optString("allergens", "")
                     )
                 )
             }
@@ -45,6 +48,9 @@ class RestaurantStore(context: Context) {
                     .put("name", item.name)
                     .put("price", item.price)
                     .put("cost", item.cost)
+                    .put("category", item.category)
+                    .put("description", item.description)
+                    .put("allergens", item.allergens)
             )
         }
         prefs.edit().putString("menu_json", array.toString()).apply()
