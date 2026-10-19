@@ -1,6 +1,6 @@
-# StudioMesa — demonstração Bicho Mau
+# StudioMesa — demonstração de gestão de restaurante
 
-Protótipo Android com identidade visual conceptual inspirada no ambiente do Bistrô Bicho Mau, em Campo de Ourique. **Não é uma aplicação oficial nem foi encomendado ou aprovado pelo restaurante.**
+Protótipo Android de gestão de restaurante, com identidade visual StudioMesa e dados fictícios. É uma demonstração técnica, não uma solução pronta para operação comercial. Cada restaurante terá de validar as funcionalidades, configurar a sua identidade e testar o sistema antes de o usar.
 
 ## Estrutura dos planos
 
