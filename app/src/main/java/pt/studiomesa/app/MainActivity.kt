@@ -1099,13 +1099,21 @@ class MainActivity : Activity() {
         dialog.show()
     }
 
+    private fun generateSecureCode(length: Int): String {
+        val alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+        val secureRandom = java.security.SecureRandom()
+        return buildString(length) {
+            repeat(length) { append(alphabet[secureRandom.nextInt(alphabet.length)]) }
+        }
+    }
+
     private fun showCreateRestaurantDialog() {
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(22), dp(8), dp(22), dp(4))
         }
         val nameField = inputField("Nome do restaurante", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
-        val code = (1..8).map { "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".random() }.joinToString("")
+        val code = generateSecureCode(12)
         form.addView(label("NOME", 10f, true, forestSoft))
         form.addView(nameField, fieldParams())
         addGap(form, 5)
