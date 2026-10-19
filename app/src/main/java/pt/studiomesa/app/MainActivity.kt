@@ -1182,7 +1182,7 @@ class MainActivity : Activity() {
                     AlertDialog.Builder(this)
                         .setTitle("Novo código gerado")
                         .setMessage((if (staffCode) "Código da equipa: " else "Código dos clientes: ") + code +
-                            "\\n\\nGuarda-o e partilha-o apenas com as pessoas autorizadas.")
+                            "\n\nGuarda-o e partilha-o apenas com as pessoas autorizadas.")
                         .setPositiveButton("OK", null)
                         .show()
                 }
