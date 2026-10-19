@@ -8,7 +8,7 @@ Protótipo Android com identidade visual conceptual inspirada no ambiente do Bis
 - **Profissional — 1 490 € (valor de referência):** aplicação para o restaurante, calculadora de preço indicativo e APK separado com a interface de cliente/cartão digital em modo demonstrativo.
 - **Premium — 1 690 € (valor de referência):** as duas interfaces, calculadora, painel de indicadores locais e resumo dos pedidos/artigos guardados no dispositivo.
 
-Os preços são propostas de referência, não pagamentos configurados nem prova de que o software está pronto para venda. O APK de cliente dos planos Profissional e Premium ainda não sincroniza pontos com a aplicação do restaurante.
+Os preços são propostas de referência, não pagamentos configurados nem prova de que o software está pronto para venda. O fluxo de fidelização partilhada foi integrado no código Android e na base de dados Supabase; a compilação mais recente e os fluxos de autenticação/adesão ainda estão em validação.
 
 ## Funcionalidades implementadas
 
@@ -17,7 +17,7 @@ Os preços são propostas de referência, não pagamentos configurados nem prova
 - Gestão simples da carta, com preço de venda e custo por unidade.
 - Calculadora de preço indicativo nos planos Profissional e Premium.
 - **Fidelização local:** criação de cartões de cliente com código, atribuição manual de pontos e desconto de pontos, sem permitir saldo negativo.
-- **Interface separada para clientes** nos planos Profissional e Premium: nome local, código de demonstração, cartão de pontos e carta de exemplos.
+- **Interface separada para clientes** nos planos Profissional e Premium, com criação de conta/início de sessão, adesão por código do restaurante e consulta do saldo de fidelização partilhado (em validação).
 - Indicadores locais no plano Premium.
 - Design em verde-floresta, creme e cobre, com ícone próprio.
 - APKs com identificadores de aplicação diferentes para permitir instalação separada.
@@ -26,7 +26,7 @@ Os preços são propostas de referência, não pagamentos configurados nem prova
 
 Os pratos e preços iniciais são **fictícios**. A aplicação do restaurante guarda os dados apenas nesse telemóvel. A app de cliente também guarda os seus dados localmente, em separado: por isso, o código/saldo do cartão de cliente ainda **não está ligado** ao registo do restaurante. Os pontos são atribuídos manualmente; não há acumulação automática por compra, pagamento, prémios configuráveis ou sincronização entre dispositivos.
 
-Ainda não existem servidor/base de dados partilhada, contas seguras, cópias de segurança, integração com caixa registadora/cozinha, sincronização, publicação na Google Play ou testes em dispositivos físicos. O painel Premium não é contabilidade oficial. **Não vender nem apresentar como serviço de fidelização operacional até implementar e testar a sincronização partilhada, a segurança e as regras comerciais com o restaurante.**
+A base de dados partilhada Supabase está criada com RLS, autenticação por conta e funções de fidelização; a integração Android ainda precisa de validação ponta a ponta. Mesas, pedidos e carta continuam locais. Não existem cópias de segurança configuradas, integração com caixa registadora/cozinha, publicação na Google Play ou testes em dispositivos físicos. O painel Premium não é contabilidade oficial. **Não vender nem apresentar como serviço de fidelização operacional até implementar e testar a sincronização partilhada, a segurança e as regras comerciais com o restaurante.**
 
 ## Compilar os cinco APKs de demonstração
 
