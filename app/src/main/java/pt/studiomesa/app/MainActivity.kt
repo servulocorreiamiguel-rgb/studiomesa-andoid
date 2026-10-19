@@ -715,9 +715,21 @@ class MainActivity : Activity() {
                 })
                 card.addView(top)
                 addGap(card, 10)
-                card.addView(label(order.optString("item_name", "Artigo"), 17f, true, ink))
-                addGap(card, 4)
-                card.addView(label(money(order.optDouble("amount", 0.0)), 14f, true, forest))
+                val itemName = order.optString("item_name", "Artigo")
+                val quantity = order.optInt("quantity", 1).coerceIn(1, 99)
+                card.addView(label((if (quantity > 1) "$quantity × " else "") + itemName, 17f, true, ink))
+                addGap(card, 3)
+                card.addView(label(
+                    order.optString("service_course", "Principal").uppercase(Locale("pt", "PT")),
+                    10f, true, forestSoft
+                ))
+                val notes = order.optString("notes").trim()
+                if (notes.isNotBlank()) {
+                    addGap(card, 5)
+                    card.addView(label("COZINHA · $notes", 11.5f, false, muted))
+                }
+                addGap(card, 5)
+                card.addView(label(money(order.optDouble("amount", 0.0) * quantity), 14f, true, forest))
                 addGap(card, 12)
                 card.addView(primaryButton(if (closed) "Reabrir pedido" else when (status) {
                     "Aberto" -> "Enviar para preparação"
@@ -770,9 +782,15 @@ class MainActivity : Activity() {
             })
             card.addView(top)
             addGap(card, 10)
-            card.addView(label(order.itemName, 17f, true, ink))
-            addGap(card, 4)
-            card.addView(label(money(order.amount), 14f, true, forest))
+            card.addView(label((if (order.quantity > 1) "${order.quantity} × " else "") + order.itemName, 17f, true, ink))
+            addGap(card, 3)
+            card.addView(label(order.serviceCourse.uppercase(Locale("pt", "PT")), 10f, true, forestSoft))
+            if (order.notes.isNotBlank()) {
+                addGap(card, 5)
+                card.addView(label("COZINHA · " + order.notes, 11.5f, false, muted))
+            }
+            addGap(card, 5)
+            card.addView(label(money(order.amount * order.quantity), 14f, true, forest))
             addGap(card, 12)
             card.addView(secondaryButton(if (done) "Reabrir pedido" else "Marcar como concluído") {
                 store.updateOrder(order.id, if (done) "Aberto" else "Concluído")
@@ -2099,7 +2117,7 @@ class MainActivity : Activity() {
                     "Aberto", "Em preparação", "Pronto" -> activeCount++
                     "Concluído" -> {
                         completedCount++
-                        completedValue += order.optDouble("amount", 0.0)
+                        completedValue += order.optDouble("amount", 0.0) * order.optInt("quantity", 1).coerceIn(1, 99)
                     }
                 }
             }
@@ -2141,7 +2159,7 @@ class MainActivity : Activity() {
         val activeOrders = orders.filter { it.status != "Concluído" }
         val completedOrders = orders.filter { it.status == "Concluído" }
         val menu = store.getMenu()
-        val valueRecorded = completedOrders.sumOf { it.amount }
+        val valueRecorded = completedOrders.sumOf { it.amount * it.quantity }
         val ratios = menu.filter { it.price > 0.0 }.map { it.cost / it.price * 100.0 }
         val avgCostRatio = ratios.average()
         val summary = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -2176,9 +2194,7 @@ class MainActivity : Activity() {
             AlertDialog.Builder(this)
                 .setTitle("Carta vazia")
                 .setMessage("Adiciona primeiro um artigo à carta e tenta novamente.")
-                .setPositiveButton("Abrir carta") { _, _ ->
-                    activePage = "Carta"; renderApp()
-                }
+                .setPositiveButton("Abrir carta") { _, _ -> activePage = "Carta"; renderApp() }
                 .setNegativeButton("Fechar", null)
                 .show()
             return
@@ -2186,7 +2202,7 @@ class MainActivity : Activity() {
 
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(22), dp(10), dp(22), dp(4))
+            setPadding(dp(22), dp(10), dp(22), dp(12))
         }
         form.addView(label("MESA", 10f, true, forestSoft))
         val tableOptions = mutableListOf<Pair<Int, String>>()
@@ -2210,15 +2226,36 @@ class MainActivity : Activity() {
         val tableSpinner = Spinner(this)
         tableSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, tableOptions.map { it.second })
         form.addView(tableSpinner, fieldParams())
-        addGap(form, 8)
-        form.addView(label("ARTIGO DA CARTA", 10f, true, forestSoft))
+        addGap(form, 3)
+
+        form.addView(label("ARTIGO", 10f, true, forestSoft))
         val itemSpinner = Spinner(this)
         itemSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, items.map { it.name })
         form.addView(itemSpinner, fieldParams())
+        addGap(form, 3)
 
+        form.addView(label("QUANTIDADE", 10f, true, forestSoft))
+        val quantityField = inputField("1–99 unidades", InputType.TYPE_CLASS_NUMBER).apply { setText("1") }
+        form.addView(quantityField, fieldParams())
+        addGap(form, 3)
+
+        form.addView(label("MOMENTO DO SERVIÇO", 10f, true, forestSoft))
+        val courseOptions = listOf("Bebidas", "Aperitivo", "Entrada", "Principal", "Sobremesa")
+        val courseSpinner = Spinner(this)
+        courseSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, courseOptions)
+        form.addView(courseSpinner, fieldParams())
+        addGap(form, 3)
+
+        form.addView(label("NOTAS PARA A COZINHA (OPCIONAL)", 10f, true, forestSoft))
+        val notesField = multilineInputField("Ex.: molho à parte, sem sal…")
+        form.addView(notesField, multilineFieldParams())
+        addGap(form, 3)
+        form.addView(label("Os pedidos ficam com o estado «Aberto» até a equipa os encaminhar para preparação.", 11f, false, muted))
+
+        val formScroll = ScrollView(this).apply { addView(form) }
         val dialog = AlertDialog.Builder(this)
             .setTitle("Novo pedido")
-            .setView(form)
+            .setView(formScroll)
             .setNegativeButton("Cancelar", null)
             .setPositiveButton("Criar pedido", null)
             .create()
@@ -2226,25 +2263,39 @@ class MainActivity : Activity() {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val table = tableOptions.getOrNull(tableSpinner.selectedItemPosition)?.first ?: 1
                 val selected = items.getOrNull(itemSpinner.selectedItemPosition)
-                if (selected != null) {
-                    if (cloudMode) {
-                        val restaurantId = backendRestaurantId()
-                        runBackend({
-                            val token = backendToken()
-                            SupabaseApi.createOrder(token, restaurantId, table, selected.name, selected.price)
-                            cacheRemoteOperations(token, restaurantId)
-                            "OK"
-                        }) {
+                val quantity = quantityField.text.toString().trim().toIntOrNull()
+                val serviceCourse = courseOptions.getOrNull(courseSpinner.selectedItemPosition) ?: "Principal"
+                val notes = notesField.text.toString().trim()
+                when {
+                    selected == null -> itemSpinner.requestFocus()
+                    quantity == null || quantity !in 1..99 -> quantityField.error = "Usa uma quantidade entre 1 e 99"
+                    notes.length > 500 -> notesField.error = "As notas podem ter no máximo 500 caracteres"
+                    else -> {
+                        if (cloudMode) {
+                            val restaurantId = backendRestaurantId()
+                            runBackend({
+                                val token = backendToken()
+                                SupabaseApi.createOrder(
+                                    token, restaurantId, table, selected.name, selected.price,
+                                    quantity, serviceCourse, notes
+                                )
+                                cacheRemoteOperations(token, restaurantId)
+                                "OK"
+                            }) {
+                                dialog.dismiss()
+                                activePage = "Pedidos"
+                                renderApp()
+                            }
+                        } else {
+                            val now = System.currentTimeMillis()
+                            store.addOrder(OrderEntry(
+                                now, table, selected.name, selected.price, "Aberto", now,
+                                quantity, serviceCourse, notes
+                            ))
                             dialog.dismiss()
                             activePage = "Pedidos"
                             renderApp()
                         }
-                    } else {
-                        val now = System.currentTimeMillis()
-                        store.addOrder(OrderEntry(now, table, selected.name, selected.price, "Aberto", now))
-                        dialog.dismiss()
-                        activePage = "Pedidos"
-                        renderApp()
                     }
                 }
             }
