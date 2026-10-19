@@ -495,16 +495,35 @@ class MainActivity : Activity() {
     }
 
     private fun showAuthChooser(afterAuth: () -> Unit) {
-        AlertDialog.Builder(this)
+        // Use explicit buttons in a custom view. Combining setMessage and setItems
+        // can render inconsistently across Android dialog implementations.
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(12), dp(22), dp(6))
+        }
+        form.addView(label(
+            "Primeira utilização? Escolhe «Criar conta». Se já tens uma conta, escolhe «Iniciar sessão».",
+            13f, false, muted
+        ))
+        addGap(form, 14)
+
+        val dialog = AlertDialog.Builder(this)
             .setTitle("Conta StudioMesa")
-            .setMessage("Primeira utilização? Escolhe «Criar conta». «Iniciar sessão» só funciona depois de a conta existir. Se o servidor pedir confirmação, confirma o email antes de entrares.")
-            .setItems(arrayOf("Criar conta", "Iniciar sessão", "Cancelar")) { _, which ->
-                when (which) {
-                    0 -> showCredentialsDialog(true, afterAuth)
-                    1 -> showCredentialsDialog(false, afterAuth)
-                }
-            }
-            .show()
+            .setView(form)
+            .setNegativeButton("Fechar", null)
+            .create()
+
+        form.addView(primaryButton("Criar conta") {
+            dialog.dismiss()
+            showCredentialsDialog(true, afterAuth)
+        }, LinearLayout.LayoutParams(-1, dp(48)))
+        addGap(form, 8)
+        form.addView(secondaryButton("Iniciar sessão") {
+            dialog.dismiss()
+            showCredentialsDialog(false, afterAuth)
+        }, LinearLayout.LayoutParams(-1, dp(48)))
+
+        dialog.show()
     }
 
     private fun showCredentialsDialog(createAccount: Boolean, afterAuth: () -> Unit) {
@@ -519,9 +538,15 @@ class MainActivity : Activity() {
         addGap(form, 4)
         form.addView(label("PALAVRA-PASSE", 10f, true, forestSoft))
         form.addView(passwordField, fieldParams())
+        // Keep the instructions inside the custom form so Android always
+        // shows the email and password fields together with the message.
+        form.addView(label(
+            "Usa um email a que tenhas acesso e uma palavra-passe com pelo menos 8 caracteres. Não partilhes estes dados.",
+            12.5f, false, muted
+        ), 0)
+        addGap(form, 10)
         val dialog = AlertDialog.Builder(this)
             .setTitle(if (createAccount) "Criar conta" else "Iniciar sessão")
-            .setMessage("Usa um email teu e uma palavra-passe única. Não partilhes estes dados com ninguém.")
             .setView(form)
             .setNegativeButton("Cancelar", null)
             .setPositiveButton(if (createAccount) "Criar conta" else "Entrar", null)
