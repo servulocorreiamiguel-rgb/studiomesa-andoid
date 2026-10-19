@@ -11,33 +11,42 @@ android {
         applicationId = "pt.studiomesa.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.0.0"
+        versionCode = 3
+        versionName = "1.1.0"
     }
 
     buildFeatures {
         buildConfig = true
     }
 
-    flavorDimensions += "plano"
+    flavorDimensions += listOf("plano", "tipo")
     productFlavors {
         create("essencial") {
             dimension = "plano"
             applicationIdSuffix = ".essencial"
             versionNameSuffix = "-essencial"
-            resValue("string", "app_name", "Bicho Mau • Essencial")
         }
         create("profissional") {
             dimension = "plano"
             applicationIdSuffix = ".profissional"
             versionNameSuffix = "-profissional"
-            resValue("string", "app_name", "Bicho Mau • Profissional")
         }
         create("premium") {
             dimension = "plano"
             applicationIdSuffix = ".premium"
             versionNameSuffix = "-premium"
-            resValue("string", "app_name", "Bicho Mau • Premium")
+        }
+        create("restaurante") {
+            dimension = "tipo"
+            applicationIdSuffix = ".restaurante"
+            versionNameSuffix = "-restaurante"
+            resValue("string", "app_name", "Bicho Mau - Restaurante")
+        }
+        create("cliente") {
+            dimension = "tipo"
+            applicationIdSuffix = ".cliente"
+            versionNameSuffix = "-cliente"
+            resValue("string", "app_name", "Bicho Mau - Cliente")
         }
     }
 
