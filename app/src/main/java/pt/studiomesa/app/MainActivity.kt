@@ -26,8 +26,9 @@ class MainActivity : Activity() {
     private var activePage = "Início"
 
     private val flavor = BuildConfig.FLAVOR.lowercase(Locale.ROOT)
-    private val isPremium = flavor == "premium"
-    private val hasCalculator = flavor == "profissional" || isPremium
+    private val isCustomerApp = flavor.contains("cliente")
+    private val isPremium = flavor.contains("premium")
+    private val hasCalculator = flavor.contains("profissional") || isPremium
 
     private val forest = Color.rgb(24, 57, 47)
     private val forestDeep = Color.rgb(15, 39, 32)
@@ -45,9 +46,9 @@ class MainActivity : Activity() {
     private val green = Color.rgb(48, 112, 78)
 
     private val planTitle: String
-        get() = when (flavor) {
-            "essencial" -> "ESSENCIAL"
-            "premium" -> "PREMIUM"
+        get() = when {
+            flavor.contains("essencial") -> "ESSENCIAL"
+            flavor.contains("premium") -> "PREMIUM"
             else -> "PROFISSIONAL"
         }
 
@@ -60,13 +61,17 @@ class MainActivity : Activity() {
     }
 
     private fun availablePages(): List<String> {
-        val pages = mutableListOf("Início", "Mesas", "Pedidos", "Carta")
+        val pages = mutableListOf("Início", "Mesas", "Pedidos", "Carta", "Pontos")
         if (hasCalculator) pages.add("Preço Justo")
         if (isPremium) pages.add("Análise")
         return pages
     }
 
     private fun renderApp() {
+        if (isCustomerApp) {
+            renderCustomerApp()
+            return
+        }
         if (activePage !in availablePages()) activePage = "Início"
 
         appRoot = LinearLayout(this).apply {
@@ -157,6 +162,7 @@ class MainActivity : Activity() {
                     "Mesas" -> "MESAS"
                     "Pedidos" -> "PEDIDOS"
                     "Carta" -> "CARTA"
+                    "Pontos" -> "PONTOS"
                     "Preço Justo" -> "PREÇO JUSTO"
                     "Análise" -> "ANÁLISE"
                     else -> page.uppercase(Locale.ROOT)
@@ -189,6 +195,7 @@ class MainActivity : Activity() {
             "Mesas" -> renderTables(container)
             "Pedidos" -> renderOrders(container)
             "Carta" -> renderMenu(container)
+            "Pontos" -> renderCustomers(container)
             "Preço Justo" -> renderPriceCalculator(container)
             "Análise" -> renderAnalysis(container)
             else -> renderHome(container)
@@ -224,13 +231,16 @@ class MainActivity : Activity() {
         actionCard(container, "03", "Carta e custos", "Artigos de exemplo, preços e custos.", "ABRIR CARTA") {
             activePage = "Carta"; renderApp()
         }
+        actionCard(container, "04", "Pontos de fidelização", "Cria cartões de cliente e ajusta saldos de pontos.", "GERIR CLIENTES") {
+            activePage = "Pontos"; renderApp()
+        }
         if (hasCalculator) {
-            actionCard(container, "04", "Preço Justo", "Calcula um preço indicativo a partir do custo.", "ABRIR CALCULADORA") {
+            actionCard(container, "05", "Preço Justo", "Calcula um preço indicativo a partir do custo.", "ABRIR CALCULADORA") {
                 activePage = "Preço Justo"; renderApp()
             }
         }
         if (isPremium) {
-            actionCard(container, "05", "Análise local", "Resumo dos dados registados neste dispositivo.", "VER ANÁLISE") {
+            actionCard(container, "06", "Análise local", "Resumo dos dados registados neste dispositivo.", "VER ANÁLISE") {
                 activePage = "Análise"; renderApp()
             }
         }
@@ -423,6 +433,243 @@ class MainActivity : Activity() {
         addGap(note, 5)
         note.addView(label("IVA, salários, renda, energia, comissões, desperdício e outros encargos não são incluídos automaticamente. Confirma esses valores antes de definir preços reais.", 12.5f, false, ink))
         container.addView(note, cardParams())
+    }
+
+    private fun renderCustomers(container: LinearLayout) {
+        pageIntro(container, "Fidelização por pontos", "Regista clientes e gere pontos manualmente.")
+        addGap(container, 9)
+
+        val notice = makeCard(14, copperPale)
+        notice.addView(label("REGRAS A DEFINIR COM O RESTAURANTE", 10f, true, forest))
+        addGap(notice, 5)
+        notice.addView(label("Por agora, a equipa atribui e desconta pontos manualmente. A acumulação automática por compra, os prémios e a sincronização com a app do cliente ainda não estão ligados.", 12.5f, false, ink))
+        container.addView(notice, cardParams())
+
+        container.addView(primaryButton("+  Adicionar cliente") { showAddCustomerDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
+        addGap(container, 13)
+
+        val customers = store.getCustomers()
+        if (customers.isEmpty()) {
+            container.addView(emptyCard("Ainda não há cartões de fidelização. Adiciona um cliente para começar a testar os pontos."))
+            return
+        }
+
+        customers.forEach { customer ->
+            val card = makeCard(15)
+            val top = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            val details = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            details.addView(label(customer.name, 16f, true, forestDeep))
+            addGap(details, 3)
+            details.addView(label("Cartão " + customer.code, 11f, false, muted))
+            top.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
+            top.addView(label(customer.points.toString(), 25f, true, forest))
+            card.addView(top)
+            addGap(card, 2)
+            card.addView(label("PONTOS DISPONÍVEIS", 9f, true, forestSoft))
+            addGap(card, 12)
+
+            val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            actions.addView(secondaryButton("+ Atribuir") {
+                showCustomerPointsDialog(customer, false)
+            }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(0, 0, dp(5), 0) })
+            actions.addView(secondaryButton("− Descontar") {
+                showCustomerPointsDialog(customer, true)
+            }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(5), 0, 0, 0) })
+            card.addView(actions)
+            container.addView(card, cardParams())
+        }
+    }
+
+    private fun showAddCustomerDialog() {
+        val nameField = inputField("Nome do cliente", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(2))
+        }
+        form.addView(label("NOME PARA IDENTIFICAR O CARTÃO", 10f, true, forestSoft))
+        form.addView(nameField, fieldParams())
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Novo cartão de fidelização")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Criar cartão", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val name = nameField.text.toString().trim()
+                if (name.isBlank()) {
+                    nameField.error = "Escreve o nome do cliente"
+                } else {
+                    val customer = store.addLoyaltyCustomer(name)
+                    dialog.dismiss()
+                    renderApp()
+                    AlertDialog.Builder(this)
+                        .setTitle("Cartão criado")
+                        .setMessage("Código do cartão: " + customer.code + "\nSaldo inicial: 0 pontos.\nGuarda o código para referência.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showCustomerPointsDialog(customer: LoyaltyCustomer, redeem: Boolean) {
+        val amountField = inputField("Número inteiro de pontos", InputType.TYPE_CLASS_NUMBER)
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(2))
+        }
+        form.addView(label(if (redeem) "PONTOS A DESCONTAR" else "PONTOS A ATRIBUIR", 10f, true, forestSoft))
+        form.addView(amountField, fieldParams())
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(if (redeem) "Descontar pontos" else "Atribuir pontos")
+            .setMessage(customer.name + " · saldo atual: " + customer.points + " pontos")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Confirmar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val amount = amountField.text.toString().trim().toIntOrNull()
+                when {
+                    amount == null || amount <= 0 -> amountField.error = "Introduz um número superior a zero"
+                    redeem && amount > customer.points -> amountField.error = "O saldo não chega para esse desconto"
+                    else -> {
+                        val delta = if (redeem) -amount else amount
+                        if (store.adjustCustomerPoints(customer.code, delta)) {
+                            dialog.dismiss()
+                            renderApp()
+                        } else {
+                            amountField.error = "Não foi possível atualizar o saldo"
+                        }
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun renderCustomerApp() {
+        appRoot = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(paper)
+        }
+
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(20), dp(20), dp(20))
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(forestDeep, forest, forestSoft)
+            ).apply { cornerRadius = dp(22).toFloat() }
+        }
+        header.addView(label("Bicho Mau", 25f, true, white))
+        addGap(header, 4)
+        header.addView(label("CARTÃO DIGITAL DE CLIENTE  ·  " + planTitle, 10f, true, copper))
+        addGap(header, 13)
+        header.addView(label("A tua experiência, num só lugar.", 17f, true, white))
+        header.addView(label("Protótipo demonstrativo, não oficial.", 12f, false, copperPale))
+        appRoot.addView(header, LinearLayout.LayoutParams(-1, -2).apply {
+            setMargins(dp(12), dp(10), dp(12), dp(4))
+        })
+
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(24))
+        }
+        scroll.addView(content)
+        appRoot.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        val savedName = store.getCustomerProfileName()
+        content.addView(label(if (savedName.isBlank()) "Olá!" else "Olá, " + savedName + "!", 25f, true, forestDeep))
+        addGap(content, 5)
+        content.addView(label("Este é o ecrã de cliente que poderá acompanhar o programa de fidelização do restaurante.", 13.5f, false, muted))
+        addGap(content, 15)
+
+        val loyalty = makeCard(18, forestDeep)
+        loyalty.addView(label("O MEU CARTÃO", 10f, true, copper))
+        addGap(loyalty, 10)
+        loyalty.addView(label("0", 42f, true, white))
+        loyalty.addView(label("PONTOS DE DEMONSTRAÇÃO", 10f, true, copperPale))
+        addGap(loyalty, 13)
+        val code = store.getCustomerMemberCode()
+        loyalty.addView(label("Código de cliente", 11f, false, copperPale))
+        addGap(loyalty, 3)
+        loyalty.addView(label(code, 20f, true, white))
+        addGap(loyalty, 9)
+        loyalty.addView(label("Este saldo é apenas ilustrativo. Ainda não está ligado ao registo do restaurante e não permite reclamar prémios reais.", 12f, false, Color.rgb(229, 235, 228)))
+        content.addView(loyalty, cardParams())
+
+        content.addView(secondaryButton("Definir o meu nome") { showCustomerProfileDialog() }, LinearLayout.LayoutParams(-1, dp(44)))
+        addGap(content, 15)
+
+        val menuCard = makeCard(16)
+        menuCard.addView(label("A CARTA", 10f, true, forestSoft))
+        addGap(menuCard, 7)
+        menuCard.addView(label("Exemplos de artigos", 18f, true, forestDeep))
+        addGap(menuCard, 4)
+        menuCard.addView(label("Nomes e preços fictícios; não correspondem à carta oficial.", 12f, false, muted))
+        addGap(menuCard, 10)
+        store.getMenu().forEach { item ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            row.addView(label(item.name, 13f, false, ink), LinearLayout.LayoutParams(0, -2, 1f))
+            row.addView(label(money(item.price), 13f, true, forest))
+            menuCard.addView(row)
+            addGap(menuCard, 8)
+        }
+        content.addView(menuCard, cardParams())
+
+        val rewards = makeCard(16, copperPale)
+        rewards.addView(label("PRÓXIMOS PRÉMIOS", 10f, true, forest))
+        addGap(rewards, 6)
+        rewards.addView(label("Os prémios e as regras de acumulação serão definidos com o restaurante antes do lançamento.", 13f, false, ink))
+        content.addView(rewards, cardParams())
+
+        val syncNote = makeCard(13)
+        syncNote.addView(label("SINCRONIZAÇÃO AINDA NÃO LIGADA", 10f, true, red))
+        addGap(syncNote, 5)
+        syncNote.addView(label("Esta aplicação de cliente funciona em modo de demonstração. Para ser vendida como serviço real, precisamos de uma base de dados partilhada, login seguro, regras de pontos e testes de privacidade.", 12f, false, muted))
+        content.addView(syncNote, cardParams())
+
+        setContentView(appRoot)
+    }
+
+    private fun showCustomerProfileDialog() {
+        val field = inputField("O teu nome", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+        field.setText(store.getCustomerProfileName())
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Perfil de demonstração")
+            .setMessage("O nome fica guardado apenas nesta instalação.")
+            .setView(field)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Guardar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val name = field.text.toString().trim()
+                if (name.isBlank()) {
+                    field.error = "Escreve o teu nome"
+                } else {
+                    store.saveCustomerProfileName(name)
+                    dialog.dismiss()
+                    renderCustomerApp()
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun renderAnalysis(container: LinearLayout) {
