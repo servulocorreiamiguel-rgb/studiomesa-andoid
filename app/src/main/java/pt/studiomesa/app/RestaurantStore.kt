@@ -7,6 +7,24 @@ import org.json.JSONObject
 class RestaurantStore(context: Context) {
     private val prefs = context.getSharedPreferences("studiomesa_data", Context.MODE_PRIVATE)
 
+    fun getRestaurantProfile(): RestaurantProfile = RestaurantProfile(
+        name = prefs.getString("restaurant_name", "Restaurante de demonstração") ?: "Restaurante de demonstração",
+        tagline = prefs.getString("restaurant_tagline", "Boa comida. Boas experiências.") ?: "Boa comida. Boas experiências.",
+        phone = prefs.getString("restaurant_phone", "") ?: "",
+        address = prefs.getString("restaurant_address", "") ?: "",
+        accent = prefs.getString("restaurant_accent", "Dourado") ?: "Dourado"
+    )
+
+    fun saveRestaurantProfile(profile: RestaurantProfile) {
+        prefs.edit()
+            .putString("restaurant_name", profile.name)
+            .putString("restaurant_tagline", profile.tagline)
+            .putString("restaurant_phone", profile.phone)
+            .putString("restaurant_address", profile.address)
+            .putString("restaurant_accent", profile.accent)
+            .apply()
+    }
+
     fun getMenu(): MutableList<MenuEntry> {
         val raw = prefs.getString("menu_json", null)
         if (raw == null) {
@@ -23,13 +41,7 @@ class RestaurantStore(context: Context) {
             val array = JSONArray(raw)
             for (i in 0 until array.length()) {
                 val item = array.getJSONObject(i)
-                result.add(
-                    MenuEntry(
-                        item.optString("name"),
-                        item.optDouble("price", 0.0),
-                        item.optDouble("cost", 0.0)
-                    )
-                )
+                result.add(MenuEntry(item.optString("name"), item.optDouble("price", 0.0), item.optDouble("cost", 0.0)))
             }
         } catch (_: Exception) {
             return mutableListOf()
@@ -40,18 +52,12 @@ class RestaurantStore(context: Context) {
     fun saveMenu(items: List<MenuEntry>) {
         val array = JSONArray()
         items.forEach { item ->
-            array.put(
-                JSONObject()
-                    .put("name", item.name)
-                    .put("price", item.price)
-                    .put("cost", item.cost)
-            )
+            array.put(JSONObject().put("name", item.name).put("price", item.price).put("cost", item.cost))
         }
         prefs.edit().putString("menu_json", array.toString()).apply()
     }
 
-    fun isTableOccupied(table: Int): Boolean =
-        prefs.getBoolean("table_" + table, false)
+    fun isTableOccupied(table: Int): Boolean = prefs.getBoolean("table_" + table, false)
 
     fun setTableOccupied(table: Int, occupied: Boolean) {
         prefs.edit().putBoolean("table_" + table, occupied).apply()
@@ -110,5 +116,62 @@ class RestaurantStore(context: Context) {
             )
         }
         prefs.edit().putString("orders_json", array.toString()).apply()
+    }
+
+    fun getReservations(): MutableList<ReservationEntry> {
+        val raw = prefs.getString("reservations_json", "[]") ?: "[]"
+        val result = mutableListOf<ReservationEntry>()
+        try {
+            val array = JSONArray(raw)
+            for (i in 0 until array.length()) {
+                val item = array.getJSONObject(i)
+                result.add(
+                    ReservationEntry(
+                        id = item.optLong("id"),
+                        customerName = item.optString("customerName"),
+                        phone = item.optString("phone"),
+                        dateTime = item.optLong("dateTime"),
+                        partySize = item.optInt("partySize", 2),
+                        notes = item.optString("notes"),
+                        status = item.optString("status", "Pendente"),
+                        createdAt = item.optLong("createdAt")
+                    )
+                )
+            }
+        } catch (_: Exception) {
+            return mutableListOf()
+        }
+        return result.sortedBy { it.dateTime }.toMutableList()
+    }
+
+    fun addReservation(reservation: ReservationEntry) {
+        val reservations = getReservations()
+        reservations.add(reservation)
+        saveReservations(reservations)
+    }
+
+    fun updateReservation(reservationId: Long, status: String) {
+        val reservations = getReservations().map { reservation ->
+            if (reservation.id == reservationId) reservation.copy(status = status) else reservation
+        }
+        saveReservations(reservations)
+    }
+
+    private fun saveReservations(reservations: List<ReservationEntry>) {
+        val array = JSONArray()
+        reservations.forEach { reservation ->
+            array.put(
+                JSONObject()
+                    .put("id", reservation.id)
+                    .put("customerName", reservation.customerName)
+                    .put("phone", reservation.phone)
+                    .put("dateTime", reservation.dateTime)
+                    .put("partySize", reservation.partySize)
+                    .put("notes", reservation.notes)
+                    .put("status", reservation.status)
+                    .put("createdAt", reservation.createdAt)
+            )
+        }
+        prefs.edit().putString("reservations_json", array.toString()).apply()
     }
 }
