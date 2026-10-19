@@ -666,7 +666,7 @@ class MainActivity : Activity() {
             setOnClickListener { action() }
         }
 
-    private fun secondaryButton(title: String, action: () -> Unit, params: LinearLayout.LayoutParams? = null): Button =
+    private fun secondaryButton(title: String, action: () -> Unit): Button =
         Button(this).apply {
             text = title
             textSize = 11.5f
