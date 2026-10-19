@@ -8,11 +8,14 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "pt.studiomesa.app"
+        // Use a separate application ID for the repaired test builds so they
+        // install alongside any older APK signed with a different temporary key.
+        // Keep this ID stable for subsequent test builds.
+        applicationId = "pt.studiomesa.preview"
         minSdk = 24
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.1.0"
+        versionCode = 4
+        versionName = "1.2.0"
     }
 
     buildFeatures {
@@ -40,13 +43,13 @@ android {
             dimension = "tipo"
             applicationIdSuffix = ".restaurante"
             versionNameSuffix = "-restaurante"
-            resValue("string", "app_name", "Bicho Mau - Restaurante")
+            resValue("string", "app_name", "StudioMesa Teste - Restaurante")
         }
         create("cliente") {
             dimension = "tipo"
             applicationIdSuffix = ".cliente"
             versionNameSuffix = "-cliente"
-            resValue("string", "app_name", "Bicho Mau - Cliente")
+            resValue("string", "app_name", "StudioMesa Teste - Cliente")
         }
     }
 
