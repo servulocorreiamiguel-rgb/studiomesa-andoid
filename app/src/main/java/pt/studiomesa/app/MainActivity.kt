@@ -500,11 +500,11 @@ class MainActivity : Activity() {
                             timestamp.matches(Regex(".*[+-]\\d{2}:\\d{2}$")) -> " " + timestamp.takeLast(6)
                             else -> ""
                         }
-                        append(readableTime).append(zone).append("\\n")
+                        append(readableTime).append(zone).append("\n")
                         append(description)
                         val actor = event.optString("actor_user_id")
-                        if (actor.isNotBlank()) append("\\nConta: …").append(actor.takeLast(8))
-                        if (index < events.length() - 1) append("\\n\\n")
+                        if (actor.isNotBlank()) append("\nConta: …").append(actor.takeLast(8))
+                        if (index < events.length() - 1) append("\n\n")
                     }
                 }
             }
@@ -528,7 +528,7 @@ class MainActivity : Activity() {
     private fun confirmCancelOrder(orderId: String, tableNumber: Int, itemName: String) {
         AlertDialog.Builder(this)
             .setTitle("Cancelar pedido?")
-            .setMessage("Mesa $tableNumber · $itemName\\n\\nO cancelamento ficará registado no histórico do pedido.")
+            .setMessage("Mesa $tableNumber · $itemName\n\nO cancelamento ficará registado no histórico do pedido.")
             .setNegativeButton("Manter pedido", null)
             .setPositiveButton("Cancelar pedido") { _, _ ->
                 runBackend({
