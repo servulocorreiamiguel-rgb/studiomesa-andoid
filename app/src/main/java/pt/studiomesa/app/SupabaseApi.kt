@@ -31,7 +31,11 @@ object SupabaseApi {
             setRequestProperty("apikey", API_KEY)
             setRequestProperty("Accept", "application/json")
             setRequestProperty("Content-Type", "application/json")
-            setRequestProperty("Authorization", "Bearer " + (accessToken ?: API_KEY))
+            // Publishable keys are not JWTs: send them only via apikey.
+            // Authorization must carry a real user access token, and only after sign-in.
+            if (!accessToken.isNullOrBlank()) {
+                setRequestProperty("Authorization", "Bearer " + accessToken)
+            }
             if (body != null) {
                 doOutput = true
                 outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
