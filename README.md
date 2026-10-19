@@ -1,43 +1,47 @@
 # StudioMesa — demonstração Bicho Mau
 
-Protótipo Android de gestão de restaurante, com identidade visual conceptual inspirada no ambiente do Bistrô Bicho Mau, em Campo de Ourique. **Não é uma aplicação oficial nem um projeto aprovado pelo restaurante.**
+Protótipo Android com identidade visual conceptual inspirada no ambiente do Bistrô Bicho Mau, em Campo de Ourique. **Não é uma aplicação oficial nem foi encomendado ou aprovado pelo restaurante.**
 
-## Três variantes
+## Estrutura dos planos
 
-- **Essencial — 890 € (valor de referência):** painel inicial, estado de 12 mesas, registo e acompanhamento de pedidos e gestão da carta de demonstração.
-- **Profissional — 1 490 € (valor de referência):** inclui o Essencial e a calculadora de preço indicativo com base no custo.
-- **Premium — 1 690 € (valor de referência):** inclui o Profissional e um resumo local dos pedidos e artigos registados.
+- **Essencial — 890 € (valor de referência):** aplicação para o restaurante com mesas, pedidos, gestão da carta e painel local para registar clientes e atribuir/descontar pontos manualmente. Não inclui APK para clientes.
+- **Profissional — 1 490 € (valor de referência):** aplicação para o restaurante, calculadora de preço indicativo e APK separado com a interface de cliente/cartão digital em modo demonstrativo.
+- **Premium — 1 690 € (valor de referência):** as duas interfaces, calculadora, painel de indicadores locais e resumo dos pedidos/artigos guardados no dispositivo.
 
-Os preços são referências comerciais de proposta, não pagamentos configurados na aplicação nem uma confirmação de que o produto está pronto para venda.
+Os preços são propostas de referência, não pagamentos configurados nem prova de que o software está pronto para venda. O APK de cliente dos planos Profissional e Premium ainda não sincroniza pontos com a aplicação do restaurante.
 
 ## Funcionalidades implementadas
 
 - Estado de 12 mesas (livre/ocupada).
-- Criação e conclusão de pedidos associados a uma mesa e a um artigo.
+- Criação e conclusão de pedidos associados a uma mesa e artigo.
 - Gestão simples da carta, com preço de venda e custo por unidade.
-- Calculadora de preço indicativo nas variantes Profissional e Premium.
-- Resumo local de pedidos e artigos na variante Premium.
-- Design em verde-floresta, creme e cobre, com ícone de aplicação próprio.
-- Os três APKs têm identificadores de aplicação separados, por isso podem ser instalados lado a lado.
+- Calculadora de preço indicativo nos planos Profissional e Premium.
+- **Fidelização local:** criação de cartões de cliente com código, atribuição manual de pontos e desconto de pontos, sem permitir saldo negativo.
+- **Interface separada para clientes** nos planos Profissional e Premium: nome local, código de demonstração, cartão de pontos e carta de exemplos.
+- Indicadores locais no plano Premium.
+- Design em verde-floresta, creme e cobre, com ícone próprio.
+- APKs com identificadores de aplicação diferentes para permitir instalação separada.
 
-## Dados e limites
+## Limitações importantes antes da venda
 
-Os artigos e valores iniciais da carta são **fictícios e servem apenas para demonstração**. Os dados são guardados localmente no dispositivo. Não existe servidor, conta de utilizador, sincronização entre telemóveis, integração com uma caixa registadora ou envio de pedidos para a cozinha. A análise Premium é um resumo dos registos locais, não contabilidade nem um relatório financeiro oficial.
+Os pratos e preços iniciais são **fictícios**. A aplicação do restaurante guarda os dados apenas nesse telemóvel. A app de cliente também guarda os seus dados localmente, em separado: por isso, o código/saldo do cartão de cliente ainda **não está ligado** ao registo do restaurante. Os pontos são atribuídos manualmente; não há acumulação automática por compra, pagamento, prémios configuráveis ou sincronização entre dispositivos.
 
-Esta versão foi compilada com sucesso em modo debug. Antes de a utilizar num restaurante real ou a vender, ainda deve ser instalada e testada em dispositivos físicos, revista com o restaurante, e complementada com requisitos de segurança, cópias de segurança, privacidade, suporte e condições comerciais.
+Ainda não existem servidor/base de dados partilhada, contas seguras, cópias de segurança, integração com caixa registadora/cozinha, sincronização, publicação na Google Play ou testes em dispositivos físicos. O painel Premium não é contabilidade oficial. **Não vender nem apresentar como serviço de fidelização operacional até implementar e testar a sincronização partilhada, a segurança e as regras comerciais com o restaurante.**
 
-## Gerar os APKs
+## Compilar os cinco APKs de demonstração
 
-O workflow do GitHub Actions em **Actions → Build StudioMesa Android APK** compila as três variantes. O artefacto **StudioMesa-BichoMau-3-APKs** inclui os APKs:
+O workflow em **Actions → Build StudioMesa Android APK** gera:
 
-- `app-essencial-debug.apk`
-- `app-profissional-debug.apk`
-- `app-premium-debug.apk`
+- `app-essencial-restaurante-debug.apk`
+- `app-profissional-restaurante-debug.apk`
+- `app-profissional-cliente-debug.apk`
+- `app-premium-restaurante-debug.apk`
+- `app-premium-cliente-debug.apk`
 
-Com Java 17, Gradle 8.9 e Android SDK instalado, executar:
+Com Java 17, Gradle 8.9 e Android SDK, executar:
 
 ```bash
-gradle --no-daemon assembleEssencialDebug assembleProfissionalDebug assemblePremiumDebug
+gradle --no-daemon assembleEssencialRestauranteDebug assembleProfissionalRestauranteDebug assembleProfissionalClienteDebug assemblePremiumRestauranteDebug assemblePremiumClienteDebug
 ```
 
-Os ficheiros são gerados em `app/build/outputs/apk/<variante>/debug/`.
+Os APKs são de depuração/demonstração. O sucesso de compilação não substitui testes de instalação e utilização em telemóveis reais.
