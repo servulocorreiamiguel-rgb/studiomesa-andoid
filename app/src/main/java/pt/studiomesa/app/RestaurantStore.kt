@@ -111,4 +111,79 @@ class RestaurantStore(context: Context) {
         }
         prefs.edit().putString("orders_json", array.toString()).apply()
     }
+
+    fun getCustomers(): MutableList<LoyaltyCustomer> {
+        val raw = prefs.getString("loyalty_customers_json", "[]") ?: "[]"
+        val result = mutableListOf<LoyaltyCustomer>()
+        try {
+            val array = JSONArray(raw)
+            for (i in 0 until array.length()) {
+                val item = array.getJSONObject(i)
+                result.add(
+                    LoyaltyCustomer(
+                        item.optString("name"),
+                        item.optString("code"),
+                        item.optInt("points", 0).coerceAtLeast(0)
+                    )
+                )
+            }
+        } catch (_: Exception) {
+            return mutableListOf()
+        }
+        return result
+    }
+
+    fun saveCustomers(customers: List<LoyaltyCustomer>) {
+        val array = JSONArray()
+        customers.forEach { customer ->
+            array.put(
+                JSONObject()
+                    .put("name", customer.name)
+                    .put("code", customer.code)
+                    .put("points", customer.points.coerceAtLeast(0))
+            )
+        }
+        prefs.edit().putString("loyalty_customers_json", array.toString()).apply()
+    }
+
+    fun addLoyaltyCustomer(name: String): LoyaltyCustomer {
+        val customers = getCustomers()
+        var code: String
+        do {
+            code = "BM" + (System.currentTimeMillis() % 1_000_000L)
+                .toString().padStart(6, '0')
+        } while (customers.any { it.code == code })
+        val customer = LoyaltyCustomer(name.trim(), code, 0)
+        customers.add(customer)
+        saveCustomers(customers)
+        return customer
+    }
+
+    fun adjustCustomerPoints(code: String, delta: Int): Boolean {
+        val customers = getCustomers()
+        val index = customers.indexOfFirst { it.code == code }
+        if (index < 0) return false
+        val updatedPoints = customers[index].points + delta
+        if (updatedPoints < 0) return false
+        customers[index] = customers[index].copy(points = updatedPoints)
+        saveCustomers(customers)
+        return true
+    }
+
+    fun getCustomerProfileName(): String =
+        prefs.getString("customer_profile_name", "") ?: ""
+
+    fun saveCustomerProfileName(name: String) {
+        prefs.edit().putString("customer_profile_name", name.trim()).apply()
+    }
+
+    fun getCustomerMemberCode(): String {
+        val existing = prefs.getString("customer_member_code", null)
+        if (!existing.isNullOrBlank()) return existing
+        val generated = "BM" + (System.currentTimeMillis() % 1_000_000L)
+            .toString().padStart(6, '0')
+        prefs.edit().putString("customer_member_code", generated).apply()
+        return generated
+    }
+
 }
