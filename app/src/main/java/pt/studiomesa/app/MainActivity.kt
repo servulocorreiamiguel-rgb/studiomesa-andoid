@@ -803,8 +803,22 @@ class MainActivity : Activity() {
             for (index in 0 until items.length()) {
                 val item = items.optJSONObject(index) ?: continue
                 val card = makeCard(15)
-                card.addView(label(item.optString("name"), 16f, true, ink))
-                addGap(card, 7)
+                card.addView(label(item.optString("name"), 17f, true, forestDeep))
+                addGap(card, 3)
+                card.addView(label(item.optString("category", "Prato principal"), 10.5f, true, forestSoft))
+                val description = item.optString("description").trim()
+                if (description.isNotBlank()) {
+                    addGap(card, 5)
+                    card.addView(label(description, 12.5f, false, ink))
+                }
+                val allergens = item.optString("allergens").trim()
+                addGap(card, 5)
+                card.addView(label(
+                    if (allergens.isBlank()) "Alergénios: confirmar com a equipa."
+                    else "Alergénios declarados: $allergens. Confirma com a equipa se tiveres uma alergia.",
+                    11f, false, muted
+                ))
+                addGap(card, 8)
                 val prices = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
                 val price = item.optDouble("price", 0.0)
                 val cost = item.optDouble("cost", 0.0)
@@ -818,7 +832,14 @@ class MainActivity : Activity() {
                 card.addView(secondaryButton("Editar artigo") {
                     showEditMenuItemDialog(
                         item.optString("id"),
-                        MenuEntry(item.optString("name"), item.optDouble("price", 0.0), item.optDouble("cost", 0.0))
+                        MenuEntry(
+                            item.optString("name"),
+                            item.optDouble("price", 0.0),
+                            item.optDouble("cost", 0.0),
+                            item.optString("category", "Prato principal"),
+                            item.optString("description", ""),
+                            item.optString("allergens", "")
+                        )
                     )
                 }, LinearLayout.LayoutParams(-1, dp(40)))
                 addGap(card, 5)
@@ -856,8 +877,20 @@ class MainActivity : Activity() {
         }
         items.forEach { item ->
             val card = makeCard(15)
-            card.addView(label(item.name, 16f, true, ink))
-            addGap(card, 7)
+            card.addView(label(item.name, 17f, true, forestDeep))
+            addGap(card, 3)
+            card.addView(label(item.category, 10.5f, true, forestSoft))
+            if (item.description.isNotBlank()) {
+                addGap(card, 5)
+                card.addView(label(item.description, 12.5f, false, ink))
+            }
+            addGap(card, 5)
+            card.addView(label(
+                if (item.allergens.isBlank()) "Alergénios: confirmar com a equipa."
+                else "Alergénios declarados: " + item.allergens + ". Confirma com a equipa se tiveres uma alergia.",
+                11f, false, muted
+            ))
+            addGap(card, 8)
             val prices = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             prices.addView(priceColumn("PREÇO DE VENDA", money(item.price)), LinearLayout.LayoutParams(0, -2, 1f))
             prices.addView(priceColumn("CUSTO ESTIMADO", money(item.cost)), LinearLayout.LayoutParams(0, -2, 1f))
@@ -1020,7 +1053,10 @@ class MainActivity : Activity() {
                 result.add(MenuEntry(
                     name,
                     item.optDouble("price", 0.0).coerceAtLeast(0.0),
-                    item.optDouble("cost", 0.0).coerceAtLeast(0.0)
+                    item.optDouble("cost", 0.0).coerceAtLeast(0.0),
+                    item.optString("category", "Prato principal"),
+                    item.optString("description", ""),
+                    item.optString("allergens", "")
                 ))
             }
         }
@@ -1938,26 +1974,58 @@ class MainActivity : Activity() {
             } else {
                 for (index in 0 until publishedMenu.length()) {
                     val item = publishedMenu.optJSONObject(index) ?: continue
-                    val row = LinearLayout(this).apply {
+                    val itemCard = makeCard(12, paper)
+                    itemCard.addView(label(item.optString("category", "Prato principal"), 10f, true, forestSoft))
+                    addGap(itemCard, 3)
+                    itemCard.addView(label(item.optString("name"), 16f, true, forestDeep))
+                    val description = item.optString("description").trim()
+                    if (description.isNotBlank()) {
+                        addGap(itemCard, 5)
+                        itemCard.addView(label(description, 12.5f, false, ink))
+                    }
+                    addGap(itemCard, 7)
+                    val priceRow = LinearLayout(this).apply {
                         orientation = LinearLayout.HORIZONTAL
                         gravity = Gravity.CENTER_VERTICAL
                     }
-                    row.addView(label(item.optString("name"), 13f, false, ink), LinearLayout.LayoutParams(0, -2, 1f))
-                    row.addView(label(money(item.optDouble("price", 0.0)), 13f, true, forest))
-                    menuCard.addView(row)
-                    addGap(menuCard, 8)
+                    priceRow.addView(label("Preço", 11f, false, muted), LinearLayout.LayoutParams(0, -2, 1f))
+                    priceRow.addView(label(money(item.optDouble("price", 0.0)), 15f, true, forest))
+                    itemCard.addView(priceRow)
+                    addGap(itemCard, 5)
+                    val allergens = item.optString("allergens").trim()
+                    itemCard.addView(label(
+                        if (allergens.isBlank()) "Alergénios não indicados. Confirma com a equipa antes de encomendar."
+                        else "Alergénios declarados: $allergens. Confirma com a equipa se tiveres uma alergia.",
+                        11f, false, muted
+                    ))
+                    menuCard.addView(itemCard, cardParams())
                 }
             }
         } else {
             store.getMenu().forEach { item ->
-                val row = LinearLayout(this).apply {
+                val itemCard = makeCard(12, paper)
+                itemCard.addView(label(item.category, 10f, true, forestSoft))
+                addGap(itemCard, 3)
+                itemCard.addView(label(item.name, 15f, true, forestDeep))
+                if (item.description.isNotBlank()) {
+                    addGap(itemCard, 5)
+                    itemCard.addView(label(item.description, 12.5f, false, ink))
+                }
+                addGap(itemCard, 7)
+                val priceRow = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
                 }
-                row.addView(label(item.name, 13f, false, ink), LinearLayout.LayoutParams(0, -2, 1f))
-                row.addView(label(money(item.price), 13f, true, forest))
-                menuCard.addView(row)
-                addGap(menuCard, 8)
+                priceRow.addView(label("Preço", 11f, false, muted), LinearLayout.LayoutParams(0, -2, 1f))
+                priceRow.addView(label(money(item.price), 15f, true, forest))
+                itemCard.addView(priceRow)
+                addGap(itemCard, 5)
+                itemCard.addView(label(
+                    if (item.allergens.isBlank()) "Alergénios não indicados. Confirma com a equipa antes de encomendar."
+                    else "Alergénios declarados: " + item.allergens + ". Confirma com a equipa se tiveres uma alergia.",
+                    11f, false, muted
+                ))
+                menuCard.addView(itemCard, cardParams())
             }
         }
         content.addView(menuCard, cardParams())
