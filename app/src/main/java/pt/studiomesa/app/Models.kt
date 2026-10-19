@@ -18,5 +18,6 @@ data class OrderEntry(
 data class LoyaltyCustomer(
     val name: String,
     val code: String,
-    val points: Int
+    val points: Int,
+    val backendId: String? = null
 )
