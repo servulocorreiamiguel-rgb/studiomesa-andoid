@@ -24,6 +24,7 @@ class MainActivity : Activity() {
     private lateinit var store: RestaurantStore
     private lateinit var appRoot: LinearLayout
     private var activePage = "Início"
+    private val backendPrefs by lazy { getSharedPreferences("studiomesa_backend", MODE_PRIVATE) }
 
     private val flavor = BuildConfig.FLAVOR.lowercase(Locale.ROOT)
     private val isCustomerApp = flavor.contains("cliente")
@@ -61,7 +62,7 @@ class MainActivity : Activity() {
     }
 
     private fun availablePages(): List<String> {
-        val pages = mutableListOf("Início", "Mesas", "Pedidos", "Carta", "Pontos")
+        val pages = mutableListOf("Início", "Mesas", "Pedidos", "Carta", "Pontos", "Conta")
         if (hasCalculator) pages.add("Preço Justo")
         if (isPremium) pages.add("Análise")
         return pages
@@ -163,6 +164,7 @@ class MainActivity : Activity() {
                     "Pedidos" -> "PEDIDOS"
                     "Carta" -> "CARTA"
                     "Pontos" -> "PONTOS"
+                    "Conta" -> "CONTA"
                     "Preço Justo" -> "PREÇO JUSTO"
                     "Análise" -> "ANÁLISE"
                     else -> page.uppercase(Locale.ROOT)
@@ -196,6 +198,7 @@ class MainActivity : Activity() {
             "Pedidos" -> renderOrders(container)
             "Carta" -> renderMenu(container)
             "Pontos" -> renderCustomers(container)
+            "Conta" -> renderBackendAccount(container)
             "Preço Justo" -> renderPriceCalculator(container)
             "Análise" -> renderAnalysis(container)
             else -> renderHome(container)
