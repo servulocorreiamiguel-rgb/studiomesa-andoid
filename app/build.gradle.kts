@@ -43,13 +43,13 @@ android {
             dimension = "tipo"
             applicationIdSuffix = ".restaurante"
             versionNameSuffix = "-restaurante"
-            resValue("string", "app_name", "StudioMesa Teste - Restaurante")
+            resValue("string", "app_name", "StudioMesa · Gestão")
         }
         create("cliente") {
             dimension = "tipo"
             applicationIdSuffix = ".cliente"
             versionNameSuffix = "-cliente"
-            resValue("string", "app_name", "StudioMesa Teste - Cliente")
+            resValue("string", "app_name", "StudioMesa · Cliente")
         }
     }
 
