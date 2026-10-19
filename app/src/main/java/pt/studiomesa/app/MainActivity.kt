@@ -177,7 +177,11 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(11), 0, dp(5), 0)
         }
-        brandText.addView(label(displayRestaurantName(), 23f, true, white))
+        brandText.addView(label(displayRestaurantName(), 23f, true, white).apply {
+            letterSpacing = 0.02f
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        })
         brandText.addView(label("STUDIOMESA  /  GESTÃO DE SALA", 9.5f, true, copper))
         brandRow.addView(brandText, LinearLayout.LayoutParams(0, -2, 1f))
 
@@ -193,7 +197,7 @@ class MainActivity : Activity() {
         val separator = View(this).apply { setBackgroundColor(Color.argb(65, 255, 255, 255)) }
         header.addView(separator, LinearLayout.LayoutParams(-1, dp(1)))
         addGap(header, 12)
-        header.addView(label("PROTÓTIPO DEMONSTRATIVO  ·  NÃO OFICIAL", 10f, true, copperPale))
+        header.addView(label(if (hasRemoteRestaurant()) "SISTEMA DE GESTÃO  ·  RESTAURANTE LIGADO" else "DEMONSTRAÇÃO  ·  NÃO OFICIAL", 10f, true, copperPale))
         header.addView(label("Uma experiência de gestão pensada para o ritmo da sala.", 13f, false, Color.rgb(229, 235, 228)))
 
         val headerParams = LinearLayout.LayoutParams(-1, -2).apply {
@@ -1424,7 +1428,7 @@ class MainActivity : Activity() {
         header.addView(label("CARTÃO DIGITAL DE CLIENTE  ·  " + planTitle, 10f, true, copper))
         addGap(header, 13)
         header.addView(label("A tua experiência, num só lugar.", 17f, true, white))
-        header.addView(label("Protótipo demonstrativo, não oficial.", 12f, false, copperPale))
+        header.addView(label(if (backendMemberId().isBlank()) "Cartão demonstrativo — associa a tua conta ao restaurante." else "Cartão digital de fidelização", 12f, false, copperPale))
         appRoot.addView(header, LinearLayout.LayoutParams(-1, -2).apply {
             setMargins(dp(12), dp(10), dp(12), dp(4))
         })
@@ -1562,14 +1566,68 @@ class MainActivity : Activity() {
     }
 
     private fun renderAnalysis(container: LinearLayout) {
-        pageIntro(container, "Análise local", "Resumo dos dados que foram registados nesta instalação.")
+        pageIntro(container, "Análise", if (hasRemoteRestaurant())
+            "Indicadores operacionais dos dados partilhados no servidor."
+        else "Resumo local dos dados de demonstração.")
         addGap(container, 6)
+
+        if (hasRemoteRestaurant()) {
+            val orders = remoteOrders()
+            val menu = remoteMenuItems()
+            var activeCount = 0
+            var completedCount = 0
+            var completedValue = 0.0
+            for (index in 0 until orders.length()) {
+                val order = orders.optJSONObject(index) ?: continue
+                when (order.optString("status")) {
+                    "Aberto", "Em preparação", "Pronto" -> activeCount++
+                    "Concluído" -> {
+                        completedCount++
+                        completedValue += order.optDouble("amount", 0.0)
+                    }
+                }
+            }
+            val ratios = mutableListOf<Double>()
+            for (index in 0 until menu.length()) {
+                val item = menu.optJSONObject(index) ?: continue
+                val price = item.optDouble("price", 0.0)
+                if (price > 0.0) ratios.add(item.optDouble("cost", 0.0) / price * 100.0)
+            }
+            val avgCostRatio = ratios.average()
+
+            val summary = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            summary.addView(statCard("PEDIDOS NO SERVIDOR", orders.length().toString(), forestSoft),
+                LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), dp(10)) })
+            summary.addView(statCard("EM CURSO", activeCount.toString(), copper),
+                LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, dp(10)) })
+            container.addView(summary)
+
+            val card = makeCard(17)
+            addMetric(card, "Pedidos concluídos", completedCount.toString())
+            addDivider(card)
+            addMetric(card, "Valor nominal de pedidos concluídos", money(completedValue))
+            addDivider(card)
+            addMetric(card, "Artigos ativos na carta", menu.length().toString())
+            addDivider(card)
+            addMetric(card, "Custo médio dos artigos / preço", if (avgCostRatio.isNaN()) "Sem dados" else String.format(Locale("pt", "PT"), "%.1f%%", avgCostRatio))
+            container.addView(card, cardParams())
+
+            addGap(container, 4)
+            val note = makeCard(14, copperPale)
+            note.addView(label("Indicadores operacionais", 13f, true, forest))
+            addGap(note, 5)
+            note.addView(label("Os dados são partilhados no servidor. O valor representa pedidos marcados como concluídos, não pagamentos confirmados nem vendas contabilísticas. Ainda não inclui IVA, custos indiretos, desperdício ou integração com caixa.", 12.5f, false, ink))
+            container.addView(note, cardParams())
+            return
+        }
+
         val orders = store.getOrders()
         val activeOrders = orders.filter { it.status != "Concluído" }
         val completedOrders = orders.filter { it.status == "Concluído" }
         val menu = store.getMenu()
-        val valueRecorded = orders.sumOf { it.amount }
-        val avgCostRatio = menu.filter { it.price > 0.0 }.map { it.cost / it.price * 100.0 }.average()
+        val valueRecorded = completedOrders.sumOf { it.amount }
+        val ratios = menu.filter { it.price > 0.0 }.map { it.cost / it.price * 100.0 }
+        val avgCostRatio = ratios.average()
         val summary = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         summary.addView(statCard("PEDIDOS REGISTADOS", orders.size.toString(), forestSoft),
             LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), dp(10)) })
@@ -1578,20 +1636,20 @@ class MainActivity : Activity() {
         container.addView(summary)
 
         val card = makeCard(17)
-        addMetric(card, "Valor total registado em pedidos", money(valueRecorded))
+        addMetric(card, "Valor nominal de pedidos concluídos", money(valueRecorded))
         addDivider(card)
         addMetric(card, "Pedidos concluídos", completedOrders.size.toString())
         addDivider(card)
         addMetric(card, "Artigos na carta", menu.size.toString())
         addDivider(card)
-        addMetric(card, "Custo médio dos artigos", if (avgCostRatio.isNaN()) "Sem dados" else String.format(Locale("pt", "PT"), "%.1f%%", avgCostRatio))
+        addMetric(card, "Custo médio dos artigos / preço", if (avgCostRatio.isNaN()) "Sem dados" else String.format(Locale("pt", "PT"), "%.1f%%", avgCostRatio))
         container.addView(card, cardParams())
 
         addGap(container, 4)
         val note = makeCard(14, copperPale)
         note.addView(label("Indicadores de demonstração", 13f, true, forest))
         addGap(note, 5)
-        note.addView(label("Os valores representam os registos guardados neste dispositivo. Não são vendas verificadas, não incluem pagamentos ou IVA e não constituem contabilidade nem relatório financeiro oficial.", 12.5f, false, ink))
+        note.addView(label("Os valores representam os registos guardados neste dispositivo. Não são pagamentos confirmados, não incluem IVA nem constituem contabilidade ou relatório financeiro oficial.", 12.5f, false, ink))
         container.addView(note, cardParams())
     }
 
@@ -1847,7 +1905,7 @@ class MainActivity : Activity() {
             text = value
             textSize = size
             setTextColor(color)
-            if (bold) typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            if (bold) typeface = Typeface.create(if (size >= 23f) "serif" else "sans-serif", Typeface.BOLD)
             setLineSpacing(dp(2).toFloat(), 1.0f)
         }
 
