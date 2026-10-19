@@ -25,6 +25,7 @@ class MainActivity : Activity() {
     private lateinit var appRoot: LinearLayout
     private var activePage = "Início"
     private val backendPrefs by lazy { getSharedPreferences("studiomesa_backend", MODE_PRIVATE) }
+    private val secureSession by lazy { SecureSessionStore(this) }
 
     private val flavor = BuildConfig.FLAVOR.lowercase(Locale.ROOT)
     private val isCustomerApp = flavor.contains("cliente")
@@ -123,11 +124,13 @@ class MainActivity : Activity() {
             val user = SupabaseApi.getUser(accessToken)
             val id = user.optString("id")
             if (id.isBlank()) throw IllegalStateException("O servidor não devolveu uma conta válida.")
+            secureSession.save(
+                accessToken,
+                fragment["refresh_token"] ?: uri.getQueryParameter("refresh_token").orEmpty()
+            )
             backendPrefs.edit()
-                .putString("access_token", accessToken)
                 .putString("user_id", id)
                 .putString("user_email", user.optString("email", ""))
-                .putString("refresh_token", fragment["refresh_token"] ?: uri.getQueryParameter("refresh_token").orEmpty())
                 .apply()
             if (isCustomerApp) restoreCustomerMembership(accessToken) else restoreOwnedRestaurant(accessToken)
             "SIGNED_IN"
@@ -981,16 +984,15 @@ class MainActivity : Activity() {
 
     private fun refreshSessionIfNeeded() {
         val accessToken = backendToken()
-        val refreshToken = backendPrefs.getString("refresh_token", "") ?: ""
+        val refreshToken = secureSession.refreshToken()
         if (accessToken.isBlank() || refreshToken.isBlank()) return
 
         val expiresAt = SupabaseApi.tokenExpiresAtMillis(accessToken)
         if (expiresAt > System.currentTimeMillis() + 120_000L) return
 
         val session = SupabaseApi.refreshSession(refreshToken)
+        secureSession.save(session.accessToken, session.refreshToken)
         backendPrefs.edit()
-            .putString("access_token", session.accessToken)
-            .putString("refresh_token", session.refreshToken)
             .putString("user_id", session.userId)
             .putString("user_email", session.email)
             .apply()
@@ -1124,7 +1126,7 @@ class MainActivity : Activity() {
     }
 
 
-    private fun backendToken(): String = backendPrefs.getString("access_token", "") ?: ""
+    private fun backendToken(): String = secureSession.accessToken()
     private fun backendRestaurantId(): String = backendPrefs.getString("restaurant_id", "") ?: ""
     private fun backendMemberId(): String = backendPrefs.getString("member_id", "") ?: ""
 
@@ -1382,9 +1384,8 @@ class MainActivity : Activity() {
                                 val user = result.optJSONObject("user")
                                 when {
                                     token.isNotBlank() && user != null -> {
+                                        secureSession.save(token, result.optString("refresh_token"))
                                         backendPrefs.edit()
-                                            .putString("access_token", token)
-                                            .putString("refresh_token", result.optString("refresh_token"))
                                             .putString("user_id", user.optString("id"))
                                             .putString("user_email", email)
                                             .apply()
@@ -1404,9 +1405,8 @@ class MainActivity : Activity() {
                                 }
                             } else {
                                 val session = SupabaseApi.signIn(email, password)
+                                secureSession.save(session.accessToken, session.refreshToken)
                                 backendPrefs.edit()
-                                    .putString("access_token", session.accessToken)
-                                    .putString("refresh_token", session.refreshToken)
                                     .putString("user_id", session.userId)
                                     .putString("user_email", session.email)
                                     .apply()
@@ -1636,6 +1636,7 @@ class MainActivity : Activity() {
         container.addView(card, cardParams())
         addGap(container, 3)
         container.addView(secondaryButton("Terminar sessão neste dispositivo") {
+            secureSession.clear()
             backendPrefs.edit().remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
                 .remove("restaurant_id").remove("restaurant_name").remove("join_code")
                 .remove("staff_join_code").remove("restaurant_role")
@@ -2043,6 +2044,7 @@ class MainActivity : Activity() {
         content.addView(syncNote, cardParams())
 
         content.addView(secondaryButton("Terminar sessão neste dispositivo") {
+            secureSession.clear()
             backendPrefs.edit()
                 .remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
                 .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
