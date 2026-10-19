@@ -438,6 +438,245 @@ class MainActivity : Activity() {
         container.addView(note, cardParams())
     }
 
+    private fun backendToken(): String = backendPrefs.getString("access_token", "") ?: ""
+    private fun backendRestaurantId(): String = backendPrefs.getString("restaurant_id", "") ?: ""
+    private fun backendMemberId(): String = backendPrefs.getString("member_id", "") ?: ""
+
+    private fun runBackend(task: () -> String, onSuccess: (String) -> Unit) {
+        Thread {
+            try {
+                val result = task()
+                runOnUiThread { onSuccess(result) }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    AlertDialog.Builder(this)
+                        .setTitle("Não foi possível concluir")
+                        .setMessage(error.message?.take(500) ?: "Erro de ligação. Verifica a internet e tenta novamente.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            }
+        }.start()
+    }
+
+    private fun showAuthChooser(afterAuth: () -> Unit) {
+        AlertDialog.Builder(this)
+            .setTitle("Conta StudioMesa")
+            .setMessage("A conta permite sincronizar os pontos entre o restaurante e os clientes.")
+            .setItems(arrayOf("Criar conta", "Iniciar sessão", "Cancelar")) { _, which ->
+                when (which) {
+                    0 -> showCredentialsDialog(true, afterAuth)
+                    1 -> showCredentialsDialog(false, afterAuth)
+                }
+            }
+            .show()
+    }
+
+    private fun showCredentialsDialog(createAccount: Boolean, afterAuth: () -> Unit) {
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(8), dp(22), dp(4))
+        }
+        val emailField = inputField("Email", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS)
+        val passwordField = inputField("Palavra-passe (mínimo 8 caracteres)", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
+        form.addView(label("EMAIL", 10f, true, forestSoft))
+        form.addView(emailField, fieldParams())
+        addGap(form, 4)
+        form.addView(label("PALAVRA-PASSE", 10f, true, forestSoft))
+        form.addView(passwordField, fieldParams())
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(if (createAccount) "Criar conta" else "Iniciar sessão")
+            .setMessage("Usa um email teu e uma palavra-passe única. Não partilhes estes dados com ninguém.")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton(if (createAccount) "Criar conta" else "Entrar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val email = emailField.text.toString().trim()
+                val password = passwordField.text.toString()
+                when {
+                    !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches() ->
+                        emailField.error = "Introduz um email válido"
+                    password.length < 8 ->
+                        passwordField.error = "Usa pelo menos 8 caracteres"
+                    else -> {
+                        dialog.dismiss()
+                        runBackend({
+                            if (createAccount) {
+                                val result = SupabaseApi.signUp(email, password)
+                                val token = result.optString("access_token")
+                                val user = result.optJSONObject("user")
+                                if (token.isNotBlank() && user != null) {
+                                    backendPrefs.edit()
+                                        .putString("access_token", token)
+                                        .putString("user_id", user.optString("id"))
+                                        .putString("user_email", email)
+                                        .apply()
+                                    "SIGNED_IN"
+                                } else {
+                                    "CONFIRM_EMAIL"
+                                }
+                            } else {
+                                val session = SupabaseApi.signIn(email, password)
+                                backendPrefs.edit()
+                                    .putString("access_token", session.accessToken)
+                                    .putString("user_id", session.userId)
+                                    .putString("user_email", session.email)
+                                    .apply()
+                                "SIGNED_IN"
+                            }
+                        }) { result ->
+                            if (result == "CONFIRM_EMAIL") {
+                                AlertDialog.Builder(this)
+                                    .setTitle("Confirma o email")
+                                    .setMessage("A conta foi criada. Se o Supabase pedir confirmação por email, confirma-a e depois escolhe «Iniciar sessão».")
+                                    .setPositiveButton("OK", null)
+                                    .show()
+                            } else {
+                                afterAuth()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showCreateRestaurantDialog() {
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(8), dp(22), dp(4))
+        }
+        val nameField = inputField("Nome do restaurante", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+        val code = (1..8).map { "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".random() }.joinToString("")
+        form.addView(label("NOME", 10f, true, forestSoft))
+        form.addView(nameField, fieldParams())
+        addGap(form, 5)
+        form.addView(label("CÓDIGO DE ADESÃO GERADO", 10f, true, forestSoft))
+        form.addView(label(code, 23f, true, forest).apply { setPadding(dp(4), dp(10), dp(4), dp(10)) })
+        form.addView(label("Guarda este código e partilha-o apenas com os clientes que devem aderir ao programa.", 12f, false, muted))
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Configurar restaurante")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Criar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val name = nameField.text.toString().trim()
+                if (name.length !in 2..100) {
+                    nameField.error = "Usa entre 2 e 100 caracteres"
+                } else {
+                    dialog.dismiss()
+                    runBackend({ SupabaseApi.createRestaurant(backendToken(), name, code) }) { restaurantId ->
+                        backendPrefs.edit().putString("restaurant_id", restaurantId)
+                            .putString("restaurant_name", name).putString("join_code", code).apply()
+                        renderApp()
+                        AlertDialog.Builder(this)
+                            .setTitle("Restaurante criado")
+                            .setMessage("Código de adesão: $code\n\nOs clientes podem usar este código na aplicação de cliente depois de criarem conta e iniciarem sessão.")
+                            .setPositiveButton("OK", null).show()
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun renderBackendAccount(container: LinearLayout) {
+        pageIntro(container, "Conta e sincronização", "Liga a aplicação a uma conta para partilhar a fidelização.")
+        addGap(container, 12)
+        val token = backendToken()
+        val card = makeCard(17)
+        if (token.isBlank()) {
+            card.addView(label("AINDA SEM SESSÃO", 10f, true, forestSoft))
+            addGap(card, 6)
+            card.addView(label("Cria uma conta ou inicia sessão. Depois podes registar o restaurante e obter um código de adesão para os clientes.", 13f, false, ink))
+            addGap(card, 12)
+            card.addView(primaryButton("Criar conta / iniciar sessão") { showAuthChooser { renderApp() } },
+                LinearLayout.LayoutParams(-1, dp(48)))
+        } else if (backendRestaurantId().isBlank()) {
+            card.addView(label("SESSÃO INICIADA", 10f, true, green))
+            addGap(card, 5)
+            card.addView(label(backendPrefs.getString("user_email", "") ?: "", 13f, false, muted))
+            addGap(card, 12)
+            card.addView(primaryButton("Configurar restaurante") { showCreateRestaurantDialog() },
+                LinearLayout.LayoutParams(-1, dp(48)))
+        } else {
+            card.addView(label("RESTAURANTE LIGADO", 10f, true, green))
+            addGap(card, 6)
+            card.addView(label(backendPrefs.getString("restaurant_name", "Restaurante") ?: "Restaurante", 19f, true, forestDeep))
+            addGap(card, 5)
+            card.addView(label("Código de adesão", 11f, false, muted))
+            card.addView(label(backendPrefs.getString("join_code", "") ?: "", 24f, true, forest))
+            addGap(card, 8)
+            card.addView(label("Partilha este código apenas com os teus clientes. A gestão dos pontos é feita na secção «Pontos».", 12f, false, ink))
+            addGap(card, 12)
+            card.addView(primaryButton("Atualizar lista de clientes") { refreshRemoteCustomers() },
+                LinearLayout.LayoutParams(-1, dp(46)))
+        }
+        container.addView(card, cardParams())
+        addGap(container, 3)
+        container.addView(secondaryButton("Terminar sessão neste dispositivo") {
+            backendPrefs.edit().remove("access_token").remove("user_id").remove("user_email")
+                .remove("restaurant_id").remove("restaurant_name").remove("join_code")
+                .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
+                .apply()
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(44)))
+        addGap(container, 10)
+        container.addView(label("A palavra-passe não é guardada pela aplicação. A base de dados aplica permissões por utilizador e regista as alterações de pontos.", 12f, false, muted))
+    }
+
+    private fun loadRemoteCustomers(): MutableList<LoyaltyCustomer> {
+        val raw = backendPrefs.getString("remote_members_json", "[]") ?: "[]"
+        val result = mutableListOf<LoyaltyCustomer>()
+        try {
+            val array = org.json.JSONArray(raw)
+            for (i in 0 until array.length()) {
+                val item = array.getJSONObject(i)
+                result.add(LoyaltyCustomer(
+                    item.optString("display_name"),
+                    item.optString("member_code"),
+                    item.optInt("points", 0).coerceAtLeast(0),
+                    item.optString("id").takeIf { it.isNotBlank() }
+                ))
+            }
+        } catch (_: Exception) { }
+        return result
+    }
+
+    private fun refreshRemoteCustomers() {
+        val restaurantId = backendRestaurantId()
+        val token = backendToken()
+        if (token.isBlank() || restaurantId.isBlank()) {
+            AlertDialog.Builder(this).setMessage("Inicia sessão e configura primeiro o restaurante na secção Conta.")
+                .setPositiveButton("OK", null).show()
+            return
+        }
+        runBackend({
+            val members = SupabaseApi.listMembers(token, restaurantId)
+            backendPrefs.edit().putString("remote_members_json", members.toString()).apply()
+            members.length().toString()
+        }) { count ->
+            if (activePage == "Pontos") renderApp()
+            AlertDialog.Builder(this).setTitle("Lista atualizada")
+                .setMessage("$count cartões de cliente encontrados no servidor.")
+                .setPositiveButton("OK", null).show()
+        }
+    }
+
+    private fun showRestaurantJoinCode() {
+        val code = backendPrefs.getString("join_code", "") ?: ""
+        AlertDialog.Builder(this)
+            .setTitle("Código de adesão")
+            .setMessage("Código: $code\n\nO cliente deve abrir a aplicação «Bicho Mau - Cliente», criar conta ou iniciar sessão e escolher «Associar ao restaurante».")
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
     private fun renderCustomers(container: LinearLayout) {
         pageIntro(container, "Fidelização por pontos", "Regista clientes e gere pontos manualmente.")
         addGap(container, 9)
