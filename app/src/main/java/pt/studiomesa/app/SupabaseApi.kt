@@ -256,6 +256,22 @@ object SupabaseApi {
         return if (restaurants.length() == 0) null else restaurants.getJSONObject(0)
     }
 
+    fun getMyLoyaltyMembership(token: String): JSONObject? {
+        val response = call("POST", "/rest/v1/rpc/get_my_loyalty_membership", JSONObject(), token)
+        val memberships = JSONArray(response)
+        return if (memberships.length() == 0) null else memberships.getJSONObject(0)
+    }
+
+    fun listCustomerMenu(token: String, memberId: String): JSONArray {
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/get_member_restaurant_menu",
+            JSONObject().put("p_member_id", memberId),
+            token
+        )
+        return JSONArray(response)
+    }
+
     fun listMembers(token: String, restaurantId: String): JSONArray {
         val encoded = URLEncoder.encode(restaurantId, "UTF-8")
         return JSONArray(call("GET",
