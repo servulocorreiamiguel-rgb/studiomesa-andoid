@@ -1,40 +1,33 @@
-# StudioMesa Android
+# StudioMesa Android — três demos instaláveis
 
-Aplicação Android nativa para apoiar a gestão diária de um restaurante.
+Aplicação Android nativa para demonstrações presenciais a restaurantes. As variantes **Essencial**, **Profissional** e **Premium** usam o mesmo design-base, identificam o plano e instalam-se como apps separadas para não substituir a aplicação original.
 
-## Funcionalidades desta versão de desenvolvimento
+## Variantes de demonstração
 
-- Painel com resumo de mesas, pedidos e reservas pendentes.
-- Estado de 12 mesas (livre/ocupada).
-- Criação e acompanhamento de pedidos.
-- Gestão simples do menu, com preço de venda e custo por unidade.
-- Calculadora de preço sugerido baseada no custo e na percentagem de custo pretendida.
-- Gestão local de reservas: nome, telefone, data, hora, número de pessoas, notas e estado (pendente, confirmada, recusada, cancelada ou concluída).
-- Personalização básica do restaurante: nome, frase, telefone, morada e cor de destaque.
-- Preços de referência dos planos StudioMesa.
+- **Essencial — 890 €:** mesas, pedidos, menu, reservas locais, personalização da identidade e calculadora de preço por custo.
+- **Profissional — 1 490 €:** tudo do Essencial e relatórios locais de pedidos/reservas.
+- **Premium — 1 690 €:** tudo do Profissional e lista de clientes/histórico derivado das reservas.
 
-## Tecnologia
+Os preços são valores de referência existentes no protótipo; a periodicidade, o alojamento, o suporte, a manutenção, as atualizações e o contrato devem ser definidos antes de uma oferta comercial.
 
-- Kotlin e componentes nativos Android.
-- minSdk 24 (Android 7.0 ou posterior).
-- Dados guardados localmente em SharedPreferences.
+## Dados de demonstração
 
-## Limitação importante: reservas ainda não são online
+Cada instalação é identificada como uma demo e começa com dados fictícios para permitir apresentar os ecrãs: mesas de exemplo, pedidos, menu e reservas. O ecrã Restaurante permite mudar o nome, frase, contactos e cor de destaque. A ação “Repor dados fictícios” apaga as alterações locais desse APK e repõe o conjunto de demonstração.
 
-A gestão de reservas que está nesta branch é local e serve para testar o fluxo dentro da app. Não recebe reservas de clientes a partir da Internet, não envia mensagens de confirmação e não sincroniza com outros telemóveis. A marca configurada também ainda não inclui logótipo ou fotografias.
+As variantes têm IDs de aplicação diferentes e podem ser instaladas lado a lado no mesmo telemóvel.
 
-Para reservas reais será necessário configurar uma base de dados e autenticação num serviço como Supabase, aplicar regras de segurança, criar uma página pública de reservas e ligar a app de gestão à mesma base de dados. A disponibilidade tem de respeitar o horário, capacidade e regras do restaurante. Não publicar nem vender esta versão como sistema de reservas online até testar esses pontos.
+## Limitação importante: ainda não é um sistema de reservas online
 
-## Gerar um APK
+As reservas são guardadas localmente no telemóvel. Não há página pública para o cliente, sincronização entre dispositivos, notificações nem confirmações automáticas. Não vender nem apresentar estas demos como serviço de reservas online pronto. Antes de uso comercial, é necessário configurar uma base de dados online com autenticação e regras de acesso, construir a página pública de reservas, implementar disponibilidade/capacidade, notificações e cancelamentos, além de testes em dispositivos diferentes e revisão da proteção dos dados pessoais.
 
-O workflow do GitHub Actions em Actions → Build StudioMesa Android APK compila a app quando recebe alterações na main ou nesta branch de desenvolvimento. Quando a compilação terminar com sucesso, o ficheiro StudioMesa-debug-apk fica disponível como artefacto da execução durante 14 dias.
+## Compilação
 
-Também é possível compilar num ambiente com Java 17, Gradle 8.9 e Android SDK instalado:
+O workflow **Actions → Build StudioMesa Android APK** compila as três variantes de depuração e publica o artefacto `StudioMesa-3-Demos` durante 14 dias. As tarefas são:
 
-    gradle --no-daemon assembleDebug
+    gradle --no-daemon assembleEssencialDebug assembleProfissionalDebug assemblePremiumDebug
 
-O APK de depuração é gerado em app/build/outputs/apk/debug/app-debug.apk.
+Os APKs são criados em `app/build/outputs/apk/{essencial,profissional,premium}/debug/`.
 
-## Antes de uma utilização comercial
+## Verificação
 
-É necessário configurar a base de dados online, contas e permissões por restaurante, regras de disponibilidade, confirmação/cancelamento, notificações, privacidade e proteção dos dados pessoais. Também são necessários testes reais em vários dispositivos. Esta branch não deve substituir ainda a versão que já instalaste.
+A compilação confirma que o código Kotlin e os recursos conseguem ser transformados em APKs. Não prova que todos os fluxos funcionam sem falhas num dispositivo; antes de uso real, testar navegação, formularios, datas/horas, guardar/repor dados, permissões, estados e comportamento em diferentes tamanhos de ecrã.

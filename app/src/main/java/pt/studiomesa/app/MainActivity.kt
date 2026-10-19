@@ -11,7 +11,6 @@ import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
-import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
@@ -42,6 +41,30 @@ class MainActivity : Activity() {
     private val red = Color.rgb(174, 67, 59)
     private val white = Color.WHITE
 
+    private val tierId: String by lazy(LazyThreadSafetyMode.NONE) {
+        when {
+            packageName.contains(".premium") -> "premium"
+            packageName.contains(".profissional") -> "profissional"
+            else -> "essencial"
+        }
+    }
+    private val tierName: String
+        get() = when (tierId) {
+            "premium" -> "Premium"
+            "profissional" -> "Profissional"
+            else -> "Essencial"
+        }
+    private val tierPrice: String
+        get() = when (tierId) {
+            "premium" -> "1 690 €"
+            "profissional" -> "1 490 €"
+            else -> "890 €"
+        }
+    private val isProfessionalTier: Boolean
+        get() = tierId == "profissional" || tierId == "premium"
+    private val isPremiumTier: Boolean
+        get() = tierId == "premium"
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         store = RestaurantStore(this)
@@ -68,7 +91,7 @@ class MainActivity : Activity() {
             setPadding(dp(20), dp(16), dp(20), dp(18))
             setBackgroundColor(navy)
         }
-        header.addView(label("STUDIOMESA  ·  GESTÃO", 12f, true, gold))
+        header.addView(label("STUDIOMESA  ·  " + tierName.uppercase(Locale("pt", "PT")) + "  ·  DEMO", 11f, true, gold))
         header.addView(label(profile.name, 24f, true, white))
         header.addView(label(profile.tagline, 13f, false, Color.rgb(218, 224, 229)))
         appRoot.addView(header, LinearLayout.LayoutParams(-1, -2))
@@ -83,6 +106,7 @@ class MainActivity : Activity() {
         }
         scroll.addView(pageContent)
         appRoot.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        renderDemoBanner(pageContent)
         renderPage(pageContent)
 
         val navScroll = HorizontalScrollView(this).apply {
@@ -93,7 +117,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             setPadding(dp(5), dp(7), dp(5), dp(7))
         }
-        val pages = listOf("Início", "Mesas", "Pedidos", "Reservas", "Menu", "Restaurante", "Preço Justo", "Planos")
+        val pages = navigationPages()
         pages.forEach { page ->
             val selected = activePage == page
             val item = TextView(this).apply {
@@ -119,6 +143,32 @@ class MainActivity : Activity() {
         setContentView(appRoot)
     }
 
+
+    private fun navigationPages(): List<String> {
+        val pages = mutableListOf("Início", "Mesas", "Pedidos", "Reservas", "Menu")
+        if (isProfessionalTier) pages.add("Relatórios")
+        if (isPremiumTier) pages.add("Clientes")
+        pages.addAll(listOf("Preço Justo", "Restaurante", "Plano"))
+        return pages
+    }
+
+    private fun renderDemoBanner(container: LinearLayout) {
+        val banner = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(13), dp(11), dp(13), dp(11))
+            background = rounded(Color.rgb(255, 247, 225), 12f)
+        }
+        banner.addView(label("MODO DEMONSTRAÇÃO", 11f, true, Color.rgb(130, 88, 27)))
+        addGap(banner, 3)
+        banner.addView(label(
+            "Dados fictícios guardados neste telemóvel. As reservas ainda não são recebidas pela Internet.",
+            12f, false, ink
+        ))
+        container.addView(banner, LinearLayout.LayoutParams(-1, -2).apply {
+            setMargins(0, 0, 0, dp(13))
+        })
+    }
+
     private fun renderPage(container: LinearLayout) {
         when (activePage) {
             "Início" -> renderHome(container)
@@ -128,7 +178,9 @@ class MainActivity : Activity() {
             "Menu" -> renderMenu(container)
             "Restaurante" -> renderRestaurantSettings(container)
             "Preço Justo" -> renderPriceCalculator(container)
-            "Planos" -> renderPlans(container)
+            "Relatórios" -> renderReports(container)
+            "Clientes" -> renderCustomers(container)
+            "Plano" -> renderPlan(container)
             else -> renderHome(container)
         }
     }
@@ -179,10 +231,22 @@ class MainActivity : Activity() {
             activePage = "Preço Justo"
             renderApp()
         }
+        if (isProfessionalTier) {
+            actionCard(container, "Relatórios", "Consultar pedidos concluídos e reservas", "Abrir relatórios") {
+                activePage = "Relatórios"
+                renderApp()
+            }
+        }
+        if (isPremiumTier) {
+            actionCard(container, "Clientes", "Ver contactos e histórico das reservas", "Abrir clientes") {
+                activePage = "Clientes"
+                renderApp()
+            }
+        }
 
         addGap(container, 8)
         container.addView(label("Nota", 16f, true, navy))
-        container.addView(label("Os dados são guardados neste dispositivo. Esta versão ainda não sincroniza dados entre telemóveis nem envia pedidos para uma cozinha.", 13f, false, muted))
+        container.addView(label("Esta versão é uma demonstração. A gestão é local: não sincroniza telemóveis nem recebe reservas de clientes pela Internet.", 13f, false, muted))
     }
 
     private fun renderTables(container: LinearLayout) {
@@ -377,6 +441,19 @@ class MainActivity : Activity() {
                 renderApp()
             }
         }, LinearLayout.LayoutParams(-1, -2))
+        addGap(form, 8)
+        form.addView(secondaryButton("Repor dados fictícios da demonstração") {
+            AlertDialog.Builder(this)
+                .setTitle("Repor demonstração?")
+                .setMessage("Isto apaga as alterações locais a este APK e repõe o restaurante, menu, mesas, pedidos e reservas fictícias.")
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Repor") { _, _ ->
+                    store.resetDemoData()
+                    activePage = "Início"
+                    renderApp()
+                }
+                .show()
+        }, LinearLayout.LayoutParams(-1, -2))
         container.addView(form, cardParams())
 
         addGap(container, 4)
@@ -468,235 +545,162 @@ class MainActivity : Activity() {
         container.addView(label("O cálculo não inclui automaticamente IVA, salários, renda, energia, comissões, desperdício ou preços praticados pela concorrência. Não representa uma pesquisa de mercado em tempo real: é uma estimativa matemática para apoiar a decisão.", 13f, false, muted))
     }
 
-    private fun renderPlans(container: LinearLayout) {
-        container.addView(label("Planos StudioMesa", 23f, true, navy))
-        container.addView(label("Tabela inicial de preços configurados para referência.", 14f, false, muted))
-        addGap(container, 14)
-        planCard(container, "Plano 890", "890 €")
-        planCard(container, "Plano 1 490", "1 490 €")
-        planCard(container, "Plano 1 690", "1 690 €")
-        addGap(container, 6)
-        container.addView(label("Antes de apresentar estes valores a clientes, confirma o que cada plano inclui, o período de prestação, suporte, atualizações e condições de pagamento.", 13f, false, muted))
-    }
 
-    private fun planCard(container: LinearLayout, title: String, price: String) {
-        val card = makeCard(18)
-        card.addView(label(title, 17f, true, navy))
-        addGap(card, 4)
-        card.addView(label(price, 25f, true, gold))
-        addGap(card, 4)
-        card.addView(label("Preço configurado — funcionalidades e condições a definir.", 13f, false, muted))
+    private fun renderReports(container: LinearLayout) {
+        container.addView(label("Relatórios", 23f, true, navy))
+        container.addView(label("Resumo calculado a partir dos dados locais desta demonstração.", 14f, false, muted))
+        addGap(container, 14)
+
+        val orders = store.getOrders()
+        val completed = orders.filter { it.status == "Concluído" }
+        val active = orders.count { it.status != "Concluído" }
+        val reservations = store.getReservations()
+        val pending = reservations.count { it.status == "Pendente" }
+        val confirmed = reservations.count { it.status == "Confirmada" }
+        val salesTotal = completed.sumOf { it.amount }
+
+        val row1 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        row1.addView(
+            statCard("Pedidos concluídos", completed.size.toString()),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), 0) }
+        )
+        row1.addView(
+            statCard("Pedidos ativos", active.toString()),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, 0) }
+        )
+        container.addView(row1)
+        addGap(container, 10)
+
+        val row2 = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        row2.addView(
+            statCard("Total concluído", money(salesTotal)),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), 0) }
+        )
+        row2.addView(
+            statCard("Reservas pendentes", pending.toString()),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, 0) }
+        )
+        container.addView(row2)
+        addGap(container, 10)
+
+        val card = makeCard(16)
+        card.addView(label("Reservas confirmadas", 14f, false, muted))
+        card.addView(label(confirmed.toString(), 24f, true, navy))
+        addGap(card, 7)
+        card.addView(label(
+            "Este resumo não é uma contabilidade nem um relatório fiscal. O total concluído soma os valores dos pedidos marcados como concluídos nesta app.",
+            12f, false, muted
+        ))
         container.addView(card, cardParams())
     }
 
-    private fun showCreateOrderDialog() {
-        val items = store.getMenu()
-        if (items.isEmpty()) {
-            AlertDialog.Builder(this)
-                .setTitle("Menu vazio")
-                .setMessage("Adiciona primeiro um artigo ao menu.")
-                .setPositiveButton("Abrir menu") { _, _ ->
-                    activePage = "Menu"
-                    renderApp()
-                }
-                .setNegativeButton("Fechar", null)
-                .show()
+    private fun renderCustomers(container: LinearLayout) {
+        container.addView(label("Clientes", 23f, true, navy))
+        container.addView(label("Contactos e atividade derivados das reservas registadas localmente.", 14f, false, muted))
+        addGap(container, 12)
+
+        val groups = store.getReservations().groupBy { it.phone.trim() }
+            .values
+            .sortedByDescending { group -> group.maxOfOrNull { it.createdAt } ?: 0L }
+
+        if (groups.isEmpty()) {
+            container.addView(emptyCard("Ainda não existem clientes. Regista uma reserva para iniciar o histórico."))
             return
         }
 
-        val form = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(22), dp(10), dp(22), dp(4))
-        }
-        form.addView(label("Mesa", 14f, true, navy))
-        val tableSpinner = Spinner(this)
-        val tables = (1..12).map { "Mesa " + it }
-        tableSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, tables)
-        form.addView(tableSpinner, fieldParams())
-        addGap(form, 8)
-        form.addView(label("Artigo", 14f, true, navy))
-        val itemSpinner = Spinner(this)
-        itemSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, items.map { it.name })
-        form.addView(itemSpinner, fieldParams())
-
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Novo pedido")
-            .setView(form)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Criar pedido", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val table = tableSpinner.selectedItemPosition + 1
-                val selected = items.getOrNull(itemSpinner.selectedItemPosition)
-                if (selected == null) {
-                    return@setOnClickListener
-                }
-                val order = OrderEntry(
-                    System.currentTimeMillis(),
-                    table,
-                    selected.name,
-                    selected.price,
-                    "Aberto",
-                    System.currentTimeMillis()
-                )
-                store.addOrder(order)
-                dialog.dismiss()
-                activePage = "Pedidos"
-                renderApp()
+        container.addView(label(groups.size.toString() + " contacto(s) encontrado(s)", 13f, true, gold))
+        addGap(container, 8)
+        groups.forEach { group ->
+            val mostRecent = group.maxByOrNull { it.createdAt } ?: group.first()
+            val nextReservation = group
+                .filter { it.dateTime >= System.currentTimeMillis() && it.status != "Cancelada" && it.status != "Recusada" }
+                .minByOrNull { it.dateTime }
+            val card = makeCard(15)
+            card.addView(label(mostRecent.customerName, 17f, true, navy))
+            addGap(card, 4)
+            card.addView(label(mostRecent.phone, 13f, false, muted))
+            addGap(card, 4)
+            card.addView(label(
+                group.size.toString() + (if (group.size == 1) " reserva registada" else " reservas registadas"),
+                13f, true, gold
+            ))
+            if (nextReservation != null) {
+                addGap(card, 4)
+                card.addView(label(
+                    "Próxima reserva: " + SimpleDateFormat("d MMM · HH:mm", Locale("pt", "PT")).format(Date(nextReservation.dateTime)),
+                    12f, false, ink
+                ))
             }
+            container.addView(card, cardParams())
         }
-        dialog.show()
+        addGap(container, 3)
+        container.addView(label(
+            "Os contactos são dados pessoais. Esta demonstração não os envia para um servidor; antes da utilização comercial será necessário configurar acessos e proteção de dados.",
+            12f, false, muted
+        ))
     }
 
+    private fun renderPlan(container: LinearLayout) {
+        container.addView(label("Plano " + tierName, 23f, true, navy))
+        container.addView(label("Versão de demonstração para apresentação presencial.", 14f, false, muted))
+        addGap(container, 14)
 
-    private fun showCreateReservationDialog() {
-        val form = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(22), dp(8), dp(22), dp(4))
+        val card = makeCard(18)
+        card.addView(label("STUDIOMESA  ·  " + tierName.uppercase(Locale("pt", "PT")), 12f, true, gold))
+        addGap(card, 5)
+        card.addView(label(tierPrice, 30f, true, navy))
+        addGap(card, 5)
+        card.addView(label("Preço de referência do pacote", 13f, false, muted))
+        addGap(card, 13)
+        card.addView(label("Incluído nesta versão", 16f, true, navy))
+        addGap(card, 7)
+
+        val features = when (tierId) {
+            "premium" -> listOf(
+                "Gestão de mesas, pedidos e menu",
+                "Registo e gestão local de reservas",
+                "Personalização da identidade do restaurante",
+                "Calculadora de preço por custo",
+                "Relatórios locais de pedidos e reservas",
+                "Lista de clientes e histórico baseado nas reservas"
+            )
+            "profissional" -> listOf(
+                "Gestão de mesas, pedidos e menu",
+                "Registo e gestão local de reservas",
+                "Personalização da identidade do restaurante",
+                "Calculadora de preço por custo",
+                "Relatórios locais de pedidos e reservas"
+            )
+            else -> listOf(
+                "Gestão de mesas, pedidos e menu",
+                "Registo e gestão local de reservas",
+                "Personalização da identidade do restaurante",
+                "Calculadora de preço por custo"
+            )
         }
-        val nameField = inputField("Nome do cliente", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
-        val phoneField = inputField("Telefone do cliente", InputType.TYPE_CLASS_PHONE)
-        form.addView(label("Nome do cliente", 14f, true, navy))
-        form.addView(nameField, fieldParams())
-        form.addView(label("Telefone", 14f, true, navy))
-        form.addView(phoneField, fieldParams())
-
-        val whenToBook = Calendar.getInstance().apply {
-            add(Calendar.HOUR_OF_DAY, 1)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-        val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale("pt", "PT"))
-        val timeFormat = SimpleDateFormat("HH:mm", Locale("pt", "PT"))
-        var dateButtonRef: Button? = null
-        val dateButton = secondaryButton("Data: " + dateFormat.format(whenToBook.time)) {
-            DatePickerDialog(
-                this,
-                { _, year, month, day ->
-                    whenToBook.set(Calendar.YEAR, year)
-                    whenToBook.set(Calendar.MONTH, month)
-                    whenToBook.set(Calendar.DAY_OF_MONTH, day)
-                    dateButtonRef?.text = "Data: " + dateFormat.format(whenToBook.time)
-                },
-                whenToBook.get(Calendar.YEAR),
-                whenToBook.get(Calendar.MONTH),
-                whenToBook.get(Calendar.DAY_OF_MONTH)
-            ).show()
-        }
-        var timeButtonRef: Button? = null
-        val timeButton = secondaryButton("Hora: " + timeFormat.format(whenToBook.time)) {
-            TimePickerDialog(
-                this,
-                { _, hour, minute ->
-                    whenToBook.set(Calendar.HOUR_OF_DAY, hour)
-                    whenToBook.set(Calendar.MINUTE, minute)
-                    timeButtonRef?.text = "Hora: " + timeFormat.format(whenToBook.time)
-                },
-                whenToBook.get(Calendar.HOUR_OF_DAY),
-                whenToBook.get(Calendar.MINUTE),
-                true
-            ).show()
-        }
-        dateButtonRef = dateButton
-        timeButtonRef = timeButton
-        form.addView(label("Data e hora", 14f, true, navy))
-        form.addView(dateButton, fieldParams())
-        form.addView(timeButton, fieldParams())
-
-        form.addView(label("Número de pessoas", 14f, true, navy))
-        val partySpinner = Spinner(this)
-        val partyOptions = (1..20).map { if (it == 1) "1 pessoa" else "$it pessoas" }
-        partySpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, partyOptions)
-        partySpinner.setSelection(1)
-        form.addView(partySpinner, fieldParams())
-
-        form.addView(label("Notas (opcional)", 14f, true, navy))
-        val notesField = inputField("Ex.: cadeira de bebé, aniversário...", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
-        form.addView(notesField, fieldParams())
-
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Nova reserva")
-            .setView(form)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Guardar reserva", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val customerName = nameField.text.toString().trim()
-                val phone = phoneField.text.toString().trim()
-                when {
-                    customerName.isBlank() -> nameField.error = "Escreve o nome do cliente"
-                    phone.isBlank() -> phoneField.error = "É necessário um contacto"
-                    whenToBook.timeInMillis <= System.currentTimeMillis() -> {
-                        Toast.makeText(this, "Escolhe uma data e hora futuras.", Toast.LENGTH_SHORT).show()
-                    }
-                    else -> {
-                        store.addReservation(
-                            ReservationEntry(
-                                id = System.currentTimeMillis(),
-                                customerName = customerName,
-                                phone = phone,
-                                dateTime = whenToBook.timeInMillis,
-                                partySize = partySpinner.selectedItemPosition + 1,
-                                notes = notesField.text.toString().trim(),
-                                status = "Pendente",
-                                createdAt = System.currentTimeMillis()
-                            )
-                        )
-                        dialog.dismiss()
-                        activePage = "Reservas"
-                        renderApp()
-                    }
-                }
+        features.forEach { feature ->
+            val line = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
             }
+            line.addView(label("✓", 15f, true, green), LinearLayout.LayoutParams(dp(22), -2))
+            line.addView(label(feature, 13f, false, ink), LinearLayout.LayoutParams(0, -2, 1f))
+            card.addView(line)
+            addGap(card, 7)
         }
-        dialog.show()
-    }
+        container.addView(card, cardParams())
 
-    private fun showAddMenuItemDialog() {
-        val form = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(22), dp(10), dp(22), dp(4))
-        }
-        val nameField = inputField("Nome do artigo", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
-        val priceField = inputField("Preço de venda (€)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
-        val costField = inputField("Custo por unidade (€)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
-        form.addView(label("Nome", 14f, true, navy))
-        form.addView(nameField, fieldParams())
-        addGap(form, 6)
-        form.addView(label("Preço de venda (€)", 14f, true, navy))
-        form.addView(priceField, fieldParams())
-        addGap(form, 6)
-        form.addView(label("Custo por unidade (€)", 14f, true, navy))
-        form.addView(costField, fieldParams())
-
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Adicionar artigo")
-            .setView(form)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Guardar", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val name = nameField.text.toString().trim()
-                val price = priceField.text.toString().trim().replace(',', '.').toDoubleOrNull()
-                val cost = costField.text.toString().trim().replace(',', '.').toDoubleOrNull()
-                when {
-                    name.isBlank() -> nameField.error = "Escreve um nome"
-                    price == null || price < 0.0 -> priceField.error = "Preço inválido"
-                    cost == null || cost < 0.0 -> costField.error = "Custo inválido"
-                    else -> {
-                        val menu = store.getMenu()
-                        menu.add(MenuEntry(name, price, cost))
-                        store.saveMenu(menu)
-                        dialog.dismiss()
-                        renderApp()
-                    }
-                }
-            }
-        }
-        dialog.show()
+        addGap(container, 3)
+        container.addView(label("Antes de vender", 16f, true, navy))
+        container.addView(label(
+            "Os valores e funcionalidades comerciais ainda devem ser formalizados. As reservas desta demo são locais: ainda não existe página pública ligada ao restaurante, sincronização, notificações nem confirmação automática.",
+            13f, false, muted
+        ))
+        addGap(container, 8)
+        container.addView(label(
+            "Recomendação: definir por escrito o preço, o período de suporte, o alojamento, a manutenção, as atualizações e as condições de cancelamento.",
+            13f, false, muted
+        ))
     }
 
     private fun actionCard(parent: LinearLayout, title: String, subtitle: String, actionText: String, action: () -> Unit) {
