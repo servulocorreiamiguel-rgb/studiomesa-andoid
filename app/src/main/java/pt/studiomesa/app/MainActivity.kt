@@ -681,13 +681,12 @@ class MainActivity : Activity() {
         pageIntro(container, "Fidelização por pontos", "Regista clientes e gere pontos manualmente.")
         addGap(container, 9)
 
-        val notice = makeCard(14, copperPale)
-        notice.addView(label("REGRAS A DEFINIR COM O RESTAURANTE", 10f, true, forest))
-        addGap(notice, 5)
-        notice.addView(label("Por agora, a equipa atribui e desconta pontos manualmente. A acumulação automática por compra, os prémios e a sincronização com a app do cliente ainda não estão ligados.", 12.5f, false, ink))
-        container.addView(notice, cardParams())
-
         val remoteMode = backendToken().isNotBlank() && backendRestaurantId().isNotBlank()
+        val notice = makeCard(14, copperPale)
+        notice.addView(label(if (remoteMode) "FIDELIZAÇÃO PARTILHADA" else "REGRAS A DEFINIR COM O RESTAURANTE", 10f, true, forest))
+        addGap(notice, 5)
+        notice.addView(label(if (remoteMode) "Os pontos são guardados no servidor e as alterações ficam registadas. A acumulação automática por compra e os prémios ainda precisam de regras comerciais." else "No modo local, os dados ficam apenas neste telemóvel. Liga uma conta e configura o restaurante na secção Conta para ativar a fidelização partilhada.", 12.5f, false, ink))
+        container.addView(notice, cardParams())
         if (remoteMode) {
             container.addView(primaryButton("Atualizar clientes do servidor") { refreshRemoteCustomers() }, LinearLayout.LayoutParams(-1, dp(48)))
             addGap(container, 6)
