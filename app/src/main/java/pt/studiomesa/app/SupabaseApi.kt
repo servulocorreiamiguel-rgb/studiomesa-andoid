@@ -16,7 +16,7 @@ object SupabaseApi {
     private const val BASE_URL = "https://svwvkfsyevuyabelrtjk.supabase.co"
     private const val API_KEY = "sb_publishable_ioJIukpwd0_Fyajd41QL_Q_M6WKE0UH"
 
-    data class Session(val accessToken: String, val userId: String, val email: String)
+    data class Session(val accessToken: String, val userId: String, val email: String, val refreshToken: String)
 
     private fun call(
         method: String,
@@ -72,7 +72,50 @@ object SupabaseApi {
         val token = result.optString("access_token")
         val user = result.optJSONObject("user") ?: throw IllegalStateException("A resposta de autenticação não contém utilizador.")
         if (token.isBlank()) throw IllegalStateException("Não foi recebido um token de sessão.")
-        return Session(token, user.optString("id"), user.optString("email", email.trim()))
+        return Session(
+            token,
+            user.optString("id"),
+            user.optString("email", email.trim()),
+            result.optString("refresh_token")
+        )
+    }
+
+    fun refreshSession(refreshToken: String): Session {
+        if (refreshToken.isBlank()) {
+            throw IllegalStateException("A sessão expirou. Inicia sessão novamente.")
+        }
+        val result = jsonCall(
+            "POST",
+            "/auth/v1/token?grant_type=refresh_token",
+            JSONObject().put("refresh_token", refreshToken)
+        )
+        val token = result.optString("access_token")
+        val user = result.optJSONObject("user")
+            ?: throw IllegalStateException("O servidor não devolveu uma conta para renovar a sessão.")
+        val nextRefreshToken = result.optString("refresh_token", refreshToken)
+        if (token.isBlank() || nextRefreshToken.isBlank()) {
+            throw IllegalStateException("Não foi possível renovar a sessão. Inicia sessão novamente.")
+        }
+        return Session(
+            token,
+            user.optString("id"),
+            user.optString("email", ""),
+            nextRefreshToken
+        )
+    }
+
+    fun tokenExpiresAtMillis(token: String): Long {
+        return try {
+            val payload = token.split(".").getOrNull(1)
+                ?: return 0L
+            val bytes = android.util.Base64.decode(
+                payload,
+                android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP or android.util.Base64.NO_PADDING
+            )
+            org.json.JSONObject(String(bytes, Charsets.UTF_8)).optLong("exp", 0L) * 1000L
+        } catch (_: Exception) {
+            0L
+        }
     }
 
     fun signUp(email: String, password: String): JSONObject {
