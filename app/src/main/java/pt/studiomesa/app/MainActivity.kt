@@ -2253,44 +2253,69 @@ class MainActivity : Activity() {
     private fun showEditMenuItemDialog(itemId: String?, current: MenuEntry) {
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(22), dp(10), dp(22), dp(4))
+            setPadding(dp(22), dp(10), dp(22), dp(12))
         }
         val nameField = inputField("Nome do artigo", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+        val categoryField = inputField("Categoria (ex.: Entradas, Peixe, Sobremesas)", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+        val descriptionField = multilineInputField("Descrição do prato, ingredientes principais ou preparação")
         val priceField = inputField("Preço de venda (€)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
         val costField = inputField("Custo por unidade (€)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+        val allergensField = inputField("Alergénios declarados (se aplicável)", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
         nameField.setText(current.name)
+        categoryField.setText(current.category)
+        descriptionField.setText(current.description)
         priceField.setText(String.format(Locale("pt", "PT"), "%.2f", current.price))
         costField.setText(String.format(Locale("pt", "PT"), "%.2f", current.cost))
-        form.addView(label("NOME", 10f, true, forestSoft))
+        allergensField.setText(current.allergens)
+
+        form.addView(label("NOME DO ARTIGO", 10f, true, forestSoft))
         form.addView(nameField, fieldParams())
-        addGap(form, 4)
+        addGap(form, 2)
+        form.addView(label("CATEGORIA", 10f, true, forestSoft))
+        form.addView(categoryField, fieldParams())
+        addGap(form, 2)
+        form.addView(label("DESCRIÇÃO", 10f, true, forestSoft))
+        form.addView(descriptionField, multilineFieldParams())
+        addGap(form, 2)
         form.addView(label("PREÇO DE VENDA (€)", 10f, true, forestSoft))
         form.addView(priceField, fieldParams())
-        addGap(form, 4)
-        form.addView(label("CUSTO POR UNIDADE (€)", 10f, true, forestSoft))
+        addGap(form, 2)
+        form.addView(label("CUSTO POR UNIDADE (€) · INTERNO", 10f, true, forestSoft))
         form.addView(costField, fieldParams())
+        addGap(form, 2)
+        form.addView(label("ALERGÉNIOS DECLARADOS", 10f, true, forestSoft))
+        form.addView(allergensField, fieldParams())
+        addGap(form, 5)
+        form.addView(label("A informação de alergénios tem de ser confirmada pelo restaurante e pela equipa de cozinha.", 11f, false, muted))
 
+        val formScroll = ScrollView(this).apply { addView(form) }
         val dialog = AlertDialog.Builder(this)
             .setTitle("Editar artigo")
-            .setView(form)
+            .setView(formScroll)
             .setNegativeButton("Cancelar", null)
             .setPositiveButton("Guardar alterações", null)
             .create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val name = nameField.text.toString().trim()
+                val category = categoryField.text.toString().trim()
+                val description = descriptionField.text.toString().trim()
                 val price = priceField.text.toString().trim().replace(',', '.').toDoubleOrNull()
                 val cost = costField.text.toString().trim().replace(',', '.').toDoubleOrNull()
+                val allergens = allergensField.text.toString().trim()
                 when {
-                    name.isBlank() -> nameField.error = "Escreve um nome"
+                    name.isBlank() || name.length > 120 -> nameField.error = "Usa entre 1 e 120 caracteres"
+                    category.isBlank() || category.length > 60 -> categoryField.error = "Usa entre 1 e 60 caracteres"
+                    description.length > 500 -> descriptionField.error = "A descrição pode ter no máximo 500 caracteres"
                     price == null || price < 0.0 -> priceField.error = "Preço inválido"
                     cost == null || cost < 0.0 -> costField.error = "Custo inválido"
+                    allergens.length > 300 -> allergensField.error = "Usa no máximo 300 caracteres"
                     else -> {
                         if (hasRemoteRestaurant() && !itemId.isNullOrBlank()) {
                             val restaurantId = backendRestaurantId()
                             runBackend({
                                 val token = backendToken()
-                                SupabaseApi.updateMenuItem(token, itemId, name, price, cost)
+                                SupabaseApi.updateMenuItem(token, itemId, name, category, description, price, cost, allergens)
                                 cacheRemoteOperations(token, restaurantId)
                                 "OK"
                             }) {
@@ -2299,13 +2324,11 @@ class MainActivity : Activity() {
                             }
                         } else {
                             val items = store.getMenu()
-                            val index = items.indexOfFirst {
-                                it.name == current.name && it.price == current.price && it.cost == current.cost
-                            }
+                            val index = items.indexOfFirst { it == current }
                             if (index < 0) {
                                 nameField.error = "O artigo já não existe. Atualiza a carta e tenta novamente."
                             } else {
-                                items[index] = MenuEntry(name, price, cost)
+                                items[index] = MenuEntry(name, price, cost, category, description, allergens)
                                 store.saveMenu(items)
                                 dialog.dismiss()
                                 renderApp()
@@ -2321,41 +2344,58 @@ class MainActivity : Activity() {
     private fun showAddMenuItemDialog() {
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(22), dp(10), dp(22), dp(4))
+            setPadding(dp(22), dp(10), dp(22), dp(12))
         }
         val nameField = inputField("Nome do artigo", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+        val categoryField = inputField("Categoria (ex.: Entradas, Peixe, Sobremesas)", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES).apply {
+            setText("Prato principal")
+        }
+        val descriptionField = multilineInputField("Descrição do prato, ingredientes principais ou preparação")
         val priceField = inputField("Preço de venda (€)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
         val costField = inputField("Custo por unidade (€)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
-        form.addView(label("NOME", 10f, true, forestSoft))
-        form.addView(nameField, fieldParams())
-        addGap(form, 4)
-        form.addView(label("PREÇO DE VENDA (€)", 10f, true, forestSoft))
-        form.addView(priceField, fieldParams())
-        addGap(form, 4)
-        form.addView(label("CUSTO POR UNIDADE (€)", 10f, true, forestSoft))
-        form.addView(costField, fieldParams())
+        val allergensField = inputField("Alergénios declarados (se aplicável)", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+        form.addView(label("NOME DO ARTIGO", 10f, true, forestSoft)); form.addView(nameField, fieldParams())
+        addGap(form, 2)
+        form.addView(label("CATEGORIA", 10f, true, forestSoft)); form.addView(categoryField, fieldParams())
+        addGap(form, 2)
+        form.addView(label("DESCRIÇÃO", 10f, true, forestSoft)); form.addView(descriptionField, multilineFieldParams())
+        addGap(form, 2)
+        form.addView(label("PREÇO DE VENDA (€)", 10f, true, forestSoft)); form.addView(priceField, fieldParams())
+        addGap(form, 2)
+        form.addView(label("CUSTO POR UNIDADE (€) · INTERNO", 10f, true, forestSoft)); form.addView(costField, fieldParams())
+        addGap(form, 2)
+        form.addView(label("ALERGÉNIOS DECLARADOS", 10f, true, forestSoft)); form.addView(allergensField, fieldParams())
+        addGap(form, 5)
+        form.addView(label("Confirma a descrição e os alergénios com a equipa de cozinha antes de publicar a carta.", 11f, false, muted))
 
+        val formScroll = ScrollView(this).apply { addView(form) }
         val dialog = AlertDialog.Builder(this)
             .setTitle("Adicionar artigo")
-            .setView(form)
+            .setView(formScroll)
             .setNegativeButton("Cancelar", null)
             .setPositiveButton("Guardar", null)
             .create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val name = nameField.text.toString().trim()
+                val category = categoryField.text.toString().trim()
+                val description = descriptionField.text.toString().trim()
                 val price = priceField.text.toString().trim().replace(',', '.').toDoubleOrNull()
                 val cost = costField.text.toString().trim().replace(',', '.').toDoubleOrNull()
+                val allergens = allergensField.text.toString().trim()
                 when {
-                    name.isBlank() -> nameField.error = "Escreve um nome"
+                    name.isBlank() || name.length > 120 -> nameField.error = "Usa entre 1 e 120 caracteres"
+                    category.isBlank() || category.length > 60 -> categoryField.error = "Usa entre 1 e 60 caracteres"
+                    description.length > 500 -> descriptionField.error = "A descrição pode ter no máximo 500 caracteres"
                     price == null || price < 0.0 -> priceField.error = "Preço inválido"
                     cost == null || cost < 0.0 -> costField.error = "Custo inválido"
+                    allergens.length > 300 -> allergensField.error = "Usa no máximo 300 caracteres"
                     else -> {
                         if (hasRemoteRestaurant()) {
                             val restaurantId = backendRestaurantId()
                             runBackend({
                                 val token = backendToken()
-                                SupabaseApi.addMenuItem(token, restaurantId, name, price, cost)
+                                SupabaseApi.addMenuItem(token, restaurantId, name, category, description, price, cost, allergens)
                                 cacheRemoteOperations(token, restaurantId)
                                 "OK"
                             }) {
@@ -2364,7 +2404,7 @@ class MainActivity : Activity() {
                             }
                         } else {
                             val menu = store.getMenu()
-                            menu.add(MenuEntry(name, price, cost))
+                            menu.add(MenuEntry(name, price, cost, category, description, allergens))
                             store.saveMenu(menu)
                             dialog.dismiss()
                             renderApp()
@@ -2475,6 +2515,24 @@ class MainActivity : Activity() {
             background = rounded(white, 10)
             isSingleLine = true
         }
+
+    private fun multilineInputField(hintText: String): EditText =
+        EditText(this).apply {
+            hint = hintText
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            textSize = 14f
+            setTextColor(ink)
+            setHintTextColor(muted)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = rounded(white, 10)
+            minLines = 2
+            maxLines = 3
+            isSingleLine = false
+            gravity = Gravity.TOP or Gravity.START
+        }
+
+    private fun multilineFieldParams(): LinearLayout.LayoutParams =
+        LinearLayout.LayoutParams(-1, dp(76)).apply { setMargins(0, dp(5), 0, dp(8)) }
 
     private fun primaryButton(title: String, action: () -> Unit): Button =
         Button(this).apply {
