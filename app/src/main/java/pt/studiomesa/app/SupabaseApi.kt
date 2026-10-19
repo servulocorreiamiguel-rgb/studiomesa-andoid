@@ -132,6 +132,24 @@ object SupabaseApi {
         return result
     }
 
+    fun requestPasswordRecovery(email: String) {
+        val redirect = URLEncoder.encode("studiomesa://auth-callback", "UTF-8")
+        call(
+            "POST",
+            "/auth/v1/recover?redirect_to=$redirect",
+            JSONObject().put("email", email.trim())
+        )
+    }
+
+    fun updatePassword(accessToken: String, newPassword: String) {
+        call(
+            "PUT",
+            "/auth/v1/user",
+            JSONObject().put("password", newPassword),
+            accessToken
+        )
+    }
+
     fun getUser(accessToken: String): JSONObject =
         jsonCall("GET", "/auth/v1/user", token = accessToken)
 
