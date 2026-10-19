@@ -748,11 +748,15 @@ class MainActivity : Activity() {
                 .remove("restaurant_id")
                 .remove("restaurant_name")
                 .remove("join_code")
+                .remove("staff_join_code")
+                .remove("restaurant_role")
             if (restaurant != null) {
                 val restaurantId = restaurant.optString("restaurant_id")
                 editor.putString("restaurant_id", restaurantId)
                     .putString("restaurant_name", restaurant.optString("restaurant_name"))
                     .putString("join_code", restaurant.optString("join_code"))
+                    .putString("staff_join_code", restaurant.optString("staff_code"))
+                    .putString("restaurant_role", restaurant.optString("user_role", "staff"))
             }
             editor.apply()
             if (restaurant != null) {
@@ -1113,7 +1117,7 @@ class MainActivity : Activity() {
                     runBackend({
                         val token = backendToken()
                         val restaurantId = SupabaseApi.createRestaurant(token, name, code)
-                        cacheRemoteOperations(token, restaurantId)
+                        restoreOwnedRestaurant(token)
                         restaurantId
                     }) { restaurantId ->
                         backendPrefs.edit().putString("restaurant_id", restaurantId)
@@ -1130,15 +1134,73 @@ class MainActivity : Activity() {
         dialog.show()
     }
 
+    private fun showStaffJoinCode() {
+        val role = backendPrefs.getString("restaurant_role", "") ?: ""
+        val code = backendPrefs.getString("staff_join_code", "") ?: ""
+        if (role != "owner" || code.isBlank()) {
+            AlertDialog.Builder(this)
+                .setTitle("Código não disponível")
+                .setMessage("Só o proprietário pode consultar o código de acesso à equipa.")
+                .setPositiveButton("OK", null).show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Código de acesso à equipa")
+            .setMessage("Código: $code\n\nPartilha-o apenas com funcionários autorizados. Cada funcionário deve criar a sua própria conta no StudioMesa e escolher «Aderir à equipa de um restaurante».")
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
+    private fun showJoinStaffDialog() {
+        if (backendToken().isBlank()) {
+            showAuthChooser { renderApp() }
+            return
+        }
+        val field = inputField("Código de acesso à equipa", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS)
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(8), dp(22), dp(4))
+        }
+        form.addView(label("CÓDIGO FORNECIDO PELO PROPRIETÁRIO", 10f, true, forestSoft))
+        form.addView(field, fieldParams())
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Aderir à equipa")
+            .setMessage("Usa o teu próprio email e a tua própria conta. Nunca partilhes a palavra-passe do proprietário.")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Aderir", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val code = field.text.toString().trim().uppercase(Locale.ROOT)
+                if (code.length !in 6..12) {
+                    field.error = "Introduz um código válido"
+                } else {
+                    runBackend({
+                        val token = backendToken()
+                        SupabaseApi.joinRestaurantStaff(token, code)
+                        restoreOwnedRestaurant(token)
+                        "OK"
+                    }) {
+                        dialog.dismiss()
+                        activePage = "Conta"
+                        renderApp()
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
     private fun renderBackendAccount(container: LinearLayout) {
-        pageIntro(container, "Conta e sincronização", "Liga a aplicação a uma conta para partilhar a fidelização.")
+        pageIntro(container, "Conta e sincronização", "Conta, restaurante e acesso da equipa.")
         addGap(container, 12)
         val token = backendToken()
         val card = makeCard(17)
         if (token.isBlank()) {
             card.addView(label("AINDA SEM SESSÃO", 10f, true, forestSoft))
             addGap(card, 6)
-            card.addView(label("Cria uma conta ou inicia sessão. Depois podes registar o restaurante e obter um código de adesão para os clientes.", 13f, false, ink))
+            card.addView(label("Cria uma conta ou inicia sessão para configurar um restaurante ou aderir à equipa de um restaurante existente.", 13f, false, ink))
             addGap(card, 12)
             card.addView(primaryButton("Criar conta / iniciar sessão") { showAuthChooser { renderApp() } },
                 LinearLayout.LayoutParams(-1, dp(48)))
@@ -1147,17 +1209,29 @@ class MainActivity : Activity() {
             addGap(card, 5)
             card.addView(label(backendPrefs.getString("user_email", "") ?: "", 13f, false, muted))
             addGap(card, 12)
-            card.addView(primaryButton("Configurar restaurante") { showCreateRestaurantDialog() },
+            card.addView(primaryButton("Configurar novo restaurante") { showCreateRestaurantDialog() },
                 LinearLayout.LayoutParams(-1, dp(48)))
+            addGap(card, 7)
+            card.addView(secondaryButton("Aderir à equipa de um restaurante") { showJoinStaffDialog() },
+                LinearLayout.LayoutParams(-1, dp(44)))
         } else {
-            card.addView(label("RESTAURANTE LIGADO", 10f, true, green))
+            val restaurantName = backendPrefs.getString("restaurant_name", "Restaurante") ?: "Restaurante"
+            val role = backendPrefs.getString("restaurant_role", "staff") ?: "staff"
+            card.addView(label(if (role == "owner") "CONTA DO PROPRIETÁRIO" else "ACESSO DE EQUIPA", 10f, true, green))
             addGap(card, 6)
-            card.addView(label(backendPrefs.getString("restaurant_name", "Restaurante") ?: "Restaurante", 19f, true, forestDeep))
+            card.addView(label(restaurantName, 20f, true, forestDeep))
             addGap(card, 5)
-            card.addView(label("Código de adesão", 11f, false, muted))
-            card.addView(label(backendPrefs.getString("join_code", "") ?: "", 24f, true, forest))
-            addGap(card, 8)
-            card.addView(label("Partilha este código apenas com os teus clientes. A gestão dos pontos é feita na secção «Pontos».", 12f, false, ink))
+            if (role == "owner") {
+                card.addView(label("Código de adesão dos clientes", 11f, false, muted))
+                card.addView(label(backendPrefs.getString("join_code", "") ?: "", 23f, true, forest))
+                addGap(card, 8)
+                card.addView(label("Partilha este código apenas com clientes que devem aderir ao programa de fidelização.", 12f, false, ink))
+                addGap(card, 8)
+                card.addView(secondaryButton("Ver código de acesso à equipa") { showStaffJoinCode() },
+                    LinearLayout.LayoutParams(-1, dp(42)))
+            } else {
+                card.addView(label("Esta conta está associada à equipa deste restaurante. As alterações operacionais são guardadas no servidor.", 12f, false, ink))
+            }
             addGap(card, 12)
             card.addView(primaryButton("Atualizar lista de clientes") { refreshRemoteCustomers() },
                 LinearLayout.LayoutParams(-1, dp(46)))
@@ -1167,6 +1241,7 @@ class MainActivity : Activity() {
         container.addView(secondaryButton("Terminar sessão neste dispositivo") {
             backendPrefs.edit().remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
                 .remove("restaurant_id").remove("restaurant_name").remove("join_code")
+                .remove("staff_join_code").remove("restaurant_role")
                 .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
                 .remove("remote_members_json").remove("remote_tables_json")
                 .remove("remote_menu_json").remove("remote_orders_json").remove("customer_menu_json")
@@ -1174,7 +1249,7 @@ class MainActivity : Activity() {
             renderApp()
         }, LinearLayout.LayoutParams(-1, dp(44)))
         addGap(container, 10)
-        container.addView(label("A palavra-passe não é guardada pela aplicação. A base de dados aplica permissões por utilizador e regista as alterações de pontos.", 12f, false, muted))
+        container.addView(label("As funções de gestão e os dados de cada restaurante são controlados por permissões no servidor.", 12f, false, muted))
     }
 
     private fun loadRemoteCustomers(): MutableList<LoyaltyCustomer> {
