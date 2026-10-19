@@ -92,6 +92,12 @@ object SupabaseApi {
     fun getUser(accessToken: String): JSONObject =
         jsonCall("GET", "/auth/v1/user", token = accessToken)
 
+    fun isOAuthProviderEnabled(provider: String): Boolean {
+        require(provider == "google" || provider == "azure") { "Fornecedor de início de sessão inválido." }
+        val settings = jsonCall("GET", "/auth/v1/settings")
+        return settings.optJSONObject("external")?.optBoolean(provider, false) ?: false
+    }
+
     fun oauthUrl(provider: String): String {
         require(provider == "google" || provider == "azure") { "Fornecedor de início de sessão inválido." }
         val redirect = URLEncoder.encode("studiomesa://auth-callback", "UTF-8")
