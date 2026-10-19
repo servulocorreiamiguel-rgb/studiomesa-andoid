@@ -818,6 +818,54 @@ class MainActivity : Activity() {
         dialog.show()
     }
 
+    private fun showCustomerJoinDialog() {
+        if (backendToken().isBlank()) { showAuthChooser { renderCustomerApp() }; return }
+        val form = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(22), dp(8), dp(22), dp(4)) }
+        val codeField = inputField("Código de adesão do restaurante", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS)
+        val nameField = inputField("O teu nome", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+        nameField.setText(store.getCustomerProfileName())
+        form.addView(label("CÓDIGO DO RESTAURANTE", 10f, true, forestSoft)); form.addView(codeField, fieldParams())
+        addGap(form, 4); form.addView(label("NOME PARA O CARTÃO", 10f, true, forestSoft)); form.addView(nameField, fieldParams())
+        val dialog = AlertDialog.Builder(this).setTitle("Associar ao restaurante")
+            .setMessage("Pede o código de adesão ao restaurante.").setView(form)
+            .setNegativeButton("Cancelar", null).setPositiveButton("Associar", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val code = codeField.text.toString().trim().uppercase(Locale.ROOT)
+                val name = nameField.text.toString().trim()
+                when {
+                    code.length !in 6..12 -> codeField.error = "O código deve ter 6 a 12 caracteres"
+                    name.isBlank() || name.length > 100 -> nameField.error = "Introduz um nome válido"
+                    else -> {
+                        dialog.dismiss()
+                        runBackend({
+                            val member = SupabaseApi.joinRestaurant(backendToken(), code, name)
+                            backendPrefs.edit().putString("member_id", member.optString("member_id"))
+                                .putString("member_code", member.optString("member_code"))
+                                .putInt("member_points", member.optInt("points", 0))
+                                .putString("member_restaurant_name", member.optString("restaurant_name")).apply()
+                            store.saveCustomerProfileName(name)
+                            "OK"
+                        }) { renderCustomerApp() }
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun refreshCustomerMembership() {
+        val token = backendToken()
+        val memberId = backendMemberId()
+        if (token.isBlank() || memberId.isBlank()) { showCustomerJoinDialog(); return }
+        runBackend({
+            val member = SupabaseApi.getMember(token, memberId)
+            backendPrefs.edit().putInt("member_points", member.optInt("points", 0))
+                .putString("member_code", member.optString("member_code")).apply()
+            "OK"
+        }) { renderCustomerApp() }
+    }
+
     private fun renderCustomerApp() {
         appRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -856,21 +904,27 @@ class MainActivity : Activity() {
         val savedName = store.getCustomerProfileName()
         content.addView(label(if (savedName.isBlank()) "Olá!" else "Olá, " + savedName + "!", 25f, true, forestDeep))
         addGap(content, 5)
-        content.addView(label("Este é o ecrã de cliente que poderá acompanhar o programa de fidelização do restaurante.", 13.5f, false, muted))
+        content.addView(label("Cartão de fidelização do restaurante.", 13.5f, false, muted))
+        addGap(content, 12)
+        when {
+            backendToken().isBlank() -> content.addView(primaryButton("Criar conta / iniciar sessão") { showAuthChooser { renderCustomerApp() } }, LinearLayout.LayoutParams(-1, dp(46)))
+            backendMemberId().isBlank() -> content.addView(primaryButton("Associar ao restaurante") { showCustomerJoinDialog() }, LinearLayout.LayoutParams(-1, dp(46)))
+            else -> content.addView(primaryButton("Atualizar saldo no servidor") { refreshCustomerMembership() }, LinearLayout.LayoutParams(-1, dp(46)))
+        }
         addGap(content, 15)
 
         val loyalty = makeCard(18, forestDeep)
         loyalty.addView(label("O MEU CARTÃO", 10f, true, copper))
         addGap(loyalty, 10)
-        loyalty.addView(label("0", 42f, true, white))
-        loyalty.addView(label("PONTOS DE DEMONSTRAÇÃO", 10f, true, copperPale))
+        loyalty.addView(label(backendPrefs.getInt("member_points", 0).toString(), 42f, true, white))
+        loyalty.addView(label(if (backendMemberId().isBlank()) "PONTOS DE DEMONSTRAÇÃO" else "PONTOS DISPONÍVEIS", 10f, true, copperPale))
         addGap(loyalty, 13)
-        val code = store.getCustomerMemberCode()
+        val code = backendPrefs.getString("member_code", "")?.takeIf { it.isNotBlank() } ?: store.getCustomerMemberCode()
         loyalty.addView(label("Código de cliente", 11f, false, copperPale))
         addGap(loyalty, 3)
         loyalty.addView(label(code, 20f, true, white))
         addGap(loyalty, 9)
-        loyalty.addView(label("Este saldo é apenas ilustrativo. Ainda não está ligado ao registo do restaurante e não permite reclamar prémios reais.", 12f, false, Color.rgb(229, 235, 228)))
+        loyalty.addView(label(if (backendMemberId().isBlank()) "Este é um cartão demonstrativo. Cria sessão e associa-o ao código do restaurante para consultar os pontos reais." else "Saldo obtido do sistema de fidelização partilhado. A atribuição de pontos é controlada pelo restaurante.", 12f, false, Color.rgb(229, 235, 228)))
         content.addView(loyalty, cardParams())
 
         content.addView(secondaryButton("Definir o meu nome") { showCustomerProfileDialog() }, LinearLayout.LayoutParams(-1, dp(44)))
@@ -902,9 +956,9 @@ class MainActivity : Activity() {
         content.addView(rewards, cardParams())
 
         val syncNote = makeCard(13)
-        syncNote.addView(label("SINCRONIZAÇÃO AINDA NÃO LIGADA", 10f, true, red))
+        syncNote.addView(label(if (backendMemberId().isBlank()) "CARTÃO AINDA NÃO ASSOCIADO" else "CONTA LIGADA", 10f, true, if (backendMemberId().isBlank()) red else green))
         addGap(syncNote, 5)
-        syncNote.addView(label("Esta aplicação de cliente funciona em modo de demonstração. Para ser vendida como serviço real, precisamos de uma base de dados partilhada, login seguro, regras de pontos e testes de privacidade.", 12f, false, muted))
+        syncNote.addView(label(if (backendMemberId().isBlank()) "Para ver o saldo real, inicia sessão e associa a conta com o código fornecido pelo restaurante." else "Restaurante associado: " + (backendPrefs.getString("member_restaurant_name", "Restaurante") ?: "Restaurante") + ". Atualiza o saldo quando quiseres consultar as alterações mais recentes.", 12f, false, muted))
         content.addView(syncNote, cardParams())
 
         setContentView(appRoot)
