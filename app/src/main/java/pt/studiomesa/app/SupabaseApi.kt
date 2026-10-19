@@ -162,6 +162,84 @@ object SupabaseApi {
         return array.getJSONObject(0)
     }
 
+    fun listTables(token: String, restaurantId: String): JSONArray {
+        val encoded = URLEncoder.encode(restaurantId, "UTF-8")
+        return JSONArray(call(
+            "GET",
+            "/rest/v1/restaurant_tables?select=id,table_number,is_occupied&restaurant_id=eq.$encoded&order=table_number.asc",
+            null,
+            token
+        ))
+    }
+
+    fun updateTable(token: String, tableId: String, occupied: Boolean) {
+        val encoded = URLEncoder.encode(tableId, "UTF-8")
+        call(
+            "PATCH",
+            "/rest/v1/restaurant_tables?id=eq.$encoded",
+            JSONObject().put("is_occupied", occupied),
+            token
+        )
+    }
+
+    fun listMenuItems(token: String, restaurantId: String): JSONArray {
+        val encoded = URLEncoder.encode(restaurantId, "UTF-8")
+        return JSONArray(call(
+            "GET",
+            "/rest/v1/menu_items?select=id,name,price,cost,is_active&restaurant_id=eq.$encoded&is_active=eq.true&order=name.asc",
+            null,
+            token
+        ))
+    }
+
+    fun addMenuItem(token: String, restaurantId: String, name: String, price: Double, cost: Double) {
+        call(
+            "POST",
+            "/rest/v1/menu_items",
+            JSONObject()
+                .put("restaurant_id", restaurantId)
+                .put("name", name.trim())
+                .put("price", price)
+                .put("cost", cost)
+                .put("is_active", true),
+            token
+        )
+    }
+
+    fun listOrders(token: String, restaurantId: String): JSONArray {
+        val encoded = URLEncoder.encode(restaurantId, "UTF-8")
+        return JSONArray(call(
+            "GET",
+            "/rest/v1/restaurant_orders?select=id,table_number,item_name,amount,status,created_at&restaurant_id=eq.$encoded&order=created_at.desc",
+            null,
+            token
+        ))
+    }
+
+    fun createOrder(token: String, restaurantId: String, tableNumber: Int, itemName: String, amount: Double) {
+        call(
+            "POST",
+            "/rest/v1/restaurant_orders",
+            JSONObject()
+                .put("restaurant_id", restaurantId)
+                .put("table_number", tableNumber)
+                .put("item_name", itemName)
+                .put("amount", amount)
+                .put("status", "Aberto"),
+            token
+        )
+    }
+
+    fun updateOrder(token: String, orderId: String, status: String) {
+        val encoded = URLEncoder.encode(orderId, "UTF-8")
+        call(
+            "PATCH",
+            "/rest/v1/restaurant_orders?id=eq.$encoded",
+            JSONObject().put("status", status),
+            token
+        )
+    }
+
     fun getMyRestaurant(token: String): JSONObject? {
         val response = call("POST", "/rest/v1/rpc/get_my_restaurant", JSONObject(), token)
         val restaurants = JSONArray(response)
