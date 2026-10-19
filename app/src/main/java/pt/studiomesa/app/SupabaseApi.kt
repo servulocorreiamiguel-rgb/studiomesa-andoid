@@ -259,6 +259,16 @@ object SupabaseApi {
         )
     }
 
+    fun listOrderEvents(token: String, orderId: String): JSONArray {
+        val encoded = URLEncoder.encode(orderId, "UTF-8")
+        return JSONArray(call(
+            "GET",
+            "/rest/v1/restaurant_order_events?select=event_type,old_status,new_status,created_at,actor_user_id&order_id=eq.$encoded&order=created_at.asc",
+            null,
+            token
+        ))
+    }
+
     fun updateOrder(token: String, orderId: String, status: String) {
         val encoded = URLEncoder.encode(orderId, "UTF-8")
         call(
