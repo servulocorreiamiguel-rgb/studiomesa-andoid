@@ -3,7 +3,10 @@ package pt.studiomesa.app
 data class MenuEntry(
     val name: String,
     val price: Double,
-    val cost: Double
+    val cost: Double,
+    val category: String = "Prato principal",
+    val description: String = "",
+    val allergens: String = ""
 )
 
 data class OrderEntry(
