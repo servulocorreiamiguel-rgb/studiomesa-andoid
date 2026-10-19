@@ -1,0 +1,1 @@
+Temporary marker used to trigger the Android CI build for the five restaurant/customer demo APKs. Do not merge this marker into the main branch.
