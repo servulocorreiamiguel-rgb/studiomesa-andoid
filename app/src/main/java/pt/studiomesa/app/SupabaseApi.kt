@@ -231,21 +231,33 @@ object SupabaseApi {
         val encoded = URLEncoder.encode(restaurantId, "UTF-8")
         return JSONArray(call(
             "GET",
-            "/rest/v1/menu_items?select=id,name,price,cost,is_active&restaurant_id=eq.$encoded&is_active=eq.true&order=name.asc",
+            "/rest/v1/menu_items?select=id,name,category,description,price,cost,allergens,is_active&restaurant_id=eq.$encoded&is_active=eq.true&order=category.asc,name.asc",
             null,
             token
         ))
     }
 
-    fun addMenuItem(token: String, restaurantId: String, name: String, price: Double, cost: Double) {
+    fun addMenuItem(
+        token: String,
+        restaurantId: String,
+        name: String,
+        category: String,
+        description: String,
+        price: Double,
+        cost: Double,
+        allergens: String
+    ) {
         call(
             "POST",
             "/rest/v1/menu_items",
             JSONObject()
                 .put("restaurant_id", restaurantId)
                 .put("name", name.trim())
+                .put("category", category.trim())
+                .put("description", description.trim())
                 .put("price", price)
                 .put("cost", cost)
+                .put("allergens", allergens.trim())
                 .put("is_active", true),
             token
         )
@@ -255,8 +267,11 @@ object SupabaseApi {
         token: String,
         itemId: String,
         name: String,
+        category: String,
+        description: String,
         price: Double,
-        cost: Double
+        cost: Double,
+        allergens: String
     ) {
         val encoded = URLEncoder.encode(itemId, "UTF-8")
         call(
@@ -264,8 +279,11 @@ object SupabaseApi {
             "/rest/v1/menu_items?id=eq.$encoded",
             JSONObject()
                 .put("name", name.trim())
+                .put("category", category.trim())
+                .put("description", description.trim())
                 .put("price", price)
-                .put("cost", cost),
+                .put("cost", cost)
+                .put("allergens", allergens.trim()),
             token
         )
     }
