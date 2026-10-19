@@ -687,10 +687,17 @@ class MainActivity : Activity() {
         notice.addView(label("Por agora, a equipa atribui e desconta pontos manualmente. A acumulação automática por compra, os prémios e a sincronização com a app do cliente ainda não estão ligados.", 12.5f, false, ink))
         container.addView(notice, cardParams())
 
-        container.addView(primaryButton("+  Adicionar cliente") { showAddCustomerDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
+        val remoteMode = backendToken().isNotBlank() && backendRestaurantId().isNotBlank()
+        if (remoteMode) {
+            container.addView(primaryButton("Atualizar clientes do servidor") { refreshRemoteCustomers() }, LinearLayout.LayoutParams(-1, dp(48)))
+            addGap(container, 6)
+            container.addView(secondaryButton("Ver código de adesão") { showRestaurantJoinCode() }, LinearLayout.LayoutParams(-1, dp(42)))
+        } else {
+            container.addView(primaryButton("+  Adicionar cliente (local)") { showAddCustomerDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
+        }
         addGap(container, 13)
 
-        val customers = store.getCustomers()
+        val customers = if (remoteMode) loadRemoteCustomers() else store.getCustomers()
         if (customers.isEmpty()) {
             container.addView(emptyCard("Ainda não há cartões de fidelização. Adiciona um cliente para começar a testar os pontos."))
             return
@@ -726,6 +733,10 @@ class MainActivity : Activity() {
     }
 
     private fun showAddCustomerDialog() {
+        if (backendToken().isNotBlank() && backendRestaurantId().isNotBlank()) {
+            showRestaurantJoinCode()
+            return
+        }
         val nameField = inputField("Nome do cliente", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -784,7 +795,17 @@ class MainActivity : Activity() {
                     redeem && amount > customer.points -> amountField.error = "O saldo não chega para esse desconto"
                     else -> {
                         val delta = if (redeem) -amount else amount
-                        if (store.adjustCustomerPoints(customer.code, delta)) {
+                        if (customer.backendId != null && backendToken().isNotBlank()) {
+                            dialog.dismiss()
+                            runBackend({
+                                SupabaseApi.adjustPoints(backendToken(), customer.backendId, delta, if (redeem) "Desconto manual" else "Atribuição manual")
+                                val members = SupabaseApi.listMembers(backendToken(), backendRestaurantId())
+                                backendPrefs.edit().putString("remote_members_json", members.toString()).apply()
+                                "OK"
+                            }) {
+                                renderApp()
+                            }
+                        } else if (store.adjustCustomerPoints(customer.code, delta)) {
                             dialog.dismiss()
                             renderApp()
                         } else {
