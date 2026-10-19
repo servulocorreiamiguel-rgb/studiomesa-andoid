@@ -16,18 +16,21 @@ Estes valores são propostas de referência para avaliação comercial, não pag
 - **Pedidos:** criação de pedidos por mesa/artigo e fluxo de estado Aberto → Em preparação → Pronto → Concluído.
 - **Carta e custos:** artigos, preço de venda e custo estimado; os custos permanecem na aplicação de gestão.
 - **Dados partilhados:** quando existe sessão e restaurante configurado, mesas, carta e pedidos são guardados no Supabase e podem ser atualizados em vários dispositivos autenticados. A sincronização é feita ao abrir a aplicação, após operações e manualmente; ainda não há atualização em tempo real por subscrição.
-- **Fidelização partilhada:** adesão de clientes com código, saldo de pontos centralizado e registo das alterações efetuadas pelo restaurante.
+- **Fidelização partilhada:** adesão de clientes com código, saldo de pontos centralizado e registo das alterações efetuadas pelo restaurante. O código de clientes fica num esquema privado e o proprietário pode renová-lo.
 - **Aplicação de cliente:** login/recuperação de adesão, consulta de saldo, código de cartão e carta com nomes e preços publicados pelo restaurante. A aplicação de cliente não recebe os custos ou margens internas.
 - **Calculadora de preço indicativo** e **indicadores operacionais** nos planos correspondentes.
 - **Identidade personalizável:** o nome do restaurante aparece depois de configurar a respetiva conta.
+- **Acesso de equipa:** código separado para juntar contas de funcionários, limitado a um restaurante por conta. O proprietário pode renovar o código; os códigos não são apresentados a clientes.
+- **Gestão da carta:** editar preço e custo ou arquivar um artigo sem apagar artigos de pedidos antigos.
+- **Histórico de pedidos no servidor:** registo de criação e alterações de estado com hora e utilizador, acessível apenas à equipa autenticada.
 
 ## O que ainda falta antes da venda ou utilização em serviço real
 
 - Testes ponta a ponta em telemóveis reais, incluindo vários dispositivos, utilizadores, perda de internet, sessões expiradas e erros de servidor. A compilação de um APK não substitui esses testes.
 - Regras comerciais da fidelização: acumulação automática, recompensas configuráveis, resgates, limites e prevenção de fraude. Neste momento, o saldo é ajustado manualmente pelo restaurante.
-- Gestão de equipas e permissões por função, incluindo um processo seguro para convidar trabalhadores.
+- Gestão avançada de equipas ainda incompleta: remover funcionários, suspender acessos, definir permissões granulares por função e gerir turnos. Atualmente a equipa partilha as permissões operacionais gerais do restaurante.
 - Integração com POS/caixa, pagamentos, impressoras de cozinha, recibos ou faturação.
-- Cópias de segurança e procedimento de recuperação, monitorização, registos de auditoria para as ações de gestão e política de conservação/eliminação de dados.
+- Cópias de segurança e procedimento testado de recuperação, monitorização, exportação/eliminação de dados e política de conservação de dados. O histórico de pedidos está implementado; ainda falta registar todas as ações de gestão num trilho de auditoria completo.
 - Gestão completa da carta (categorias, descrições, fotografias, alergénios, disponibilidade por horário, idiomas e validação editorial).
 - Testes de privacidade, segurança e proteção de dados; revisão independente da configuração de produção. A proteção de palavras-passe comprometidas no Supabase ainda não está ativada.
 - Credenciais próprias de OAuth para Google/Microsoft, caso se queira disponibilizar esses métodos de login. Para emails de confirmação fora do teste, é necessário configurar um fornecedor SMTP apropriado.
