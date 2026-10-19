@@ -359,13 +359,16 @@ class MainActivity : Activity() {
 
     private fun renderTables(container: LinearLayout) {
         pageIntro(container, "Mesas", if (hasRemoteRestaurant())
-            "Estado partilhado entre dispositivos da equipa."
+            "Estado, zona e capacidade partilhados pela equipa."
         else "Toca numa mesa para alternar entre livre e ocupada.")
         addGap(container, 8)
 
         if (hasRemoteRestaurant()) {
+            container.addView(primaryButton("+  Adicionar mesa") { showAddTableDialog() },
+                LinearLayout.LayoutParams(-1, dp(46)))
+            addGap(container, 6)
             container.addView(secondaryButton("Atualizar do servidor") { refreshRemoteOperations() },
-                LinearLayout.LayoutParams(-1, dp(42)))
+                LinearLayout.LayoutParams(-1, dp(40)))
             addGap(container, 10)
 
             val tableData = remoteTables()
@@ -380,7 +383,9 @@ class MainActivity : Activity() {
                 row.addView(remoteTableCard(
                     first.optString("id"),
                     first.optInt("table_number", index + 1),
-                    first.optBoolean("is_occupied", false)
+                    first.optBoolean("is_occupied", false),
+                    first.optString("area", "Sala principal"),
+                    first.optInt("seats", 2)
                 ), LinearLayout.LayoutParams(0, -2, 1f).apply {
                     setMargins(0, 0, dp(6), dp(10))
                 })
@@ -390,7 +395,9 @@ class MainActivity : Activity() {
                         row.addView(remoteTableCard(
                             second.optString("id"),
                             second.optInt("table_number", index + 2),
-                            second.optBoolean("is_occupied", false)
+                            second.optBoolean("is_occupied", false),
+                            second.optString("area", "Sala principal"),
+                            second.optInt("seats", 2)
                         ), LinearLayout.LayoutParams(0, -2, 1f).apply {
                             setMargins(dp(6), 0, 0, dp(10))
                         })
@@ -402,7 +409,7 @@ class MainActivity : Activity() {
                 }
                 container.addView(row)
             }
-            container.addView(label("As alterações são guardadas no servidor e ficam disponíveis à equipa após atualização.", 12f, false, muted))
+            container.addView(label("Mesas numeradas até 100. As zonas e os lugares podem ser configurados para refletir a organização real do restaurante.", 12f, false, muted))
             return
         }
 
@@ -425,20 +432,33 @@ class MainActivity : Activity() {
             container.addView(row)
         }
         addGap(container, 3)
-        container.addView(label("O estado das mesas fica guardado localmente neste telemóvel.", 12f, false, muted))
+        container.addView(label("O modo de demonstração local inclui 12 mesas. Configura um restaurante para gerir a planta no servidor.", 12f, false, muted))
     }
 
-    private fun remoteTableCard(tableId: String, tableNumber: Int, occupied: Boolean): LinearLayout {
-        val card = makeCard(15, if (occupied) paleRed else white)
+    private fun remoteTableCard(
+        tableId: String,
+        tableNumber: Int,
+        occupied: Boolean,
+        area: String,
+        seats: Int
+    ): LinearLayout {
+        val card = makeCard(14, if (occupied) paleRed else white)
         card.addView(label("MESA  " + tableNumber.toString().padStart(2, '0'), 10f, true, muted))
-        addGap(card, 11)
-        card.addView(label(if (occupied) "Ocupada" else "Livre", 18f, true, if (occupied) red else forest))
         addGap(card, 8)
+        card.addView(label(if (occupied) "Ocupada" else "Livre", 18f, true, if (occupied) red else forest))
+        addGap(card, 4)
+        card.addView(label(area, 12f, true, forestSoft))
+        card.addView(label("$seats lugares", 11f, false, muted))
+        addGap(card, 9)
         card.addView(label(if (occupied) "MARCAR LIVRE" else "MARCAR OCUPADA", 9f, true, if (occupied) red else green).apply {
             setPadding(dp(7), dp(6), dp(7), dp(6))
             gravity = Gravity.CENTER
             background = rounded(if (occupied) Color.rgb(255, 246, 243) else paleGreen, 12)
         })
+        addGap(card, 5)
+        card.addView(secondaryButton("Editar zona / lugares") {
+            showEditTableDialog(tableId, tableNumber, area, seats)
+        }, LinearLayout.LayoutParams(-1, dp(38)))
         card.isClickable = true
         card.isFocusable = true
         card.setOnClickListener {
@@ -452,6 +472,115 @@ class MainActivity : Activity() {
         }
         return card
     }
+
+    private fun showAddTableDialog() {
+        if (!hasRemoteRestaurant()) return
+        val existing = remoteTables()
+        val usedNumbers = (0 until existing.length()).mapNotNull {
+            existing.optJSONObject(it)?.optInt("table_number")
+        }.toSet()
+        val nextNumber = (1..100).firstOrNull { it !in usedNumbers } ?: 0
+
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(10), dp(22), dp(4))
+        }
+        val numberField = inputField("Número da mesa (1–100)", InputType.TYPE_CLASS_NUMBER).apply {
+            if (nextNumber > 0) setText(nextNumber.toString())
+        }
+        val areaField = inputField("Zona: Sala principal, Terraço…", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES).apply {
+            setText("Sala principal")
+        }
+        val seatsField = inputField("Número de lugares (1–30)", InputType.TYPE_CLASS_NUMBER).apply {
+            setText("2")
+        }
+        form.addView(label("NÚMERO", 10f, true, forestSoft)); form.addView(numberField, fieldParams())
+        addGap(form, 2)
+        form.addView(label("ZONA", 10f, true, forestSoft)); form.addView(areaField, fieldParams())
+        addGap(form, 2)
+        form.addView(label("CAPACIDADE", 10f, true, forestSoft)); form.addView(seatsField, fieldParams())
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Adicionar mesa")
+            .setMessage("Define o número, a zona e a capacidade para a planta do restaurante.")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Adicionar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val number = numberField.text.toString().trim().toIntOrNull()
+                val area = areaField.text.toString().trim()
+                val seats = seatsField.text.toString().trim().toIntOrNull()
+                when {
+                    number == null || number !in 1..100 -> numberField.error = "Usa um número entre 1 e 100"
+                    number in usedNumbers -> numberField.error = "Esse número já está em uso"
+                    area.isBlank() || area.length > 80 -> areaField.error = "Introduz uma zona com 1 a 80 caracteres"
+                    seats == null || seats !in 1..30 -> seatsField.error = "Usa entre 1 e 30 lugares"
+                    else -> runBackend({
+                        val token = backendToken()
+                        val restaurantId = backendRestaurantId()
+                        SupabaseApi.addTable(token, restaurantId, number, area, seats)
+                        cacheRemoteOperations(token, restaurantId)
+                        "OK"
+                    }) {
+                        dialog.dismiss()
+                        renderApp()
+                    }
+                }
+            }
+        }
+        dialog.show()
+        if (nextNumber == 0) {
+            numberField.error = "Já foram usados os números de mesa de 1 a 100"
+        }
+    }
+
+    private fun showEditTableDialog(tableId: String, tableNumber: Int, currentArea: String, currentSeats: Int) {
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(10), dp(22), dp(4))
+        }
+        val areaField = inputField("Zona da mesa", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES).apply {
+            setText(currentArea)
+        }
+        val seatsField = inputField("Número de lugares (1–30)", InputType.TYPE_CLASS_NUMBER).apply {
+            setText(currentSeats.toString())
+        }
+        form.addView(label("MESA " + tableNumber.toString().padStart(2, '0'), 11f, true, forestSoft))
+        addGap(form, 5)
+        form.addView(label("ZONA", 10f, true, forestSoft)); form.addView(areaField, fieldParams())
+        addGap(form, 2)
+        form.addView(label("CAPACIDADE", 10f, true, forestSoft)); form.addView(seatsField, fieldParams())
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Configurar mesa")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Guardar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val area = areaField.text.toString().trim()
+                val seats = seatsField.text.toString().trim().toIntOrNull()
+                when {
+                    area.isBlank() || area.length > 80 -> areaField.error = "Introduz uma zona com 1 a 80 caracteres"
+                    seats == null || seats !in 1..30 -> seatsField.error = "Usa entre 1 e 30 lugares"
+                    else -> runBackend({
+                        val token = backendToken()
+                        SupabaseApi.updateTableDetails(token, tableId, tableNumber, area, seats)
+                        cacheRemoteOperations(token, backendRestaurantId())
+                        "OK"
+                    }) {
+                        dialog.dismiss()
+                        renderApp()
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+
 
     private fun tableCard(table: Int): LinearLayout {
         val occupied = store.isTableOccupied(table)
@@ -1990,8 +2119,26 @@ class MainActivity : Activity() {
             setPadding(dp(22), dp(10), dp(22), dp(4))
         }
         form.addView(label("MESA", 10f, true, forestSoft))
+        val tableOptions = mutableListOf<Pair<Int, String>>()
+        if (cloudMode) {
+            val tableData = remoteTables()
+            for (index in 0 until tableData.length()) {
+                val tableItem = tableData.optJSONObject(index) ?: continue
+                val tableNumber = tableItem.optInt("table_number", index + 1)
+                val area = tableItem.optString("area", "Sala principal")
+                tableOptions.add(tableNumber to ("Mesa " + tableNumber.toString().padStart(2, '0') + " · " + area))
+            }
+        } else {
+            (1..12).forEach { tableOptions.add(it to ("Mesa " + it)) }
+        }
+        if (tableOptions.isEmpty()) {
+            AlertDialog.Builder(this).setTitle("Sem mesas disponíveis")
+                .setMessage("Adiciona uma mesa antes de criar um pedido.")
+                .setPositiveButton("OK", null).show()
+            return
+        }
         val tableSpinner = Spinner(this)
-        tableSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, (1..12).map { "Mesa " + it })
+        tableSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, tableOptions.map { it.second })
         form.addView(tableSpinner, fieldParams())
         addGap(form, 8)
         form.addView(label("ARTIGO DA CARTA", 10f, true, forestSoft))
@@ -2007,7 +2154,7 @@ class MainActivity : Activity() {
             .create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val table = tableSpinner.selectedItemPosition + 1
+                val table = tableOptions.getOrNull(tableSpinner.selectedItemPosition)?.first ?: 1
                 val selected = items.getOrNull(itemSpinner.selectedItemPosition)
                 if (selected != null) {
                     if (cloudMode) {
