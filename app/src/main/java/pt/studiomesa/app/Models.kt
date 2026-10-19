@@ -14,3 +14,9 @@ data class OrderEntry(
     val status: String,
     val createdAt: Long
 )
+
+data class LoyaltyCustomer(
+    val name: String,
+    val code: String,
+    val points: Int
+)
