@@ -251,9 +251,21 @@ object SupabaseApi {
     }
 
     fun getMyRestaurant(token: String): JSONObject? {
-        val response = call("POST", "/rest/v1/rpc/get_my_restaurant", JSONObject(), token)
+        val response = call("POST", "/rest/v1/rpc/get_my_restaurant_details", JSONObject(), token)
         val restaurants = JSONArray(response)
         return if (restaurants.length() == 0) null else restaurants.getJSONObject(0)
+    }
+
+    fun joinRestaurantStaff(token: String, staffCode: String): JSONObject {
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/join_restaurant_staff",
+            JSONObject().put("p_staff_code", staffCode.trim().uppercase()),
+            token
+        )
+        val result = JSONArray(response)
+        if (result.length() == 0) throw IllegalStateException("Não foi possível associar a conta à equipa.")
+        return result.getJSONObject(0)
     }
 
     fun getMyLoyaltyMembership(token: String): JSONObject? {
