@@ -75,9 +75,28 @@ object SupabaseApi {
         return Session(token, user.optString("id"), user.optString("email", email.trim()))
     }
 
-    fun signUp(email: String, password: String): JSONObject =
-        jsonCall("POST", "/auth/v1/signup",
+    fun signUp(email: String, password: String): JSONObject {
+        val result = jsonCall("POST", "/auth/v1/signup",
             JSONObject().put("email", email.trim()).put("password", password))
+        // GoTrue signup commonly returns the user at the JSON root, not in "user".
+        // Normalize the response so the UI can recognize that the account was created.
+        if (result.optJSONObject("user") == null && result.optString("id").isNotBlank()) {
+            result.put("user", JSONObject()
+                .put("id", result.optString("id"))
+                .put("email", result.optString("email", email.trim())))
+        }
+        return result
+    }
+
+    fun getUser(accessToken: String): JSONObject =
+        jsonCall("GET", "/auth/v1/user", token = accessToken)
+
+    fun oauthUrl(provider: String): String {
+        require(provider == "google" || provider == "azure") { "Fornecedor de início de sessão inválido." }
+        val redirect = URLEncoder.encode("studiomesa://auth-callback", "UTF-8")
+        val scopes = if (provider == "azure") "&scopes=email" else ""
+        return "$BASE_URL/auth/v1/authorize?provider=$provider&redirect_to=$redirect&apikey=$API_KEY$scopes"
+    }
 
     fun createRestaurant(token: String, name: String, code: String): String {
         val response = call("POST", "/rest/v1/rpc/create_restaurant",
