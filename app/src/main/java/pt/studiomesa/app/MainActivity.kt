@@ -282,9 +282,17 @@ class MainActivity : Activity() {
         container.addView(label("Demonstração StudioMesa. Os dados, a carta e os pedidos são exemplos; configura o restaurante e introduz dados aprovados antes de qualquer utilização real.", 14f, false, muted))
         addGap(container, 18)
 
-        val occupied = store.occupiedTableCount()
-        val orders = store.getOrders()
-        val activeOrders = orders.count { it.status != "Concluído" }
+        val occupied = if (hasRemoteRestaurant()) {
+            val tables = remoteTables()
+            (0 until tables.length()).count { tables.optJSONObject(it)?.optBoolean("is_occupied", false) == true }
+        } else store.occupiedTableCount()
+        val activeOrders = if (hasRemoteRestaurant()) {
+            val orders = remoteOrders()
+            (0 until orders.length()).count {
+                val status = orders.optJSONObject(it)?.optString("status").orEmpty()
+                status != "Concluído" && status != "Cancelado"
+            }
+        } else store.getOrders().count { it.status != "Concluído" }
         val stats = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         stats.addView(statCard("MESAS OCUPADAS", "$occupied / 12", if (occupied > 0) copper else forestSoft),
             LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), 0) })
@@ -319,15 +327,64 @@ class MainActivity : Activity() {
 
         addGap(container, 6)
         val note = makeCard(14, copperPale)
-        note.addView(label("DEMONSTRAÇÃO", 10f, true, forest))
+        note.addView(label(if (hasRemoteRestaurant()) "OPERAÇÃO PARTILHADA" else "DEMONSTRAÇÃO", 10f, true, forest))
         addGap(note, 4)
-        note.addView(label("Não está ligado a um sistema de caixa, não sincroniza entre dispositivos e não envia pedidos para a cozinha. Substitui os exemplos pelos dados aprovados pelo restaurante antes de qualquer utilização real.", 12.5f, false, ink))
+        note.addView(label(
+            if (hasRemoteRestaurant()) "Mesas, carta, pedidos e estados ficam guardados no servidor e podem ser consultados pela equipa autenticada. Ainda não existe integração com caixa registadora, pagamentos ou impressora de cozinha."
+            else "O modo de demonstração guarda mesas, carta e pedidos apenas neste telemóvel. Liga uma conta e configura o restaurante para usar os dados partilhados no servidor.",
+            12.5f, false, ink
+        ))
         container.addView(note, cardParams())
     }
 
     private fun renderTables(container: LinearLayout) {
-        pageIntro(container, "Mesas", "Toca numa mesa para alternar entre livre e ocupada.")
+        pageIntro(container, "Mesas", if (hasRemoteRestaurant())
+            "Estado partilhado entre dispositivos da equipa."
+        else "Toca numa mesa para alternar entre livre e ocupada.")
         addGap(container, 8)
+
+        if (hasRemoteRestaurant()) {
+            container.addView(secondaryButton("Atualizar do servidor") { refreshRemoteOperations() },
+                LinearLayout.LayoutParams(-1, dp(42)))
+            addGap(container, 10)
+
+            val tableData = remoteTables()
+            if (tableData.length() == 0) {
+                container.addView(emptyCard("Ainda não existem mesas sincronizadas. Atualiza os dados ou volta a iniciar sessão."))
+                return
+            }
+
+            for (index in 0 until tableData.length() step 2) {
+                val first = tableData.optJSONObject(index) ?: continue
+                val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                row.addView(remoteTableCard(
+                    first.optString("id"),
+                    first.optInt("table_number", index + 1),
+                    first.optBoolean("is_occupied", false)
+                ), LinearLayout.LayoutParams(0, -2, 1f).apply {
+                    setMargins(0, 0, dp(6), dp(10))
+                })
+                if (index + 1 < tableData.length()) {
+                    val second = tableData.optJSONObject(index + 1)
+                    if (second != null) {
+                        row.addView(remoteTableCard(
+                            second.optString("id"),
+                            second.optInt("table_number", index + 2),
+                            second.optBoolean("is_occupied", false)
+                        ), LinearLayout.LayoutParams(0, -2, 1f).apply {
+                            setMargins(dp(6), 0, 0, dp(10))
+                        })
+                    } else {
+                        row.addView(View(this), LinearLayout.LayoutParams(0, dp(1), 1f))
+                    }
+                } else {
+                    row.addView(View(this), LinearLayout.LayoutParams(0, dp(1), 1f))
+                }
+                container.addView(row)
+            }
+            container.addView(label("As alterações são guardadas no servidor e ficam disponíveis à equipa após atualização.", 12f, false, muted))
+            return
+        }
 
         val legend = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -349,6 +406,31 @@ class MainActivity : Activity() {
         }
         addGap(container, 3)
         container.addView(label("O estado das mesas fica guardado localmente neste telemóvel.", 12f, false, muted))
+    }
+
+    private fun remoteTableCard(tableId: String, tableNumber: Int, occupied: Boolean): LinearLayout {
+        val card = makeCard(15, if (occupied) paleRed else white)
+        card.addView(label("MESA  " + tableNumber.toString().padStart(2, '0'), 10f, true, muted))
+        addGap(card, 11)
+        card.addView(label(if (occupied) "Ocupada" else "Livre", 18f, true, if (occupied) red else forest))
+        addGap(card, 8)
+        card.addView(label(if (occupied) "MARCAR LIVRE" else "MARCAR OCUPADA", 9f, true, if (occupied) red else green).apply {
+            setPadding(dp(7), dp(6), dp(7), dp(6))
+            gravity = Gravity.CENTER
+            background = rounded(if (occupied) Color.rgb(255, 246, 243) else paleGreen, 12)
+        })
+        card.isClickable = true
+        card.isFocusable = true
+        card.setOnClickListener {
+            if (tableId.isBlank()) return@setOnClickListener
+            runBackend({
+                val token = backendToken()
+                SupabaseApi.updateTable(token, tableId, !occupied)
+                cacheRemoteOperations(token, backendRestaurantId())
+                "OK"
+            }) { renderApp() }
+        }
+        return card
     }
 
     private fun tableCard(table: Int): LinearLayout {
@@ -374,10 +456,67 @@ class MainActivity : Activity() {
     }
 
     private fun renderOrders(container: LinearLayout) {
-        pageIntro(container, "Pedidos", "Registo simples de pedidos por mesa.")
+        pageIntro(container, "Pedidos", if (hasRemoteRestaurant())
+            "Pedidos partilhados com o resto da equipa."
+        else "Registo simples de pedidos por mesa.")
         addGap(container, 10)
+        if (hasRemoteRestaurant()) {
+            container.addView(secondaryButton("Atualizar do servidor") { refreshRemoteOperations() },
+                LinearLayout.LayoutParams(-1, dp(42)))
+            addGap(container, 7)
+        }
         container.addView(primaryButton("+  Novo pedido") { showCreateOrderDialog() }, LinearLayout.LayoutParams(-1, dp(50)))
         addGap(container, 15)
+
+        if (hasRemoteRestaurant()) {
+            val orders = remoteOrders()
+            if (orders.length() == 0) {
+                container.addView(emptyCard("Ainda não há pedidos registados no servidor. Cria o primeiro pedido para testar o fluxo."))
+                return
+            }
+            for (index in 0 until orders.length()) {
+                val order = orders.optJSONObject(index) ?: continue
+                val status = order.optString("status", "Aberto")
+                val closed = status == "Concluído" || status == "Cancelado"
+                val nextStatus = when (status) {
+                    "Aberto" -> "Em preparação"
+                    "Em preparação" -> "Pronto"
+                    "Pronto" -> "Concluído"
+                    else -> "Aberto"
+                }
+                val card = makeCard(16)
+                val top = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                top.addView(label("MESA " + order.optInt("table_number", 1).toString().padStart(2, '0'), 10f, true, forestSoft),
+                    LinearLayout.LayoutParams(0, -2, 1f))
+                top.addView(label(status.uppercase(Locale("pt", "PT")), 9f, true, if (closed) green else copper).apply {
+                    setPadding(dp(8), dp(6), dp(8), dp(6))
+                    background = rounded(if (closed) paleGreen else copperPale, 12)
+                })
+                card.addView(top)
+                addGap(card, 10)
+                card.addView(label(order.optString("item_name", "Artigo"), 17f, true, ink))
+                addGap(card, 4)
+                card.addView(label(money(order.optDouble("amount", 0.0)), 14f, true, forest))
+                addGap(card, 12)
+                card.addView(secondaryButton(if (closed) "Reabrir pedido" else when (status) {
+                    "Aberto" -> "Enviar para preparação"
+                    "Em preparação" -> "Marcar como pronto"
+                    else -> "Concluir pedido"
+                }) {
+                    runBackend({
+                        val token = backendToken()
+                        SupabaseApi.updateOrder(token, order.optString("id"), nextStatus)
+                        cacheRemoteOperations(token, backendRestaurantId())
+                        "OK"
+                    }) { renderApp() }
+                }, LinearLayout.LayoutParams(-1, dp(42)))
+                container.addView(card, cardParams())
+            }
+            return
+        }
 
         val orders = store.getOrders()
         if (orders.isEmpty()) {
@@ -412,8 +551,61 @@ class MainActivity : Activity() {
     }
 
     private fun renderMenu(container: LinearLayout) {
-        pageIntro(container, "Carta e custos", "Artigos de exemplo para testar a gestão.")
+        pageIntro(container, "Carta e custos", if (hasRemoteRestaurant())
+            "Carta e custos privados, guardados no servidor."
+        else "Artigos de exemplo para testar a gestão.")
         addGap(container, 7)
+        if (hasRemoteRestaurant()) {
+            container.addView(makeCard(13, copperPale).apply {
+                addView(label("CARTA DO RESTAURANTE", 10f, true, forest))
+                addGap(this, 4)
+                addView(label("A carta é partilhada pela equipa. Os custos e margens só são apresentados na aplicação de gestão, não no cartão de cliente.", 12.5f, false, ink))
+            }, cardParams())
+            container.addView(secondaryButton("Atualizar do servidor") { refreshRemoteOperations() },
+                LinearLayout.LayoutParams(-1, dp(42)))
+            addGap(container, 6)
+            container.addView(primaryButton("+  Adicionar artigo") { showAddMenuItemDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
+            addGap(container, 15)
+            val items = remoteMenuItems()
+            if (items.length() == 0) {
+                container.addView(emptyCard("A carta do servidor está vazia. Adiciona os primeiros artigos e preços aprovados pelo restaurante."))
+                return
+            }
+            for (index in 0 until items.length()) {
+                val item = items.optJSONObject(index) ?: continue
+                val card = makeCard(15)
+                card.addView(label(item.optString("name"), 16f, true, ink))
+                addGap(card, 7)
+                val prices = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                val price = item.optDouble("price", 0.0)
+                val cost = item.optDouble("cost", 0.0)
+                prices.addView(priceColumn("PREÇO DE VENDA", money(price)), LinearLayout.LayoutParams(0, -2, 1f))
+                prices.addView(priceColumn("CUSTO ESTIMADO", money(cost)), LinearLayout.LayoutParams(0, -2, 1f))
+                card.addView(prices)
+                val ratio = if (price > 0.0) cost / price * 100.0 else 0.0
+                addGap(card, 9)
+                card.addView(label("Custo do artigo: " + String.format(Locale("pt", "PT"), "%.1f%%", ratio) + " do preço de venda", 11.5f, false, muted))
+                addGap(card, 9)
+                card.addView(secondaryButton("Arquivar artigo") {
+                    AlertDialog.Builder(this)
+                        .setTitle("Arquivar artigo?")
+                        .setMessage("«" + item.optString("name") + "» deixa de aparecer na carta ativa. Os pedidos antigos mantêm o registo.")
+                        .setNegativeButton("Cancelar", null)
+                        .setPositiveButton("Arquivar") { _, _ ->
+                            runBackend({
+                                val token = backendToken()
+                                SupabaseApi.deactivateMenuItem(token, item.optString("id"))
+                                cacheRemoteOperations(token, backendRestaurantId())
+                                "OK"
+                            }) { renderApp() }
+                        }
+                        .show()
+                }, LinearLayout.LayoutParams(-1, dp(40)))
+                container.addView(card, cardParams())
+            }
+            return
+        }
+
         container.addView(makeCard(13, copperPale).apply {
             addView(label("CARTA FICTÍCIA", 10f, true, forest))
             addGap(this, 4)
@@ -436,8 +628,7 @@ class MainActivity : Activity() {
             card.addView(prices)
             val ratio = if (item.price > 0.0) item.cost / item.price * 100.0 else 0.0
             addGap(card, 9)
-            val ratioLabel = label("Custo do artigo: " + String.format(Locale("pt", "PT"), "%.1f%%", ratio) + " do preço de venda", 11.5f, false, muted)
-            card.addView(ratioLabel)
+            card.addView(label("Custo do artigo: " + String.format(Locale("pt", "PT"), "%.1f%%", ratio) + " do preço de venda", 11.5f, false, muted))
             addGap(card, 9)
             card.addView(secondaryButton("Remover artigo") {
                 AlertDialog.Builder(this)
@@ -544,16 +735,21 @@ class MainActivity : Activity() {
                 .remove("restaurant_name")
                 .remove("join_code")
             if (restaurant != null) {
-                editor.putString("restaurant_id", restaurant.optString("restaurant_id"))
+                val restaurantId = restaurant.optString("restaurant_id")
+                editor.putString("restaurant_id", restaurantId)
                     .putString("restaurant_name", restaurant.optString("restaurant_name"))
                     .putString("join_code", restaurant.optString("join_code"))
             }
             editor.apply()
+            if (restaurant != null) {
+                cacheRemoteOperations(token, restaurant.optString("restaurant_id"))
+            }
         } catch (_: Exception) {
-            // Keep authentication successful if restoring the owner's restaurant
-            // temporarily fails; the server can be queried again after sign-in.
+            // Keep authentication successful if restoring cloud data temporarily fails.
         }
     }
+
+
 
     private fun backendToken(): String = backendPrefs.getString("access_token", "") ?: ""
     private fun backendRestaurantId(): String = backendPrefs.getString("restaurant_id", "") ?: ""
