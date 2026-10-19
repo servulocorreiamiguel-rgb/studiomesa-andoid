@@ -162,7 +162,7 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
         }
         val mark = TextView(this).apply {
-            text = "BM"
+            text = "SM"
             textSize = 15f
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
             gravity = Gravity.CENTER
@@ -176,7 +176,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(11), 0, dp(5), 0)
         }
-        brandText.addView(label("Bicho Mau", 23f, true, white))
+        brandText.addView(label(displayRestaurantName(), 23f, true, white))
         brandText.addView(label("STUDIOMESA  /  GESTÃO DE SALA", 9.5f, true, copper))
         brandRow.addView(brandText, LinearLayout.LayoutParams(0, -2, 1f))
 
@@ -278,7 +278,7 @@ class MainActivity : Activity() {
         addGap(container, 5)
         container.addView(label("A sala, num relance.", 27f, true, forestDeep))
         addGap(container, 5)
-        container.addView(label("Uma demonstração visual personalizada para o Bistrô Bicho Mau. Os dados e a carta são exemplos, não informação oficial do restaurante.", 14f, false, muted))
+        container.addView(label("Demonstração StudioMesa. Os dados, a carta e os pedidos são exemplos; configura o restaurante e introduz dados aprovados antes de qualquer utilização real.", 14f, false, muted))
         addGap(container, 18)
 
         val occupied = store.occupiedTableCount()
@@ -416,7 +416,7 @@ class MainActivity : Activity() {
         container.addView(makeCard(13, copperPale).apply {
             addView(label("CARTA FICTÍCIA", 10f, true, forest))
             addGap(this, 4)
-            addView(label("Os nomes e valores abaixo são ilustrativos; não representam a carta real do Bistrô Bicho Mau.", 12.5f, false, ink))
+            addView(label("Os nomes e valores abaixo são ilustrativos; não representam a carta real do restaurante.", 12.5f, false, ink))
         }, cardParams())
         container.addView(primaryButton("+  Adicionar artigo") { showAddMenuItemDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
         addGap(container, 15)
@@ -505,6 +505,14 @@ class MainActivity : Activity() {
         note.addView(label("IVA, salários, renda, energia, comissões, desperdício e outros encargos não são incluídos automaticamente. Confirma esses valores antes de definir preços reais.", 12.5f, false, ink))
         container.addView(note, cardParams())
     }
+
+    private fun displayRestaurantName(): String =
+        backendPrefs.getString("restaurant_name", null)?.trim()?.takeIf { it.isNotEmpty() }
+            ?: "StudioMesa"
+
+    private fun displayCustomerRestaurantName(): String =
+        backendPrefs.getString("member_restaurant_name", null)?.trim()?.takeIf { it.isNotEmpty() }
+            ?: "StudioMesa"
 
     private fun backendToken(): String = backendPrefs.getString("access_token", "") ?: ""
     private fun backendRestaurantId(): String = backendPrefs.getString("restaurant_id", "") ?: ""
@@ -855,7 +863,7 @@ class MainActivity : Activity() {
         val code = backendPrefs.getString("join_code", "") ?: ""
         AlertDialog.Builder(this)
             .setTitle("Código de adesão")
-            .setMessage("Código: $code\n\nO cliente deve abrir a aplicação «Bicho Mau - Cliente», criar conta ou iniciar sessão e escolher «Associar ao restaurante».")
+            .setMessage("Código: $code\n\nO cliente deve abrir a aplicação «StudioMesa - Cliente», criar conta ou iniciar sessão e escolher «Associar ao restaurante».")
             .setPositiveButton("OK", null)
             .show()
     }
@@ -1062,7 +1070,7 @@ class MainActivity : Activity() {
                 intArrayOf(forestDeep, forest, forestSoft)
             ).apply { cornerRadius = dp(22).toFloat() }
         }
-        header.addView(label("Bicho Mau", 25f, true, white))
+        header.addView(label(displayCustomerRestaurantName(), 25f, true, white))
         addGap(header, 4)
         header.addView(label("CARTÃO DIGITAL DE CLIENTE  ·  " + planTitle, 10f, true, copper))
         addGap(header, 13)
