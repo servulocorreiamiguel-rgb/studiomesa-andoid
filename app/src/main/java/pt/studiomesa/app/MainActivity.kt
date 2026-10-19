@@ -515,6 +515,25 @@ class MainActivity : Activity() {
         backendPrefs.getString("member_restaurant_name", null)?.trim()?.takeIf { it.isNotEmpty() }
             ?: "StudioMesa"
 
+    private fun refreshSessionIfNeeded() {
+        val accessToken = backendToken()
+        val refreshToken = backendPrefs.getString("refresh_token", "") ?: ""
+        if (accessToken.isBlank() || refreshToken.isBlank()) return
+
+        val expiresAt = SupabaseApi.tokenExpiresAtMillis(accessToken)
+        if (expiresAt > System.currentTimeMillis() + 120_000L) return
+
+        val session = SupabaseApi.refreshSession(refreshToken)
+        backendPrefs.edit()
+            .putString("access_token", session.accessToken)
+            .putString("refresh_token", session.refreshToken)
+            .putString("user_id", session.userId)
+            .putString("user_email", session.email)
+            .apply()
+
+        if (!isCustomerApp) restoreOwnedRestaurant(session.accessToken)
+    }
+
     private fun restoreOwnedRestaurant(token: String) {
         if (isCustomerApp || token.isBlank()) return
 
@@ -570,6 +589,7 @@ class MainActivity : Activity() {
         progress.show()
         Thread {
             try {
+                refreshSessionIfNeeded()
                 val result = task()
                 runOnUiThread {
                     if (!isFinishing) {
@@ -714,6 +734,7 @@ class MainActivity : Activity() {
                                     token.isNotBlank() && user != null -> {
                                         backendPrefs.edit()
                                             .putString("access_token", token)
+                                            .putString("refresh_token", result.optString("refresh_token"))
                                             .putString("user_id", user.optString("id"))
                                             .putString("user_email", email)
                                             .apply()
@@ -735,6 +756,7 @@ class MainActivity : Activity() {
                                 val session = SupabaseApi.signIn(email, password)
                                 backendPrefs.edit()
                                     .putString("access_token", session.accessToken)
+                                    .putString("refresh_token", session.refreshToken)
                                     .putString("user_id", session.userId)
                                     .putString("user_email", session.email)
                                     .apply()
@@ -838,6 +860,7 @@ class MainActivity : Activity() {
             backendPrefs.edit().remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
                 .remove("restaurant_id").remove("restaurant_name").remove("join_code")
                 .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
+                .remove("remote_members_json")
                 .apply()
             renderApp()
         }, LinearLayout.LayoutParams(-1, dp(44)))
@@ -865,14 +888,13 @@ class MainActivity : Activity() {
 
     private fun refreshRemoteCustomers() {
         val restaurantId = backendRestaurantId()
-        val token = backendToken()
-        if (token.isBlank() || restaurantId.isBlank()) {
+        if (backendToken().isBlank() || restaurantId.isBlank()) {
             AlertDialog.Builder(this).setMessage("Inicia sessão e configura primeiro o restaurante na secção Conta.")
                 .setPositiveButton("OK", null).show()
             return
         }
         runBackend({
-            val members = SupabaseApi.listMembers(token, restaurantId)
+            val members = SupabaseApi.listMembers(backendToken(), restaurantId)
             backendPrefs.edit().putString("remote_members_json", members.toString()).apply()
             members.length().toString()
         }) { count ->
@@ -1069,11 +1091,10 @@ class MainActivity : Activity() {
     }
 
     private fun refreshCustomerMembership() {
-        val token = backendToken()
         val memberId = backendMemberId()
-        if (token.isBlank() || memberId.isBlank()) { showCustomerJoinDialog(); return }
+        if (backendToken().isBlank() || memberId.isBlank()) { showCustomerJoinDialog(); return }
         runBackend({
-            val member = SupabaseApi.getMember(token, memberId)
+            val member = SupabaseApi.getMember(backendToken(), memberId)
             backendPrefs.edit().putInt("member_points", member.optInt("points", 0))
                 .putString("member_code", member.optString("member_code")).apply()
             "OK"
