@@ -1064,7 +1064,12 @@ class MainActivity : Activity() {
                     nameField.error = "Usa entre 2 e 100 caracteres"
                 } else {
                     dialog.dismiss()
-                    runBackend({ SupabaseApi.createRestaurant(backendToken(), name, code) }) { restaurantId ->
+                    runBackend({
+                        val token = backendToken()
+                        val restaurantId = SupabaseApi.createRestaurant(token, name, code)
+                        cacheRemoteOperations(token, restaurantId)
+                        restaurantId
+                    }) { restaurantId ->
                         backendPrefs.edit().putString("restaurant_id", restaurantId)
                             .putString("restaurant_name", name).putString("join_code", code).apply()
                         renderApp()
@@ -1516,11 +1521,12 @@ class MainActivity : Activity() {
     }
 
     private fun showCreateOrderDialog() {
-        val items = store.getMenu()
+        val cloudMode = hasRemoteRestaurant()
+        val items = if (cloudMode) remoteMenuEntries() else store.getMenu()
         if (items.isEmpty()) {
             AlertDialog.Builder(this)
                 .setTitle("Carta vazia")
-                .setMessage("Adiciona primeiro um artigo à carta de demonstração.")
+                .setMessage("Adiciona primeiro um artigo à carta e tenta novamente.")
                 .setPositiveButton("Abrir carta") { _, _ ->
                     activePage = "Carta"; renderApp()
                 }
@@ -1554,11 +1560,25 @@ class MainActivity : Activity() {
                 val table = tableSpinner.selectedItemPosition + 1
                 val selected = items.getOrNull(itemSpinner.selectedItemPosition)
                 if (selected != null) {
-                    val now = System.currentTimeMillis()
-                    store.addOrder(OrderEntry(now, table, selected.name, selected.price, "Aberto", now))
-                    dialog.dismiss()
-                    activePage = "Pedidos"
-                    renderApp()
+                    if (cloudMode) {
+                        val restaurantId = backendRestaurantId()
+                        runBackend({
+                            val token = backendToken()
+                            SupabaseApi.createOrder(token, restaurantId, table, selected.name, selected.price)
+                            cacheRemoteOperations(token, restaurantId)
+                            "OK"
+                        }) {
+                            dialog.dismiss()
+                            activePage = "Pedidos"
+                            renderApp()
+                        }
+                    } else {
+                        val now = System.currentTimeMillis()
+                        store.addOrder(OrderEntry(now, table, selected.name, selected.price, "Aberto", now))
+                        dialog.dismiss()
+                        activePage = "Pedidos"
+                        renderApp()
+                    }
                 }
             }
         }
@@ -1598,11 +1618,24 @@ class MainActivity : Activity() {
                     price == null || price < 0.0 -> priceField.error = "Preço inválido"
                     cost == null || cost < 0.0 -> costField.error = "Custo inválido"
                     else -> {
-                        val menu = store.getMenu()
-                        menu.add(MenuEntry(name, price, cost))
-                        store.saveMenu(menu)
-                        dialog.dismiss()
-                        renderApp()
+                        if (hasRemoteRestaurant()) {
+                            val restaurantId = backendRestaurantId()
+                            runBackend({
+                                val token = backendToken()
+                                SupabaseApi.addMenuItem(token, restaurantId, name, price, cost)
+                                cacheRemoteOperations(token, restaurantId)
+                                "OK"
+                            }) {
+                                dialog.dismiss()
+                                renderApp()
+                            }
+                        } else {
+                            val menu = store.getMenu()
+                            menu.add(MenuEntry(name, price, cost))
+                            store.saveMenu(menu)
+                            dialog.dismiss()
+                            renderApp()
+                        }
                     }
                 }
             }
