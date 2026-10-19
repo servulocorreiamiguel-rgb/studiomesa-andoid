@@ -1,36 +1,45 @@
 # StudioMesa — demonstração de gestão de restaurante
 
-Protótipo Android de gestão de restaurante, com identidade visual StudioMesa e dados fictícios. É uma demonstração técnica, não uma solução pronta para operação comercial. Cada restaurante terá de validar as funcionalidades, configurar a sua identidade e testar o sistema antes de o usar.
+Protótipo Android de gestão de restaurante com identidade visual própria e dados de demonstração. Não é uma solução certificada para operação comercial. Antes de um restaurante o usar em serviço real, é obrigatório testar os fluxos, configurar as regras do restaurante e confirmar os requisitos legais e operacionais.
 
-## Estrutura dos planos
+## Estrutura dos planos de demonstração
 
-- **Essencial — 890 € (valor de referência):** aplicação para o restaurante com mesas, pedidos, gestão da carta e painel local para registar clientes e atribuir/descontar pontos manualmente. Não inclui APK para clientes.
-- **Profissional — 1 490 € (valor de referência):** aplicação para o restaurante, calculadora de preço indicativo e APK separado com a interface de cliente/cartão digital em modo demonstrativo.
-- **Premium — 1 690 € (valor de referência):** as duas interfaces, calculadora, painel de indicadores locais e resumo dos pedidos/artigos guardados no dispositivo.
+- **Essencial — 890 € (referência):** aplicação de gestão do restaurante com mesas, carta, pedidos e fidelização.
+- **Profissional — 1 490 € (referência):** inclui também a calculadora de preço indicativo e a aplicação separada de cliente.
+- **Premium — 1 690 € (referência):** inclui as duas aplicações, calculadora e indicadores operacionais.
 
-Os preços são propostas de referência, não pagamentos configurados nem prova de que o software está pronto para venda. O fluxo de fidelização partilhada foi integrado no código Android e na base de dados Supabase; a compilação mais recente e os fluxos de autenticação/adesão ainda estão em validação.
+Estes valores são propostas de referência para avaliação comercial, não pagamentos configurados nem prova de que o produto está pronto para venda.
 
-## Funcionalidades implementadas
+## O que está implementado
 
-- Estado de 12 mesas (livre/ocupada).
-- Criação e conclusão de pedidos associados a uma mesa e artigo.
-- Gestão simples da carta, com preço de venda e custo por unidade.
-- Calculadora de preço indicativo nos planos Profissional e Premium.
-- **Fidelização local:** criação de cartões de cliente com código, atribuição manual de pontos e desconto de pontos, sem permitir saldo negativo.
-- **Interface separada para clientes** nos planos Profissional e Premium, com criação de conta/início de sessão, adesão por código do restaurante e consulta do saldo de fidelização partilhado (em validação).
-- Indicadores locais no plano Premium.
-- Design em verde-floresta, creme e cobre, com ícone próprio.
-- APKs com identificadores de aplicação diferentes para permitir instalação separada.
+- **Mesas:** 12 mesas iniciais por restaurante, com estado livre/ocupada.
+- **Pedidos:** criação de pedidos por mesa/artigo e fluxo de estado Aberto → Em preparação → Pronto → Concluído.
+- **Carta e custos:** artigos, preço de venda e custo estimado; os custos permanecem na aplicação de gestão.
+- **Dados partilhados:** quando existe sessão e restaurante configurado, mesas, carta e pedidos são guardados no Supabase e podem ser atualizados em vários dispositivos autenticados. A sincronização é feita ao abrir a aplicação, após operações e manualmente; ainda não há atualização em tempo real por subscrição.
+- **Fidelização partilhada:** adesão de clientes com código, saldo de pontos centralizado e registo das alterações efetuadas pelo restaurante.
+- **Aplicação de cliente:** login/recuperação de adesão, consulta de saldo, código de cartão e carta com nomes e preços publicados pelo restaurante. A aplicação de cliente não recebe os custos ou margens internas.
+- **Calculadora de preço indicativo** e **indicadores operacionais** nos planos correspondentes.
+- **Identidade personalizável:** o nome do restaurante aparece depois de configurar a respetiva conta.
 
-## Limitações importantes antes da venda
+## O que ainda falta antes da venda ou utilização em serviço real
 
-Os pratos e preços iniciais são **fictícios**. A aplicação do restaurante guarda os dados apenas nesse telemóvel. A app de cliente também guarda os seus dados localmente, em separado: por isso, o código/saldo do cartão de cliente ainda **não está ligado** ao registo do restaurante. Os pontos são atribuídos manualmente; não há acumulação automática por compra, pagamento, prémios configuráveis ou sincronização entre dispositivos.
+- Testes ponta a ponta em telemóveis reais, incluindo vários dispositivos, utilizadores, perda de internet, sessões expiradas e erros de servidor. A compilação de um APK não substitui esses testes.
+- Regras comerciais da fidelização: acumulação automática, recompensas configuráveis, resgates, limites e prevenção de fraude. Neste momento, o saldo é ajustado manualmente pelo restaurante.
+- Gestão de equipas e permissões por função, incluindo um processo seguro para convidar trabalhadores.
+- Integração com POS/caixa, pagamentos, impressoras de cozinha, recibos ou faturação.
+- Cópias de segurança e procedimento de recuperação, monitorização, registos de auditoria para as ações de gestão e política de conservação/eliminação de dados.
+- Gestão completa da carta (categorias, descrições, fotografias, alergénios, disponibilidade por horário, idiomas e validação editorial).
+- Testes de privacidade, segurança e proteção de dados; revisão independente da configuração de produção. A proteção de palavras-passe comprometidas no Supabase ainda não está ativada.
+- Credenciais próprias de OAuth para Google/Microsoft, caso se queira disponibilizar esses métodos de login. Para emails de confirmação fora do teste, é necessário configurar um fornecedor SMTP apropriado.
+- Compilação de release, assinatura de lançamento controlada pelo proprietário, testes de compatibilidade e preparação da eventual publicação na Google Play. Os APKs gerados atualmente são de demonstração/debug.
 
-A base de dados partilhada Supabase está criada com RLS, autenticação por conta e funções de fidelização; a integração Android ainda precisa de validação ponta a ponta. Mesas, pedidos e carta continuam locais. Não existem cópias de segurança configuradas, integração com caixa registadora/cozinha, publicação na Google Play ou testes em dispositivos físicos. O painel Premium não é contabilidade oficial. **Não vender nem apresentar como serviço de fidelização operacional até implementar e testar a sincronização partilhada, a segurança e as regras comerciais com o restaurante.**
+## Configuração técnica
 
-## Compilar os cinco APKs de demonstração
+O backend usa Supabase Auth e PostgreSQL com Row Level Security. Os códigos de adesão dos clientes ficam num esquema privado, separados das tabelas expostas à aplicação. As tabelas de mesas, carta e pedidos usam políticas de segurança por restaurante. Algumas funções protegidas usam SECURITY DEFINER para executar operações verificadas do lado da base de dados; as regras devem continuar a ser auditadas.
 
-O workflow em **Actions → Build StudioMesa Android APK** gera:
+### Compilar os cinco APKs de demonstração
+
+O workflow **Actions → Build StudioMesa Android APK** gera:
 
 - `app-essencial-restaurante-debug.apk`
 - `app-profissional-restaurante-debug.apk`
@@ -38,10 +47,10 @@ O workflow em **Actions → Build StudioMesa Android APK** gera:
 - `app-premium-restaurante-debug.apk`
 - `app-premium-cliente-debug.apk`
 
-Com Java 17, Gradle 8.9 e Android SDK, executar:
+Com Java 17, Gradle 8.9 e Android SDK:
 
 ```bash
 gradle --no-daemon assembleEssencialRestauranteDebug assembleProfissionalRestauranteDebug assembleProfissionalClienteDebug assemblePremiumRestauranteDebug assemblePremiumClienteDebug
 ```
 
-Os APKs são de depuração/demonstração. O sucesso de compilação não substitui testes de instalação e utilização em telemóveis reais.
+Os APKs de demonstração não devem ser tratados como versão comercial final nem apresentados como testados em produção.
