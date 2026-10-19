@@ -602,23 +602,40 @@ class MainActivity : Activity() {
             dialog.dismiss()
             startOAuth("azure")
         }, LinearLayout.LayoutParams(-1, dp(46)))
+        addGap(form, 7)
+        form.addView(label(
+            "Google e Outlook só podem ser usados depois de os fornecedores estarem ativados no servidor.",
+            10.5f, false, muted
+        ))
 
         dialog.show()
     }
 
     private fun startOAuth(provider: String) {
-        try {
-            val intent = android.content.Intent(
-                android.content.Intent.ACTION_VIEW,
-                android.net.Uri.parse(SupabaseApi.oauthUrl(provider))
-            )
-            startActivity(intent)
-        } catch (_: Exception) {
-            AlertDialog.Builder(this)
-                .setTitle("Não foi possível abrir o início de sessão")
-                .setMessage("Confirma que tens um navegador instalado e que o fornecedor está configurado no servidor.")
-                .setPositiveButton("OK", null)
-                .show()
+        runBackend({
+            if (!SupabaseApi.isOAuthProviderEnabled(provider)) {
+                throw IllegalStateException(
+                    if (provider == "google") {
+                        "O início de sessão com Google ainda não está ativado no Supabase. É necessário configurar as credenciais OAuth do Google no servidor."
+                    } else {
+                        "O início de sessão com Microsoft/Outlook ainda não está ativado no Supabase. É necessário configurar as credenciais OAuth da Microsoft no servidor."
+                    }
+                )
+            }
+            SupabaseApi.oauthUrl(provider)
+        }) { authUrl ->
+            try {
+                startActivity(android.content.Intent(
+                    android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse(authUrl)
+                ))
+            } catch (_: Exception) {
+                AlertDialog.Builder(this)
+                    .setTitle("Não foi possível abrir o início de sessão")
+                    .setMessage("Confirma que tens um navegador instalado e tenta novamente.")
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
         }
     }
 
