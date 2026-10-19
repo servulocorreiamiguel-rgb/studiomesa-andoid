@@ -206,6 +206,25 @@ object SupabaseApi {
         )
     }
 
+    fun updateMenuItem(
+        token: String,
+        itemId: String,
+        name: String,
+        price: Double,
+        cost: Double
+    ) {
+        val encoded = URLEncoder.encode(itemId, "UTF-8")
+        call(
+            "PATCH",
+            "/rest/v1/menu_items?id=eq.$encoded",
+            JSONObject()
+                .put("name", name.trim())
+                .put("price", price)
+                .put("cost", cost),
+            token
+        )
+    }
+
     fun deactivateMenuItem(token: String, itemId: String) {
         val encoded = URLEncoder.encode(itemId, "UTF-8")
         call(
