@@ -119,6 +119,12 @@ object SupabaseApi {
         return array.getJSONObject(0)
     }
 
+    fun getMyRestaurant(token: String): JSONObject? {
+        val response = call("POST", "/rest/v1/rpc/get_my_restaurant", JSONObject(), token)
+        val restaurants = JSONArray(response)
+        return if (restaurants.length() == 0) null else restaurants.getJSONObject(0)
+    }
+
     fun listMembers(token: String, restaurantId: String): JSONArray {
         val encoded = URLEncoder.encode(restaurantId, "UTF-8")
         return JSONArray(call("GET",
