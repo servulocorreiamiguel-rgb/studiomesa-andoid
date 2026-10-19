@@ -161,7 +161,7 @@ class MainActivity : Activity() {
         banner.addView(label("MODO DEMONSTRAÇÃO", 11f, true, Color.rgb(130, 88, 27)))
         addGap(banner, 3)
         banner.addView(label(
-            "Dados fictícios guardados neste telemóvel. As reservas ainda não são recebidas pela Internet.",
+            "Inclui dados fictícios. Tudo fica neste telemóvel; as reservas ainda não chegam pela Internet.",
             12f, false, ink
         ))
         container.addView(banner, LinearLayout.LayoutParams(-1, -2).apply {
@@ -701,6 +701,216 @@ class MainActivity : Activity() {
             "Recomendação: definir por escrito o preço, o período de suporte, o alojamento, a manutenção, as atualizações e as condições de cancelamento.",
             13f, false, muted
         ))
+    }
+
+    private fun showCreateOrderDialog() {
+        val items = store.getMenu()
+        if (items.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle("Menu vazio")
+                .setMessage("Adiciona primeiro um artigo ao menu.")
+                .setPositiveButton("Abrir menu") { _, _ ->
+                    activePage = "Menu"
+                    renderApp()
+                }
+                .setNegativeButton("Fechar", null)
+                .show()
+            return
+        }
+
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(10), dp(22), dp(4))
+        }
+        form.addView(label("Mesa", 14f, true, navy))
+        val tableSpinner = Spinner(this)
+        val tables = (1..12).map { "Mesa " + it }
+        tableSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, tables)
+        form.addView(tableSpinner, fieldParams())
+        addGap(form, 8)
+        form.addView(label("Artigo", 14f, true, navy))
+        val itemSpinner = Spinner(this)
+        itemSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, items.map { it.name })
+        form.addView(itemSpinner, fieldParams())
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Novo pedido")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Criar pedido", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val table = tableSpinner.selectedItemPosition + 1
+                val selected = items.getOrNull(itemSpinner.selectedItemPosition)
+                if (selected == null) {
+                    return@setOnClickListener
+                }
+                val order = OrderEntry(
+                    System.currentTimeMillis(),
+                    table,
+                    selected.name,
+                    selected.price,
+                    "Aberto",
+                    System.currentTimeMillis()
+                )
+                store.addOrder(order)
+                dialog.dismiss()
+                activePage = "Pedidos"
+                renderApp()
+            }
+        }
+        dialog.show()
+    }
+
+
+    private fun showCreateReservationDialog() {
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(8), dp(22), dp(4))
+        }
+        val nameField = inputField("Nome do cliente", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+        val phoneField = inputField("Telefone do cliente", InputType.TYPE_CLASS_PHONE)
+        form.addView(label("Nome do cliente", 14f, true, navy))
+        form.addView(nameField, fieldParams())
+        form.addView(label("Telefone", 14f, true, navy))
+        form.addView(phoneField, fieldParams())
+
+        val whenToBook = Calendar.getInstance().apply {
+            add(Calendar.HOUR_OF_DAY, 1)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale("pt", "PT"))
+        val timeFormat = SimpleDateFormat("HH:mm", Locale("pt", "PT"))
+        var dateButtonRef: Button? = null
+        val dateButton = secondaryButton("Data: " + dateFormat.format(whenToBook.time)) {
+            DatePickerDialog(
+                this,
+                { _, year, month, day ->
+                    whenToBook.set(Calendar.YEAR, year)
+                    whenToBook.set(Calendar.MONTH, month)
+                    whenToBook.set(Calendar.DAY_OF_MONTH, day)
+                    dateButtonRef?.text = "Data: " + dateFormat.format(whenToBook.time)
+                },
+                whenToBook.get(Calendar.YEAR),
+                whenToBook.get(Calendar.MONTH),
+                whenToBook.get(Calendar.DAY_OF_MONTH)
+            ).show()
+        }
+        var timeButtonRef: Button? = null
+        val timeButton = secondaryButton("Hora: " + timeFormat.format(whenToBook.time)) {
+            TimePickerDialog(
+                this,
+                { _, hour, minute ->
+                    whenToBook.set(Calendar.HOUR_OF_DAY, hour)
+                    whenToBook.set(Calendar.MINUTE, minute)
+                    timeButtonRef?.text = "Hora: " + timeFormat.format(whenToBook.time)
+                },
+                whenToBook.get(Calendar.HOUR_OF_DAY),
+                whenToBook.get(Calendar.MINUTE),
+                true
+            ).show()
+        }
+        dateButtonRef = dateButton
+        timeButtonRef = timeButton
+        form.addView(label("Data e hora", 14f, true, navy))
+        form.addView(dateButton, fieldParams())
+        form.addView(timeButton, fieldParams())
+
+        form.addView(label("Número de pessoas", 14f, true, navy))
+        val partySpinner = Spinner(this)
+        val partyOptions = (1..20).map { if (it == 1) "1 pessoa" else "$it pessoas" }
+        partySpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, partyOptions)
+        partySpinner.setSelection(1)
+        form.addView(partySpinner, fieldParams())
+
+        form.addView(label("Notas (opcional)", 14f, true, navy))
+        val notesField = inputField("Ex.: cadeira de bebé, aniversário...", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+        form.addView(notesField, fieldParams())
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Nova reserva")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Guardar reserva", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val customerName = nameField.text.toString().trim()
+                val phone = phoneField.text.toString().trim()
+                when {
+                    customerName.isBlank() -> nameField.error = "Escreve o nome do cliente"
+                    phone.isBlank() -> phoneField.error = "É necessário um contacto"
+                    whenToBook.timeInMillis <= System.currentTimeMillis() -> {
+                        Toast.makeText(this, "Escolhe uma data e hora futuras.", Toast.LENGTH_SHORT).show()
+                    }
+                    else -> {
+                        store.addReservation(
+                            ReservationEntry(
+                                id = System.currentTimeMillis(),
+                                customerName = customerName,
+                                phone = phone,
+                                dateTime = whenToBook.timeInMillis,
+                                partySize = partySpinner.selectedItemPosition + 1,
+                                notes = notesField.text.toString().trim(),
+                                status = "Pendente",
+                                createdAt = System.currentTimeMillis()
+                            )
+                        )
+                        dialog.dismiss()
+                        activePage = "Reservas"
+                        renderApp()
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showAddMenuItemDialog() {
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(10), dp(22), dp(4))
+        }
+        val nameField = inputField("Nome do artigo", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+        val priceField = inputField("Preço de venda (€)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+        val costField = inputField("Custo por unidade (€)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+        form.addView(label("Nome", 14f, true, navy))
+        form.addView(nameField, fieldParams())
+        addGap(form, 6)
+        form.addView(label("Preço de venda (€)", 14f, true, navy))
+        form.addView(priceField, fieldParams())
+        addGap(form, 6)
+        form.addView(label("Custo por unidade (€)", 14f, true, navy))
+        form.addView(costField, fieldParams())
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Adicionar artigo")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Guardar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val name = nameField.text.toString().trim()
+                val price = priceField.text.toString().trim().replace(',', '.').toDoubleOrNull()
+                val cost = costField.text.toString().trim().replace(',', '.').toDoubleOrNull()
+                when {
+                    name.isBlank() -> nameField.error = "Escreve um nome"
+                    price == null || price < 0.0 -> priceField.error = "Preço inválido"
+                    cost == null || cost < 0.0 -> costField.error = "Custo inválido"
+                    else -> {
+                        val menu = store.getMenu()
+                        menu.add(MenuEntry(name, price, cost))
+                        store.saveMenu(menu)
+                        dialog.dismiss()
+                        renderApp()
+                    }
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun actionCard(parent: LinearLayout, title: String, subtitle: String, actionText: String, action: () -> Unit) {
