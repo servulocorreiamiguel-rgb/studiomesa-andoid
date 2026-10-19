@@ -600,6 +600,13 @@ class MainActivity : Activity() {
                 addGap(card, 9)
                 card.addView(label("Custo do artigo: " + String.format(Locale("pt", "PT"), "%.1f%%", ratio) + " do preço de venda", 11.5f, false, muted))
                 addGap(card, 9)
+                card.addView(secondaryButton("Editar artigo") {
+                    showEditMenuItemDialog(
+                        item.optString("id"),
+                        MenuEntry(item.optString("name"), item.optDouble("price", 0.0), item.optDouble("cost", 0.0))
+                    )
+                }, LinearLayout.LayoutParams(-1, dp(40)))
+                addGap(card, 5)
                 card.addView(secondaryButton("Arquivar artigo") {
                     AlertDialog.Builder(this)
                         .setTitle("Arquivar artigo?")
@@ -644,6 +651,10 @@ class MainActivity : Activity() {
             addGap(card, 9)
             card.addView(label("Custo do artigo: " + String.format(Locale("pt", "PT"), "%.1f%%", ratio) + " do preço de venda", 11.5f, false, muted))
             addGap(card, 9)
+            card.addView(secondaryButton("Editar artigo") {
+                showEditMenuItemDialog(null, item)
+            }, LinearLayout.LayoutParams(-1, dp(40)))
+            addGap(card, 5)
             card.addView(secondaryButton("Remover artigo") {
                 AlertDialog.Builder(this)
                     .setTitle("Remover artigo?")
@@ -1842,6 +1853,74 @@ class MainActivity : Activity() {
                         dialog.dismiss()
                         activePage = "Pedidos"
                         renderApp()
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showEditMenuItemDialog(itemId: String?, current: MenuEntry) {
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(10), dp(22), dp(4))
+        }
+        val nameField = inputField("Nome do artigo", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+        val priceField = inputField("Preço de venda (€)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+        val costField = inputField("Custo por unidade (€)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+        nameField.setText(current.name)
+        priceField.setText(String.format(Locale("pt", "PT"), "%.2f", current.price))
+        costField.setText(String.format(Locale("pt", "PT"), "%.2f", current.cost))
+        form.addView(label("NOME", 10f, true, forestSoft))
+        form.addView(nameField, fieldParams())
+        addGap(form, 4)
+        form.addView(label("PREÇO DE VENDA (€)", 10f, true, forestSoft))
+        form.addView(priceField, fieldParams())
+        addGap(form, 4)
+        form.addView(label("CUSTO POR UNIDADE (€)", 10f, true, forestSoft))
+        form.addView(costField, fieldParams())
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Editar artigo")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Guardar alterações", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val name = nameField.text.toString().trim()
+                val price = priceField.text.toString().trim().replace(',', '.').toDoubleOrNull()
+                val cost = costField.text.toString().trim().replace(',', '.').toDoubleOrNull()
+                when {
+                    name.isBlank() -> nameField.error = "Escreve um nome"
+                    price == null || price < 0.0 -> priceField.error = "Preço inválido"
+                    cost == null || cost < 0.0 -> costField.error = "Custo inválido"
+                    else -> {
+                        if (hasRemoteRestaurant() && !itemId.isNullOrBlank()) {
+                            val restaurantId = backendRestaurantId()
+                            runBackend({
+                                val token = backendToken()
+                                SupabaseApi.updateMenuItem(token, itemId, name, price, cost)
+                                cacheRemoteOperations(token, restaurantId)
+                                "OK"
+                            }) {
+                                dialog.dismiss()
+                                renderApp()
+                            }
+                        } else {
+                            val items = store.getMenu()
+                            val index = items.indexOfFirst {
+                                it.name == current.name && it.price == current.price && it.cost == current.cost
+                            }
+                            if (index < 0) {
+                                nameField.error = "O artigo já não existe. Atualiza a carta e tenta novamente."
+                            } else {
+                                items[index] = MenuEntry(name, price, cost)
+                                store.saveMenu(items)
+                                dialog.dismiss()
+                                renderApp()
+                            }
+                        }
                     }
                 }
             }
