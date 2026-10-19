@@ -40,7 +40,7 @@ object SupabaseApi {
         try {
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-            val text = stream?.bufferedReader(Charsets.UTF_8)?.use(BufferedReader::readText).orEmpty()
+            val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
             if (code !in 200..299) {
                 val message = try {
                     JSONObject(text).optString("msg").ifBlank {
