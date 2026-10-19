@@ -11,9 +11,9 @@ class RestaurantStore(context: Context) {
         val raw = prefs.getString("menu_json", null)
         if (raw == null) {
             val initial = mutableListOf(
-                MenuEntry("Hambúrguer da casa", 12.50, 3.80),
-                MenuEntry("Bitoque", 11.90, 4.10),
-                MenuEntry("Limonada", 2.50, 0.55)
+                MenuEntry("Entrada da casa · exemplo", 6.50, 2.10),
+                MenuEntry("Prato principal · exemplo", 14.50, 4.80),
+                MenuEntry("Bebida · exemplo", 2.50, 0.55)
             )
             saveMenu(initial)
             return initial
