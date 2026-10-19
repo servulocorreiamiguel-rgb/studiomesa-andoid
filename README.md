@@ -1,35 +1,43 @@
-# StudioMesa Android
+# StudioMesa — demonstração Bicho Mau
 
-Aplicação Android nativa para apoiar a gestão diária de um restaurante.
+Protótipo Android de gestão de restaurante, com identidade visual conceptual inspirada no ambiente do Bistrô Bicho Mau, em Campo de Ourique. **Não é uma aplicação oficial nem um projeto aprovado pelo restaurante.**
 
-## Funcionalidades desta primeira versão
+## Três variantes
 
-- Painel com resumo de mesas ocupadas e pedidos ativos.
-- Estado de 12 mesas (livre/ocupada), guardado localmente no dispositivo.
-- Criação de pedidos associados a uma mesa e a um artigo do menu.
-- Acompanhamento de pedidos abertos e concluídos.
-- Gestão simples do menu, com preço de venda e custo por unidade.
-- Calculadora «Preço Justo de Mercado» baseada no custo e na percentagem de custo pretendida.
-- Ecrã de referência com os preços de 890 €, 1 490 € e 1 690 €.
+- **Essencial — 890 € (valor de referência):** painel inicial, estado de 12 mesas, registo e acompanhamento de pedidos e gestão da carta de demonstração.
+- **Profissional — 1 490 € (valor de referência):** inclui o Essencial e a calculadora de preço indicativo com base no custo.
+- **Premium — 1 690 € (valor de referência):** inclui o Profissional e um resumo local dos pedidos e artigos registados.
 
-## Tecnologia
+Os preços são referências comerciais de proposta, não pagamentos configurados na aplicação nem uma confirmação de que o produto está pronto para venda.
 
-- Kotlin e componentes nativos Android.
-- minSdk 24 (Android 7.0 ou posterior).
-- Dados guardados localmente em SharedPreferences; não há ainda servidor, contas de utilizador nem sincronização entre dispositivos.
+## Funcionalidades implementadas
 
-## Gerar um APK
+- Estado de 12 mesas (livre/ocupada).
+- Criação e conclusão de pedidos associados a uma mesa e a um artigo.
+- Gestão simples da carta, com preço de venda e custo por unidade.
+- Calculadora de preço indicativo nas variantes Profissional e Premium.
+- Resumo local de pedidos e artigos na variante Premium.
+- Design em verde-floresta, creme e cobre, com ícone de aplicação próprio.
+- Os três APKs têm identificadores de aplicação separados, por isso podem ser instalados lado a lado.
 
-O workflow do GitHub Actions em **Actions → Build StudioMesa Android APK** tenta compilar a aplicação em cada atualização da branch main. Quando a compilação terminar com sucesso, o ficheiro **StudioMesa-debug-apk** fica disponível como artefacto da execução por 14 dias.
+## Dados e limites
 
-Também é possível compilar num ambiente com Java 17, Gradle 8.9 e Android SDK instalado:
+Os artigos e valores iniciais da carta são **fictícios e servem apenas para demonstração**. Os dados são guardados localmente no dispositivo. Não existe servidor, conta de utilizador, sincronização entre telemóveis, integração com uma caixa registadora ou envio de pedidos para a cozinha. A análise Premium é um resumo dos registos locais, não contabilidade nem um relatório financeiro oficial.
+
+Esta versão foi compilada com sucesso em modo debug. Antes de a utilizar num restaurante real ou a vender, ainda deve ser instalada e testada em dispositivos físicos, revista com o restaurante, e complementada com requisitos de segurança, cópias de segurança, privacidade, suporte e condições comerciais.
+
+## Gerar os APKs
+
+O workflow do GitHub Actions em **Actions → Build StudioMesa Android APK** compila as três variantes. O artefacto **StudioMesa-BichoMau-3-APKs** inclui os APKs:
+
+- `app-essencial-debug.apk`
+- `app-profissional-debug.apk`
+- `app-premium-debug.apk`
+
+Com Java 17, Gradle 8.9 e Android SDK instalado, executar:
 
 ```bash
-gradle --no-daemon assembleDebug
+gradle --no-daemon assembleEssencialDebug assembleProfissionalDebug assemblePremiumDebug
 ```
 
-O APK de depuração é gerado em app/build/outputs/apk/debug/app-debug.apk.
-
-## Limitações conhecidas desta versão
-
-Este é um MVP inicial, não uma solução pronta para venda ou publicação. Os preços dos planos são apresentados como valores de referência; os módulos incluídos precisam de ser especificados. A calculadora não consulta preços concorrentes em tempo real nem calcula automaticamente IVA, desperdício, salários, rendas ou outras despesas. A aplicação ainda precisa de compilação, testes em dispositivo e validação das regras de negócio antes de ser distribuída a clientes.
+Os ficheiros são gerados em `app/build/outputs/apk/<variante>/debug/`.
