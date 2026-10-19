@@ -60,6 +60,16 @@ class MainActivity : Activity() {
         window.navigationBarColor = forestDeep
         renderApp()
         handleAuthCallback(intent)
+
+        // Refresh shared data when an already-authenticated user opens the app,
+        // but do not start a second request while processing an OAuth callback.
+        if (intent?.data == null && backendToken().isNotBlank()) {
+            if (isCustomerApp && backendMemberId().isNotBlank()) {
+                refreshCustomerMembership()
+            } else if (!isCustomerApp && hasRemoteRestaurant()) {
+                refreshRemoteOperations()
+            }
+        }
     }
 
     override fun onNewIntent(intent: android.content.Intent) {
