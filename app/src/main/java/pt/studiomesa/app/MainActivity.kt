@@ -94,6 +94,8 @@ class MainActivity : Activity() {
         val fragment = parseAuthParams(uri.fragment)
         val accessToken = uri.getQueryParameter("access_token")
             ?: fragment["access_token"].orEmpty()
+        val callbackType = uri.getQueryParameter("type") ?: fragment["type"].orEmpty()
+        val isPasswordRecovery = callbackType.equals("recovery", ignoreCase = true)
         val errorText = uri.getQueryParameter("error_description")
             ?: fragment["error_description"]
             ?: uri.getQueryParameter("error")
@@ -130,13 +132,17 @@ class MainActivity : Activity() {
             if (isCustomerApp) restoreCustomerMembership(accessToken) else restoreOwnedRestaurant(accessToken)
             "SIGNED_IN"
         }) {
-            if (isCustomerApp) renderCustomerApp() else renderApp()
-            AlertDialog.Builder(this)
-                .setTitle("Sessão iniciada")
-                .setMessage("A conta foi ligada ao StudioMesa. " +
-                    if (isCustomerApp) "Agora associa-te ao restaurante com o respetivo código." else "Agora configura o restaurante para gerar um código de adesão.")
-                .setPositiveButton("OK", null)
-                .show()
+            if (isPasswordRecovery) {
+                showSetNewPasswordDialog()
+            } else {
+                if (isCustomerApp) renderCustomerApp() else renderApp()
+                AlertDialog.Builder(this)
+                    .setTitle("Sessão iniciada")
+                    .setMessage("A conta foi ligada ao StudioMesa. " +
+                        if (isCustomerApp) "Agora associa-te ao restaurante com o respetivo código." else "Agora configura o restaurante para gerar um código de adesão.")
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
         }
     }
 
@@ -1010,6 +1016,66 @@ class MainActivity : Activity() {
         }.start()
     }
 
+    private fun showSetNewPasswordDialog() {
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(10), dp(22), dp(4))
+        }
+        val passwordField = inputField(
+            "Nova palavra-passe (mínimo 8 caracteres)",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        )
+        val repeatField = inputField(
+            "Confirmar nova palavra-passe",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        )
+        form.addView(label("NOVA PALAVRA-PASSE", 10f, true, forestSoft))
+        form.addView(passwordField, fieldParams())
+        addGap(form, 4)
+        form.addView(label("CONFIRMAR PALAVRA-PASSE", 10f, true, forestSoft))
+        form.addView(repeatField, fieldParams())
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Definir nova palavra-passe")
+            .setMessage("Escolhe uma palavra-passe nova e não a partilhes.")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Guardar palavra-passe", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val password = passwordField.text.toString()
+                val repeated = repeatField.text.toString()
+                when {
+                    password.length < 8 -> passwordField.error = "Usa pelo menos 8 caracteres"
+                    password != repeated -> repeatField.error = "As palavras-passe não coincidem"
+                    backendToken().isBlank() -> {
+                        dialog.dismiss()
+                        AlertDialog.Builder(this)
+                            .setTitle("Ligação expirada")
+                            .setMessage("Abre novamente a ligação de recuperação mais recente que recebeste por email.")
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
+                    else -> runBackend({
+                        SupabaseApi.updatePassword(backendToken(), password)
+                        "UPDATED"
+                    }) {
+                        dialog.dismiss()
+                        AlertDialog.Builder(this)
+                            .setTitle("Palavra-passe atualizada")
+                            .setMessage("A palavra-passe foi alterada. Guarda-a num gestor de palavras-passe e não a partilhes.")
+                            .setPositiveButton("Continuar") { _, _ ->
+                                if (isCustomerApp) renderCustomerApp() else renderApp()
+                            }
+                            .show()
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
     private fun showAuthChooser(afterAuth: () -> Unit) {
         // Use explicit buttons in a custom view. Combining setMessage and setItems
         // can render inconsistently across Android dialog implementations.
@@ -1112,6 +1178,27 @@ class MainActivity : Activity() {
             .setNegativeButton("Cancelar", null)
             .setPositiveButton(if (createAccount) "Criar conta" else "Entrar", null)
             .create()
+        if (!createAccount) {
+            addGap(form, 2)
+            form.addView(secondaryButton("Esqueci-me da palavra-passe") {
+                val email = emailField.text.toString().trim()
+                if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                    emailField.error = "Introduz primeiro o email da tua conta"
+                } else {
+                    dialog.dismiss()
+                    runBackend({
+                        SupabaseApi.requestPasswordRecovery(email)
+                        "SENT"
+                    }) {
+                        AlertDialog.Builder(this)
+                            .setTitle("Verifica o teu email")
+                            .setMessage("Se existir uma conta com este endereço, será enviado um email para recuperar o acesso. Abre a ligação no mesmo telemóvel para definires uma nova palavra-passe. Verifica também Spam.")
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
+                }
+            }, LinearLayout.LayoutParams(-1, dp(42)))
+        }
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val email = emailField.text.toString().trim()
