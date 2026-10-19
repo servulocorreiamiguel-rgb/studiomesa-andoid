@@ -469,6 +469,72 @@ class MainActivity : Activity() {
         return card
     }
 
+    private fun showOrderHistory(orderId: String) {
+        if (orderId.isBlank() || !hasRemoteRestaurant()) return
+        runBackend({
+            val events = SupabaseApi.listOrderEvents(backendToken(), orderId)
+            if (events.length() == 0) {
+                "Ainda não há eventos de histórico para este pedido."
+            } else {
+                buildString {
+                    for (index in 0 until events.length()) {
+                        val event = events.optJSONObject(index) ?: continue
+                        val type = event.optString("event_type")
+                        val oldStatus = event.optString("old_status")
+                        val newStatus = event.optString("new_status")
+                        val description = when (type) {
+                            "created" -> "Pedido criado · estado inicial: " + newStatus.ifBlank { "Aberto" }
+                            "status_changed" -> (oldStatus.ifBlank { "—" }) + " → " + newStatus.ifBlank { "—" }
+                            else -> "Evento registado: " + type
+                        }
+                        val timestamp = event.optString("created_at")
+                        val readableTime = timestamp.replace('T', ' ').take(19)
+                        val zone = when {
+                            timestamp.endsWith("Z") || timestamp.endsWith("+00:00") -> " UTC"
+                            timestamp.matches(Regex(".*[+-]\\d{2}:\\d{2}$")) -> " " + timestamp.takeLast(6)
+                            else -> ""
+                        }
+                        append(readableTime).append(zone).append("\\n")
+                        append(description)
+                        val actor = event.optString("actor_user_id")
+                        if (actor.isNotBlank()) append("\\nConta: …").append(actor.takeLast(8))
+                        if (index < events.length() - 1) append("\\n\\n")
+                    }
+                }
+            }
+        }) { history ->
+            val textView = TextView(this).apply {
+                text = history
+                textSize = 13f
+                setTextColor(ink)
+                setPadding(dp(20), dp(12), dp(20), dp(12))
+                setLineSpacing(dp(3).toFloat(), 1.0f)
+            }
+            val scroll = ScrollView(this).apply { addView(textView) }
+            AlertDialog.Builder(this)
+                .setTitle("Histórico do pedido")
+                .setView(scroll)
+                .setPositiveButton("Fechar", null)
+                .show()
+        }
+    }
+
+    private fun confirmCancelOrder(orderId: String, tableNumber: Int, itemName: String) {
+        AlertDialog.Builder(this)
+            .setTitle("Cancelar pedido?")
+            .setMessage("Mesa $tableNumber · $itemName\\n\\nO cancelamento ficará registado no histórico do pedido.")
+            .setNegativeButton("Manter pedido", null)
+            .setPositiveButton("Cancelar pedido") { _, _ ->
+                runBackend({
+                    val token = backendToken()
+                    SupabaseApi.updateOrder(token, orderId, "Cancelado")
+                    cacheRemoteOperations(token, backendRestaurantId())
+                    "OK"
+                }) { renderApp() }
+            }
+            .show()
+    }
+
     private fun renderOrders(container: LinearLayout) {
         pageIntro(container, "Pedidos", if (hasRemoteRestaurant())
             "Pedidos partilhados com o resto da equipa."
@@ -515,7 +581,7 @@ class MainActivity : Activity() {
                 addGap(card, 4)
                 card.addView(label(money(order.optDouble("amount", 0.0)), 14f, true, forest))
                 addGap(card, 12)
-                card.addView(secondaryButton(if (closed) "Reabrir pedido" else when (status) {
+                card.addView(primaryButton(if (closed) "Reabrir pedido" else when (status) {
                     "Aberto" -> "Enviar para preparação"
                     "Em preparação" -> "Marcar como pronto"
                     else -> "Concluir pedido"
@@ -526,7 +592,21 @@ class MainActivity : Activity() {
                         cacheRemoteOperations(token, backendRestaurantId())
                         "OK"
                     }) { renderApp() }
-                }, LinearLayout.LayoutParams(-1, dp(42)))
+                }, LinearLayout.LayoutParams(-1, dp(44)))
+                addGap(card, 5)
+                if (!closed) {
+                    card.addView(secondaryButton("Cancelar pedido") {
+                        confirmCancelOrder(
+                            order.optString("id"),
+                            order.optInt("table_number", 1),
+                            order.optString("item_name", "Artigo")
+                        )
+                    }, LinearLayout.LayoutParams(-1, dp(40)))
+                    addGap(card, 5)
+                }
+                card.addView(secondaryButton("Ver histórico") {
+                    showOrderHistory(order.optString("id"))
+                }, LinearLayout.LayoutParams(-1, dp(40)))
                 container.addView(card, cardParams())
             }
             return
