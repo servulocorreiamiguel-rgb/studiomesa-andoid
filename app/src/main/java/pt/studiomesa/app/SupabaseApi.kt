@@ -184,10 +184,37 @@ object SupabaseApi {
         val encoded = URLEncoder.encode(restaurantId, "UTF-8")
         return JSONArray(call(
             "GET",
-            "/rest/v1/restaurant_tables?select=id,table_number,is_occupied&restaurant_id=eq.$encoded&order=table_number.asc",
+            "/rest/v1/restaurant_tables?select=id,table_number,is_occupied,area,seats&restaurant_id=eq.$encoded&order=area.asc,table_number.asc",
             null,
             token
         ))
+    }
+
+    fun addTable(token: String, restaurantId: String, tableNumber: Int, area: String, seats: Int) {
+        call(
+            "POST",
+            "/rest/v1/restaurant_tables",
+            JSONObject()
+                .put("restaurant_id", restaurantId)
+                .put("table_number", tableNumber)
+                .put("area", area.trim())
+                .put("seats", seats)
+                .put("is_occupied", false),
+            token
+        )
+    }
+
+    fun updateTableDetails(token: String, tableId: String, tableNumber: Int, area: String, seats: Int) {
+        val encoded = URLEncoder.encode(tableId, "UTF-8")
+        call(
+            "PATCH",
+            "/rest/v1/restaurant_tables?id=eq.$encoded",
+            JSONObject()
+                .put("table_number", tableNumber)
+                .put("area", area.trim())
+                .put("seats", seats),
+            token
+        )
     }
 
     fun updateTable(token: String, tableId: String, occupied: Boolean) {
