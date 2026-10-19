@@ -22,6 +22,10 @@ Os preços são propostas de referência, não pagamentos configurados nem prova
 - Design em verde-floresta, creme e cobre, com ícone próprio.
 - APKs com identificadores de aplicação diferentes para permitir instalação separada.
 
+## Estado da versão em desenvolvimento
+
+A versão de desenvolvimento contém um cliente de API para autenticação Supabase e fidelização partilhada. A compilação e os fluxos completos de registo, adesão e alteração de pontos devem ser validados antes de utilizar dados reais.
+
 ## Limitações importantes antes da venda
 
 Os pratos e preços iniciais são **fictícios**. A aplicação do restaurante guarda os dados apenas nesse telemóvel. A app de cliente também guarda os seus dados localmente, em separado: por isso, o código/saldo do cartão de cliente ainda **não está ligado** ao registo do restaurante. Os pontos são atribuídos manualmente; não há acumulação automática por compra, pagamento, prémios configuráveis ou sincronização entre dispositivos.
