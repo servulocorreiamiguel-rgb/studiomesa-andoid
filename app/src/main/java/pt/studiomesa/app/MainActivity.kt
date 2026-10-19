@@ -751,6 +751,67 @@ class MainActivity : Activity() {
 
 
 
+    private fun hasRemoteRestaurant(): Boolean =
+        backendToken().isNotBlank() && backendRestaurantId().isNotBlank()
+
+    private fun savedRemoteArray(key: String): org.json.JSONArray {
+        return try {
+            org.json.JSONArray(backendPrefs.getString(key, "[]") ?: "[]")
+        } catch (_: Exception) {
+            org.json.JSONArray()
+        }
+    }
+
+    private fun remoteTables(): org.json.JSONArray = savedRemoteArray("remote_tables_json")
+    private fun remoteMenuItems(): org.json.JSONArray = savedRemoteArray("remote_menu_json")
+    private fun remoteOrders(): org.json.JSONArray = savedRemoteArray("remote_orders_json")
+
+    private fun remoteMenuEntries(): MutableList<MenuEntry> {
+        val result = mutableListOf<MenuEntry>()
+        val array = remoteMenuItems()
+        for (i in 0 until array.length()) {
+            val item = array.optJSONObject(i) ?: continue
+            val name = item.optString("name").trim()
+            if (name.isNotBlank()) {
+                result.add(MenuEntry(
+                    name,
+                    item.optDouble("price", 0.0).coerceAtLeast(0.0),
+                    item.optDouble("cost", 0.0).coerceAtLeast(0.0)
+                ))
+            }
+        }
+        return result
+    }
+
+    private fun cacheRemoteOperations(token: String, restaurantId: String) {
+        if (token.isBlank() || restaurantId.isBlank()) return
+        val tables = SupabaseApi.listTables(token, restaurantId)
+        val menu = SupabaseApi.listMenuItems(token, restaurantId)
+        val orders = SupabaseApi.listOrders(token, restaurantId)
+        backendPrefs.edit()
+            .putString("remote_tables_json", tables.toString())
+            .putString("remote_menu_json", menu.toString())
+            .putString("remote_orders_json", orders.toString())
+            .apply()
+    }
+
+    private fun refreshRemoteOperations() {
+        val restaurantId = backendRestaurantId()
+        if (!hasRemoteRestaurant() || restaurantId.isBlank()) {
+            AlertDialog.Builder(this)
+                .setMessage("Inicia sessão e configura o restaurante na secção Conta para sincronizar os dados.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        runBackend({
+            cacheRemoteOperations(backendToken(), restaurantId)
+            "OK"
+        }) {
+            renderApp()
+        }
+    }
+
     private fun backendToken(): String = backendPrefs.getString("access_token", "") ?: ""
     private fun backendRestaurantId(): String = backendPrefs.getString("restaurant_id", "") ?: ""
     private fun backendMemberId(): String = backendPrefs.getString("member_id", "") ?: ""
