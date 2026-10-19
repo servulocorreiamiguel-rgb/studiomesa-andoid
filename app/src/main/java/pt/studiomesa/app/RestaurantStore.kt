@@ -79,7 +79,10 @@ class RestaurantStore(context: Context) {
                         item.optString("itemName"),
                         item.optDouble("amount", 0.0),
                         item.optString("status", "Aberto"),
-                        item.optLong("createdAt")
+                        item.optLong("createdAt"),
+                        item.optInt("quantity", 1).coerceIn(1, 99),
+                        item.optString("serviceCourse", "Principal"),
+                        item.optString("notes", "")
                     )
                 )
             }
@@ -113,6 +116,9 @@ class RestaurantStore(context: Context) {
                     .put("amount", order.amount)
                     .put("status", order.status)
                     .put("createdAt", order.createdAt)
+                    .put("quantity", order.quantity.coerceIn(1, 99))
+                    .put("serviceCourse", order.serviceCourse)
+                    .put("notes", order.notes)
             )
         }
         prefs.edit().putString("orders_json", array.toString()).apply()
