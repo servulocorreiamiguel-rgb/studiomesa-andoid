@@ -22,7 +22,7 @@ As reservas são guardadas localmente no telemóvel. Não há página pública p
 
 ## Compilação
 
-O workflow **Actions → Build StudioMesa Android APK** compila as três variantes de depuração e publica o artefacto `StudioMesa-3-Demos` durante 14 dias. As tarefas são:
+O workflow **Actions → Build StudioMesa Android APK** compila as três variantes de depuração, executa Android Lint nas três e publica o artefacto `StudioMesa-3-Demos` durante 14 dias. As tarefas são:
 
     gradle --no-daemon assembleEssencialDebug assembleProfissionalDebug assemblePremiumDebug
 
