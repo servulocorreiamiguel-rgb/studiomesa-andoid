@@ -1151,6 +1151,46 @@ class MainActivity : Activity() {
             .show()
     }
 
+    private fun confirmCodeRotation(staffCode: Boolean) {
+        val title = if (staffCode) "Renovar código da equipa?" else "Renovar código dos clientes?"
+        val message = if (staffCode) {
+            "O código atual deixa de aceitar novas adesões da equipa. Os funcionários já associados mantêm o acesso."
+        } else {
+            "O código atual deixa de aceitar novas adesões de clientes. Os cartões já associados mantêm os pontos."
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Gerar novo código", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                runBackend({
+                    val token = backendToken()
+                    val code = if (staffCode) {
+                        SupabaseApi.rotateStaffJoinCode(token)
+                    } else {
+                        SupabaseApi.rotateCustomerJoinCode(token)
+                    }
+                    val key = if (staffCode) "staff_join_code" else "join_code"
+                    backendPrefs.edit().putString(key, code).apply()
+                    code
+                }) { code ->
+                    dialog.dismiss()
+                    renderApp()
+                    AlertDialog.Builder(this)
+                        .setTitle("Novo código gerado")
+                        .setMessage((if (staffCode) "Código da equipa: " else "Código dos clientes: ") + code +
+                            "\\n\\nGuarda-o e partilha-o apenas com as pessoas autorizadas.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            }
+        }
+        dialog.show()
+    }
+
     private fun showJoinStaffDialog() {
         if (backendToken().isBlank()) {
             showAuthChooser { renderApp() }
@@ -1227,8 +1267,14 @@ class MainActivity : Activity() {
                 addGap(card, 8)
                 card.addView(label("Partilha este código apenas com clientes que devem aderir ao programa de fidelização.", 12f, false, ink))
                 addGap(card, 8)
+                card.addView(secondaryButton("Renovar código de adesão dos clientes") { confirmCodeRotation(false) },
+                    LinearLayout.LayoutParams(-1, dp(44)))
+                addGap(card, 5)
                 card.addView(secondaryButton("Ver código de acesso à equipa") { showStaffJoinCode() },
-                    LinearLayout.LayoutParams(-1, dp(42)))
+                    LinearLayout.LayoutParams(-1, dp(44)))
+                addGap(card, 5)
+                card.addView(secondaryButton("Renovar código da equipa") { confirmCodeRotation(true) },
+                    LinearLayout.LayoutParams(-1, dp(44)))
             } else {
                 card.addView(label("Esta conta está associada à equipa deste restaurante. As alterações operacionais são guardadas no servidor.", 12f, false, ink))
             }
