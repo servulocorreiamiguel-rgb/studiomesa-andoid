@@ -12,16 +12,16 @@ Estes valores são propostas de referência para avaliação comercial, não pag
 
 ## O que está implementado
 
-- **Mesas:** 12 mesas iniciais por restaurante, com estado livre/ocupada.
-- **Pedidos:** criação de pedidos por mesa/artigo e fluxo de estado Aberto → Em preparação → Pronto → Concluído.
-- **Carta e custos:** artigos, preço de venda e custo estimado; os custos permanecem na aplicação de gestão.
+- **Mesas:** 12 mesas iniciais por restaurante, com possibilidade de adicionar até 100 números de mesa e definir zona e capacidade. O estado livre/ocupada fica partilhado pela equipa.
+- **Pedidos:** criação de pedidos por mesa/artigo, fluxo Aberto → Em preparação → Pronto → Concluído e cancelamento com confirmação. O servidor regista a criação e cada mudança de estado no histórico, com data/hora e utilizador.
+- **Carta:** artigos editáveis com categoria, descrição, preço de venda, custo interno e informação declarada de alergénios. Os custos e margens permanecem na aplicação de gestão; o cartão de cliente só recebe nome, categoria, descrição, preço e nota de alergénios.
 - **Dados partilhados:** quando existe sessão e restaurante configurado, mesas, carta e pedidos são guardados no Supabase e podem ser atualizados em vários dispositivos autenticados. A sincronização é feita ao abrir a aplicação, após operações e manualmente; ainda não há atualização em tempo real por subscrição.
 - **Fidelização partilhada:** adesão de clientes com código, saldo de pontos centralizado e registo das alterações efetuadas pelo restaurante. O código de clientes fica num esquema privado e o proprietário pode renová-lo.
-- **Aplicação de cliente:** login/recuperação de adesão, consulta de saldo, código de cartão e carta com nomes e preços publicados pelo restaurante. A aplicação de cliente não recebe os custos ou margens internas.
+- **Aplicação de cliente:** login, recuperação de palavra-passe por email, consulta de saldo, código de cartão e carta publicada pelo restaurante. A aplicação não recebe os custos ou margens internas. Os alergénios são declarações introduzidas pelo restaurante e devem ser confirmados com a equipa; não são uma garantia médica.
 - **Calculadora de preço indicativo** e **indicadores operacionais** nos planos correspondentes.
 - **Identidade personalizável:** o nome do restaurante aparece depois de configurar a respetiva conta.
 - **Acesso de equipa:** código separado para juntar contas de funcionários, limitado a um restaurante por conta. O proprietário pode renovar o código; os códigos não são apresentados a clientes.
-- **Gestão da carta:** editar preço e custo ou arquivar um artigo sem apagar artigos de pedidos antigos.
+- **Gestão da carta:** editar nome, categoria, descrição, preço, custo e alergénios declarados ou arquivar um artigo sem apagar artigos de pedidos antigos.
 - **Histórico de pedidos no servidor:** registo de criação e alterações de estado com hora e utilizador, acessível apenas à equipa autenticada.
 
 ## O que ainda falta antes da venda ou utilização em serviço real
@@ -31,9 +31,9 @@ Estes valores são propostas de referência para avaliação comercial, não pag
 - Gestão avançada de equipas ainda incompleta: remover funcionários, suspender acessos, definir permissões granulares por função e gerir turnos. Atualmente a equipa partilha as permissões operacionais gerais do restaurante.
 - Integração com POS/caixa, pagamentos, impressoras de cozinha, recibos ou faturação.
 - Cópias de segurança e procedimento testado de recuperação, monitorização, exportação/eliminação de dados e política de conservação de dados. O histórico de pedidos está implementado; ainda falta registar todas as ações de gestão num trilho de auditoria completo.
-- Gestão completa da carta (categorias, descrições, fotografias, alergénios, disponibilidade por horário, idiomas e validação editorial).
+- Gestão avançada da carta ainda incompleta: fotografias, disponibilidade por horário, tradução de menus, histórico editorial e validação sistemática de alergénios. Os campos de categoria, descrição e alergénios já existem, mas precisam de revisão pelo restaurante.
 - Testes de privacidade, segurança e proteção de dados; revisão independente da configuração de produção. A proteção de palavras-passe comprometidas no Supabase ainda não está ativada.
-- Credenciais próprias de OAuth para Google/Microsoft, caso se queira disponibilizar esses métodos de login. Para emails de confirmação fora do teste, é necessário configurar um fornecedor SMTP apropriado.
+- Credenciais próprias de OAuth para Google/Microsoft, caso se queira disponibilizar esses métodos de login. O fluxo de recuperação de palavra-passe está implementado no código, mas depende de um URL de retorno autorizado e de um fornecedor SMTP configurado para o envio real dos emails.
 - Compilação de release, assinatura de lançamento controlada pelo proprietário, testes de compatibilidade e preparação da eventual publicação na Google Play. Os APKs gerados atualmente são de demonstração/debug.
 
 ## Configuração técnica
