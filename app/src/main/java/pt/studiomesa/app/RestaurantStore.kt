@@ -123,7 +123,8 @@ class RestaurantStore(context: Context) {
                     LoyaltyCustomer(
                         item.optString("name"),
                         item.optString("code"),
-                        item.optInt("points", 0).coerceAtLeast(0)
+                        item.optInt("points", 0).coerceAtLeast(0),
+                        item.optString("backendId").takeIf { it.isNotBlank() }
                     )
                 )
             }
@@ -141,6 +142,7 @@ class RestaurantStore(context: Context) {
                     .put("name", customer.name)
                     .put("code", customer.code)
                     .put("points", customer.points.coerceAtLeast(0))
+                    .put("backendId", customer.backendId ?: "")
             )
         }
         prefs.edit().putString("loyalty_customers_json", array.toString()).apply()
