@@ -38,12 +38,12 @@ jobs:
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
       - name: Compile app
-        run: gradle --no-daemon assembleEssencialDebug assembleProfissionalDebug assemblePremiumDebug
+        run: gradle --no-daemon assembleEssencialRestauranteDebug assembleProfissionalRestauranteDebug assembleProfissionalClienteDebug assemblePremiumRestauranteDebug assemblePremiumClienteDebug
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: StudioMesa-BichoMau-3-APKs
-          path: app/build/outputs/apk/*/debug/*.apk
+          name: StudioMesa-BichoMau-Restaurante-e-Cliente
+          path: app/build/outputs/apk/**/*.apk
           if-no-files-found: error
           retention-days: 14
