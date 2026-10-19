@@ -15,7 +15,10 @@ data class OrderEntry(
     val itemName: String,
     val amount: Double,
     val status: String,
-    val createdAt: Long
+    val createdAt: Long,
+    val quantity: Int = 1,
+    val serviceCourse: String = "Principal",
+    val notes: String = ""
 )
 
 data class LoyaltyCustomer(
