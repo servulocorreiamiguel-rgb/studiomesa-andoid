@@ -414,6 +414,16 @@ object SupabaseApi {
         return array.getJSONObject(0)
     }
 
+    fun listMemberTransactions(token: String, memberId: String): JSONArray {
+        val encoded = URLEncoder.encode(memberId, "UTF-8")
+        return JSONArray(call(
+            "GET",
+            "/rest/v1/loyalty_transactions?select=points_delta,points_after,note,created_at&member_id=eq.$encoded&order=created_at.desc&limit=20",
+            null,
+            token
+        ))
+    }
+
     fun getMember(token: String, memberId: String): JSONObject {
         val encoded = URLEncoder.encode(memberId, "UTF-8")
         val array = JSONArray(call("GET",
