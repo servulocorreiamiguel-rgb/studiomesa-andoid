@@ -29,7 +29,11 @@ class SecureSessionStore(context: Context) {
     @Synchronized
     fun save(accessToken: String, refreshToken: String) {
         val editor = securePrefs.edit()
-            .putString("access_token", encrypt(accessToken))
+        if (accessToken.isBlank()) {
+            editor.remove("access_token")
+        } else {
+            editor.putString("access_token", encrypt(accessToken))
+        }
         if (refreshToken.isBlank()) {
             editor.remove("refresh_token")
         } else {
