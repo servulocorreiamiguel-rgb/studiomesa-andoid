@@ -59,6 +59,74 @@ class MainActivity : Activity() {
         window.statusBarColor = forestDeep
         window.navigationBarColor = forestDeep
         renderApp()
+        handleAuthCallback(intent)
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleAuthCallback(intent)
+    }
+
+    private fun parseAuthParams(raw: String?): Map<String, String> =
+        raw.orEmpty().split("&").mapNotNull { part ->
+            val separator = part.indexOf('=')
+            if (separator <= 0) null else {
+                val key = java.net.URLDecoder.decode(part.substring(0, separator), "UTF-8")
+                val value = java.net.URLDecoder.decode(part.substring(separator + 1), "UTF-8")
+                key to value
+            }
+        }.toMap()
+
+    private fun handleAuthCallback(callbackIntent: android.content.Intent?) {
+        val uri = callbackIntent?.data ?: return
+        if (uri.scheme != "studiomesa" || uri.host != "auth-callback") return
+        val fragment = parseAuthParams(uri.fragment)
+        val accessToken = uri.getQueryParameter("access_token")
+            ?: fragment["access_token"].orEmpty()
+        val errorText = uri.getQueryParameter("error_description")
+            ?: fragment["error_description"]
+            ?: uri.getQueryParameter("error")
+            ?: fragment["error"]
+
+        if (!errorText.isNullOrBlank()) {
+            AlertDialog.Builder(this)
+                .setTitle("Início de sessão não concluído")
+                .setMessage(errorText.replace('+', ' ').take(500))
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        if (accessToken.isBlank()) {
+            // A browser redirect without a session token is not a successful login.
+            AlertDialog.Builder(this)
+                .setTitle("Não foi recebida uma sessão")
+                .setMessage("O fornecedor de autenticação regressou à aplicação sem uma sessão válida. Confirma se Google/Microsoft está ativo no Supabase e se o URL de retorno está autorizado.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+
+        runBackend({
+            val user = SupabaseApi.getUser(accessToken)
+            val id = user.optString("id")
+            if (id.isBlank()) throw IllegalStateException("O servidor não devolveu uma conta válida.")
+            backendPrefs.edit()
+                .putString("access_token", accessToken)
+                .putString("user_id", id)
+                .putString("user_email", user.optString("email", ""))
+                .putString("refresh_token", fragment["refresh_token"] ?: uri.getQueryParameter("refresh_token").orEmpty())
+                .apply()
+            "SIGNED_IN"
+        }) {
+            if (isCustomerApp) renderCustomerApp() else renderApp()
+            AlertDialog.Builder(this)
+                .setTitle("Sessão iniciada")
+                .setMessage("A conta foi ligada ao StudioMesa. " +
+                    if (isCustomerApp) "Agora associa-te ao restaurante com o respetivo código." else "Agora configura o restaurante para gerar um código de adesão.")
+                .setPositiveButton("OK", null)
+                .show()
+        }
     }
 
     private fun availablePages(): List<String> {
@@ -522,8 +590,36 @@ class MainActivity : Activity() {
             dialog.dismiss()
             showCredentialsDialog(false, afterAuth)
         }, LinearLayout.LayoutParams(-1, dp(48)))
+        addGap(form, 14)
+        form.addView(label("Ou continuar com uma conta externa:", 11.5f, true, muted))
+        addGap(form, 6)
+        form.addView(secondaryButton("Continuar com Google") {
+            dialog.dismiss()
+            startOAuth("google")
+        }, LinearLayout.LayoutParams(-1, dp(46)))
+        addGap(form, 6)
+        form.addView(secondaryButton("Continuar com Microsoft (Outlook)") {
+            dialog.dismiss()
+            startOAuth("azure")
+        }, LinearLayout.LayoutParams(-1, dp(46)))
 
         dialog.show()
+    }
+
+    private fun startOAuth(provider: String) {
+        try {
+            val intent = android.content.Intent(
+                android.content.Intent.ACTION_VIEW,
+                android.net.Uri.parse(SupabaseApi.oauthUrl(provider))
+            )
+            startActivity(intent)
+        } catch (_: Exception) {
+            AlertDialog.Builder(this)
+                .setTitle("Não foi possível abrir o início de sessão")
+                .setMessage("Confirma que tens um navegador instalado e que o fornecedor está configurado no servidor.")
+                .setPositiveButton("OK", null)
+                .show()
+        }
     }
 
     private fun showCredentialsDialog(createAccount: Boolean, afterAuth: () -> Unit) {
@@ -690,7 +786,7 @@ class MainActivity : Activity() {
         container.addView(card, cardParams())
         addGap(container, 3)
         container.addView(secondaryButton("Terminar sessão neste dispositivo") {
-            backendPrefs.edit().remove("access_token").remove("user_id").remove("user_email")
+            backendPrefs.edit().remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
                 .remove("restaurant_id").remove("restaurant_name").remove("join_code")
                 .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
                 .apply()
