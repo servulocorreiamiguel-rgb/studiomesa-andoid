@@ -442,18 +442,53 @@ class MainActivity : Activity() {
     private fun backendRestaurantId(): String = backendPrefs.getString("restaurant_id", "") ?: ""
     private fun backendMemberId(): String = backendPrefs.getString("member_id", "") ?: ""
 
+    private fun friendlyBackendError(rawMessage: String?): String {
+        val message = rawMessage?.trim().orEmpty()
+        val normalized = message.lowercase(Locale.ROOT)
+        return when {
+            normalized.contains("invalid login credentials") ->
+                "Não foi possível iniciar sessão com estes dados. Se é a primeira utilização, volta atrás e escolhe «Criar conta». Se já tens conta, confirma o email e verifica o endereço e a palavra-passe."
+            normalized.contains("email not confirmed") || normalized.contains("email_not_confirmed") ->
+                "O email ainda não foi confirmado. Abre a mensagem de confirmação enviada pelo Supabase (verifica também Spam) e, depois, escolhe «Iniciar sessão»."
+            normalized.contains("user already registered") || normalized.contains("already been registered") ->
+                "Este email já tem uma conta. Volta atrás e escolhe «Iniciar sessão» em vez de «Criar conta»."
+            normalized.contains("email rate limit exceeded") || normalized.contains("rate limit") ->
+                "O serviço limitou temporariamente os pedidos. Aguarda um pouco antes de tentares novamente."
+            normalized.contains("unable to resolve host") || normalized.contains("failed to connect") ||
+                normalized.contains("network is unreachable") || normalized.contains("timeout") ->
+                "Não foi possível ligar ao servidor. Confirma que o telemóvel tem internet e tenta novamente."
+            else -> message.take(500).ifBlank {
+                "Erro de ligação. Confirma a internet e tenta novamente."
+            }
+        }
+    }
+
     private fun runBackend(task: () -> String, onSuccess: (String) -> Unit) {
+        val progress = AlertDialog.Builder(this)
+            .setTitle("A ligar ao StudioMesa")
+            .setMessage("A validar a conta no servidor. Aguarda, por favor…")
+            .setCancelable(false)
+            .create()
+        progress.show()
         Thread {
             try {
                 val result = task()
-                runOnUiThread { onSuccess(result) }
+                runOnUiThread {
+                    if (!isFinishing) {
+                        progress.dismiss()
+                        onSuccess(result)
+                    }
+                }
             } catch (error: Exception) {
                 runOnUiThread {
-                    AlertDialog.Builder(this)
-                        .setTitle("Não foi possível concluir")
-                        .setMessage(error.message?.take(500) ?: "Erro de ligação. Verifica a internet e tenta novamente.")
-                        .setPositiveButton("OK", null)
-                        .show()
+                    if (!isFinishing) {
+                        progress.dismiss()
+                        AlertDialog.Builder(this)
+                            .setTitle("Não foi possível concluir")
+                            .setMessage(friendlyBackendError(error.message))
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
                 }
             }
         }.start()
@@ -462,7 +497,7 @@ class MainActivity : Activity() {
     private fun showAuthChooser(afterAuth: () -> Unit) {
         AlertDialog.Builder(this)
             .setTitle("Conta StudioMesa")
-            .setMessage("A conta permite sincronizar os pontos entre o restaurante e os clientes.")
+            .setMessage("Primeira utilização? Escolhe «Criar conta». «Iniciar sessão» só funciona depois de a conta existir. Se o servidor pedir confirmação, confirma o email antes de entrares.")
             .setItems(arrayOf("Criar conta", "Iniciar sessão", "Cancelar")) { _, which ->
                 when (which) {
                     0 -> showCredentialsDialog(true, afterAuth)
@@ -507,15 +542,25 @@ class MainActivity : Activity() {
                                 val result = SupabaseApi.signUp(email, password)
                                 val token = result.optString("access_token")
                                 val user = result.optJSONObject("user")
-                                if (token.isNotBlank() && user != null) {
-                                    backendPrefs.edit()
-                                        .putString("access_token", token)
-                                        .putString("user_id", user.optString("id"))
-                                        .putString("user_email", email)
-                                        .apply()
-                                    "SIGNED_IN"
-                                } else {
-                                    "CONFIRM_EMAIL"
+                                when {
+                                    token.isNotBlank() && user != null -> {
+                                        backendPrefs.edit()
+                                            .putString("access_token", token)
+                                            .putString("user_id", user.optString("id"))
+                                            .putString("user_email", email)
+                                            .apply()
+                                        "SIGNED_IN"
+                                    }
+                                    user != null -> {
+                                        backendPrefs.edit()
+                                            .putString("user_id", user.optString("id"))
+                                            .putString("user_email", email)
+                                            .apply()
+                                        "CONFIRM_EMAIL"
+                                    }
+                                    else -> throw IllegalStateException(
+                                        "O servidor não confirmou a criação da conta. Tenta novamente; se o erro continuar, regista a mensagem que aparecer."
+                                    )
                                 }
                             } else {
                                 val session = SupabaseApi.signIn(email, password)
@@ -529,8 +574,8 @@ class MainActivity : Activity() {
                         }) { result ->
                             if (result == "CONFIRM_EMAIL") {
                                 AlertDialog.Builder(this)
-                                    .setTitle("Confirma o email")
-                                    .setMessage("A conta foi criada. Se o Supabase pedir confirmação por email, confirma-a e depois escolhe «Iniciar sessão».")
+                                    .setTitle("Falta confirmar o email")
+                                    .setMessage("A conta foi criada, mas ainda não foi iniciada sessão. Abre o email de confirmação (verifica também Spam/Promoções). Depois volta à aplicação e escolhe «Iniciar sessão». Não cries outra conta com o mesmo email.")
                                     .setPositiveButton("OK", null)
                                     .show()
                             } else {
