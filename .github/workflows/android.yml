@@ -10,6 +10,11 @@ on:
 permissions:
   contents: read
 
+# Prevent concurrent debug builds from racing to create the persistent signing key.
+concurrency:
+  group: studiomesa-android-debug-build
+  cancel-in-progress: false
+
 jobs:
   build:
     name: Compile debug APK
@@ -28,6 +33,30 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: "8.9"
+
+      # Persist the Android debug keystore across workflow runs so that
+      # future test APKs can update earlier test APKs without a signature mismatch.
+      - name: Restore persistent debug signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: studiomesa-android-debug-signing-key-v1
+
+      - name: Create debug signing key if missing
+        shell: bash
+        run: |
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -v \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
 
       - name: Configure preinstalled Android SDK
         shell: bash
