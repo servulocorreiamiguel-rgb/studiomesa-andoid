@@ -2,7 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
         android:allowBackup="true"
-        android:label="StudioMesa"
+        android:label="${appLabel}"
+        android:icon="@drawable/ic_studiomesa"
+        android:roundIcon="@drawable/ic_studiomesa"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity

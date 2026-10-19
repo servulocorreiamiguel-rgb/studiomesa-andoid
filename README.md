@@ -1,35 +1,33 @@
-# StudioMesa Android
+# StudioMesa Android — três demos instaláveis
 
-Aplicação Android nativa para apoiar a gestão diária de um restaurante.
+Aplicação Android nativa com identidade visual de restaurante e ícone StudioMesa, para demonstrações presenciais. As variantes **Essencial**, **Profissional** e **Premium** usam o mesmo design-base, identificam o plano e instalam-se como apps separadas para não substituir a aplicação original.
 
-## Funcionalidades desta primeira versão
+## Variantes de demonstração
 
-- Painel com resumo de mesas ocupadas e pedidos ativos.
-- Estado de 12 mesas (livre/ocupada), guardado localmente no dispositivo.
-- Criação de pedidos associados a uma mesa e a um artigo do menu.
-- Acompanhamento de pedidos abertos e concluídos.
-- Gestão simples do menu, com preço de venda e custo por unidade.
-- Calculadora «Preço Justo de Mercado» baseada no custo e na percentagem de custo pretendida.
-- Ecrã de referência com os preços de 890 €, 1 490 € e 1 690 €.
+- **Essencial — 890 €:** mesas, pedidos, menu, reservas locais, personalização da identidade e calculadora de preço por custo.
+- **Profissional — 1 490 €:** tudo do Essencial e relatórios locais de pedidos/reservas.
+- **Premium — 1 690 €:** tudo do Profissional e lista de clientes/histórico derivado das reservas.
 
-## Tecnologia
+Os preços são valores de referência existentes no protótipo; a periodicidade, o alojamento, o suporte, a manutenção, as atualizações e o contrato devem ser definidos antes de uma oferta comercial.
 
-- Kotlin e componentes nativos Android.
-- minSdk 24 (Android 7.0 ou posterior).
-- Dados guardados localmente em SharedPreferences; não há ainda servidor, contas de utilizador nem sincronização entre dispositivos.
+## Dados de demonstração
 
-## Gerar um APK
+Cada instalação é identificada como uma demo e começa com dados fictícios para permitir apresentar os ecrãs: mesas de exemplo, pedidos, menu e reservas. O ecrã Restaurante permite mudar o nome, frase, contactos e cor de destaque. A ação “Repor dados fictícios” apaga as alterações locais desse APK e repõe o conjunto de demonstração.
 
-O workflow do GitHub Actions em **Actions → Build StudioMesa Android APK** tenta compilar a aplicação em cada atualização da branch main. Quando a compilação terminar com sucesso, o ficheiro **StudioMesa-debug-apk** fica disponível como artefacto da execução por 14 dias.
+As variantes têm IDs de aplicação diferentes e podem ser instaladas lado a lado no mesmo telemóvel.
 
-Também é possível compilar num ambiente com Java 17, Gradle 8.9 e Android SDK instalado:
+## Limitação importante: ainda não é um sistema de reservas online
 
-```bash
-gradle --no-daemon assembleDebug
-```
+As reservas são guardadas localmente no telemóvel. Não há página pública para o cliente, sincronização entre dispositivos, notificações nem confirmações automáticas. Não vender nem apresentar estas demos como serviço de reservas online pronto. Antes de uso comercial, é necessário configurar uma base de dados online com autenticação e regras de acesso, construir a página pública de reservas, implementar disponibilidade/capacidade, notificações e cancelamentos, além de testes em dispositivos diferentes e revisão da proteção dos dados pessoais.
 
-O APK de depuração é gerado em app/build/outputs/apk/debug/app-debug.apk.
+## Compilação
 
-## Limitações conhecidas desta versão
+O workflow **Actions → Build StudioMesa Android APK** compila as três variantes de depuração, executa Android Lint nas três e publica o artefacto `StudioMesa-3-Demos` durante 14 dias. As tarefas são:
 
-Este é um MVP inicial, não uma solução pronta para venda ou publicação. Os preços dos planos são apresentados como valores de referência; os módulos incluídos precisam de ser especificados. A calculadora não consulta preços concorrentes em tempo real nem calcula automaticamente IVA, desperdício, salários, rendas ou outras despesas. A aplicação ainda precisa de compilação, testes em dispositivo e validação das regras de negócio antes de ser distribuída a clientes.
+    gradle --no-daemon assembleEssencialDebug assembleProfissionalDebug assemblePremiumDebug
+
+Os APKs são criados em `app/build/outputs/apk/{essencial,profissional,premium}/debug/`.
+
+## Verificação
+
+A compilação confirma que o código Kotlin e os recursos conseguem ser transformados em APKs. Não prova que todos os fluxos funcionam sem falhas num dispositivo; antes de uso real, testar navegação, formularios, datas/horas, guardar/repor dados, permissões, estados e comportamento em diferentes tamanhos de ecrã.

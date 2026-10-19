@@ -2,7 +2,7 @@ name: Build StudioMesa Android APK
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "feature/**"]
   pull_request:
     branches: ["main"]
   workflow_dispatch:
@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    name: Compile debug APK
+    name: Build three StudioMesa demo APKs
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
@@ -37,13 +37,16 @@ jobs:
       - name: Install Android platform and build tools
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Compile app
-        run: gradle --no-daemon assembleDebug
+      - name: Compile all three demo APKs
+        run: gradle --no-daemon assembleEssencialDebug assembleProfissionalDebug assemblePremiumDebug
 
-      - name: Upload debug APK
+      - name: Run Android Lint for all three variants
+        run: gradle --no-daemon lintEssencialDebug lintProfissionalDebug lintPremiumDebug
+
+      - name: Upload three demo APKs
         uses: actions/upload-artifact@v4
         with:
-          name: StudioMesa-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: StudioMesa-3-Demos
+          path: app/build/outputs/apk/*/debug/*.apk
           if-no-files-found: error
           retention-days: 14

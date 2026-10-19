@@ -14,3 +14,22 @@ data class OrderEntry(
     val status: String,
     val createdAt: Long
 )
+
+data class ReservationEntry(
+    val id: Long,
+    val customerName: String,
+    val phone: String,
+    val dateTime: Long,
+    val partySize: Int,
+    val notes: String,
+    val status: String,
+    val createdAt: Long
+)
+
+data class RestaurantProfile(
+    val name: String = "Restaurante de demonstração",
+    val tagline: String = "Boa comida. Boas experiências.",
+    val phone: String = "",
+    val address: String = "",
+    val accent: String = "Dourado"
+)
