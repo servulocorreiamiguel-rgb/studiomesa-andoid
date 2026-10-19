@@ -1564,7 +1564,7 @@ class MainActivity : Activity() {
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val code = field.text.toString().trim().uppercase(Locale.ROOT)
-                if (code.length !in 6..12) {
+                if (code.length !in 6..16) {
                     field.error = "Introduz um código válido"
                 } else {
                     runBackend({
