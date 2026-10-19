@@ -76,7 +76,8 @@ object SupabaseApi {
     }
 
     fun signUp(email: String, password: String): JSONObject {
-        val result = jsonCall("POST", "/auth/v1/signup",
+        val redirect = URLEncoder.encode("studiomesa://auth-callback", "UTF-8")
+        val result = jsonCall("POST", "/auth/v1/signup?redirect_to=$redirect",
             JSONObject().put("email", email.trim()).put("password", password))
         // GoTrue signup commonly returns the user at the JSON root, not in "user".
         // Normalize the response so the UI can recognize that the account was created.
