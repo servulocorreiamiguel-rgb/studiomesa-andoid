@@ -117,6 +117,7 @@ class MainActivity : Activity() {
                 .putString("user_email", user.optString("email", ""))
                 .putString("refresh_token", fragment["refresh_token"] ?: uri.getQueryParameter("refresh_token").orEmpty())
                 .apply()
+            restoreOwnedRestaurant(accessToken)
             "SIGNED_IN"
         }) {
             if (isCustomerApp) renderCustomerApp() else renderApp()
@@ -514,6 +515,27 @@ class MainActivity : Activity() {
         backendPrefs.getString("member_restaurant_name", null)?.trim()?.takeIf { it.isNotEmpty() }
             ?: "StudioMesa"
 
+    private fun restoreOwnedRestaurant(token: String) {
+        if (isCustomerApp || token.isBlank()) return
+
+        try {
+            val restaurant = SupabaseApi.getMyRestaurant(token)
+            val editor = backendPrefs.edit()
+                .remove("restaurant_id")
+                .remove("restaurant_name")
+                .remove("join_code")
+            if (restaurant != null) {
+                editor.putString("restaurant_id", restaurant.optString("restaurant_id"))
+                    .putString("restaurant_name", restaurant.optString("restaurant_name"))
+                    .putString("join_code", restaurant.optString("join_code"))
+            }
+            editor.apply()
+        } catch (_: Exception) {
+            // Keep authentication successful if restoring the owner's restaurant
+            // temporarily fails; the server can be queried again after sign-in.
+        }
+    }
+
     private fun backendToken(): String = backendPrefs.getString("access_token", "") ?: ""
     private fun backendRestaurantId(): String = backendPrefs.getString("restaurant_id", "") ?: ""
     private fun backendMemberId(): String = backendPrefs.getString("member_id", "") ?: ""
@@ -695,6 +717,7 @@ class MainActivity : Activity() {
                                             .putString("user_id", user.optString("id"))
                                             .putString("user_email", email)
                                             .apply()
+                                        restoreOwnedRestaurant(token)
                                         "SIGNED_IN"
                                     }
                                     user != null -> {
@@ -715,6 +738,7 @@ class MainActivity : Activity() {
                                     .putString("user_id", session.userId)
                                     .putString("user_email", session.email)
                                     .apply()
+                                restoreOwnedRestaurant(session.accessToken)
                                 "SIGNED_IN"
                             }
                         }) { result ->
