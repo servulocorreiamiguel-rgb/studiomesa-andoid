@@ -117,7 +117,7 @@ class MainActivity : Activity() {
                 .putString("user_email", user.optString("email", ""))
                 .putString("refresh_token", fragment["refresh_token"] ?: uri.getQueryParameter("refresh_token").orEmpty())
                 .apply()
-            restoreOwnedRestaurant(accessToken)
+            if (isCustomerApp) restoreCustomerMembership(accessToken) else restoreOwnedRestaurant(accessToken)
             "SIGNED_IN"
         }) {
             if (isCustomerApp) renderCustomerApp() else renderApp()
@@ -722,7 +722,7 @@ class MainActivity : Activity() {
             .putString("user_email", session.email)
             .apply()
 
-        if (!isCustomerApp) restoreOwnedRestaurant(session.accessToken)
+        if (isCustomerApp) restoreCustomerMembership(session.accessToken) else restoreOwnedRestaurant(session.accessToken)
     }
 
     private fun restoreOwnedRestaurant(token: String) {
@@ -811,6 +811,38 @@ class MainActivity : Activity() {
             renderApp()
         }
     }
+
+    private fun restoreCustomerMembership(token: String) {
+        if (!isCustomerApp || token.isBlank()) return
+        try {
+            val member = SupabaseApi.getMyLoyaltyMembership(token)
+            if (member == null) {
+                backendPrefs.edit()
+                    .remove("member_id")
+                    .remove("member_code")
+                    .remove("member_points")
+                    .remove("member_restaurant_name")
+                    .putString("customer_menu_json", "[]")
+                    .apply()
+                return
+            }
+
+            val memberId = member.optString("member_id")
+            val menu = if (memberId.isNotBlank()) SupabaseApi.listCustomerMenu(token, memberId) else org.json.JSONArray()
+            backendPrefs.edit()
+                .putString("member_id", memberId)
+                .putString("member_code", member.optString("member_code"))
+                .putInt("member_points", member.optInt("points", 0))
+                .putString("member_restaurant_name", member.optString("restaurant_name"))
+                .putString("customer_menu_json", menu.toString())
+                .apply()
+            val displayName = member.optString("display_name").trim()
+            if (displayName.isNotBlank()) store.saveCustomerProfileName(displayName)
+        } catch (_: Exception) {
+            // Do not discard a valid login if the membership is temporarily unavailable.
+        }
+    }
+
 
     private fun backendToken(): String = backendPrefs.getString("access_token", "") ?: ""
     private fun backendRestaurantId(): String = backendPrefs.getString("restaurant_id", "") ?: ""
@@ -995,7 +1027,7 @@ class MainActivity : Activity() {
                                             .putString("user_id", user.optString("id"))
                                             .putString("user_email", email)
                                             .apply()
-                                        restoreOwnedRestaurant(token)
+                                        if (isCustomerApp) restoreCustomerMembership(token) else restoreOwnedRestaurant(token)
                                         "SIGNED_IN"
                                     }
                                     user != null -> {
@@ -1017,7 +1049,7 @@ class MainActivity : Activity() {
                                     .putString("user_id", session.userId)
                                     .putString("user_email", session.email)
                                     .apply()
-                                restoreOwnedRestaurant(session.accessToken)
+                                if (isCustomerApp) restoreCustomerMembership(session.accessToken) else restoreOwnedRestaurant(session.accessToken)
                                 "SIGNED_IN"
                             }
                         }) { result ->
@@ -1122,7 +1154,8 @@ class MainActivity : Activity() {
             backendPrefs.edit().remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
                 .remove("restaurant_id").remove("restaurant_name").remove("join_code")
                 .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
-                .remove("remote_members_json")
+                .remove("remote_members_json").remove("remote_tables_json")
+                .remove("remote_menu_json").remove("remote_orders_json").remove("customer_menu_json")
                 .apply()
             renderApp()
         }, LinearLayout.LayoutParams(-1, dp(44)))
@@ -1337,11 +1370,16 @@ class MainActivity : Activity() {
                     else -> {
                         dialog.dismiss()
                         runBackend({
-                            val member = SupabaseApi.joinRestaurant(backendToken(), code, name)
-                            backendPrefs.edit().putString("member_id", member.optString("member_id"))
+                            val token = backendToken()
+                            val member = SupabaseApi.joinRestaurant(token, code, name)
+                            val memberId = member.optString("member_id")
+                            val menu = SupabaseApi.listCustomerMenu(token, memberId)
+                            backendPrefs.edit().putString("member_id", memberId)
                                 .putString("member_code", member.optString("member_code"))
                                 .putInt("member_points", member.optInt("points", 0))
-                                .putString("member_restaurant_name", member.optString("restaurant_name")).apply()
+                                .putString("member_restaurant_name", member.optString("restaurant_name"))
+                                .putString("customer_menu_json", menu.toString())
+                                .apply()
                             store.saveCustomerProfileName(name)
                             "OK"
                         }) { renderCustomerApp() }
@@ -1356,9 +1394,13 @@ class MainActivity : Activity() {
         val memberId = backendMemberId()
         if (backendToken().isBlank() || memberId.isBlank()) { showCustomerJoinDialog(); return }
         runBackend({
-            val member = SupabaseApi.getMember(backendToken(), memberId)
+            val token = backendToken()
+            val member = SupabaseApi.getMember(token, memberId)
+            val menu = SupabaseApi.listCustomerMenu(token, memberId)
             backendPrefs.edit().putInt("member_points", member.optInt("points", 0))
-                .putString("member_code", member.optString("member_code")).apply()
+                .putString("member_code", member.optString("member_code"))
+                .putString("customer_menu_json", menu.toString())
+                .apply()
             "OK"
         }) { renderCustomerApp() }
     }
@@ -1428,21 +1470,45 @@ class MainActivity : Activity() {
         addGap(content, 15)
 
         val menuCard = makeCard(16)
-        menuCard.addView(label("A CARTA", 10f, true, forestSoft))
+        val isLinkedToRestaurant = backendMemberId().isNotBlank()
+        menuCard.addView(label(if (isLinkedToRestaurant) "CARTA DO RESTAURANTE" else "CARTA DE DEMONSTRAÇÃO", 10f, true, forestSoft))
         addGap(menuCard, 7)
-        menuCard.addView(label("Exemplos de artigos", 18f, true, forestDeep))
+        menuCard.addView(label(if (isLinkedToRestaurant) "A nossa carta" else "Exemplos de artigos", 18f, true, forestDeep))
         addGap(menuCard, 4)
-        menuCard.addView(label("Nomes e preços fictícios; não correspondem à carta oficial.", 12f, false, muted))
+        menuCard.addView(label(
+            if (isLinkedToRestaurant) "Preços publicados pelo restaurante. Os custos internos não são mostrados."
+            else "Nomes e preços de exemplo; associa a tua conta a um restaurante para veres a carta real.",
+            12f, false, muted
+        ))
         addGap(menuCard, 10)
-        store.getMenu().forEach { item ->
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
+        if (isLinkedToRestaurant) {
+            val publishedMenu = savedRemoteArray("customer_menu_json")
+            if (publishedMenu.length() == 0) {
+                menuCard.addView(label("O restaurante ainda não publicou artigos ativos na carta.", 13f, false, muted))
+            } else {
+                for (index in 0 until publishedMenu.length()) {
+                    val item = publishedMenu.optJSONObject(index) ?: continue
+                    val row = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                    }
+                    row.addView(label(item.optString("name"), 13f, false, ink), LinearLayout.LayoutParams(0, -2, 1f))
+                    row.addView(label(money(item.optDouble("price", 0.0)), 13f, true, forest))
+                    menuCard.addView(row)
+                    addGap(menuCard, 8)
+                }
             }
-            row.addView(label(item.name, 13f, false, ink), LinearLayout.LayoutParams(0, -2, 1f))
-            row.addView(label(money(item.price), 13f, true, forest))
-            menuCard.addView(row)
-            addGap(menuCard, 8)
+        } else {
+            store.getMenu().forEach { item ->
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                row.addView(label(item.name, 13f, false, ink), LinearLayout.LayoutParams(0, -2, 1f))
+                row.addView(label(money(item.price), 13f, true, forest))
+                menuCard.addView(row)
+                addGap(menuCard, 8)
+            }
         }
         content.addView(menuCard, cardParams())
 
@@ -1457,6 +1523,15 @@ class MainActivity : Activity() {
         addGap(syncNote, 5)
         syncNote.addView(label(if (backendMemberId().isBlank()) "Para ver o saldo real, inicia sessão e associa a conta com o código fornecido pelo restaurante." else "Restaurante associado: " + (backendPrefs.getString("member_restaurant_name", "Restaurante") ?: "Restaurante") + ". Atualiza o saldo quando quiseres consultar as alterações mais recentes.", 12f, false, muted))
         content.addView(syncNote, cardParams())
+
+        content.addView(secondaryButton("Terminar sessão neste dispositivo") {
+            backendPrefs.edit()
+                .remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
+                .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
+                .remove("customer_menu_json")
+                .apply()
+            renderCustomerApp()
+        }, LinearLayout.LayoutParams(-1, dp(44)))
 
         setContentView(appRoot)
     }
