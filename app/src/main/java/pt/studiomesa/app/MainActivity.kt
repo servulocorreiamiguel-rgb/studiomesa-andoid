@@ -569,6 +569,7 @@ class MainActivity : Activity() {
         }
         val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale("pt", "PT"))
         val timeFormat = SimpleDateFormat("HH:mm", Locale("pt", "PT"))
+        var dateButtonRef: Button? = null
         val dateButton = secondaryButton("Data: " + dateFormat.format(whenToBook.time)) {
             DatePickerDialog(
                 this,
@@ -576,26 +577,29 @@ class MainActivity : Activity() {
                     whenToBook.set(Calendar.YEAR, year)
                     whenToBook.set(Calendar.MONTH, month)
                     whenToBook.set(Calendar.DAY_OF_MONTH, day)
-                    dateButton.text = "Data: " + dateFormat.format(whenToBook.time)
+                    dateButtonRef?.text = "Data: " + dateFormat.format(whenToBook.time)
                 },
                 whenToBook.get(Calendar.YEAR),
                 whenToBook.get(Calendar.MONTH),
                 whenToBook.get(Calendar.DAY_OF_MONTH)
             ).show()
         }
+        var timeButtonRef: Button? = null
         val timeButton = secondaryButton("Hora: " + timeFormat.format(whenToBook.time)) {
             TimePickerDialog(
                 this,
                 { _, hour, minute ->
                     whenToBook.set(Calendar.HOUR_OF_DAY, hour)
                     whenToBook.set(Calendar.MINUTE, minute)
-                    timeButton.text = "Hora: " + timeFormat.format(whenToBook.time)
+                    timeButtonRef?.text = "Hora: " + timeFormat.format(whenToBook.time)
                 },
                 whenToBook.get(Calendar.HOUR_OF_DAY),
                 whenToBook.get(Calendar.MINUTE),
                 true
             ).show()
         }
+        dateButtonRef = dateButton
+        timeButtonRef = timeButton
         form.addView(label("Data e hora", 14f, true, navy))
         form.addView(dateButton, fieldParams())
         form.addView(timeButton, fieldParams())
