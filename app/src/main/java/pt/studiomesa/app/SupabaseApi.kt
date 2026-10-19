@@ -302,13 +302,22 @@ object SupabaseApi {
         val encoded = URLEncoder.encode(restaurantId, "UTF-8")
         return JSONArray(call(
             "GET",
-            "/rest/v1/restaurant_orders?select=id,table_number,item_name,amount,status,created_at&restaurant_id=eq.$encoded&order=created_at.desc",
+            "/rest/v1/restaurant_orders?select=id,table_number,item_name,amount,quantity,service_course,notes,status,created_at&restaurant_id=eq.$encoded&order=created_at.desc",
             null,
             token
         ))
     }
 
-    fun createOrder(token: String, restaurantId: String, tableNumber: Int, itemName: String, amount: Double) {
+    fun createOrder(
+        token: String,
+        restaurantId: String,
+        tableNumber: Int,
+        itemName: String,
+        amount: Double,
+        quantity: Int,
+        serviceCourse: String,
+        notes: String
+    ) {
         call(
             "POST",
             "/rest/v1/restaurant_orders",
@@ -317,6 +326,9 @@ object SupabaseApi {
                 .put("table_number", tableNumber)
                 .put("item_name", itemName)
                 .put("amount", amount)
+                .put("quantity", quantity)
+                .put("service_course", serviceCourse)
+                .put("notes", notes.trim())
                 .put("status", "Aberto"),
             token
         )
