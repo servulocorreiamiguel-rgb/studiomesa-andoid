@@ -256,6 +256,16 @@ object SupabaseApi {
         return if (restaurants.length() == 0) null else restaurants.getJSONObject(0)
     }
 
+    fun rotateStaffJoinCode(token: String): String {
+        val response = call("POST", "/rest/v1/rpc/rotate_restaurant_staff_code", JSONObject(), token)
+        return response.trim().trim('"')
+    }
+
+    fun rotateCustomerJoinCode(token: String): String {
+        val response = call("POST", "/rest/v1/rpc/rotate_restaurant_customer_code", JSONObject(), token)
+        return response.trim().trim('"')
+    }
+
     fun joinRestaurantStaff(token: String, staffCode: String): JSONObject {
         val response = call(
             "POST",
