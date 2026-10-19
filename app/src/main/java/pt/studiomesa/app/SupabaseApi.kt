@@ -206,6 +206,16 @@ object SupabaseApi {
         )
     }
 
+    fun deactivateMenuItem(token: String, itemId: String) {
+        val encoded = URLEncoder.encode(itemId, "UTF-8")
+        call(
+            "PATCH",
+            "/rest/v1/menu_items?id=eq.$encoded",
+            JSONObject().put("is_active", false),
+            token
+        )
+    }
+
     fun listOrders(token: String, restaurantId: String): JSONArray {
         val encoded = URLEncoder.encode(restaurantId, "UTF-8")
         return JSONArray(call(
