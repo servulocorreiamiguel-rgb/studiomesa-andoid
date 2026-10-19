@@ -22,6 +22,10 @@ Os preços são propostas de referência, não pagamentos configurados nem prova
 - Design em verde-floresta, creme e cobre, com ícone próprio.
 - APKs com identificadores de aplicação diferentes para permitir instalação separada.
 
+## Base de dados de fidelização (versão em desenvolvimento)
+
+O projeto Supabase configurado contém tabelas protegidas por RLS para restaurantes, equipa, cartões de cliente e transações de pontos. A aplicação Android inclui chamadas de autenticação e operações de fidelização; estas alterações continuam em validação e não devem ser usadas para gerir dados reais até o build e os fluxos de conta terem sido testados em dispositivos.
+
 ## Limitações importantes antes da venda
 
 Os pratos e preços iniciais são **fictícios**. A aplicação do restaurante guarda os dados apenas nesse telemóvel. A app de cliente também guarda os seus dados localmente, em separado: por isso, o código/saldo do cartão de cliente ainda **não está ligado** ao registo do restaurante. Os pontos são atribuídos manualmente; não há acumulação automática por compra, pagamento, prémios configuráveis ou sincronização entre dispositivos.
