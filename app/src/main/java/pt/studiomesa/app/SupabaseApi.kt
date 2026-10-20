@@ -195,6 +195,11 @@ object SupabaseApi {
     fun getUser(accessToken: String): JSONObject =
         jsonCall("GET", "/auth/v1/user", token = accessToken)
 
+    fun signOut(accessToken: String) {
+        if (accessToken.isBlank()) return
+        call("POST", "/auth/v1/logout?scope=local", accessToken = accessToken)
+    }
+
     fun isOAuthProviderEnabled(provider: String): Boolean {
         require(provider == "google" || provider == "azure") { "Fornecedor de início de sessão inválido." }
         val settings = jsonCall("GET", "/auth/v1/settings")
