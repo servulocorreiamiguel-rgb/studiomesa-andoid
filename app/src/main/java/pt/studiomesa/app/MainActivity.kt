@@ -1472,7 +1472,7 @@ class MainActivity : Activity() {
                             if (result == "CONFIRM_EMAIL") {
                                 AlertDialog.Builder(this)
                                     .setTitle("Falta confirmar o email")
-                                    .setMessage("A conta foi criada, mas ainda não foi iniciada sessão. Abre o email de confirmação (verifica também Spam/Promoções). Depois volta à aplicação e escolhe «Iniciar sessão». Não cries outra conta com o mesmo email.")
+                                    .setMessage("A conta foi criada, mas ainda não foi iniciada sessão. Abre o email de confirmação no mesmo telemóvel e toca na ligação; deverá abrir o StudioMesa. Verifica também Spam/Promoções. Se a ligação não concluir a sessão, pede uma nova. Não cries outra conta com o mesmo email.")
                                     .setPositiveButton("OK", null)
                                     .show()
                             } else {
