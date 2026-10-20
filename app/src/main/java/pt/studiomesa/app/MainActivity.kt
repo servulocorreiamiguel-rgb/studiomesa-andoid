@@ -32,20 +32,20 @@ class MainActivity : Activity() {
     private val isPremium = flavor.contains("premium")
     private val hasCalculator = flavor.contains("profissional") || isPremium
 
-    private val forest = Color.rgb(24, 57, 47)
-    private val forestDeep = Color.rgb(15, 39, 32)
-    private val forestSoft = Color.rgb(49, 91, 74)
-    private val copper = Color.rgb(201, 145, 99)
-    private val copperPale = Color.rgb(246, 231, 215)
-    private val paper = Color.rgb(248, 246, 240)
+    private val forest = Color.rgb(57, 78, 67)
+    private val forestDeep = Color.rgb(43, 59, 50)
+    private val forestSoft = Color.rgb(77, 101, 87)
+    private val copper = Color.rgb(211, 177, 139)
+    private val copperPale = Color.rgb(245, 237, 224)
+    private val paper = Color.rgb(248, 248, 244)
     private val white = Color.WHITE
-    private val ink = Color.rgb(39, 49, 43)
-    private val muted = Color.rgb(110, 120, 112)
-    private val line = Color.rgb(228, 226, 216)
-    private val paleGreen = Color.rgb(229, 239, 231)
-    private val paleRed = Color.rgb(249, 231, 226)
-    private val red = Color.rgb(164, 68, 56)
-    private val green = Color.rgb(48, 112, 78)
+    private val ink = Color.rgb(47, 57, 51)
+    private val muted = Color.rgb(112, 121, 114)
+    private val line = Color.rgb(230, 229, 220)
+    private val paleGreen = Color.rgb(235, 242, 236)
+    private val paleRed = Color.rgb(249, 237, 233)
+    private val red = Color.rgb(169, 89, 78)
+    private val green = Color.rgb(84, 123, 98)
 
     private val planTitle: String
         get() = when {
@@ -201,7 +201,7 @@ class MainActivity : Activity() {
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
         })
-        brandText.addView(label("STUDIOMESA  /  GESTÃO DE SALA", 9.5f, true, copper))
+        brandText.addView(label("StudioMesa · Gestão de sala", 10f, true, copper))
         brandRow.addView(brandText, LinearLayout.LayoutParams(0, -2, 1f))
 
         val planChip = label(planTitle, 9.5f, true, forestDeep).apply {
@@ -216,7 +216,7 @@ class MainActivity : Activity() {
         val separator = View(this).apply { setBackgroundColor(Color.argb(65, 255, 255, 255)) }
         header.addView(separator, LinearLayout.LayoutParams(-1, dp(1)))
         addGap(header, 12)
-        header.addView(label(if (hasRemoteRestaurant()) "SISTEMA DE GESTÃO  ·  RESTAURANTE LIGADO" else "DEMONSTRAÇÃO  ·  NÃO OFICIAL", 10f, true, copperPale))
+        header.addView(label(if (hasRemoteRestaurant()) "Sistema ligado · Gestão de restaurante" else "Demonstração · Dados de exemplo", 10.5f, true, copperPale))
         header.addView(label("Uma experiência de gestão pensada para o ritmo da sala.", 13f, false, Color.rgb(229, 235, 228)))
 
         val headerParams = LinearLayout.LayoutParams(-1, -2).apply {
@@ -251,15 +251,15 @@ class MainActivity : Activity() {
             val selected = activePage == page
             val item = TextView(this).apply {
                 text = when (page) {
-                    "Início" -> "INÍCIO"
-                    "Mesas" -> "MESAS"
-                    "Pedidos" -> "PEDIDOS"
-                    "Carta" -> "CARTA"
-                    "Pontos" -> "PONTOS"
-                    "Conta" -> "CONTA"
-                    "Preço Justo" -> "PREÇO JUSTO"
-                    "Análise" -> "ANÁLISE"
-                    else -> page.uppercase(Locale.ROOT)
+                    "Início" -> "Início"
+                    "Mesas" -> "Mesas"
+                    "Pedidos" -> "Pedidos"
+                    "Carta" -> "Carta"
+                    "Pontos" -> "Pontos"
+                    "Conta" -> "Conta"
+                    "Preço Justo" -> "Preço justo"
+                    "Análise" -> "Análise"
+                    else -> page
                 }
                 textSize = 10.5f
                 typeface = Typeface.create("sans-serif", Typeface.BOLD)
@@ -1926,7 +1926,7 @@ class MainActivity : Activity() {
         }
         header.addView(label(displayCustomerRestaurantName(), 25f, true, white))
         addGap(header, 4)
-        header.addView(label("CARTÃO DIGITAL DE CLIENTE  ·  " + planTitle, 10f, true, copper))
+        header.addView(label("Cartão digital de cliente · " + planTitle, 10.5f, true, copper))
         addGap(header, 13)
         header.addView(label("A tua experiência, num só lugar.", 17f, true, white))
         header.addView(label(if (backendMemberId().isBlank()) "Cartão demonstrativo — associa a tua conta ao restaurante." else "Cartão digital de fidelização", 12f, false, copperPale))
@@ -1957,11 +1957,11 @@ class MainActivity : Activity() {
         }
         addGap(content, 15)
 
-        val loyalty = makeCard(18, forestDeep)
-        loyalty.addView(label("O MEU CARTÃO", 10f, true, copper))
+        val loyalty = makeCard(18, forest)
+        loyalty.addView(label("O meu cartão", 10.5f, true, copper))
         addGap(loyalty, 10)
         loyalty.addView(label(backendPrefs.getInt("member_points", 0).toString(), 42f, true, white))
-        loyalty.addView(label(if (backendMemberId().isBlank()) "PONTOS DE DEMONSTRAÇÃO" else "PONTOS DISPONÍVEIS", 10f, true, copperPale))
+        loyalty.addView(label(if (backendMemberId().isBlank()) "Pontos de demonstração" else "Pontos disponíveis", 10f, true, copperPale))
         addGap(loyalty, 13)
         val code = backendPrefs.getString("member_code", "")?.takeIf { it.isNotBlank() } ?: store.getCustomerMemberCode()
         loyalty.addView(label("Código de cliente", 11f, false, copperPale))
@@ -1976,7 +1976,7 @@ class MainActivity : Activity() {
 
         val menuCard = makeCard(16)
         val isLinkedToRestaurant = backendMemberId().isNotBlank()
-        menuCard.addView(label(if (isLinkedToRestaurant) "CARTA DO RESTAURANTE" else "CARTA DE DEMONSTRAÇÃO", 10f, true, forestSoft))
+        menuCard.addView(label(if (isLinkedToRestaurant) "Carta do restaurante" else "Carta de demonstração", 10f, true, forestSoft))
         addGap(menuCard, 7)
         menuCard.addView(label(if (isLinkedToRestaurant) "A nossa carta" else "Exemplos de artigos", 18f, true, forestDeep))
         addGap(menuCard, 4)
@@ -2470,7 +2470,7 @@ class MainActivity : Activity() {
     }
 
     private fun pageIntro(container: LinearLayout, title: String, subtitle: String) {
-        container.addView(label("GESTÃO DE RESTAURANTE", 10f, true, forestSoft))
+        container.addView(label("Gestão de restaurante", 10.5f, true, forestSoft))
         addGap(container, 5)
         container.addView(label(title, 27f, true, forestDeep))
         addGap(container, 5)
@@ -2521,7 +2521,7 @@ class MainActivity : Activity() {
     }
 
     private fun addMetric(parent: LinearLayout, title: String, value: String) {
-        parent.addView(label(title.uppercase(Locale.ROOT), 9.5f, true, muted))
+        parent.addView(label(title, 10.5f, true, muted))
         addGap(parent, 4)
         parent.addView(label(value, 21f, true, forest))
         addGap(parent, 13)
@@ -2547,8 +2547,8 @@ class MainActivity : Activity() {
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(padding), dp(padding), dp(padding), dp(padding))
-            background = rounded(color, 17)
-            elevation = dp(2).toFloat()
+            background = rounded(color, 19)
+            elevation = dp(1).toFloat()
         }
 
     private fun cardParams(): LinearLayout.LayoutParams =
@@ -2565,7 +2565,7 @@ class MainActivity : Activity() {
             setTextColor(ink)
             setHintTextColor(muted)
             setPadding(dp(12), dp(8), dp(12), dp(8))
-            background = rounded(white, 10)
+            background = rounded(white, 12)
             isSingleLine = true
         }
 
@@ -2577,7 +2577,7 @@ class MainActivity : Activity() {
             setTextColor(ink)
             setHintTextColor(muted)
             setPadding(dp(12), dp(10), dp(12), dp(10))
-            background = rounded(white, 10)
+            background = rounded(white, 12)
             minLines = 2
             maxLines = 3
             isSingleLine = false
@@ -2594,7 +2594,8 @@ class MainActivity : Activity() {
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
             isAllCaps = false
             setTextColor(forestDeep)
-            background = rounded(copper, 13)
+            background = rounded(copper, 15)
+            elevation = dp(1).toFloat()
             setPadding(dp(12), dp(3), dp(12), dp(3))
             setOnClickListener { action() }
         }
@@ -2606,7 +2607,8 @@ class MainActivity : Activity() {
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
             isAllCaps = false
             setTextColor(forest)
-            background = rounded(paleGreen, 12)
+            background = rounded(paleGreen, 14)
+            elevation = 0f
             setPadding(dp(8), dp(2), dp(8), dp(2))
             setOnClickListener { action() }
         }
