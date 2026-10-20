@@ -54,6 +54,54 @@ class SecureSessionStore(context: Context) {
         legacyPrefs.edit().remove("access_token").remove("refresh_token").apply()
     }
 
+    /**
+     * Stores a pending PKCE verifier encrypted with the same Android Keystore key as session tokens.
+     * Only one auth-code flow is allowed at a time in this single-activity demo app.
+     */
+    @Synchronized
+    fun savePendingCodeVerifier(verifier: String, flowType: String) {
+        require(flowType == "oauth" || flowType == "recovery") {
+            "Tipo de autenticação pendente inválido."
+        }
+        val editor = securePrefs.edit()
+        if (verifier.isBlank()) {
+            editor.remove("pending_code_verifier")
+            editor.remove("pending_code_flow")
+        } else {
+            editor.putString("pending_code_verifier", encrypt(verifier))
+                .putString("pending_code_flow", flowType)
+        }
+        if (!editor.commit()) {
+            throw IllegalStateException("Não foi possível guardar a verificação segura da autenticação.")
+        }
+    }
+
+    @Synchronized
+    fun pendingCodeVerifier(): String {
+        val encrypted = securePrefs.getString("pending_code_verifier", null)
+        if (encrypted.isNullOrBlank()) return ""
+        return try {
+            decrypt(encrypted)
+        } catch (_: Exception) {
+            clearPendingCodeVerifier()
+            ""
+        }
+    }
+
+    @Synchronized
+    fun pendingCodeFlowType(): String =
+        securePrefs.getString("pending_code_flow", "").orEmpty()
+
+    @Synchronized
+    fun clearPendingCodeVerifier() {
+        if (!securePrefs.edit()
+                .remove("pending_code_verifier")
+                .remove("pending_code_flow")
+                .commit()) {
+            throw IllegalStateException("Não foi possível limpar a autenticação pendente.")
+        }
+    }
+
     private fun getToken(key: String): String {
         val encrypted = securePrefs.getString(key, null)
         if (!encrypted.isNullOrBlank()) {
