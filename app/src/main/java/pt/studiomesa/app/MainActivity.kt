@@ -40,7 +40,7 @@ class MainActivity : Activity() {
     private val paper = Color.rgb(248, 248, 244)
     private val white = Color.WHITE
     private val ink = Color.rgb(47, 57, 51)
-    private val muted = Color.rgb(112, 121, 114)
+    private val muted = Color.rgb(106, 116, 108)
     private val line = Color.rgb(230, 229, 220)
     private val paleGreen = Color.rgb(235, 242, 236)
     private val paleRed = Color.rgb(249, 237, 233)
