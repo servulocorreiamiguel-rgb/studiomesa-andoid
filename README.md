@@ -33,7 +33,7 @@ Estes valores são propostas de referência para avaliação comercial, não pag
 - Cópias de segurança e procedimento testado de recuperação, monitorização, exportação/eliminação de dados e política de conservação de dados. O histórico de pedidos está implementado; ainda falta registar todas as ações de gestão num trilho de auditoria completo.
 - Gestão avançada da carta ainda incompleta: fotografias, disponibilidade por horário, tradução de menus, histórico editorial e validação sistemática de alergénios. Os campos de categoria, descrição e alergénios já existem, mas precisam de revisão pelo restaurante.
 - Testes de privacidade, segurança e proteção de dados; revisão independente da configuração de produção. A proteção de palavras-passe comprometidas no Supabase ainda não está ativada.
-- Credenciais próprias de OAuth para Google/Microsoft, caso se queira disponibilizar esses métodos de login. O fluxo de recuperação de palavra-passe está implementado no código, mas depende de um URL de retorno autorizado e de um fornecedor SMTP configurado para o envio real dos emails.
+- Credenciais próprias de OAuth para Google/Microsoft, caso se queira disponibilizar esses métodos de login. O código Android usa PKCE para OAuth, registo e recuperação e guarda o verificador cifrado no Android Keystore; estes fluxos ainda precisam de testes ponta a ponta num dispositivo real. É necessário autorizar o URL de retorno e configurar um fornecedor SMTP para o envio real dos emails.
 - Compilação de release, assinatura de lançamento controlada pelo proprietário, testes de compatibilidade e preparação da eventual publicação na Google Play. Os APKs gerados atualmente são de demonstração/debug.
 
 ## Configuração técnica
