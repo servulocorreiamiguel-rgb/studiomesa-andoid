@@ -93,48 +93,54 @@ class MainActivity : Activity() {
         val uri = callbackIntent?.data ?: return
         if (uri.scheme != "studiomesa" || uri.host != "auth-callback") return
         val fragment = parseAuthParams(uri.fragment)
-        val accessToken = uri.getQueryParameter("access_token")
-            ?: fragment["access_token"].orEmpty()
         val callbackType = uri.getQueryParameter("type") ?: fragment["type"].orEmpty()
-        val isPasswordRecovery = callbackType.equals("recovery", ignoreCase = true)
         val errorText = uri.getQueryParameter("error_description")
             ?: fragment["error_description"]
             ?: uri.getQueryParameter("error")
             ?: fragment["error"]
 
         if (!errorText.isNullOrBlank()) {
+            runCatching { secureSession.clearPendingCodeVerifier() }
             AlertDialog.Builder(this)
-                .setTitle("Início de sessão não concluído")
+                .setTitle("Autenticação não concluída")
                 .setMessage(errorText.replace('+', ' ').take(500))
                 .setPositiveButton("OK", null)
                 .show()
             return
         }
-        if (accessToken.isBlank()) {
-            // A browser redirect without a session token is not a successful login.
+
+        // Accept only the one-time PKCE authorization code. Do not accept bearer
+        // access/refresh tokens supplied directly in a custom-scheme URL.
+        val authCode = uri.getQueryParameter("code").orEmpty()
+        val pendingFlow = secureSession.pendingCodeFlowType()
+        val codeVerifier = secureSession.pendingCodeVerifier()
+        if (authCode.isBlank() || codeVerifier.isBlank() ||
+            pendingFlow !in setOf("oauth", "recovery", "signup")) {
             AlertDialog.Builder(this)
-                .setTitle("Não foi recebida uma sessão")
-                .setMessage("O fornecedor de autenticação regressou à aplicação sem uma sessão válida. Confirma se Google/Microsoft está ativo no Supabase e se o URL de retorno está autorizado.")
+                .setTitle("Ligação de autenticação inválida")
+                .setMessage("Não foi recebida uma ligação protegida válida. Pede uma nova ligação e abre-a neste telemóvel, com a aplicação instalada.")
                 .setPositiveButton("OK", null)
                 .show()
             return
         }
+        val isPasswordRecovery = pendingFlow == "recovery" ||
+            callbackType.equals("recovery", ignoreCase = true)
 
         runBackend({
-            val user = SupabaseApi.getUser(accessToken)
+            val session = SupabaseApi.exchangeCodeForSession(authCode, codeVerifier)
+            val user = SupabaseApi.getUser(session.accessToken)
             val id = user.optString("id")
             if (id.isBlank()) throw IllegalStateException("O servidor não devolveu uma conta válida.")
-            secureSession.save(
-                accessToken,
-                fragment["refresh_token"] ?: uri.getQueryParameter("refresh_token").orEmpty()
-            )
+            secureSession.save(session.accessToken, session.refreshToken)
+            secureSession.clearPendingCodeVerifier()
             backendPrefs.edit()
                 .putString("user_id", id)
-                .putString("user_email", user.optString("email", ""))
+                .putString("user_email", user.optString("email", session.email))
                 .apply()
-            if (isCustomerApp) restoreCustomerMembership(accessToken) else restoreOwnedRestaurant(accessToken)
+            if (isCustomerApp) restoreCustomerMembership(session.accessToken)
+            else restoreOwnedRestaurant(session.accessToken)
             "SIGNED_IN"
-        }) {
+        }, refreshSession = false) {
             if (isPasswordRecovery) {
                 showSetNewPasswordDialog()
             } else {
@@ -1169,7 +1175,11 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun runBackend(task: () -> String, onSuccess: (String) -> Unit) {
+    private fun runBackend(
+        task: () -> String,
+        refreshSession: Boolean = true,
+        onSuccess: (String) -> Unit
+    ) {
         val progress = AlertDialog.Builder(this)
             .setTitle("A ligar ao StudioMesa")
             .setMessage("A validar a conta no servidor. Aguarda, por favor…")
@@ -1178,7 +1188,7 @@ class MainActivity : Activity() {
         progress.show()
         Thread {
             try {
-                refreshSessionIfNeeded()
+                if (refreshSession) refreshSessionIfNeeded()
                 val result = task()
                 runOnUiThread {
                     if (!isFinishing) {
@@ -1310,6 +1320,24 @@ class MainActivity : Activity() {
         dialog.show()
     }
 
+    private fun createPkceVerifier(): String {
+        val random = ByteArray(32)
+        java.security.SecureRandom().nextBytes(random)
+        return android.util.Base64.encodeToString(
+            random,
+            android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP or android.util.Base64.NO_PADDING
+        )
+    }
+
+    private fun createPkceChallenge(verifier: String): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(verifier.toByteArray(Charsets.US_ASCII))
+        return android.util.Base64.encodeToString(
+            digest,
+            android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP or android.util.Base64.NO_PADDING
+        )
+    }
+
     private fun startOAuth(provider: String) {
         runBackend({
             if (!SupabaseApi.isOAuthProviderEnabled(provider)) {
@@ -1321,14 +1349,18 @@ class MainActivity : Activity() {
                     }
                 )
             }
-            SupabaseApi.oauthUrl(provider)
-        }) { authUrl ->
+            val verifier = createPkceVerifier()
+            val challenge = createPkceChallenge(verifier)
+            secureSession.savePendingCodeVerifier(verifier, "oauth")
+            SupabaseApi.oauthUrl(provider, challenge)
+        }, refreshSession = false) { authUrl ->
             try {
                 startActivity(android.content.Intent(
                     android.content.Intent.ACTION_VIEW,
                     android.net.Uri.parse(authUrl)
                 ))
             } catch (_: Exception) {
+                runCatching { secureSession.clearPendingCodeVerifier() }
                 AlertDialog.Builder(this)
                     .setTitle("Não foi possível abrir o início de sessão")
                     .setMessage("Confirma que tens um navegador instalado e tenta novamente.")
@@ -1372,9 +1404,12 @@ class MainActivity : Activity() {
                 } else {
                     dialog.dismiss()
                     runBackend({
-                        SupabaseApi.requestPasswordRecovery(email)
+                        val verifier = createPkceVerifier()
+                        val challenge = createPkceChallenge(verifier)
+                        secureSession.savePendingCodeVerifier(verifier, "recovery")
+                        SupabaseApi.requestPasswordRecovery(email, challenge)
                         "SENT"
-                    }) {
+                    }, refreshSession = false) {
                         AlertDialog.Builder(this)
                             .setTitle("Verifica o teu email")
                             .setMessage("Se existir uma conta com este endereço, será enviado um email para recuperar o acesso. Abre a ligação no mesmo telemóvel para definires uma nova palavra-passe. Verifica também Spam.")
@@ -1397,12 +1432,16 @@ class MainActivity : Activity() {
                         dialog.dismiss()
                         runBackend({
                             if (createAccount) {
-                                val result = SupabaseApi.signUp(email, password)
+                                val verifier = createPkceVerifier()
+                                val challenge = createPkceChallenge(verifier)
+                                secureSession.savePendingCodeVerifier(verifier, "signup")
+                                val result = SupabaseApi.signUp(email, password, challenge)
                                 val token = result.optString("access_token")
                                 val user = result.optJSONObject("user")
                                 when {
                                     token.isNotBlank() && user != null -> {
                                         secureSession.save(token, result.optString("refresh_token"))
+                                        secureSession.clearPendingCodeVerifier()
                                         backendPrefs.edit()
                                             .putString("user_id", user.optString("id"))
                                             .putString("user_email", email)
@@ -1431,7 +1470,7 @@ class MainActivity : Activity() {
                                 if (isCustomerApp) restoreCustomerMembership(session.accessToken) else restoreOwnedRestaurant(session.accessToken)
                                 "SIGNED_IN"
                             }
-                        }) { result ->
+                        }, refreshSession = false) { result ->
                             if (result == "CONFIRM_EMAIL") {
                                 AlertDialog.Builder(this)
                                     .setTitle("Falta confirmar o email")
