@@ -22,7 +22,8 @@
 ## Configuração de autenticação
 
 - Email/palavra-passe: confirma as regras de palavras-passe, a confirmação de email, o fornecedor de envio de emails e o URL de retorno autorizado para recuperação.
-- Google e Microsoft: só devem ser apresentados como métodos operacionais depois de configurares as credenciais OAuth reais no Supabase, autorizares o callback e testares o fluxo num telemóvel real.
+- O código Android passou a usar PKCE: o verificador é gerado aleatoriamente, guardado cifrado no Android Keystore e usado para trocar o código de retorno por uma sessão. O callback já não aceita tokens bearer diretamente na ligação.
+- Google e Microsoft só devem ser apresentados como métodos operacionais depois de configurares as credenciais OAuth reais no Supabase, autorizares o callback e testares o fluxo completo num telemóvel real.
 - Não partilhes palavras-passe entre proprietário e funcionários. Cada pessoa deve ter a sua própria conta.
 - Ativa proteção contra palavras-passe comprometidas e revê limites de pedidos e monitorização antes da utilização comercial.
 
