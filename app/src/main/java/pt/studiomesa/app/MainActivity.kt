@@ -93,7 +93,6 @@ class MainActivity : Activity() {
         val uri = callbackIntent?.data ?: return
         if (uri.scheme != "studiomesa" || uri.host != "auth-callback") return
         val fragment = parseAuthParams(uri.fragment)
-        val callbackType = uri.getQueryParameter("type") ?: fragment["type"].orEmpty()
         val errorText = uri.getQueryParameter("error_description")
             ?: fragment["error_description"]
             ?: uri.getQueryParameter("error")
@@ -123,8 +122,7 @@ class MainActivity : Activity() {
                 .show()
             return
         }
-        val isPasswordRecovery = pendingFlow == "recovery" ||
-            callbackType.equals("recovery", ignoreCase = true)
+        val isPasswordRecovery = pendingFlow == "recovery"
 
         runBackend({
             val session = SupabaseApi.exchangeCodeForSession(authCode, codeVerifier)
