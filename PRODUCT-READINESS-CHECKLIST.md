@@ -53,7 +53,9 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [x] As funções `SECURITY DEFINER` inspecionadas exigem sessão e as permissões de execução para `anon` estavam revogadas para os RPCs listados pelo Security Advisor.
 - [ ] Proteção contra palavras-passe comprometidas no Supabase Auth.
 - [x] Sessões guardadas com cifragem AES-GCM usando Android Keystore no código inspecionado.
-- [ ] Rever o fluxo OAuth/deep link e testá-lo num dispositivo real antes de uso comercial.
+- [x] Código PKCE em OAuth, registo e recuperação, com verificador cifrado e rejeição de tokens bearer na ligação de retorno.
+- [x] Logout local limpa os tokens e inicia a revogação da sessão atual no Supabase em segundo plano.
+- [ ] Testar login, recuperação, registo e revogação de sessão num dispositivo real; o logout remoto é best effort quando a rede falha.
 - [ ] Confirmar backups disponíveis, retenção e executar um restauro de teste num ambiente separado.
 - [ ] Testar exportação/eliminação de dados, registos, conservação e resposta a incidentes.
 - [ ] Não colocar chaves `service_role` ou `sb_secret_...` na aplicação. A chave `sb_publishable_...` incorporada no cliente é pública por natureza e depende de RLS/políticas corretas.
