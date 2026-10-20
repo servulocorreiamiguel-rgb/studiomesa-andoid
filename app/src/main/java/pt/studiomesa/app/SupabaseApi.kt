@@ -118,10 +118,20 @@ object SupabaseApi {
         }
     }
 
-    fun signUp(email: String, password: String): JSONObject {
+    fun signUp(email: String, password: String, codeChallenge: String): JSONObject {
+        require(codeChallenge.matches(Regex("^[A-Za-z0-9_-]{43}$"))) {
+            "O desafio de autenticação não é válido."
+        }
         val redirect = URLEncoder.encode("studiomesa://auth-callback", "UTF-8")
-        val result = jsonCall("POST", "/auth/v1/signup?redirect_to=$redirect",
-            JSONObject().put("email", email.trim()).put("password", password))
+        val result = jsonCall(
+            "POST",
+            "/auth/v1/signup?redirect_to=$redirect",
+            JSONObject()
+                .put("email", email.trim())
+                .put("password", password)
+                .put("code_challenge", codeChallenge)
+                .put("code_challenge_method", "s256")
+        )
         // GoTrue signup commonly returns the user at the JSON root, not in "user".
         // Normalize the response so the UI can recognize that the account was created.
         if (result.optJSONObject("user") == null && result.optString("id").isNotBlank()) {
@@ -132,12 +142,44 @@ object SupabaseApi {
         return result
     }
 
-    fun requestPasswordRecovery(email: String) {
+    fun requestPasswordRecovery(email: String, codeChallenge: String) {
+        require(codeChallenge.matches(Regex("^[A-Za-z0-9_-]{43}$"))) {
+            "O desafio de autenticação não é válido."
+        }
         val redirect = URLEncoder.encode("studiomesa://auth-callback", "UTF-8")
         call(
             "POST",
             "/auth/v1/recover?redirect_to=$redirect",
-            JSONObject().put("email", email.trim())
+            JSONObject()
+                .put("email", email.trim())
+                .put("code_challenge", codeChallenge)
+                .put("code_challenge_method", "s256")
+        )
+    }
+
+    fun exchangeCodeForSession(authCode: String, codeVerifier: String): Session {
+        require(authCode.isNotBlank()) { "A ligação de autenticação não contém um código válido." }
+        require(codeVerifier.matches(Regex("^[A-Za-z0-9._~-]{43,128}$"))) {
+            "A verificação de autenticação não é válida."
+        }
+        val result = jsonCall(
+            "POST",
+            "/auth/v1/token?grant_type=pkce",
+            JSONObject()
+                .put("auth_code", authCode)
+                .put("code_verifier", codeVerifier)
+        )
+        val user = result.optJSONObject("user") ?: JSONObject()
+        val accessToken = result.optString("access_token")
+        val refreshToken = result.optString("refresh_token")
+        if (accessToken.isBlank() || refreshToken.isBlank()) {
+            throw IllegalStateException("O servidor não devolveu uma sessão válida.")
+        }
+        return Session(
+            accessToken,
+            user.optString("id"),
+            user.optString("email", ""),
+            refreshToken
         )
     }
 
@@ -153,17 +195,25 @@ object SupabaseApi {
     fun getUser(accessToken: String): JSONObject =
         jsonCall("GET", "/auth/v1/user", token = accessToken)
 
+    fun signOut(accessToken: String) {
+        if (accessToken.isBlank()) return
+        call("POST", "/auth/v1/logout?scope=local", accessToken = accessToken)
+    }
+
     fun isOAuthProviderEnabled(provider: String): Boolean {
         require(provider == "google" || provider == "azure") { "Fornecedor de início de sessão inválido." }
         val settings = jsonCall("GET", "/auth/v1/settings")
         return settings.optJSONObject("external")?.optBoolean(provider, false) ?: false
     }
 
-    fun oauthUrl(provider: String): String {
+    fun oauthUrl(provider: String, codeChallenge: String): String {
         require(provider == "google" || provider == "azure") { "Fornecedor de início de sessão inválido." }
+        require(codeChallenge.matches(Regex("^[A-Za-z0-9_-]{43}$"))) {
+            "O desafio de autenticação não é válido."
+        }
         val redirect = URLEncoder.encode("studiomesa://auth-callback", "UTF-8")
         val scopes = if (provider == "azure") "&scopes=email" else ""
-        return "$BASE_URL/auth/v1/authorize?provider=$provider&redirect_to=$redirect&apikey=$API_KEY$scopes"
+        return "$BASE_URL/auth/v1/authorize?provider=$provider&redirect_to=$redirect&code_challenge=$codeChallenge&code_challenge_method=s256&apikey=$API_KEY$scopes"
     }
 
     fun createRestaurant(token: String, name: String, code: String): String {

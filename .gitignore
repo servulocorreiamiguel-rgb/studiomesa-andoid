@@ -8,3 +8,14 @@ local.properties
 .DS_Store
 *.apk
 *.aab
+
+# Never commit production signing material or local credentials
+*.jks
+*.keystore
+keystore.properties
+.env
+.env.*
+!.env.example
+*.p12
+*.pem
+*.key

@@ -1,45 +1,56 @@
-# Configurar a base de dados partilhada do StudioMesa
+# StudioMesa — configuração do backend e preparação para produção
 
-Este passo prepara os pontos para poderem ser partilhados entre a aplicação do restaurante e a aplicação do cliente. A aplicação Android **ainda não está ligada** a esta base de dados; depois de criares o projeto, o código Android terá de ser ligado e compilado novamente.
+> **Importante:** este documento substitui instruções antigas de configuração. O código e a base de dados evoluíram; não executes o ficheiro `supabase/schema.sql` no projeto ligado à aplicação sem antes comparar o esquema e validar uma migração. Esse ficheiro é um protótipo inicial da parte de fidelização e não representa, por si só, todo o esquema atualmente utilizado pela aplicação.
 
-## 1. Criar o projeto
+## Estado técnico
 
-1. Abre https://supabase.com e cria uma conta/projeto novo.
-2. Escolhe uma palavra-passe forte para a base de dados e guarda-a num gestor de palavras-passe.
-3. Espera que o projeto fique pronto.
+- A aplicação Android é nativa, escrita em Kotlin.
+- A aplicação usa o cliente REST/Auth definido em `app/src/main/java/pt/studiomesa/app/SupabaseApi.kt`.
+- O cliente contém o URL do projeto e uma chave Supabase publicável (`sb_publishable_...`). Uma chave publicável pode existir numa aplicação móvel; **não** é uma chave secreta.
+- Nunca coloques em Kotlin, recursos Android, APKs, GitHub público ou nesta conversa chaves `sb_secret_...`, `service_role`, palavras-passe da base de dados ou credenciais privadas de OAuth.
+- O backend tem tabelas de mesas, carta, pedidos, histórico de pedidos, equipa e fidelização. As regras RLS e permissões têm de ser revistas em conjunto com as funções SQL que as aplicações chamam.
 
-## 2. Criar as tabelas e as regras de segurança
+## Antes de alterar o esquema
 
-1. No projeto, abre **SQL Editor**.
-2. Abre o ficheiro `supabase/schema.sql` deste repositório.
-3. Copia todo o SQL, cola no SQL Editor e executa-o uma vez.
-4. Se aparecer um erro, não continues a configuração: guarda o texto exato do erro para o corrigirmos.
+1. Confirma que estás no projeto Supabase correto.
+2. Revê o SQL exato numa branch de desenvolvimento, nunca diretamente em produção.
+3. Confirma que cada tabela exposta tem RLS e políticas alinhadas com o papel do utilizador e com o restaurante.
+4. Revê as funções `SECURITY DEFINER`: devem verificar `auth.uid()`, autorizações e `search_path`, e o direito `EXECUTE` deve ser concedido apenas aos papéis necessários.
+5. Não atives RLS numa tabela privada sem compreender os acessos das funções que a utilizam. RLS sem políticas bloqueia o acesso direto à tabela; isso pode ser correto para uma tabela privada, mas deve ser confirmado com testes dos fluxos legítimos.
+6. Depois de cada alteração, volta a executar os Security Advisors e testa os fluxos com contas de proprietário, funcionário, cliente e utilizador não autenticado.
 
-O esquema cria restaurantes, membros de equipa, cartões de fidelização e histórico de movimentos. As tabelas têm Row Level Security (RLS), os utilizadores só podem ler o que lhes diz respeito ou o que a sua função de equipa permite, e apenas uma função validada pode alterar pontos. Revê sempre o Security Advisor antes de usar dados reais.
+## Configuração de autenticação
 
-## 3. Obter apenas os dados públicos da app
+- Email/palavra-passe: confirma as regras de palavras-passe, a confirmação de email, o fornecedor de envio de emails e o URL de retorno autorizado para recuperação.
+- O código Android passou a usar PKCE: o verificador é gerado aleatoriamente, guardado cifrado no Android Keystore e usado para trocar o código de retorno por uma sessão. O callback já não aceita tokens bearer diretamente na ligação.
+- Google e Microsoft só devem ser apresentados como métodos operacionais depois de configurares as credenciais OAuth reais no Supabase, autorizares o callback e testares o fluxo completo num telemóvel real.
+- Não partilhes palavras-passe entre proprietário e funcionários. Cada pessoa deve ter a sua própria conta.
+- Ativa proteção contra palavras-passe comprometidas e revê limites de pedidos e monitorização antes da utilização comercial.
 
-1. No painel do Supabase, abre **Connect** ou **Settings → API Keys**.
-2. Copia o **Project URL**.
-3. Copia a chave **Publishable** que começa por `sb_publishable_` (ou a chave pública `anon` de um projeto antigo).
-4. Guarda-os para configurar a aplicação.
+## Cópias de segurança e recuperação
 
-**Nunca partilhes nem coloques no Android, GitHub ou nesta conversa a chave `sb_secret_`, `service_role`, a palavra-passe da base de dados ou qualquer chave secreta.** A chave publicável pode estar numa app móvel, mas só é segura com RLS e políticas de acesso bem configuradas.
+A aplicação não substitui as cópias de segurança do fornecedor da base de dados. Antes de usar dados reais:
 
-## 4. O que será ligado no código
+- Confirma no painel do Supabase o plano, retenção e frequência de backups efetivamente disponíveis.
+- Define quem pode solicitar um restauro e qual o objetivo aceitável de perda de dados.
+- Faz um restauro de teste num ambiente separado e confirma mesas, carta, pedidos, histórico e pontos.
+- Documenta exportação, eliminação e conservação de dados; não guardes dados de clientes para além do necessário.
 
-Depois de o projeto estar criado, a implementação Android tem de acrescentar:
-- registo e início de sessão seguros;
-- criação do restaurante e conta de equipa;
-- entrada de clientes através do código do restaurante;
-- leitura do saldo de pontos real;
-- atribuição/desconto de pontos através de função verificada, com histórico;
-- tratamento de erros, falta de rede e sessões expiradas.
+Não se considera um backup verificado até existir evidência de um restauro testado.
 
-O fluxo de pontos vai usar transações no servidor; a app não deve poder alterar diretamente o campo de saldo. Os pontos só passam a sincronizar entre dispositivos depois de o código Android estar ligado ao projeto e testado.
+## Testes obrigatórios antes da venda
 
-## 5. Estado atual
+- Compilar todas as variantes Android e instalar os APKs num dispositivo real.
+- Testar registo, login, renovação e expiração de sessão, recuperação de palavra-passe e logout.
+- Testar pedidos e alterações concorrentes em dois dispositivos, incluindo perda de internet durante uma gravação.
+- Testar que uma conta de um restaurante não consegue consultar ou modificar dados de outro.
+- Testar códigos de cliente/equipa inválidos, tentativas repetidas e renovação de códigos.
+- Confirmar que a aplicação de cliente nunca recebe custos internos, saldos de outros clientes ou dados da equipa.
+- Confirmar permissões e papéis de funcionário/proprietário, cópias de segurança e o procedimento de recuperação.
+- Gerar uma versão de produção assinada com uma chave privada guardada fora do repositório. O workflow atual gera apenas APKs de demonstração/debug.
 
-O ficheiro SQL está preparado no repositório, mas **a base de dados ainda não foi criada nem testada num projeto Supabase**. As atuais apps são demonstrações locais. Não registes clientes reais nem prometas sincronização até a ligação e os testes ficarem concluídos.
+## Limitações conhecidas
 
-Repositório: https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid
+A lista exata de funcionalidades por plano está no `README.md`. A existência de um botão ou de uma tabela não prova que a funcionalidade está concluída. Reservas, gestão granular de funcionários, integrações POS/caixa, pagamentos, faturação, impressoras e recuperação comprovada devem ser considerados por implementar ou validar até existirem testes e evidências específicas.
+
+**Não utilizar esta aplicação para operar um restaurante real nem introduzir dados pessoais reais até a revisão de segurança, os testes funcionais e o restauro de backups estarem concluídos.**
