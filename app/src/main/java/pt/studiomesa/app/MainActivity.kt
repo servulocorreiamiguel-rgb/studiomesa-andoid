@@ -1690,6 +1690,10 @@ class MainActivity : Activity() {
         container.addView(card, cardParams())
         addGap(container, 3)
         container.addView(secondaryButton("Terminar sessão neste dispositivo") {
+            val tokenToRevoke = backendToken()
+            if (tokenToRevoke.isNotBlank()) {
+                Thread { runCatching { SupabaseApi.signOut(tokenToRevoke) } }.start()
+            }
             secureSession.clear()
             backendPrefs.edit().remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
                 .remove("restaurant_id").remove("restaurant_name").remove("join_code")
@@ -2098,6 +2102,10 @@ class MainActivity : Activity() {
         content.addView(syncNote, cardParams())
 
         content.addView(secondaryButton("Terminar sessão neste dispositivo") {
+            val tokenToRevoke = backendToken()
+            if (tokenToRevoke.isNotBlank()) {
+                Thread { runCatching { SupabaseApi.signOut(tokenToRevoke) } }.start()
+            }
             secureSession.clear()
             backendPrefs.edit()
                 .remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
