@@ -61,3 +61,25 @@ gradle --no-daemon assembleEssencialRestauranteDebug assembleProfissionalRestaur
 | Teste de isolamento entre restaurantes com contas reais | Não executado |
 
 Não marcar um caso como aprovado sem guardar a evidência do teste. Uma compilação aprovada não permite concluir que a app está segura ou pronta para operar um restaurante.
+
+
+## Testes adicionais — autenticação PKCE
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| AUTH-01 | Normal | Iniciar OAuth com fornecedor configurado | URL contém challenge PKCE e o navegador abre |
+| AUTH-02 | Normal | Regressar com um código válido e o verificador guardado | Código trocado uma vez; sessão cifrada no Android Keystore |
+| AUTH-03 | Segurança | Abrir um callback com `access_token`/ `refresh_token` no URL e sem código | Callback rejeitado; tokens no URL não são aceites |
+| AUTH-04 | Segurança | Abrir callback com código, mas sem verificador guardado | Acesso recusado; nenhuma sessão guardada |
+| AUTH-05 | Segurança | Tentar reutilizar o mesmo código | Segundo uso rejeitado pelo servidor |
+| AUTH-06 | Limite | Código vazio, muito longo ou parâmetros malformados | Erro controlado, sem falha da aplicação |
+| AUTH-07 | Recuperação | Pedir recuperação e abrir a ligação no mesmo dispositivo | Código trocado com o verificador de recuperação; diálogo para definir nova palavra-passe |
+| AUTH-08 | Recuperação | Abrir a ligação de recuperação noutro dispositivo | Não deve iniciar sessão; mensagem clara a pedir nova ligação no dispositivo certo |
+| AUTH-09 | Inválido | Palavra-passe nova abaixo de 8 caracteres ou confirmação diferente | Formulário rejeita e não envia atualização |
+| AUTH-10 | Sessão | Código PKCE válido, mas sessão anterior expirada | A troca PKCE decorre sem tentar renovar primeiro a sessão antiga |
+| AUTH-11 | Rede | Perder rede ao trocar o código | Erro claro; não mostrar sessão iniciada sem confirmar resposta do servidor |
+| AUTH-12 | Rede | Servidor troca o código mas a resposta é perdida | Repetir o código pode falhar; pedir novo início de sessão/ligação sem guardar uma sessão incompleta |
+| AUTH-13 | Regressão | Login normal por email/palavra-passe | Continua a iniciar sessão e a guardar os tokens cifrados |
+| AUTH-14 | Registo | Confirmar email com PKCE no mesmo dispositivo | Código trocado com o verificador de registo; o fluxo não aceita tokens bearer da ligação |
+
+Estes casos foram acrescentados ao plano após a revisão do fluxo de autenticação. **Não foram executados num dispositivo real**; dependem de OAuth/email configurados e contas de teste. A compilação do APK só valida sintaxe/compilação, não prova os resultados de autenticação.
