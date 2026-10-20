@@ -81,5 +81,8 @@ Não marcar um caso como aprovado sem guardar a evidência do teste. Uma compila
 | AUTH-12 | Rede | Servidor troca o código mas a resposta é perdida | Repetir o código pode falhar; pedir novo início de sessão/ligação sem guardar uma sessão incompleta |
 | AUTH-13 | Regressão | Login normal por email/palavra-passe | Continua a iniciar sessão e a guardar os tokens cifrados |
 | AUTH-14 | Registo | Confirmar email com PKCE no mesmo dispositivo | Código trocado com o verificador de registo; o fluxo não aceita tokens bearer da ligação |
+| AUTH-15 | Logout | Terminar sessão com rede disponível | Tokens locais são limpos e o servidor recebe o pedido de revogação da sessão atual |
+| AUTH-16 | Logout / rede | Terminar sessão sem rede | A sessão local é limpa de imediato; a revogação no servidor não pode ser confirmada e deve ser tratada como best effort |
+| AUTH-17 | Logout / regressão | Fechar sessão e voltar ao ecrã de conta | Não ficam dados da conta anterior ou verificador PKCE pendente acessíveis na interface |
 
 Estes casos foram acrescentados ao plano após a revisão do fluxo de autenticação. **Não foram executados num dispositivo real**; dependem de OAuth/email configurados e contas de teste. A compilação do APK só valida sintaxe/compilação, não prova os resultados de autenticação.
