@@ -99,7 +99,6 @@ class MainActivity : Activity() {
             ?: fragment["error"]
 
         if (!errorText.isNullOrBlank()) {
-            runCatching { secureSession.clearPendingCodeVerifier() }
             AlertDialog.Builder(this)
                 .setTitle("Autenticação não concluída")
                 .setMessage(errorText.replace('+', ' ').take(500))
