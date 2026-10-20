@@ -301,7 +301,7 @@ class MainActivity : Activity() {
     }
 
     private fun renderHome(container: LinearLayout) {
-        container.addView(label("PAINEL DE OPERAÇÃO", 10f, true, forestSoft))
+        container.addView(label("Painel de operação", 10f, true, forestSoft))
         addGap(container, 5)
         container.addView(label("A sala, num relance.", 27f, true, forestDeep))
         addGap(container, 5)
@@ -449,7 +449,7 @@ class MainActivity : Activity() {
         seats: Int
     ): LinearLayout {
         val card = makeCard(14, if (occupied) paleRed else white)
-        card.addView(label("MESA  " + tableNumber.toString().padStart(2, '0'), 10f, true, muted))
+        card.addView(label("Mesa  " + tableNumber.toString().padStart(2, '0'), 10f, true, muted))
         addGap(card, 8)
         card.addView(label(if (occupied) "Ocupada" else "Livre", 18f, true, if (occupied) red else forest))
         addGap(card, 4)
@@ -500,11 +500,11 @@ class MainActivity : Activity() {
         val seatsField = inputField("Número de lugares (1–30)", InputType.TYPE_CLASS_NUMBER).apply {
             setText("2")
         }
-        form.addView(label("NÚMERO", 10f, true, forestSoft)); form.addView(numberField, fieldParams())
+        form.addView(label("Número", 10f, true, forestSoft)); form.addView(numberField, fieldParams())
         addGap(form, 2)
-        form.addView(label("ZONA", 10f, true, forestSoft)); form.addView(areaField, fieldParams())
+        form.addView(label("Zona", 10f, true, forestSoft)); form.addView(areaField, fieldParams())
         addGap(form, 2)
-        form.addView(label("CAPACIDADE", 10f, true, forestSoft)); form.addView(seatsField, fieldParams())
+        form.addView(label("Capacidade", 10f, true, forestSoft)); form.addView(seatsField, fieldParams())
 
         val dialog = AlertDialog.Builder(this)
             .setTitle("Adicionar mesa")
@@ -553,11 +553,11 @@ class MainActivity : Activity() {
         val seatsField = inputField("Número de lugares (1–30)", InputType.TYPE_CLASS_NUMBER).apply {
             setText(currentSeats.toString())
         }
-        form.addView(label("MESA " + tableNumber.toString().padStart(2, '0'), 11f, true, forestSoft))
+        form.addView(label("Mesa " + tableNumber.toString().padStart(2, '0'), 11f, true, forestSoft))
         addGap(form, 5)
-        form.addView(label("ZONA", 10f, true, forestSoft)); form.addView(areaField, fieldParams())
+        form.addView(label("Zona", 10f, true, forestSoft)); form.addView(areaField, fieldParams())
         addGap(form, 2)
-        form.addView(label("CAPACIDADE", 10f, true, forestSoft)); form.addView(seatsField, fieldParams())
+        form.addView(label("Capacidade", 10f, true, forestSoft)); form.addView(seatsField, fieldParams())
         val dialog = AlertDialog.Builder(this)
             .setTitle("Configurar mesa")
             .setView(form)
@@ -591,7 +591,7 @@ class MainActivity : Activity() {
     private fun tableCard(table: Int): LinearLayout {
         val occupied = store.isTableOccupied(table)
         val card = makeCard(15, if (occupied) paleRed else white)
-        card.addView(label("MESA  " + table.toString().padStart(2, '0'), 10f, true, muted))
+        card.addView(label("Mesa  " + table.toString().padStart(2, '0'), 10f, true, muted))
         addGap(card, 11)
         card.addView(label(if (occupied) "Ocupada" else "Livre", 18f, true, if (occupied) red else forest))
         addGap(card, 8)
@@ -710,7 +710,7 @@ class MainActivity : Activity() {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
                 }
-                top.addView(label("MESA " + order.optInt("table_number", 1).toString().padStart(2, '0'), 10f, true, forestSoft),
+                top.addView(label("Mesa " + order.optInt("table_number", 1).toString().padStart(2, '0'), 10f, true, forestSoft),
                     LinearLayout.LayoutParams(0, -2, 1f))
                 top.addView(label(status.uppercase(Locale("pt", "PT")), 9f, true, if (closed) green else copper).apply {
                     setPadding(dp(8), dp(6), dp(8), dp(6))
@@ -778,7 +778,7 @@ class MainActivity : Activity() {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
             }
-            top.addView(label("MESA " + order.table.toString().padStart(2, '0'), 10f, true, forestSoft), LinearLayout.LayoutParams(0, -2, 1f))
+            top.addView(label("Mesa " + order.table.toString().padStart(2, '0'), 10f, true, forestSoft), LinearLayout.LayoutParams(0, -2, 1f))
             top.addView(label(if (done) "CONCLUÍDO" else "EM ABERTO", 9f, true, if (done) green else copper).apply {
                 setPadding(dp(8), dp(6), dp(8), dp(6))
                 background = rounded(if (done) paleGreen else copperPale, 12)
@@ -790,7 +790,7 @@ class MainActivity : Activity() {
             card.addView(label(order.serviceCourse.uppercase(Locale("pt", "PT")), 10f, true, forestSoft))
             if (order.notes.isNotBlank()) {
                 addGap(card, 5)
-                card.addView(label("COZINHA · " + order.notes, 11.5f, false, muted))
+                card.addView(label("Cozinha · " + order.notes, 11.5f, false, muted))
             }
             addGap(card, 5)
             card.addView(label(money(order.amount * order.quantity), 14f, true, forest))
@@ -810,7 +810,7 @@ class MainActivity : Activity() {
         addGap(container, 7)
         if (hasRemoteRestaurant()) {
             container.addView(makeCard(13, copperPale).apply {
-                addView(label("CARTA DO RESTAURANTE", 10f, true, forest))
+                addView(label("Carta do restaurante", 10f, true, forest))
                 addGap(this, 4)
                 addView(label("A carta é partilhada pela equipa. Os custos e margens só são apresentados na aplicação de gestão, não no cartão de cliente.", 12.5f, false, ink))
             }, cardParams())
@@ -888,7 +888,7 @@ class MainActivity : Activity() {
         }
 
         container.addView(makeCard(13, copperPale).apply {
-            addView(label("CARTA FICTÍCIA", 10f, true, forest))
+            addView(label("Carta de demonstração", 10f, true, forest))
             addGap(this, 4)
             addView(label("Os nomes e valores abaixo são ilustrativos; não representam a carta real do restaurante.", 12.5f, false, ink))
         }, cardParams())
@@ -952,11 +952,11 @@ class MainActivity : Activity() {
         addGap(container, 15)
 
         val form = makeCard(17)
-        form.addView(label("CUSTO POR UNIDADE (€)", 10f, true, forestSoft))
+        form.addView(label("Custo por unidade (€)", 10f, true, forestSoft))
         val costField = inputField("Ex.: 3,20", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
         form.addView(costField, fieldParams())
         addGap(form, 7)
-        form.addView(label("CUSTO PRETENDIDO (% DO PREÇO)", 10f, true, forestSoft))
+        form.addView(label("Custo pretendido (% do preço)", 10f, true, forestSoft))
         val percentageField = inputField("Ex.: 30", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
         percentageField.setText("30")
         form.addView(percentageField, fieldParams())
@@ -1221,10 +1221,10 @@ class MainActivity : Activity() {
             "Confirmar nova palavra-passe",
             InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
         )
-        form.addView(label("NOVA PALAVRA-PASSE", 10f, true, forestSoft))
+        form.addView(label("Nova palavra-passe", 10f, true, forestSoft))
         form.addView(passwordField, fieldParams())
         addGap(form, 4)
-        form.addView(label("CONFIRMAR PALAVRA-PASSE", 10f, true, forestSoft))
+        form.addView(label("Confirmar palavra-passe", 10f, true, forestSoft))
         form.addView(repeatField, fieldParams())
 
         val dialog = AlertDialog.Builder(this)
@@ -1374,10 +1374,10 @@ class MainActivity : Activity() {
         }
         val emailField = inputField("Email", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS)
         val passwordField = inputField("Palavra-passe (mínimo 8 caracteres)", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
-        form.addView(label("EMAIL", 10f, true, forestSoft))
+        form.addView(label("Email", 10f, true, forestSoft))
         form.addView(emailField, fieldParams())
         addGap(form, 4)
-        form.addView(label("PALAVRA-PASSE", 10f, true, forestSoft))
+        form.addView(label("Palavra-passe", 10f, true, forestSoft))
         form.addView(passwordField, fieldParams())
         // Keep the instructions inside the custom form so Android always
         // shows the email and password fields together with the message.
@@ -1500,10 +1500,10 @@ class MainActivity : Activity() {
         }
         val nameField = inputField("Nome do restaurante", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
         val code = generateSecureCode(12)
-        form.addView(label("NOME", 10f, true, forestSoft))
+        form.addView(label("Nome", 10f, true, forestSoft))
         form.addView(nameField, fieldParams())
         addGap(form, 5)
-        form.addView(label("CÓDIGO DE ADESÃO GERADO", 10f, true, forestSoft))
+        form.addView(label("Código de adesão gerado", 10f, true, forestSoft))
         form.addView(label(code, 23f, true, forest).apply { setPadding(dp(4), dp(10), dp(4), dp(10)) })
         form.addView(label("Guarda este código e partilha-o apenas com os clientes que devem aderir ao programa.", 12f, false, muted))
         val dialog = AlertDialog.Builder(this)
@@ -1606,7 +1606,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(22), dp(8), dp(22), dp(4))
         }
-        form.addView(label("CÓDIGO FORNECIDO PELO PROPRIETÁRIO", 10f, true, forestSoft))
+        form.addView(label("Código fornecido pelo proprietário", 10f, true, forestSoft))
         form.addView(field, fieldParams())
         val dialog = AlertDialog.Builder(this)
             .setTitle("Aderir à equipa")
@@ -1643,14 +1643,14 @@ class MainActivity : Activity() {
         val token = backendToken()
         val card = makeCard(17)
         if (token.isBlank()) {
-            card.addView(label("AINDA SEM SESSÃO", 10f, true, forestSoft))
+            card.addView(label("Ainda sem sessão", 10f, true, forestSoft))
             addGap(card, 6)
             card.addView(label("Cria uma conta ou inicia sessão para configurar um restaurante ou aderir à equipa de um restaurante existente.", 13f, false, ink))
             addGap(card, 12)
             card.addView(primaryButton("Criar conta / iniciar sessão") { showAuthChooser { renderApp() } },
                 LinearLayout.LayoutParams(-1, dp(48)))
         } else if (backendRestaurantId().isBlank()) {
-            card.addView(label("SESSÃO INICIADA", 10f, true, green))
+            card.addView(label("Sessão iniciada", 10f, true, green))
             addGap(card, 5)
             card.addView(label(backendPrefs.getString("user_email", "") ?: "", 13f, false, muted))
             addGap(card, 12)
@@ -1789,7 +1789,7 @@ class MainActivity : Activity() {
             top.addView(label(customer.points.toString(), 25f, true, forest))
             card.addView(top)
             addGap(card, 2)
-            card.addView(label("PONTOS DISPONÍVEIS", 9f, true, forestSoft))
+            card.addView(label("Pontos disponíveis", 9f, true, forestSoft))
             addGap(card, 12)
 
             val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -1814,7 +1814,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(8), dp(20), dp(2))
         }
-        form.addView(label("NOME PARA IDENTIFICAR O CARTÃO", 10f, true, forestSoft))
+        form.addView(label("Nome para identificar o cartão", 10f, true, forestSoft))
         form.addView(nameField, fieldParams())
 
         val dialog = AlertDialog.Builder(this)
@@ -1896,8 +1896,8 @@ class MainActivity : Activity() {
         val codeField = inputField("Código de adesão do restaurante", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS)
         val nameField = inputField("O teu nome", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
         nameField.setText(store.getCustomerProfileName())
-        form.addView(label("CÓDIGO DO RESTAURANTE", 10f, true, forestSoft)); form.addView(codeField, fieldParams())
-        addGap(form, 4); form.addView(label("NOME PARA O CARTÃO", 10f, true, forestSoft)); form.addView(nameField, fieldParams())
+        form.addView(label("Código do restaurante", 10f, true, forestSoft)); form.addView(codeField, fieldParams())
+        addGap(form, 4); form.addView(label("Nome para o cartão", 10f, true, forestSoft)); form.addView(nameField, fieldParams())
         val dialog = AlertDialog.Builder(this).setTitle("Associar ao restaurante")
             .setMessage("Pede o código de adesão ao restaurante.").setView(form)
             .setNegativeButton("Cancelar", null).setPositiveButton("Associar", null).create()
@@ -2086,7 +2086,7 @@ class MainActivity : Activity() {
         content.addView(menuCard, cardParams())
 
         val rewards = makeCard(16, copperPale)
-        rewards.addView(label("PRÓXIMOS PRÉMIOS", 10f, true, forest))
+        rewards.addView(label("Próximos prémios", 10f, true, forest))
         addGap(rewards, 6)
         rewards.addView(label("Os prémios e as regras de acumulação serão definidos com o restaurante antes do lançamento.", 13f, false, ink))
         content.addView(rewards, cardParams())
@@ -2240,7 +2240,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(22), dp(10), dp(22), dp(12))
         }
-        form.addView(label("MESA", 10f, true, forestSoft))
+        form.addView(label("Mesa", 10f, true, forestSoft))
         val tableOptions = mutableListOf<Pair<Int, String>>()
         if (cloudMode) {
             val tableData = remoteTables()
@@ -2264,25 +2264,25 @@ class MainActivity : Activity() {
         form.addView(tableSpinner, fieldParams())
         addGap(form, 3)
 
-        form.addView(label("ARTIGO", 10f, true, forestSoft))
+        form.addView(label("Artigo", 10f, true, forestSoft))
         val itemSpinner = Spinner(this)
         itemSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, items.map { it.name })
         form.addView(itemSpinner, fieldParams())
         addGap(form, 3)
 
-        form.addView(label("QUANTIDADE", 10f, true, forestSoft))
+        form.addView(label("Quantidade", 10f, true, forestSoft))
         val quantityField = inputField("1–99 unidades", InputType.TYPE_CLASS_NUMBER).apply { setText("1") }
         form.addView(quantityField, fieldParams())
         addGap(form, 3)
 
-        form.addView(label("MOMENTO DO SERVIÇO", 10f, true, forestSoft))
+        form.addView(label("Momento do serviço", 10f, true, forestSoft))
         val courseOptions = listOf("Bebidas", "Aperitivo", "Entrada", "Principal", "Sobremesa")
         val courseSpinner = Spinner(this)
         courseSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, courseOptions)
         form.addView(courseSpinner, fieldParams())
         addGap(form, 3)
 
-        form.addView(label("NOTAS PARA A COZINHA (OPCIONAL)", 10f, true, forestSoft))
+        form.addView(label("Notas para a cozinha (opcional)", 10f, true, forestSoft))
         val notesField = multilineInputField("Ex.: molho à parte, sem sal…")
         form.addView(notesField, multilineFieldParams())
         addGap(form, 3)
@@ -2357,22 +2357,22 @@ class MainActivity : Activity() {
         costField.setText(String.format(Locale("pt", "PT"), "%.2f", current.cost))
         allergensField.setText(current.allergens)
 
-        form.addView(label("NOME DO ARTIGO", 10f, true, forestSoft))
+        form.addView(label("Nome do artigo", 10f, true, forestSoft))
         form.addView(nameField, fieldParams())
         addGap(form, 2)
-        form.addView(label("CATEGORIA", 10f, true, forestSoft))
+        form.addView(label("Categoria", 10f, true, forestSoft))
         form.addView(categoryField, fieldParams())
         addGap(form, 2)
-        form.addView(label("DESCRIÇÃO", 10f, true, forestSoft))
+        form.addView(label("Descrição", 10f, true, forestSoft))
         form.addView(descriptionField, multilineFieldParams())
         addGap(form, 2)
-        form.addView(label("PREÇO DE VENDA (€)", 10f, true, forestSoft))
+        form.addView(label("Preço de venda (€)", 10f, true, forestSoft))
         form.addView(priceField, fieldParams())
         addGap(form, 2)
-        form.addView(label("CUSTO POR UNIDADE (€) · INTERNO", 10f, true, forestSoft))
+        form.addView(label("Custo por unidade (€) · interno", 10f, true, forestSoft))
         form.addView(costField, fieldParams())
         addGap(form, 2)
-        form.addView(label("ALERGÉNIOS DECLARADOS", 10f, true, forestSoft))
+        form.addView(label("Alergénios declarados", 10f, true, forestSoft))
         form.addView(allergensField, fieldParams())
         addGap(form, 5)
         form.addView(label("A informação de alergénios tem de ser confirmada pelo restaurante e pela equipa de cozinha.", 11f, false, muted))
@@ -2443,17 +2443,17 @@ class MainActivity : Activity() {
         val priceField = inputField("Preço de venda (€)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
         val costField = inputField("Custo por unidade (€)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
         val allergensField = inputField("Alergénios declarados (se aplicável)", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
-        form.addView(label("NOME DO ARTIGO", 10f, true, forestSoft)); form.addView(nameField, fieldParams())
+        form.addView(label("Nome do artigo", 10f, true, forestSoft)); form.addView(nameField, fieldParams())
         addGap(form, 2)
-        form.addView(label("CATEGORIA", 10f, true, forestSoft)); form.addView(categoryField, fieldParams())
+        form.addView(label("Categoria", 10f, true, forestSoft)); form.addView(categoryField, fieldParams())
         addGap(form, 2)
-        form.addView(label("DESCRIÇÃO", 10f, true, forestSoft)); form.addView(descriptionField, multilineFieldParams())
+        form.addView(label("Descrição", 10f, true, forestSoft)); form.addView(descriptionField, multilineFieldParams())
         addGap(form, 2)
-        form.addView(label("PREÇO DE VENDA (€)", 10f, true, forestSoft)); form.addView(priceField, fieldParams())
+        form.addView(label("Preço de venda (€)", 10f, true, forestSoft)); form.addView(priceField, fieldParams())
         addGap(form, 2)
-        form.addView(label("CUSTO POR UNIDADE (€) · INTERNO", 10f, true, forestSoft)); form.addView(costField, fieldParams())
+        form.addView(label("Custo por unidade (€) · interno", 10f, true, forestSoft)); form.addView(costField, fieldParams())
         addGap(form, 2)
-        form.addView(label("ALERGÉNIOS DECLARADOS", 10f, true, forestSoft)); form.addView(allergensField, fieldParams())
+        form.addView(label("Alergénios declarados", 10f, true, forestSoft)); form.addView(allergensField, fieldParams())
         addGap(form, 5)
         form.addView(label("Confirma a descrição e os alergénios com a equipa de cozinha antes de publicar a carta.", 11f, false, muted))
 
