@@ -123,9 +123,15 @@ object SupabaseApi {
             "O desafio de autenticação não é válido."
         }
         val redirect = URLEncoder.encode("studiomesa://auth-callback", "UTF-8")
-        val result = jsonCall("POST",
-            "/auth/v1/signup?redirect_to=$redirect&code_challenge=$codeChallenge&code_challenge_method=s256",
-            JSONObject().put("email", email.trim()).put("password", password))
+        val result = jsonCall(
+            "POST",
+            "/auth/v1/signup?redirect_to=$redirect",
+            JSONObject()
+                .put("email", email.trim())
+                .put("password", password)
+                .put("code_challenge", codeChallenge)
+                .put("code_challenge_method", "s256")
+        )
         // GoTrue signup commonly returns the user at the JSON root, not in "user".
         // Normalize the response so the UI can recognize that the account was created.
         if (result.optJSONObject("user") == null && result.optString("id").isNotBlank()) {
@@ -143,8 +149,11 @@ object SupabaseApi {
         val redirect = URLEncoder.encode("studiomesa://auth-callback", "UTF-8")
         call(
             "POST",
-            "/auth/v1/recover?redirect_to=$redirect&code_challenge=$codeChallenge&code_challenge_method=s256",
-            JSONObject().put("email", email.trim())
+            "/auth/v1/recover?redirect_to=$redirect",
+            JSONObject()
+                .put("email", email.trim())
+                .put("code_challenge", codeChallenge)
+                .put("code_challenge_method", "s256")
         )
     }
 
