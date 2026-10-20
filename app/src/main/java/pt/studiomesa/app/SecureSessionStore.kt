@@ -50,7 +50,12 @@ class SecureSessionStore(context: Context) {
 
     @Synchronized
     fun clear() {
-        securePrefs.edit().remove("access_token").remove("refresh_token").commit()
+        securePrefs.edit()
+            .remove("access_token")
+            .remove("refresh_token")
+            .remove("pending_code_verifier")
+            .remove("pending_code_flow")
+            .commit()
         legacyPrefs.edit().remove("access_token").remove("refresh_token").apply()
     }
 
