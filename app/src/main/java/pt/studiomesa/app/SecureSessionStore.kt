@@ -60,7 +60,7 @@ class SecureSessionStore(context: Context) {
      */
     @Synchronized
     fun savePendingCodeVerifier(verifier: String, flowType: String) {
-        require(flowType == "oauth" || flowType == "recovery") {
+        require(flowType == "oauth" || flowType == "recovery" || flowType == "signup") {
             "Tipo de autenticação pendente inválido."
         }
         val editor = securePrefs.edit()
