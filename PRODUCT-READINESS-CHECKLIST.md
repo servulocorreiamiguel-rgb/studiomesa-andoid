@@ -67,7 +67,7 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [x] Sessões guardadas com cifragem AES-GCM usando Android Keystore no código inspecionado.
 - [x] Código PKCE em OAuth, registo e recuperação, com verificador cifrado e rejeição de tokens bearer na ligação de retorno.
 - [x] Logout local limpa os tokens e inicia a revogação da sessão atual no Supabase em segundo plano.
-- [x] A cache de dados remotos é limpa quando muda a conta autenticada; também é limpa quando o servidor confirma que a conta já não pertence a um restaurante. Ainda falta validar estes casos no dispositivo real.
+- [x] A cache de dados operacionais é limpa sempre que se estabelece uma nova sessão, mesmo para a mesma conta, e quando o servidor confirma que a conta já não pertence a um restaurante. A cache é depois reposta a partir do servidor; ainda falta validar estes casos no dispositivo real.
 - [ ] Testar login, recuperação, registo e revogação de sessão num dispositivo real; o logout remoto é best effort quando a rede falha.
 - [ ] Confirmar backups disponíveis, retenção e executar um restauro de teste num ambiente separado.
 - [ ] Testar exportação/eliminação de dados, registos, conservação e resposta a incidentes.

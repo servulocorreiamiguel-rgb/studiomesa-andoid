@@ -1369,15 +1369,14 @@ class MainActivity : Activity() {
 
 
     /**
-     * Do not leave one account's cached restaurant/customer data visible after another
-     * account signs in. Clear account-scoped data before saving the new user identity.
+     * A freshly established session must not inherit cached operational data.
+     * Clear it even if the account ID matches: restaurant membership or permissions
+     * may have changed while signed out, and the server must repopulate authoritative data.
      */
     private fun prepareForAuthenticatedUser(newUserId: String) {
         if (newUserId.isBlank()) {
             throw IllegalStateException("O servidor não devolveu um identificador de conta válido.")
         }
-        val previousUserId = backendPrefs.getString("user_id", "").orEmpty()
-        if (previousUserId == newUserId) return
 
         backendPrefs.edit()
             .remove("user_id").remove("user_email")
