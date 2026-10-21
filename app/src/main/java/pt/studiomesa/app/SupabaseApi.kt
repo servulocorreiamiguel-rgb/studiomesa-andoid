@@ -36,12 +36,12 @@ object SupabaseApi {
             if (!accessToken.isNullOrBlank()) {
                 setRequestProperty("Authorization", "Bearer " + accessToken)
             }
-            if (body != null) {
-                doOutput = true
-                outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
-            }
         }
         try {
+            if (body != null) {
+                connection.doOutput = true
+                connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+            }
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
             val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
