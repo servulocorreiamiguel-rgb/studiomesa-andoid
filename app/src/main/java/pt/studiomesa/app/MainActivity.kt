@@ -146,6 +146,7 @@ class MainActivity : Activity() {
             val id = user.optString("id")
             if (id.isBlank()) throw IllegalStateException("O servidor não devolveu uma conta válida.")
             secureSession.save(session.accessToken, session.refreshToken)
+            prepareForAuthenticatedUser(id)
             secureSession.clearPendingCodeVerifier()
             backendPrefs.edit()
                 .putString("user_id", id)
@@ -1359,6 +1360,35 @@ class MainActivity : Activity() {
     }
 
 
+    /**
+     * Do not leave one account's cached restaurant/customer data visible after another
+     * account signs in. Clear account-scoped data before saving the new user identity.
+     */
+    private fun prepareForAuthenticatedUser(newUserId: String) {
+        if (newUserId.isBlank()) {
+            throw IllegalStateException("O servidor não devolveu um identificador de conta válido.")
+        }
+        val previousUserId = backendPrefs.getString("user_id", "").orEmpty()
+        if (previousUserId == newUserId) return
+
+        backendPrefs.edit()
+            .remove("user_id").remove("user_email")
+            .remove("access_token").remove("refresh_token")
+            .remove("restaurant_id").remove("restaurant_name").remove("join_code")
+            .remove("staff_join_code").remove("restaurant_role")
+            .remove("member_id").remove("member_code").remove("member_points")
+            .remove("member_restaurant_name")
+            .remove("remote_members_json").remove("remote_tables_json")
+            .remove("remote_menu_json").remove("remote_orders_json")
+            .remove("customer_menu_json")
+            .remove("remote_inventory_json").remove("inventory_loaded")
+            .remove("remote_reservations_json").remove("reservations_loaded")
+            .apply()
+
+        reservationCache = JSONArray()
+        reservationsLoaded = false
+    }
+
     private fun backendToken(): String = secureSession.accessToken()
     private fun backendRestaurantId(): String = backendPrefs.getString("restaurant_id", "") ?: ""
     private fun backendMemberId(): String = backendPrefs.getString("member_id", "") ?: ""
@@ -1649,6 +1679,7 @@ class MainActivity : Activity() {
                                 when {
                                     token.isNotBlank() && user != null -> {
                                         secureSession.save(token, result.optString("refresh_token"))
+                                        prepareForAuthenticatedUser(user.optString("id"))
                                         secureSession.clearPendingCodeVerifier()
                                         backendPrefs.edit()
                                             .putString("user_id", user.optString("id"))
@@ -1671,6 +1702,7 @@ class MainActivity : Activity() {
                             } else {
                                 val session = SupabaseApi.signIn(email, password)
                                 secureSession.save(session.accessToken, session.refreshToken)
+                                prepareForAuthenticatedUser(session.userId)
                                 backendPrefs.edit()
                                     .putString("user_id", session.userId)
                                     .putString("user_email", session.email)
