@@ -1565,6 +1565,83 @@ class MainActivity : Activity() {
         dialog.show()
     }
 
+
+    private fun showRestaurantTeam() {
+        if (backendToken().isBlank() || (backendPrefs.getString("restaurant_role", "") ?: "") != "owner") {
+            AlertDialog.Builder(this)
+                .setTitle("Acesso reservado")
+                .setMessage("Só o proprietário do restaurante pode consultar ou remover membros da equipa.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+
+        runBackend({
+            SupabaseApi.listRestaurantTeam(backendToken()).toString()
+        }) { raw ->
+            val members = JSONArray(raw)
+            val content = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(14), dp(8), dp(14), dp(8))
+            }
+            if (members.length() == 0) {
+                content.addView(emptyCard("O servidor não devolveu membros para este restaurante."))
+            }
+
+            lateinit var teamDialog: AlertDialog
+            for (index in 0 until members.length()) {
+                val member = members.optJSONObject(index) ?: continue
+                val userId = member.optString("member_user_id")
+                val email = member.optString("member_email").trim().ifBlank { "Conta " + userId.take(8) }
+                val role = member.optString("member_role", "staff")
+                val joined = member.optString("joined_at")
+                val joinedText = runCatching {
+                    val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US)
+                    val formatter = SimpleDateFormat("dd/MM/yyyy", Locale("pt", "PT"))
+                    formatter.format(parser.parse(joined) ?: Date())
+                }.getOrElse { "" }
+
+                val card = makeCard(12)
+                card.addView(label(email, 14f, true, forestDeep))
+                addGap(card, 3)
+                card.addView(label(
+                    (if (role == "owner") "Proprietário · acesso protegido" else "Funcionário · acesso operacional") +
+                        if (joinedText.isNotBlank()) " · desde $joinedText" else "",
+                    10.5f, false, muted
+                ))
+                if (role == "staff") {
+                    addGap(card, 8)
+                    card.addView(secondaryButton("Remover acesso") {
+                        AlertDialog.Builder(this)
+                            .setTitle("Remover acesso à equipa?")
+                            .setMessage("A conta $email deixará de pertencer a este restaurante. O utilizador poderá voltar a aderir se receber um novo código de acesso.")
+                            .setNegativeButton("Cancelar", null)
+                            .setPositiveButton("Remover") { _, _ ->
+                                runBackend({
+                                    SupabaseApi.removeRestaurantStaff(backendToken(), userId)
+                                    "OK"
+                                }) {
+                                    teamDialog.dismiss()
+                                    showRestaurantTeam()
+                                }
+                            }
+                            .show()
+                    }, LinearLayout.LayoutParams(-1, dp(40)))
+                }
+                content.addView(card, cardParams())
+            }
+
+            val scroll = ScrollView(this).apply { addView(content) }
+            teamDialog = AlertDialog.Builder(this)
+                .setTitle("Membros da equipa")
+                .setView(scroll)
+                .setPositiveButton("Fechar", null)
+                .create()
+            teamDialog.show()
+            teamDialog.window?.setLayout(-1, dp(560))
+        }
+    }
+
     private fun showStaffJoinCode() {
         val role = backendPrefs.getString("restaurant_role", "") ?: ""
         val code = backendPrefs.getString("staff_join_code", "") ?: ""
@@ -1702,6 +1779,9 @@ class MainActivity : Activity() {
                     LinearLayout.LayoutParams(-1, dp(44)))
                 addGap(card, 5)
                 card.addView(secondaryButton("Ver código de acesso à equipa") { showStaffJoinCode() },
+                    LinearLayout.LayoutParams(-1, dp(44)))
+                addGap(card, 5)
+                card.addView(secondaryButton("Gerir membros e acessos da equipa") { showRestaurantTeam() },
                     LinearLayout.LayoutParams(-1, dp(44)))
                 addGap(card, 5)
                 card.addView(secondaryButton("Renovar código da equipa") { confirmCodeRotation(true) },
