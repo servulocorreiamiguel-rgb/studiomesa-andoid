@@ -24,6 +24,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 class MainActivity : Activity() {
     private lateinit var store: RestaurantStore
@@ -166,7 +167,7 @@ class MainActivity : Activity() {
     }
 
     private fun availablePages(): List<String> {
-        val pages = mutableListOf("Início", "Mesas", "Pedidos", "Carta", "Pontos", "Conta")
+        val pages = mutableListOf("Início", "Mesas", "Pedidos", "Cozinha", "Carta", "Pontos", "Conta")
         if (hasCalculator) {
             pages.add("Reservas")
             pages.add("Preço Justo")
@@ -276,6 +277,7 @@ class MainActivity : Activity() {
                     "Início" -> "Início"
                     "Mesas" -> "Mesas"
                     "Pedidos" -> "Pedidos"
+                    "Cozinha" -> "Cozinha"
                     "Carta" -> "Carta"
                     "Pontos" -> "Pontos"
                     "Conta" -> "Conta"
@@ -312,6 +314,7 @@ class MainActivity : Activity() {
             "Início" -> renderHome(container)
             "Mesas" -> renderTables(container)
             "Pedidos" -> renderOrders(container)
+            "Cozinha" -> renderKitchen(container)
             "Carta" -> renderMenu(container)
             "Pontos" -> renderCustomers(container)
             "Conta" -> renderBackendAccount(container)
@@ -835,6 +838,173 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(-1, dp(42)))
             container.addView(card, cardParams())
         }
+    }
+
+
+    private fun parseOrderTimestamp(value: String): Long {
+        val normalized = value.replace(Regex("\\.\\d+(?=(Z|[+-]\\d{2}:?\\d{2})$)"), "")
+        return runCatching {
+            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).apply {
+                isLenient = false
+            }.parse(normalized)?.time ?: 0L
+        }.getOrDefault(0L)
+    }
+
+    private fun orderWaitLabel(createdAtMillis: Long): String {
+        if (createdAtMillis <= 0L) return "Tempo de espera indisponível"
+        val minutes = ((System.currentTimeMillis() - createdAtMillis) / 60_000L).coerceAtLeast(0L)
+        return when {
+            minutes < 1L -> "Acabado de entrar"
+            minutes < 60L -> "$minutes min em espera"
+            else -> "${minutes / 60L} h ${minutes % 60L} min em espera"
+        }
+    }
+
+    private fun renderKitchen(container: LinearLayout) {
+        pageIntro(container, "Cozinha", "Fila de preparação por estado e tempo de espera.")
+        addGap(container, 8)
+        if (hasRemoteRestaurant()) {
+            container.addView(secondaryButton("Atualizar fila do servidor") { refreshRemoteOperations() },
+                LinearLayout.LayoutParams(-1, dp(42)))
+        } else {
+            container.addView(label("Modo de demonstração · os pedidos não são partilhados com outros dispositivos.", 11f, false, muted))
+        }
+        addGap(container, 12)
+
+        if (hasRemoteRestaurant()) {
+            val orders = remoteOrders()
+            val active = (0 until orders.length())
+                .mapNotNull { orders.optJSONObject(it) }
+                .filter { it.optString("status", "Aberto") !in setOf("Concluído", "Cancelado") }
+                .sortedWith(compareBy<JSONObject>(
+                    { when (it.optString("status", "Aberto")) {
+                        "Aberto" -> 0
+                        "Em preparação" -> 1
+                        "Pronto" -> 2
+                        else -> 3
+                    } },
+                    { parseOrderTimestamp(it.optString("created_at")) }
+                ))
+
+            if (active.isEmpty()) {
+                container.addView(emptyCard("A fila está vazia. Os novos pedidos aparecerão aqui depois de atualizares os dados."))
+                return
+            }
+            container.addView(label("${active.size} pedido(s) ativo(s)", 12f, true, forestSoft))
+            addGap(container, 8)
+            for (order in active) {
+                val status = order.optString("status", "Aberto")
+                val createdAt = parseOrderTimestamp(order.optString("created_at"))
+                val nextStatus = when (status) {
+                    "Aberto" -> "Em preparação"
+                    "Em preparação" -> "Pronto"
+                    "Pronto" -> "Concluído"
+                    else -> status
+                }
+                renderKitchenTicket(
+                    container,
+                    order.optInt("table_number", 1),
+                    order.optString("item_name", "Artigo"),
+                    order.optInt("quantity", 1).coerceIn(1, 99),
+                    order.optString("service_course", "Principal"),
+                    order.optString("notes").trim(),
+                    status,
+                    orderWaitLabel(createdAt)
+                ) {
+                    runBackend({
+                        val token = backendToken()
+                        SupabaseApi.updateOrder(token, order.optString("id"), nextStatus)
+                        cacheRemoteOperations(token, backendRestaurantId())
+                        "OK"
+                    }) { renderApp() }
+                }
+            }
+        } else {
+            val active = store.getOrders()
+                .filter { it.status !in setOf("Concluído", "Cancelado") }
+                .sortedBy { it.createdAt }
+            if (active.isEmpty()) {
+                container.addView(emptyCard("A fila está vazia. Cria um pedido para testar o fluxo da cozinha."))
+                return
+            }
+            container.addView(label("${active.size} pedido(s) ativo(s)", 12f, true, forestSoft))
+            addGap(container, 8)
+            active.forEach { order ->
+                val nextStatus = when (order.status) {
+                    "Aberto" -> "Em preparação"
+                    "Em preparação" -> "Pronto"
+                    "Pronto" -> "Concluído"
+                    else -> order.status
+                }
+                renderKitchenTicket(
+                    container,
+                    order.table,
+                    order.itemName,
+                    order.quantity,
+                    order.serviceCourse,
+                    order.notes,
+                    order.status,
+                    orderWaitLabel(order.createdAt)
+                ) {
+                    store.updateOrder(order.id, nextStatus)
+                    renderApp()
+                }
+            }
+        }
+    }
+
+    private fun renderKitchenTicket(
+        container: LinearLayout,
+        tableNumber: Int,
+        itemName: String,
+        quantity: Int,
+        serviceCourse: String,
+        notes: String,
+        status: String,
+        waitLabel: String,
+        onAdvance: () -> Unit
+    ) {
+        val card = makeCard(16)
+        val statusColor = when (status) {
+            "Pronto" -> green
+            "Em preparação" -> forestSoft
+            else -> copper
+        }
+        val statusBackground = when (status) {
+            "Pronto" -> paleGreen
+            "Em preparação" -> paleGreen
+            else -> copperPale
+        }
+        val top = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        top.addView(label("MESA ${tableNumber.toString().padStart(2, '0')}", 12f, true, forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f))
+        top.addView(label(status.uppercase(Locale("pt", "PT")), 10f, true, statusColor).apply {
+            setPadding(dp(8), dp(6), dp(8), dp(6))
+            background = rounded(statusBackground, 12)
+        })
+        card.addView(top)
+        addGap(card, 8)
+        card.addView(label((if (quantity > 1) "$quantity × " else "") + itemName, 19f, true, forestDeep))
+        addGap(card, 4)
+        card.addView(label(serviceCourse.uppercase(Locale("pt", "PT")), 11f, true, forestSoft))
+        if (notes.isNotBlank()) {
+            addGap(card, 8)
+            card.addView(label("NOTAS PARA A COZINHA", 9.5f, true, muted))
+            card.addView(label(notes, 14f, false, ink))
+        }
+        addGap(card, 8)
+        card.addView(label(waitLabel, 11.5f, true, if (waitLabel.contains("min em espera") || waitLabel.contains("h ")) red else muted))
+        addGap(card, 12)
+        card.addView(primaryButton(when (status) {
+            "Aberto" -> "Iniciar preparação"
+            "Em preparação" -> "Marcar como pronto"
+            "Pronto" -> "Concluir pedido"
+            else -> "Atualizar pedido"
+        }, onAdvance), LinearLayout.LayoutParams(-1, dp(46)))
+        container.addView(card, cardParams())
     }
 
     private fun renderMenu(container: LinearLayout) {
