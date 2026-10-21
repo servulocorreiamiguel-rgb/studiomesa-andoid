@@ -20,11 +20,13 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [ ] Edição/reagendamento, calendário visual, lembretes, confirmações por email e regras configuráveis de cancelamento.
 - [ ] Testar concorrência em dois dispositivos e alterações ao horário de funcionamento.
 - [x] Os contactos/notas das reservas não são persistidos nas preferências locais e a cache legada é limpa no arranque/logout.
+- [x] A criação de reservas usa um identificador de tentativa único e índice composto para que uma repetição da mesma operação possa devolver a reserva original; teste real de perda de rede continua pendente.
 - [ ] Definir minimização de dados pessoais no servidor, acesso, conservação e eliminação.
 
 ## Pedidos e serviço
 
 - [x] Mesas, pedidos, quantidade, fase do serviço, notas e estados básicos.
+- [x] A criação de pedidos reutiliza o mesmo UUID para tentativas idênticas dentro do formulário e verifica o registo pelo servidor antes de declarar sucesso após um erro de escrita. Teste real de perda de rede continua pendente.
 - [x] Vista de cozinha separada para pedidos ativos, com tempo de espera, notas e avanço de estado; a fila ainda precisa de atualização manual.
 - [x] Histórico de criação e alteração de estado no servidor.
 - [ ] Testar duplicações por repetição após falha de rede e pedidos concorrentes.

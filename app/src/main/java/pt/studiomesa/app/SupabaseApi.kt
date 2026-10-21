@@ -243,7 +243,11 @@ object SupabaseApi {
     fun createRestaurant(token: String, name: String, code: String): String {
         val response = call("POST", "/rest/v1/rpc/create_restaurant",
             JSONObject().put("p_name", name.trim()).put("p_join_code", code.trim().uppercase()), token)
-        return response.trim().trim('"')
+        val restaurantId = response.trim().trim('"')
+        require(runCatching { java.util.UUID.fromString(restaurantId).toString() == restaurantId }.getOrDefault(false)) {
+            "O servidor não confirmou a criação do restaurante com um identificador válido."
+        }
+        return restaurantId
     }
 
     fun joinRestaurant(token: String, code: String, displayName: String): JSONObject {
@@ -396,23 +400,59 @@ object SupabaseApi {
         amount: Double,
         quantity: Int,
         serviceCourse: String,
-        notes: String
+        notes: String,
+        requestId: String
     ) {
-        mutateRows(
-            "POST",
-            "/rest/v1/restaurant_orders",
-            JSONObject()
-                .put("restaurant_id", restaurantId)
-                .put("table_number", tableNumber)
-                .put("item_name", itemName)
-                .put("amount", amount)
-                .put("quantity", quantity)
-                .put("service_course", serviceCourse)
-                .put("notes", notes.trim())
-                .put("status", "Aberto"),
-            token,
-            "O servidor não confirmou a criação do pedido."
-        )
+        require(runCatching { java.util.UUID.fromString(requestId).toString() == requestId }.getOrDefault(false)) {
+            "O identificador da tentativa de pedido não é válido."
+        }
+        val body = JSONObject()
+            .put("id", requestId)
+            .put("restaurant_id", restaurantId)
+            .put("table_number", tableNumber)
+            .put("item_name", itemName)
+            .put("amount", amount)
+            .put("quantity", quantity)
+            .put("service_course", serviceCourse)
+            .put("notes", notes.trim())
+            .put("status", "Aberto")
+
+        try {
+            mutateRows(
+                "POST",
+                "/rest/v1/restaurant_orders",
+                body,
+                token,
+                "O servidor não confirmou a criação do pedido."
+            )
+        } catch (writeError: Exception) {
+            // The request may have committed while its HTTP response was lost.
+            // Reuse the client-generated primary key and verify the saved row before
+            // reporting success, rather than inserting a duplicate on retry.
+            val existingMatches = runCatching {
+                val encodedId = URLEncoder.encode(requestId, "UTF-8")
+                val rows = JSONArray(call(
+                    "GET",
+                    "/rest/v1/restaurant_orders?select=id,restaurant_id,table_number,item_name,amount,quantity,service_course,notes,created_by&id=eq.$encodedId",
+                    null,
+                    token
+                ))
+                val row = rows.optJSONObject(0)
+                val userId = getUser(token).optString("id")
+                row != null &&
+                    userId.isNotBlank() &&
+                    row.optString("id") == requestId &&
+                    row.optString("restaurant_id") == restaurantId &&
+                    row.optString("created_by") == userId &&
+                    row.optInt("table_number") == tableNumber &&
+                    row.optString("item_name") == itemName &&
+                    kotlin.math.abs(row.optDouble("amount", Double.NaN) - amount) < 0.000001 &&
+                    row.optInt("quantity") == quantity &&
+                    row.optString("service_course") == serviceCourse &&
+                    row.optString("notes") == notes.trim()
+            }.getOrDefault(false)
+            if (!existingMatches) throw writeError
+        }
     }
 
     fun listOrderEvents(token: String, orderId: String): JSONArray {
@@ -584,6 +624,7 @@ object SupabaseApi {
 
     fun createReservation(
         token: String,
+        requestId: String,
         restaurantId: String,
         guestName: String,
         guestPhone: String,
@@ -593,7 +634,11 @@ object SupabaseApi {
         tableNumber: Int?,
         notes: String
     ): String {
+        require(runCatching { java.util.UUID.fromString(requestId).toString() == requestId }.getOrDefault(false)) {
+            "O identificador da tentativa de reserva não é válido."
+        }
         val body = JSONObject()
+            .put("p_client_request_id", requestId)
             .put("p_restaurant_id", restaurantId)
             .put("p_guest_name", guestName.trim())
             .put("p_guest_phone", guestPhone.trim())
@@ -602,7 +647,16 @@ object SupabaseApi {
             .put("p_duration_minutes", durationMinutes)
             .put("p_table_number", tableNumber ?: JSONObject.NULL)
             .put("p_notes", notes.trim())
-        return call("POST", "/rest/v1/rpc/create_restaurant_reservation", body, token).trim().trim('"')
+        val reservationId = call(
+            "POST",
+            "/rest/v1/rpc/create_restaurant_reservation_idempotent",
+            body,
+            token
+        ).trim().trim('"')
+        require(runCatching { java.util.UUID.fromString(reservationId).toString() == reservationId }.getOrDefault(false)) {
+            "O servidor não confirmou a criação da reserva. Atualiza a lista antes de voltar a tentar."
+        }
+        return reservationId
     }
 
     fun updateReservationStatus(token: String, reservationId: String, status: String) {

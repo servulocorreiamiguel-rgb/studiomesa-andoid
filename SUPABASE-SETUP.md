@@ -10,6 +10,10 @@
 - Nunca coloques em Kotlin, recursos Android, APKs, GitHub público ou nesta conversa chaves `sb_secret_...`, `service_role`, palavras-passe da base de dados ou credenciais privadas de OAuth.
 - O backend tem tabelas de mesas, carta, pedidos, histórico de pedidos, equipa e fidelização. As regras RLS e permissões têm de ser revistas em conjunto com as funções SQL que as aplicações chamam.
 
+## Idempotência das reservas (21/10/2026)
+
+A tabela `public.restaurant_reservations` tem a coluna `client_request_id` e um índice único composto parcial (`restaurant_id`, `created_by`, `client_request_id`). A função `public.create_restaurant_reservation_idempotent` exige uma sessão, valida a pertença ao restaurante e devolve o ID existente quando recebe a mesma chave e o mesmo payload. Uma chave repetida com payload diferente é rejeitada. A app mantém a chave por conteúdo no formulário para que uma repetição após perda de resposta não crie outra reserva. A confirmação ponta a ponta com falha de rede ainda está pendente.
+
 ## Estado verificado do backend (21/10/2026)
 
 - `private.restaurant_join_codes` tem RLS ativa, sem políticas para acesso direto; as contas `anon` e `authenticated` não têm permissões diretas de leitura/escrita. As funções proprietárias de `postgres` foram mantidas e o utilizador `postgres` tem `BYPASSRLS`, para permitir os fluxos `SECURITY DEFINER` que fazem verificações explícitas.

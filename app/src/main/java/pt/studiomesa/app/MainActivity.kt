@@ -1777,8 +1777,11 @@ class MainActivity : Activity() {
                         restaurantId
                     }) { restaurantId ->
                         dialog.dismiss()
+                        // A successful create_restaurant RPC creates the current user as owner.
+                        // Keep owner controls available even if the follow-up refresh briefly fails.
                         backendPrefs.edit().putString("restaurant_id", restaurantId)
-                            .putString("restaurant_name", name).putString("join_code", code).apply()
+                            .putString("restaurant_name", name).putString("join_code", code)
+                            .putString("restaurant_role", "owner").apply()
                         renderApp()
                         AlertDialog.Builder(this)
                             .setTitle("Restaurante criado")
@@ -2640,6 +2643,7 @@ class MainActivity : Activity() {
     }
 
     private fun showReservationDialog() {
+        val requestIdsByPayload = mutableMapOf<String, String>()
         if (!hasRemoteRestaurant()) {
             AlertDialog.Builder(this).setMessage("Liga primeiro o restaurante na secção Conta.")
                 .setPositiveButton("OK", null).show()
@@ -2698,13 +2702,31 @@ class MainActivity : Activity() {
                     notes.text.toString().length > 1000 -> notes.error = "Máximo de 1000 caracteres."
                     else -> {
                         val reservationAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).format(parsedDate)
+                        val normalizedPhone = phone.text.toString().trim()
+                        val normalizedNotes = notes.text.toString().trim()
+                        val restaurantId = backendRestaurantId()
+                        val signature = JSONObject()
+                            .put("restaurant_id", restaurantId)
+                            .put("guest_name", guestName)
+                            .put("guest_phone", normalizedPhone)
+                            .put("party_size", partySize)
+                            .put("reservation_at", reservationAt)
+                            .put("duration_minutes", durationMinutes)
+                            .put("table_number", tableNumber ?: JSONObject.NULL)
+                            .put("notes", normalizedNotes)
+                            .toString()
+                        // If the server committed but the reply was lost, the same payload
+                        // reuses its UUID; changed form data receives a different UUID.
+                        val requestId = requestIdsByPayload.getOrPut(signature) {
+                            java.util.UUID.randomUUID().toString()
+                        }
                         runBackend({
                             SupabaseApi.createReservation(
-                                backendToken(), backendRestaurantId(), guestName,
-                                phone.text.toString(), partySize, reservationAt, durationMinutes,
-                                tableNumber, notes.text.toString()
+                                backendToken(), requestId, restaurantId, guestName,
+                                normalizedPhone, partySize, reservationAt, durationMinutes,
+                                tableNumber, normalizedNotes
                             )
-                            val latest = SupabaseApi.listReservations(backendToken(), backendRestaurantId())
+                            val latest = SupabaseApi.listReservations(backendToken(), restaurantId)
                             reservationCache = latest
                             reservationsLoaded = true
                             "OK"
@@ -3040,6 +3062,7 @@ class MainActivity : Activity() {
     }
 
     private fun showCreateOrderDialog() {
+        val requestIdsByPayload = mutableMapOf<String, String>()
         val cloudMode = hasRemoteRestaurant()
         val items = if (cloudMode) remoteMenuEntries() else store.getMenu()
         if (items.isEmpty()) {
@@ -3125,11 +3148,24 @@ class MainActivity : Activity() {
                     else -> {
                         if (cloudMode) {
                             val restaurantId = backendRestaurantId()
+                            val signature = JSONObject()
+                                .put("restaurant_id", restaurantId)
+                                .put("table_number", table)
+                                .put("item_name", selected.name)
+                                .put("amount", selected.price)
+                                .put("quantity", quantity)
+                                .put("service_course", serviceCourse)
+                                .put("notes", notes)
+                                .toString()
+                            // Exact retries reuse the same key; edits get a new key.
+                            val requestId = requestIdsByPayload.getOrPut(signature) {
+                                java.util.UUID.randomUUID().toString()
+                            }
                             runBackend({
                                 val token = backendToken()
                                 SupabaseApi.createOrder(
                                     token, restaurantId, table, selected.name, selected.price,
-                                    quantity, serviceCourse, notes
+                                    quantity, serviceCourse, notes, requestId
                                 )
                                 cacheRemoteOperations(token, restaurantId)
                                 "OK"
