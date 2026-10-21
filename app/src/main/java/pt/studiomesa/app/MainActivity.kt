@@ -31,6 +31,9 @@ class MainActivity : Activity() {
     private var activePage = "Início"
     private val backendPrefs by lazy { getSharedPreferences("studiomesa_backend", MODE_PRIVATE) }
     private val secureSession by lazy { SecureSessionStore(this) }
+    // Reservation contacts are kept in memory only, not persisted to SharedPreferences.
+    private var reservationCache = JSONArray()
+    private var reservationsLoaded = false
 
     private val flavor = BuildConfig.FLAVOR.lowercase(Locale.ROOT)
     private val isCustomerApp = flavor.contains("cliente")
@@ -61,6 +64,11 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Remove reservation contact data left by older demo builds which cached it on disk.
+        backendPrefs.edit()
+            .remove("remote_reservations_json")
+            .remove("reservations_loaded")
+            .apply()
         store = RestaurantStore(this)
         window.statusBarColor = forestDeep
         window.navigationBarColor = forestDeep
@@ -338,7 +346,7 @@ class MainActivity : Activity() {
                 val status = orders.optJSONObject(it)?.optString("status").orEmpty()
                 status != "Concluído" && status != "Cancelado"
             }
-        } else store.getOrders().count { it.status != "Concluído" }
+        } else store.getOrders().count { it.status != "Concluído" && it.status != "Cancelado" }
         val stats = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         stats.addView(statCard("MESAS OCUPADAS", "$occupied / $tableTotal", if (occupied > 0) copper else forestSoft),
             LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), 0) })
@@ -1618,11 +1626,26 @@ class MainActivity : Activity() {
                             .setNegativeButton("Cancelar", null)
                             .setPositiveButton("Remover") { _, _ ->
                                 runBackend({
-                                    SupabaseApi.removeRestaurantStaff(backendToken(), userId)
+                                    val token = backendToken()
+                                    SupabaseApi.removeRestaurantStaff(token, userId)
+                                    // The server rotates the shared code when access is revoked.
+                                    backendPrefs.edit().remove("staff_join_code").apply()
+                                    runCatching {
+                                        val latestRestaurant = SupabaseApi.getMyRestaurant(token)
+                                        if (latestRestaurant != null) {
+                                            backendPrefs.edit()
+                                                .putString("staff_join_code", latestRestaurant.optString("staff_code"))
+                                                .apply()
+                                        }
+                                    }
                                     "OK"
                                 }) {
                                     teamDialog.dismiss()
-                                    showRestaurantTeam()
+                                    AlertDialog.Builder(this)
+                                        .setTitle("Acesso removido")
+                                        .setMessage("O acesso foi revogado e o código antigo da equipa deixou de ser válido. Usa «Ver código de acesso à equipa» para obter o novo código antes de o partilhares com funcionários autorizados.")
+                                        .setPositiveButton("OK") { _, _ -> showRestaurantTeam() }
+                                        .show()
                                 }
                             }
                             .show()
@@ -1644,19 +1667,28 @@ class MainActivity : Activity() {
 
     private fun showStaffJoinCode() {
         val role = backendPrefs.getString("restaurant_role", "") ?: ""
-        val code = backendPrefs.getString("staff_join_code", "") ?: ""
-        if (role != "owner" || code.isBlank()) {
+        if (role != "owner") {
             AlertDialog.Builder(this)
                 .setTitle("Código não disponível")
                 .setMessage("Só o proprietário pode consultar o código de acesso à equipa.")
                 .setPositiveButton("OK", null).show()
             return
         }
-        AlertDialog.Builder(this)
-            .setTitle("Código de acesso à equipa")
-            .setMessage("Código: $code\n\nPartilha-o apenas com funcionários autorizados. Cada funcionário deve criar a sua própria conta no StudioMesa e escolher «Aderir à equipa de um restaurante».")
-            .setPositiveButton("OK", null)
-            .show()
+        // Always fetch the current code. A staff revocation rotates it on the server.
+        runBackend({
+            val restaurant = SupabaseApi.getMyRestaurant(backendToken())
+                ?: throw IllegalStateException("Não foi possível obter os dados do restaurante.")
+            val code = restaurant.optString("staff_code").trim()
+            if (code.isBlank()) throw IllegalStateException("O servidor não devolveu um código válido.")
+            backendPrefs.edit().putString("staff_join_code", code).apply()
+            code
+        }) { code ->
+            AlertDialog.Builder(this)
+                .setTitle("Código de acesso à equipa")
+                .setMessage("Código: $code\n\nPartilha-o apenas com funcionários autorizados. Cada funcionário deve criar a sua própria conta no StudioMesa e escolher «Aderir à equipa de um restaurante».")
+                .setPositiveButton("OK", null)
+                .show()
+        }
     }
 
     private fun confirmCodeRotation(staffCode: Boolean) {
@@ -1807,7 +1839,11 @@ class MainActivity : Activity() {
                 .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
                 .remove("remote_members_json").remove("remote_tables_json")
                 .remove("remote_menu_json").remove("remote_orders_json").remove("customer_menu_json")
+                .remove("remote_inventory_json").remove("inventory_loaded")
+                .remove("remote_reservations_json").remove("reservations_loaded")
                 .apply()
+            reservationCache = JSONArray()
+            reservationsLoaded = false
             renderApp()
         }, LinearLayout.LayoutParams(-1, dp(44)))
         addGap(container, 10)
@@ -2254,9 +2290,7 @@ class MainActivity : Activity() {
         runCatching { JSONArray(backendPrefs.getString("remote_inventory_json", "[]") ?: "[]") }
             .getOrElse { JSONArray() }
 
-    private fun remoteReservations(): JSONArray =
-        runCatching { JSONArray(backendPrefs.getString("remote_reservations_json", "[]") ?: "[]") }
-            .getOrElse { JSONArray() }
+    private fun remoteReservations(): JSONArray = reservationCache
 
     private fun refreshInventoryItems() {
         if (!hasRemoteRestaurant()) {
@@ -2282,8 +2316,8 @@ class MainActivity : Activity() {
         }
         runBackend({
             val reservations = SupabaseApi.listReservations(backendToken(), backendRestaurantId())
-            backendPrefs.edit().putString("remote_reservations_json", reservations.toString())
-                .putBoolean("reservations_loaded", true).apply()
+            reservationCache = reservations
+            reservationsLoaded = true
             "OK"
         }) { renderApp() }
     }
@@ -2302,7 +2336,7 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(-1, dp(40)))
         addGap(container, 12)
 
-        if (!backendPrefs.getBoolean("reservations_loaded", false)) {
+        if (!reservationsLoaded) {
             container.addView(emptyCard("A carregar as reservas do servidor…"))
             refreshReservations()
             return
@@ -2377,7 +2411,8 @@ class MainActivity : Activity() {
         runBackend({
             SupabaseApi.updateReservationStatus(backendToken(), reservationId, status)
             val latest = SupabaseApi.listReservations(backendToken(), backendRestaurantId())
-            backendPrefs.edit().putString("remote_reservations_json", latest.toString()).apply()
+            reservationCache = latest
+            reservationsLoaded = true
             "OK"
         }) { renderApp() }
     }
@@ -2448,8 +2483,8 @@ class MainActivity : Activity() {
                                 tableNumber, notes.text.toString()
                             )
                             val latest = SupabaseApi.listReservations(backendToken(), backendRestaurantId())
-                            backendPrefs.edit().putString("remote_reservations_json", latest.toString())
-                                .putBoolean("reservations_loaded", true).apply()
+                            reservationCache = latest
+                            reservationsLoaded = true
                             "OK"
                         }) {
                             dialog.dismiss()
