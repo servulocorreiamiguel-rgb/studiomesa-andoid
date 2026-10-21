@@ -1,6 +1,6 @@
 # Plano de testes — pedidos, quantidades, fases e notas
 
-**Versão-alvo:** StudioMesa 1.4.0 (APK de demonstração)  
+**Versão-alvo:** StudioMesa 1.5.0 (APK de demonstração/debug)  
 **Funcionalidade:** quantidade por artigo, fase de serviço e nota de cozinha por pedido.  
 **Estado:** plano preparado; os testes de execução ainda não foram feitos num telemóvel real.
 
@@ -10,7 +10,7 @@
 - Usar uma conta de teste de proprietário e outra de funcionário do mesmo restaurante; criar também uma conta de outro restaurante e uma conta de cliente.
 - Confirmar que só existem dados de teste. Não usar nomes, contactos ou pedidos de clientes reais.
 - Guardar o commit, a variante instalada e os resultados de cada execução.
-- O workflow atual compila variantes debug; uma compilação bem-sucedida não substitui estes testes funcionais.
+- O workflow atual compila as cinco variantes debug e executa Android Lint; estes controlos não substituem os testes funcionais abaixo.
 
 ## Casos de teste
 
@@ -41,7 +41,7 @@
 
 ## Execução automatizada disponível
 
-O workflow `.github/workflows/android.yml` executa a compilação das cinco variantes debug. Não foram identificados testes unitários ou testes instrumentados na estrutura inspecionada.
+O workflow `.github/workflows/android.yml` compila as cinco variantes debug e executa Android Lint. Não foram identificados testes unitários ou instrumentados; os fluxos de negócio continuam a exigir testes manuais em Android.
 
 Comando de compilação usado pelo workflow:
 
@@ -56,7 +56,7 @@ gradle --no-daemon assembleEssencialRestauranteDebug assembleProfissionalRestaur
 | Revisão das restrições SQL de quantidade/fase/nota | Inspecionada na estrutura da base de dados; não equivale a teste funcional |
 | Testes manuais em Android | Não executados nesta sessão |
 | Testes unitários/instrumentados | Não disponíveis/identificados na estrutura inspecionada |
-| Compilação CI desta alteração visual | A aguardar execução do workflow da pull request |
+| Compilação CI e Android Lint | Aprovados no GitHub Actions para o commit de código da PR #8 (21/10/2026) |
 | Testes de rede e concorrência | Não executados |
 | Teste de isolamento entre restaurantes com contas reais | Não executado |
 
@@ -86,3 +86,17 @@ Não marcar um caso como aprovado sem guardar a evidência do teste. Uma compila
 | AUTH-17 | Logout / regressão | Fechar sessão e voltar ao ecrã de conta | Não ficam dados da conta anterior ou verificador PKCE pendente acessíveis na interface |
 
 Estes casos foram acrescentados ao plano após a revisão do fluxo de autenticação. **Não foram executados num dispositivo real**; dependem de OAuth/email configurados e contas de teste. A compilação do APK só valida sintaxe/compilação, não prova os resultados de autenticação.
+
+
+## Casos adicionais da revisão de fiabilidade 1.5.0
+
+Estes casos foram acrescentados após a revisão do código. **Estado inicial: pendentes de execução manual num dispositivo Android real.** Os testes de CI verificam compilação e Android Lint, não simulam estes cenários.
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| REL-01 | Rede / reservas | Preencher uma reserva e interromper a ligação durante a gravação | Mensagem de erro; formulário mantém nome, contacto, data, número de pessoas e notas |
+| REL-02 | Rede / stock | Falhar ao guardar um artigo de stock ou uma entrada/saída | Não declarar sucesso; manter os campos preenchidos para nova tentativa |
+| REL-03 | Rede / autenticação | Falhar um início de sessão, registo ou recuperação de palavra-passe por indisponibilidade do servidor | Mostrar erro e manter o formulário disponível |
+| REL-04 | Permissões / REST | Tentar atualizar uma mesa, artigo da carta ou pedido eliminado ou sem acesso | O servidor não deve ser apresentado como tendo alterado um registo; mostrar erro claro quando não for devolvida nenhuma linha |
+| VAL-01 | Entrada numérica | Introduzir `NaN` ou infinito em preço/custo, ou custo zero na calculadora de preço | Rejeitar a entrada sem falha da app nem resultado `NaN` |
+| REL-05 | Regressão | Criar, atualizar e arquivar mesa/artigo/pedido com conta autorizada | Confirmação de sucesso apenas quando o servidor devolve a linha alterada |
