@@ -85,6 +85,9 @@ jobs:
       - name: Compile app
         run: gradle --no-daemon assembleEssencialRestauranteDebug assembleProfissionalRestauranteDebug assembleProfissionalClienteDebug assemblePremiumRestauranteDebug assemblePremiumClienteDebug
 
+      - name: Run Android lint
+        run: gradle --no-daemon lint
+
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
