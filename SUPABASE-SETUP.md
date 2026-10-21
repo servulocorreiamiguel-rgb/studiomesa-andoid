@@ -10,6 +10,13 @@
 - Nunca coloques em Kotlin, recursos Android, APKs, GitHub público ou nesta conversa chaves `sb_secret_...`, `service_role`, palavras-passe da base de dados ou credenciais privadas de OAuth.
 - O backend tem tabelas de mesas, carta, pedidos, histórico de pedidos, equipa e fidelização. As regras RLS e permissões têm de ser revistas em conjunto com as funções SQL que as aplicações chamam.
 
+## Estado verificado do backend (21/10/2026)
+
+- `private.restaurant_join_codes` tem RLS ativa, sem políticas para acesso direto; as contas `anon` e `authenticated` não têm permissões diretas de leitura/escrita. As funções proprietárias de `postgres` foram mantidas e o utilizador `postgres` tem `BYPASSRLS`, para permitir os fluxos `SECURITY DEFINER` que fazem verificações explícitas.
+- Os índices `restaurant_staff_one_restaurant_per_user_idx` e `loyalty_members_one_restaurant_per_user_idx` impõem a regra de uma associação por conta e protegem contra pedidos concorrentes.
+- A proteção de palavras-passe comprometidas permanece desativada. O Supabase indica que a funcionalidade está disponível no plano Pro e superiores; esta configuração deve ser revista antes de operar com contas reais.
+- As alterações de RLS e índices estão registadas nas migrações `20261021152901_enable_rls_private_restaurant_join_codes.sql` e `20261021153243_enforce_one_restaurant_per_user.sql`. Os fluxos legítimos continuam pendentes de testes ponta a ponta com contas de teste.
+
 ## Antes de alterar o esquema
 
 1. Confirma que estás no projeto Supabase correto.

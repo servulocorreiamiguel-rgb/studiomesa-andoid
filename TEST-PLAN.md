@@ -10,7 +10,7 @@
 - Usar uma conta de teste de proprietário e outra de funcionário do mesmo restaurante; criar também uma conta de outro restaurante e uma conta de cliente.
 - Confirmar que só existem dados de teste. Não usar nomes, contactos ou pedidos de clientes reais.
 - Guardar o commit, a variante instalada e os resultados de cada execução.
-- O workflow atual compila as cinco variantes debug e executa Android Lint; estes controlos não substituem os testes funcionais abaixo.
+- O workflow compila as cinco variantes debug, executa `testEssencialRestauranteDebugUnitTest` (testes unitários do parser de parâmetros de autenticação) e Android Lint. Estes controlos não substituem os testes funcionais abaixo.
 
 ## Casos de teste
 
@@ -41,7 +41,7 @@
 
 ## Execução automatizada disponível
 
-O workflow `.github/workflows/android.yml` compila as cinco variantes debug e executa Android Lint. Não foram identificados testes unitários ou instrumentados; os fluxos de negócio continuam a exigir testes manuais em Android.
+O workflow `.github/workflows/android.yml` compila as cinco variantes debug, executa `testEssencialRestauranteDebugUnitTest` e Android Lint. Os testes unitários cobrem quatro casos de descodificação de parâmetros de autenticação, incluindo componentes malformados. Não existem testes instrumentados identificados; os fluxos de autenticação contra o servidor, reservas, pedidos, stock, permissões e sincronização continuam a exigir testes manuais em Android.
 
 Comando de compilação usado pelo workflow:
 
@@ -55,8 +55,9 @@ gradle --no-daemon assembleEssencialRestauranteDebug assembleProfissionalRestaur
 |---|---|
 | Revisão das restrições SQL de quantidade/fase/nota | Inspecionada na estrutura da base de dados; não equivale a teste funcional |
 | Testes manuais em Android | Não executados nesta sessão |
-| Testes unitários/instrumentados | Não disponíveis/identificados na estrutura inspecionada |
-| Compilação CI e Android Lint | Aprovados no GitHub Actions para o commit de código da PR #8 (21/10/2026) |
+| Testes unitários de parâmetros de autenticação | Quatro casos em `AuthCallbackParserTest`; o resultado final é registado pelo CI. Cobertura limitada ao parser. |
+| Testes instrumentados/funcionais em Android | Não identificados; continuam pendentes em dispositivo real. |
+| Compilação CI, testes unitários do parser e Android Lint | Verificar sempre a execução GitHub Actions do commit candidato a distribuição; uma execução aprovada não substitui testes de negócio em Android. |
 | Testes de rede e concorrência | Não executados |
 | Teste de isolamento entre restaurantes com contas reais | Não executado |
 

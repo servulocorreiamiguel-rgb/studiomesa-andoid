@@ -58,12 +58,14 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 ## Segurança e continuidade
 
 - [x] RLS ativa nas tabelas principais do esquema público inspecionado.
-- [ ] Rever a tabela privada `private.restaurant_join_codes`, cuja RLS continua desativada. Na consulta de 21/10/2026, `anon` não tem USAGE no esquema; `authenticated` tem USAGE, mas nem `anon` nem `authenticated` têm privilégios diretos de leitura/escrita sobre a tabela. O Security Advisor continua a sinalizar a RLS desativada. A alteração não foi aplicada automaticamente: validar primeiro o comportamento das funções `SECURITY DEFINER` e decidir a defesa em profundidade.
+- [x] Índices únicos na base de dados impõem uma única associação de equipa e um único cartão de fidelização por conta (migração `20261021153243`), prevenindo associações duplicadas por pedidos concorrentes; as tabelas estavam vazias antes da aplicação.
+- [x] RLS ativada na tabela privada `private.restaurant_join_codes` (migração `20261021152901`). Não existem políticas de acesso direto; confirmado que `anon` e `authenticated` não têm privilégios diretos de leitura/escrita. As funções necessárias são propriedade de `postgres`, com `BYPASSRLS`. O aviso atual do Security Advisor é informativo: RLS ativa sem política, intencional para esta tabela privada.
 - [x] As funções `SECURITY DEFINER` inspecionadas exigem sessão e as permissões de execução para `anon` estavam revogadas para os RPCs listados pelo Security Advisor.
 - [ ] Proteção contra palavras-passe comprometidas no Supabase Auth.
 - [x] Sessões guardadas com cifragem AES-GCM usando Android Keystore no código inspecionado.
 - [x] Código PKCE em OAuth, registo e recuperação, com verificador cifrado e rejeição de tokens bearer na ligação de retorno.
 - [x] Logout local limpa os tokens e inicia a revogação da sessão atual no Supabase em segundo plano.
+- [x] A cache de dados remotos é limpa quando muda a conta autenticada; também é limpa quando o servidor confirma que a conta já não pertence a um restaurante. Ainda falta validar estes casos no dispositivo real.
 - [ ] Testar login, recuperação, registo e revogação de sessão num dispositivo real; o logout remoto é best effort quando a rede falha.
 - [ ] Confirmar backups disponíveis, retenção e executar um restauro de teste num ambiente separado.
 - [ ] Testar exportação/eliminação de dados, registos, conservação e resposta a incidentes.

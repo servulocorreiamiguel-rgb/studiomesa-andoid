@@ -1249,6 +1249,21 @@ class MainActivity : Activity() {
             editor.apply()
             if (restaurant != null) {
                 cacheRemoteOperations(token, restaurant.optString("restaurant_id"))
+            } else {
+                // The server confirmed this account no longer belongs to a restaurant.
+                // Remove data that would otherwise remain on this device after revocation.
+                backendPrefs.edit()
+                    .remove("remote_members_json")
+                    .remove("remote_tables_json")
+                    .remove("remote_menu_json")
+                    .remove("remote_orders_json")
+                    .remove("remote_inventory_json")
+                    .remove("inventory_loaded")
+                    .remove("remote_reservations_json")
+                    .remove("reservations_loaded")
+                    .apply()
+                reservationCache = JSONArray()
+                reservationsLoaded = false
             }
         } catch (_: Exception) {
             // Keep authentication successful if restoring cloud data temporarily fails.
