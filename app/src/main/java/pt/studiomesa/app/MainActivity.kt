@@ -2885,9 +2885,9 @@ class MainActivity : Activity() {
                     itemName.isBlank() || itemName.length > 100 -> name.error = "Indica um nome até 100 caracteres."
                     itemUnit.isBlank() || itemUnit.length > 24 -> unit.error = "Indica uma unidade até 24 caracteres."
                     qty == null || !qty.isFinite() || qty < 0 || qty > 999999999 -> quantity.error = "Quantidade inválida."
-                    qtyText.substringAfter('.', "").length > 3 -> quantity.error = "Usa no máximo três casas decimais."
+                    !StockDecimalValidator.hasAtMostThreeDecimalPlaces(qtyText) -> quantity.error = "Usa no máximo três casas decimais."
                     low == null || !low.isFinite() || low < 0 || low > 999999999 -> threshold.error = "Limite inválido."
-                    lowText.substringAfter('.', "").length > 3 -> threshold.error = "Usa no máximo três casas decimais."
+                    !StockDecimalValidator.hasAtMostThreeDecimalPlaces(lowText) -> threshold.error = "Usa no máximo três casas decimais."
                     note.text.toString().length > 500 -> note.error = "Máximo de 500 caracteres."
                     else -> {
                         runBackend({
@@ -2940,7 +2940,7 @@ class MainActivity : Activity() {
                 val value = rawValue.toDoubleOrNull()
                 if (value == null || !value.isFinite() || value <= 0 || value > 999999999) {
                     amount.error = "Indica uma quantidade positiva válida."
-                } else if (rawValue.substringAfter('.', "").length > 3) {
+                } else if (!StockDecimalValidator.hasAtMostThreeDecimalPlaces(rawValue)) {
                     amount.error = "Usa no máximo três casas decimais."
                 } else if (note.text.toString().length > 500) {
                     note.error = "Máximo de 500 caracteres."
