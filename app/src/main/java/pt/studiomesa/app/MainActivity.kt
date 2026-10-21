@@ -2877,13 +2877,17 @@ class MainActivity : Activity() {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val itemName = name.text.toString().trim()
                 val itemUnit = unit.text.toString().trim()
-                val qty = quantity.text.toString().trim().replace(',', '.').toDoubleOrNull()
-                val low = threshold.text.toString().trim().replace(',', '.').toDoubleOrNull()
+                val qtyText = quantity.text.toString().trim().replace(',', '.')
+                val lowText = threshold.text.toString().trim().replace(',', '.')
+                val qty = qtyText.toDoubleOrNull()
+                val low = lowText.toDoubleOrNull()
                 when {
                     itemName.isBlank() || itemName.length > 100 -> name.error = "Indica um nome até 100 caracteres."
                     itemUnit.isBlank() || itemUnit.length > 24 -> unit.error = "Indica uma unidade até 24 caracteres."
                     qty == null || !qty.isFinite() || qty < 0 || qty > 999999999 -> quantity.error = "Quantidade inválida."
+                    qtyText.substringAfter('.', "").length > 3 -> quantity.error = "Usa no máximo três casas decimais."
                     low == null || !low.isFinite() || low < 0 || low > 999999999 -> threshold.error = "Limite inválido."
+                    lowText.substringAfter('.', "").length > 3 -> threshold.error = "Usa no máximo três casas decimais."
                     note.text.toString().length > 500 -> note.error = "Máximo de 500 caracteres."
                     else -> {
                         runBackend({
@@ -2932,9 +2936,12 @@ class MainActivity : Activity() {
             .create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val value = amount.text.toString().trim().replace(',', '.').toDoubleOrNull()
+                val rawValue = amount.text.toString().trim().replace(',', '.')
+                val value = rawValue.toDoubleOrNull()
                 if (value == null || !value.isFinite() || value <= 0 || value > 999999999) {
                     amount.error = "Indica uma quantidade positiva válida."
+                } else if (rawValue.substringAfter('.', "").length > 3) {
+                    amount.error = "Usa no máximo três casas decimais."
                 } else if (note.text.toString().length > 500) {
                     note.error = "Máximo de 500 caracteres."
                 } else {

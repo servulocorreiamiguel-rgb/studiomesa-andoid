@@ -18,6 +18,10 @@ A tabela `public.restaurant_reservations` tem a coluna `client_request_id` e um 
 
 A função `public.update_restaurant_reservation_status` devolve sucesso sem voltar a alterar a reserva quando o estado pedido já é o estado atual. Isto evita apresentar um erro quando o servidor confirmou uma alteração e a resposta se perdeu; as transições inválidas continuam a ser rejeitadas.
 
+## Precisão dos valores de stock (21/10/2026)
+
+A tabela de stock e o histórico de movimentos usam colunas `numeric(12,3)`. As funções `public.save_inventory_item` e `public.adjust_inventory_stock_idempotent` rejeitam valores com mais de três casas decimais, em vez de os arredondarem silenciosamente. A interface Android aplica a mesma validação. O caso de regressão `VAL-02` continua pendente de execução ponta a ponta num dispositivo real.
+
 ## Idempotência dos movimentos de stock e pontos (21/10/2026)
 
 As tabelas `public.restaurant_inventory_movements` e `public.loyalty_transactions` têm a coluna `client_request_id` e índices únicos parciais compostos com restaurante e autor. As funções `public.adjust_inventory_stock_idempotent` e `public.adjust_loyalty_points_idempotent` exigem sessão, verificam a pertença ao restaurante e devolvem o resultado existente para reenvios idênticos. A reutilização de uma chave com dados diferentes é rejeitada. A app reutiliza o identificador enquanto o formulário mantém os mesmos dados; os testes reais de perda de rede continuam pendentes.
@@ -34,7 +38,7 @@ A tabela `public.restaurant_reservations` tem a coluna `client_request_id` e um 
 - `menu_items`, `restaurant_orders` e `restaurant_tables` não concedem privilégios diretos a `anon`; `authenticated` tem apenas `SELECT`, `INSERT` e `UPDATE`. A RLS continua a limitar as linhas ao restaurante autorizado.
 - O índice único existente `restaurant_join_codes_staff_code_idx` garante que o código de equipa identifica no máximo um restaurante; a migração `20261021154348_drop_redundant_staff_code_index.sql` remove o índice equivalente que tinha sido criado pela migração anterior. Os índices de chave estrangeira para stock, movimentos e reservas reduzem verificações caras à medida que os dados crescem.
 - A proteção de palavras-passe comprometidas permanece desativada. O Supabase indica que a funcionalidade está disponível no plano Pro e superiores; esta configuração deve ser revista antes de operar com contas reais.
-- As alterações estão registadas nas migrações `20261021152901_enable_rls_private_restaurant_join_codes.sql`, `20261021153243_enforce_one_restaurant_per_user.sql`, `20261021154007_index_inventory_reservation_foreign_keys.sql`, `20261021154106_unique_staff_access_code.sql`, `20261021154348_drop_redundant_staff_code_index.sql`, `20261021154559_restrict_direct_table_privileges.sql`, `20261021160028_reservation_idempotency.sql`, `20261021160835_inventory_and_loyalty_idempotency.sql`, `20261021161858_disable_legacy_non_idempotent_adjustment_rpcs.sql` e `20261021162325_idempotent_reservation_status_retries.sql`. Os fluxos legítimos continuam pendentes de testes ponta a ponta com contas de teste.
+- As alterações estão registadas nas migrações `20261021152901_enable_rls_private_restaurant_join_codes.sql`, `20261021153243_enforce_one_restaurant_per_user.sql`, `20261021154007_index_inventory_reservation_foreign_keys.sql`, `20261021154106_unique_staff_access_code.sql`, `20261021154348_drop_redundant_staff_code_index.sql`, `20261021154559_restrict_direct_table_privileges.sql`, `20261021160028_reservation_idempotency.sql`, `20261021160835_inventory_and_loyalty_idempotency.sql`, `20261021161858_disable_legacy_non_idempotent_adjustment_rpcs.sql`, `20261021162325_idempotent_reservation_status_retries.sql` e `20261021162652_stock_precision_validation.sql`. Os fluxos legítimos continuam pendentes de testes ponta a ponta com contas de teste.
 
 ## Antes de alterar o esquema
 

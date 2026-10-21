@@ -118,6 +118,7 @@ Estes casos foram acrescentados após a revisão do código. **Estado inicial: p
 | REL-03 | Rede / autenticação | Falhar um início de sessão, registo ou recuperação de palavra-passe por indisponibilidade do servidor | Mostrar erro e manter o formulário disponível |
 | REL-04 | Permissões / REST | Tentar atualizar uma mesa, artigo da carta ou pedido eliminado ou sem acesso | O servidor não deve ser apresentado como tendo alterado um registo; mostrar erro claro quando não for devolvida nenhuma linha |
 | VAL-01 | Entrada numérica | Introduzir `NaN` ou infinito em preço/custo, ou custo zero na calculadora de preço | Rejeitar a entrada sem falha da app nem resultado `NaN` |
+| VAL-02 | Precisão de stock | Introduzir 1,234 e 1,2345 na quantidade, limite mínimo e movimento de stock | 1,234 é aceite; 1,2345 é rejeitado pela interface e pelo servidor, sem arredondamento silencioso |
 | REL-05 | Regressão | Criar, atualizar e arquivar mesa/artigo/pedido com conta autorizada | Confirmação de sucesso apenas quando o servidor devolve a linha alterada |
 | REL-06 | Pedidos / perda de resposta | Enviar um pedido, simular perda da resposta após a gravação e repetir sem alterar os campos | Mantém-se um só pedido; a repetição reconhece o registo original pelo UUID |
 | REL-07 | Reservas / perda de resposta | Guardar uma reserva, perder a resposta e repetir os mesmos dados | Mantém-se uma só reserva; a função RPC devolve o ID original |
