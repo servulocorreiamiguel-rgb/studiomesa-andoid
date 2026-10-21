@@ -1174,15 +1174,20 @@ class MainActivity : Activity() {
             val cost = costField.text.toString().trim().replace(',', '.').toDoubleOrNull()
             val percentage = percentageField.text.toString().trim().replace(',', '.').toDoubleOrNull()
             when {
-                cost == null || !cost.isFinite() || cost < 0.0 -> costField.error = "Introduz um custo válido"
+                cost == null || !cost.isFinite() || cost <= 0.0 -> costField.error = "Introduz um custo superior a zero"
                 percentage == null || !percentage.isFinite() || percentage <= 0.0 || percentage > 100.0 -> percentageField.error = "Usa uma percentagem entre 0 e 100"
                 else -> {
                     val suggested = cost / (percentage / 100.0)
+                    if (!suggested.isFinite()) {
+                        costField.error = "Os valores são demasiado elevados para calcular um preço."
+                        return@primaryButton
+                    }
                     val gross = suggested - cost
+                    val marginPercent = String.format(Locale("pt", "PT"), "%.1f%%", (gross / suggested) * 100.0)
                     result.text = "PREÇO INDICATIVO\n" + money(suggested) +
                         "\n\nCusto por unidade: " + money(cost) +
                         "\nMargem bruta estimada: " + money(gross) +
-                        "\nMargem bruta: " + String.format(Locale("pt", "PT"), "%.1f%%", (gross / suggested) * 100.0)
+                        "\nMargem bruta: " + marginPercent
                     result.setTextColor(forest)
                 }
             }
