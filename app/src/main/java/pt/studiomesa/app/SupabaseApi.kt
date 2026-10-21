@@ -482,4 +482,107 @@ object SupabaseApi {
         if (array.length() == 0) throw IllegalStateException("Cartão de cliente não encontrado.")
         return array.getJSONObject(0)
     }
+    fun listInventoryItems(token: String, restaurantId: String): JSONArray {
+        val encoded = URLEncoder.encode(restaurantId, "UTF-8")
+        return JSONArray(call(
+            "GET",
+            "/rest/v1/restaurant_inventory_items?select=id,name,unit,quantity,low_stock_threshold,updated_at&restaurant_id=eq.$encoded&order=name.asc",
+            null,
+            token
+        ))
+    }
+
+    fun saveInventoryItem(
+        token: String,
+        restaurantId: String,
+        itemId: String?,
+        name: String,
+        unit: String,
+        quantity: Double,
+        lowStockThreshold: Double,
+        note: String
+    ): String {
+        val body = JSONObject()
+            .put("p_restaurant_id", restaurantId)
+            .put("p_item_id", itemId ?: JSONObject.NULL)
+            .put("p_name", name.trim())
+            .put("p_unit", unit.trim())
+            .put("p_quantity", quantity)
+            .put("p_low_stock_threshold", lowStockThreshold)
+            .put("p_note", note.trim())
+        return call("POST", "/rest/v1/rpc/save_inventory_item", body, token).trim().trim('"')
+    }
+
+    fun adjustInventoryStock(token: String, itemId: String, delta: Double, note: String): Double {
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/adjust_inventory_stock",
+            JSONObject()
+                .put("p_item_id", itemId)
+                .put("p_delta", delta)
+                .put("p_note", note.trim()),
+            token
+        )
+        val rows = JSONArray(response)
+        if (rows.length() == 0) throw IllegalStateException("O servidor não devolveu a quantidade atualizada.")
+        return rows.getJSONObject(0).optDouble("quantity", Double.NaN).also {
+            if (it.isNaN() || it < 0.0) throw IllegalStateException("A quantidade devolvida pelo servidor não é válida.")
+        }
+    }
+
+    fun listInventoryMovements(token: String, itemId: String): JSONArray {
+        val encoded = URLEncoder.encode(itemId, "UTF-8")
+        return JSONArray(call(
+            "GET",
+            "/rest/v1/restaurant_inventory_movements?select=delta,quantity_after,note,created_at&item_id=eq.$encoded&order=created_at.desc&limit=30",
+            null,
+            token
+        ))
+    }
+
+    fun listReservations(token: String, restaurantId: String): JSONArray {
+        val encoded = URLEncoder.encode(restaurantId, "UTF-8")
+        return JSONArray(call(
+            "GET",
+            "/rest/v1/restaurant_reservations?select=id,guest_name,guest_phone,party_size,reservation_at,duration_minutes,table_number,status,notes,created_at&restaurant_id=eq.$encoded&order=reservation_at.asc&limit=200",
+            null,
+            token
+        ))
+    }
+
+    fun createReservation(
+        token: String,
+        restaurantId: String,
+        guestName: String,
+        guestPhone: String,
+        partySize: Int,
+        reservationAt: String,
+        durationMinutes: Int,
+        tableNumber: Int?,
+        notes: String
+    ): String {
+        val body = JSONObject()
+            .put("p_restaurant_id", restaurantId)
+            .put("p_guest_name", guestName.trim())
+            .put("p_guest_phone", guestPhone.trim())
+            .put("p_party_size", partySize)
+            .put("p_reservation_at", reservationAt)
+            .put("p_duration_minutes", durationMinutes)
+            .put("p_table_number", tableNumber ?: JSONObject.NULL)
+            .put("p_notes", notes.trim())
+        return call("POST", "/rest/v1/rpc/create_restaurant_reservation", body, token).trim().trim('"')
+    }
+
+    fun updateReservationStatus(token: String, reservationId: String, status: String) {
+        require(status in setOf("Pendente", "Confirmada", "Cancelada", "Concluída", "Não compareceu")) {
+            "Estado de reserva inválido."
+        }
+        call(
+            "POST",
+            "/rest/v1/rpc/update_restaurant_reservation_status",
+            JSONObject().put("p_reservation_id", reservationId).put("p_status", status),
+            token
+        )
+    }
+
 }
