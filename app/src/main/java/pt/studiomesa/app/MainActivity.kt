@@ -1174,15 +1174,20 @@ class MainActivity : Activity() {
             val cost = costField.text.toString().trim().replace(',', '.').toDoubleOrNull()
             val percentage = percentageField.text.toString().trim().replace(',', '.').toDoubleOrNull()
             when {
-                cost == null || cost < 0.0 -> costField.error = "Introduz um custo válido"
-                percentage == null || percentage <= 0.0 || percentage > 100.0 -> percentageField.error = "Usa uma percentagem entre 0 e 100"
+                cost == null || !cost.isFinite() || cost <= 0.0 -> costField.error = "Introduz um custo superior a zero"
+                percentage == null || !percentage.isFinite() || percentage <= 0.0 || percentage > 100.0 -> percentageField.error = "Usa uma percentagem entre 0 e 100"
                 else -> {
                     val suggested = cost / (percentage / 100.0)
+                    if (!suggested.isFinite()) {
+                        costField.error = "Os valores são demasiado elevados para calcular um preço."
+                        return@primaryButton
+                    }
                     val gross = suggested - cost
+                    val marginPercent = String.format(Locale("pt", "PT"), "%.1f%%", (gross / suggested) * 100.0)
                     result.text = "PREÇO INDICATIVO\n" + money(suggested) +
                         "\n\nCusto por unidade: " + money(cost) +
                         "\nMargem bruta estimada: " + money(gross) +
-                        "\nMargem bruta: " + String.format(Locale("pt", "PT"), "%.1f%%", (gross / suggested) * 100.0)
+                        "\nMargem bruta: " + marginPercent
                     result.setTextColor(forest)
                 }
             }
@@ -1603,7 +1608,6 @@ class MainActivity : Activity() {
                 if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
                     emailField.error = "Introduz primeiro o email da tua conta"
                 } else {
-                    dialog.dismiss()
                     runBackend({
                         val verifier = createPkceVerifier()
                         val challenge = createPkceChallenge(verifier)
@@ -1611,6 +1615,7 @@ class MainActivity : Activity() {
                         SupabaseApi.requestPasswordRecovery(email, challenge)
                         "SENT"
                     }, refreshSession = false) {
+                        dialog.dismiss()
                         AlertDialog.Builder(this)
                             .setTitle("Verifica o teu email")
                             .setMessage("Se existir uma conta com este endereço, será enviado um email para recuperar o acesso. Abre a ligação no mesmo telemóvel para definires uma nova palavra-passe. Verifica também Spam.")
@@ -1630,7 +1635,6 @@ class MainActivity : Activity() {
                     password.length < 8 ->
                         passwordField.error = "Usa pelo menos 8 caracteres"
                     else -> {
-                        dialog.dismiss()
                         runBackend({
                             if (createAccount) {
                                 val verifier = createPkceVerifier()
@@ -1672,6 +1676,7 @@ class MainActivity : Activity() {
                                 "SIGNED_IN"
                             }
                         }, refreshSession = false) { result ->
+                            dialog.dismiss()
                             if (result == "CONFIRM_EMAIL") {
                                 AlertDialog.Builder(this)
                                     .setTitle("Falta confirmar o email")
@@ -1722,13 +1727,13 @@ class MainActivity : Activity() {
                 if (name.length !in 2..100) {
                     nameField.error = "Usa entre 2 e 100 caracteres"
                 } else {
-                    dialog.dismiss()
                     runBackend({
                         val token = backendToken()
                         val restaurantId = SupabaseApi.createRestaurant(token, name, code)
                         restoreOwnedRestaurant(token)
                         restaurantId
                     }) { restaurantId ->
+                        dialog.dismiss()
                         backendPrefs.edit().putString("restaurant_id", restaurantId)
                             .putString("restaurant_name", name).putString("join_code", code).apply()
                         renderApp()
@@ -2184,13 +2189,13 @@ class MainActivity : Activity() {
                     else -> {
                         val delta = if (redeem) -amount else amount
                         if (customer.backendId != null && backendToken().isNotBlank()) {
-                            dialog.dismiss()
                             runBackend({
                                 SupabaseApi.adjustPoints(backendToken(), customer.backendId, delta, if (redeem) "Desconto manual" else "Atribuição manual")
                                 val members = SupabaseApi.listMembers(backendToken(), backendRestaurantId())
                                 backendPrefs.edit().putString("remote_members_json", members.toString()).apply()
                                 "OK"
                             }) {
+                                dialog.dismiss()
                                 renderApp()
                             }
                         } else if (store.adjustCustomerPoints(customer.code, delta)) {
@@ -2225,7 +2230,6 @@ class MainActivity : Activity() {
                     code.length !in 6..12 -> codeField.error = "O código deve ter 6 a 12 caracteres"
                     name.isBlank() || name.length > 100 -> nameField.error = "Introduz um nome válido"
                     else -> {
-                        dialog.dismiss()
                         runBackend({
                             val token = backendToken()
                             val member = SupabaseApi.joinRestaurant(token, code, name)
@@ -2239,7 +2243,10 @@ class MainActivity : Activity() {
                                 .apply()
                             store.saveCustomerProfileName(name)
                             "OK"
-                        }) { renderCustomerApp() }
+                        }) {
+                            dialog.dismiss()
+                            renderCustomerApp()
+                        }
                     }
                 }
             }
@@ -2810,7 +2817,6 @@ class MainActivity : Activity() {
                             dialog.dismiss()
                             renderApp()
                         }
-                        dialog.dismiss()
                     }
                 }
             }
@@ -2860,7 +2866,6 @@ class MainActivity : Activity() {
                         dialog.dismiss()
                         renderApp()
                     }
-                    dialog.dismiss()
                 }
             }
         }
@@ -3162,8 +3167,8 @@ class MainActivity : Activity() {
                     name.isBlank() || name.length > 120 -> nameField.error = "Usa entre 1 e 120 caracteres"
                     category.isBlank() || category.length > 60 -> categoryField.error = "Usa entre 1 e 60 caracteres"
                     description.length > 500 -> descriptionField.error = "A descrição pode ter no máximo 500 caracteres"
-                    price == null || price < 0.0 -> priceField.error = "Preço inválido"
-                    cost == null || cost < 0.0 -> costField.error = "Custo inválido"
+                    price == null || !price.isFinite() || price < 0.0 -> priceField.error = "Preço inválido"
+                    cost == null || !cost.isFinite() || cost < 0.0 -> costField.error = "Custo inválido"
                     allergens.length > 300 -> allergensField.error = "Usa no máximo 300 caracteres"
                     else -> {
                         if (hasRemoteRestaurant() && !itemId.isNullOrBlank()) {
@@ -3242,8 +3247,8 @@ class MainActivity : Activity() {
                     name.isBlank() || name.length > 120 -> nameField.error = "Usa entre 1 e 120 caracteres"
                     category.isBlank() || category.length > 60 -> categoryField.error = "Usa entre 1 e 60 caracteres"
                     description.length > 500 -> descriptionField.error = "A descrição pode ter no máximo 500 caracteres"
-                    price == null || price < 0.0 -> priceField.error = "Preço inválido"
-                    cost == null || cost < 0.0 -> costField.error = "Custo inválido"
+                    price == null || !price.isFinite() || price < 0.0 -> priceField.error = "Preço inválido"
+                    cost == null || !cost.isFinite() || cost < 0.0 -> costField.error = "Custo inválido"
                     allergens.length > 300 -> allergensField.error = "Usa no máximo 300 caracteres"
                     else -> {
                         if (hasRemoteRestaurant()) {

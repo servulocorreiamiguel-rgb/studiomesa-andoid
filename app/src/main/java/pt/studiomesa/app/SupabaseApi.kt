@@ -22,7 +22,8 @@ object SupabaseApi {
         method: String,
         path: String,
         body: JSONObject? = null,
-        accessToken: String? = null
+        accessToken: String? = null,
+        returnRepresentation: Boolean = false
     ): String {
         val connection = (URL(BASE_URL + path).openConnection() as HttpURLConnection).apply {
             requestMethod = method
@@ -31,17 +32,18 @@ object SupabaseApi {
             setRequestProperty("apikey", API_KEY)
             setRequestProperty("Accept", "application/json")
             setRequestProperty("Content-Type", "application/json")
+            if (returnRepresentation) setRequestProperty("Prefer", "return=representation")
             // Publishable keys are not JWTs: send them only via apikey.
             // Authorization must carry a real user access token, and only after sign-in.
             if (!accessToken.isNullOrBlank()) {
                 setRequestProperty("Authorization", "Bearer " + accessToken)
             }
-            if (body != null) {
-                doOutput = true
-                outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
-            }
         }
         try {
+            if (body != null) {
+                connection.doOutput = true
+                connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+            }
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
             val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
@@ -59,6 +61,28 @@ object SupabaseApi {
         } finally {
             connection.disconnect()
         }
+    }
+
+    /**
+     * PostgREST can return HTTP success with an empty result when RLS hides the target row.
+     * Requesting representation and requiring a returned row prevents the UI from reporting
+     * that a write succeeded when the target was deleted or access was revoked.
+     */
+    private fun mutateRows(
+        method: String,
+        path: String,
+        body: JSONObject,
+        token: String,
+        emptyMessage: String
+    ) {
+        val response = call(method, path, body, token, returnRepresentation = true)
+        if (response.isBlank()) throw IllegalStateException(emptyMessage)
+        val rows = try {
+            JSONArray(response)
+        } catch (_: Exception) {
+            throw IllegalStateException(emptyMessage)
+        }
+        if (rows.length() == 0) throw IllegalStateException(emptyMessage)
     }
 
     private fun jsonCall(method: String, path: String, body: JSONObject? = null, token: String? = null): JSONObject {
@@ -241,7 +265,7 @@ object SupabaseApi {
     }
 
     fun addTable(token: String, restaurantId: String, tableNumber: Int, area: String, seats: Int) {
-        call(
+        mutateRows(
             "POST",
             "/rest/v1/restaurant_tables",
             JSONObject()
@@ -250,30 +274,33 @@ object SupabaseApi {
                 .put("area", area.trim())
                 .put("seats", seats)
                 .put("is_occupied", false),
-            token
+            token,
+            "O servidor não confirmou a criação da mesa."
         )
     }
 
     fun updateTableDetails(token: String, tableId: String, tableNumber: Int, area: String, seats: Int) {
         val encoded = URLEncoder.encode(tableId, "UTF-8")
-        call(
+        mutateRows(
             "PATCH",
             "/rest/v1/restaurant_tables?id=eq.$encoded",
             JSONObject()
                 .put("table_number", tableNumber)
                 .put("area", area.trim())
                 .put("seats", seats),
-            token
+            token,
+            "A mesa já não existe ou a tua conta deixou de ter acesso a este restaurante."
         )
     }
 
     fun updateTable(token: String, tableId: String, occupied: Boolean) {
         val encoded = URLEncoder.encode(tableId, "UTF-8")
-        call(
+        mutateRows(
             "PATCH",
             "/rest/v1/restaurant_tables?id=eq.$encoded",
             JSONObject().put("is_occupied", occupied),
-            token
+            token,
+            "O estado da mesa não foi alterado. Atualiza os dados e verifica o acesso."
         )
     }
 
@@ -297,7 +324,7 @@ object SupabaseApi {
         cost: Double,
         allergens: String
     ) {
-        call(
+        mutateRows(
             "POST",
             "/rest/v1/menu_items",
             JSONObject()
@@ -309,7 +336,8 @@ object SupabaseApi {
                 .put("cost", cost)
                 .put("allergens", allergens.trim())
                 .put("is_active", true),
-            token
+            token,
+            "O servidor não confirmou a criação do artigo da carta."
         )
     }
 
@@ -324,7 +352,7 @@ object SupabaseApi {
         allergens: String
     ) {
         val encoded = URLEncoder.encode(itemId, "UTF-8")
-        call(
+        mutateRows(
             "PATCH",
             "/rest/v1/menu_items?id=eq.$encoded",
             JSONObject()
@@ -334,17 +362,19 @@ object SupabaseApi {
                 .put("price", price)
                 .put("cost", cost)
                 .put("allergens", allergens.trim()),
-            token
+            token,
+            "O artigo já não existe ou a tua conta deixou de ter acesso a este restaurante."
         )
     }
 
     fun deactivateMenuItem(token: String, itemId: String) {
         val encoded = URLEncoder.encode(itemId, "UTF-8")
-        call(
+        mutateRows(
             "PATCH",
             "/rest/v1/menu_items?id=eq.$encoded",
             JSONObject().put("is_active", false),
-            token
+            token,
+            "O artigo não foi arquivado. Atualiza a carta e verifica o acesso."
         )
     }
 
@@ -368,7 +398,7 @@ object SupabaseApi {
         serviceCourse: String,
         notes: String
     ) {
-        call(
+        mutateRows(
             "POST",
             "/rest/v1/restaurant_orders",
             JSONObject()
@@ -380,7 +410,8 @@ object SupabaseApi {
                 .put("service_course", serviceCourse)
                 .put("notes", notes.trim())
                 .put("status", "Aberto"),
-            token
+            token,
+            "O servidor não confirmou a criação do pedido."
         )
     }
 
@@ -396,11 +427,12 @@ object SupabaseApi {
 
     fun updateOrder(token: String, orderId: String, status: String) {
         val encoded = URLEncoder.encode(orderId, "UTF-8")
-        call(
+        mutateRows(
             "PATCH",
             "/rest/v1/restaurant_orders?id=eq.$encoded",
             JSONObject().put("status", status),
-            token
+            token,
+            "O pedido não foi alterado. Atualiza a fila e verifica o acesso."
         )
     }
 
