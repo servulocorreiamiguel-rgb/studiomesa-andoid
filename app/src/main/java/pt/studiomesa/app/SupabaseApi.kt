@@ -76,7 +76,13 @@ object SupabaseApi {
         emptyMessage: String
     ) {
         val response = call(method, path, body, token, returnRepresentation = true)
-        if (JSONArray(response).length() == 0) throw IllegalStateException(emptyMessage)
+        if (response.isBlank()) throw IllegalStateException(emptyMessage)
+        val rows = try {
+            JSONArray(response)
+        } catch (_: Exception) {
+            throw IllegalStateException(emptyMessage)
+        }
+        if (rows.length() == 0) throw IllegalStateException(emptyMessage)
     }
 
     private fun jsonCall(method: String, path: String, body: JSONObject? = null, token: String? = null): JSONObject {
