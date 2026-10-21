@@ -14,9 +14,10 @@
 
 - `private.restaurant_join_codes` tem RLS ativa, sem políticas para acesso direto; as contas `anon` e `authenticated` não têm permissões diretas de leitura/escrita. As funções proprietárias de `postgres` foram mantidas e o utilizador `postgres` tem `BYPASSRLS`, para permitir os fluxos `SECURITY DEFINER` que fazem verificações explícitas.
 - Os índices `restaurant_staff_one_restaurant_per_user_idx` e `loyalty_members_one_restaurant_per_user_idx` impõem a regra de uma associação por conta e protegem contra pedidos concorrentes.
+- `menu_items`, `restaurant_orders` e `restaurant_tables` não concedem privilégios diretos a `anon`; `authenticated` tem apenas `SELECT`, `INSERT` e `UPDATE`. A RLS continua a limitar as linhas ao restaurante autorizado.
 - O índice único existente `restaurant_join_codes_staff_code_idx` garante que o código de equipa identifica no máximo um restaurante; a migração `20261021154348_drop_redundant_staff_code_index.sql` remove o índice equivalente que tinha sido criado pela migração anterior. Os índices de chave estrangeira para stock, movimentos e reservas reduzem verificações caras à medida que os dados crescem.
 - A proteção de palavras-passe comprometidas permanece desativada. O Supabase indica que a funcionalidade está disponível no plano Pro e superiores; esta configuração deve ser revista antes de operar com contas reais.
-- As alterações estão registadas nas migrações `20261021152901_enable_rls_private_restaurant_join_codes.sql`, `20261021153243_enforce_one_restaurant_per_user.sql`, `20261021154007_index_inventory_reservation_foreign_keys.sql`, `20261021154106_unique_staff_access_code.sql` e `20261021154348_drop_redundant_staff_code_index.sql`. Os fluxos legítimos continuam pendentes de testes ponta a ponta com contas de teste.
+- As alterações estão registadas nas migrações `20261021152901_enable_rls_private_restaurant_join_codes.sql`, `20261021153243_enforce_one_restaurant_per_user.sql`, `20261021154007_index_inventory_reservation_foreign_keys.sql`, `20261021154106_unique_staff_access_code.sql` e `20261021154348_drop_redundant_staff_code_index.sql` e `20261021154559_restrict_direct_table_privileges.sql`. Os fluxos legítimos continuam pendentes de testes ponta a ponta com contas de teste.
 
 ## Antes de alterar o esquema
 
