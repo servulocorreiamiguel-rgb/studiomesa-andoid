@@ -96,20 +96,23 @@ class MainActivity : Activity() {
     private fun parseAuthParams(raw: String?): Map<String, String> =
         raw.orEmpty().split("&").mapNotNull { part ->
             val separator = part.indexOf('=')
-            if (separator <= 0) null else {
+            if (separator <= 0) null else runCatching {
                 val key = java.net.URLDecoder.decode(part.substring(0, separator), "UTF-8")
                 val value = java.net.URLDecoder.decode(part.substring(separator + 1), "UTF-8")
                 key to value
-            }
-        }.toMap()
+            }.getOrNull()
+        }.filter { (key, _) -> key.isNotBlank() }.toMap()
 
     private fun handleAuthCallback(callbackIntent: android.content.Intent?) {
         val uri = callbackIntent?.data ?: return
         if (uri.scheme != "studiomesa" || uri.host != "auth-callback") return
-        val fragment = parseAuthParams(uri.fragment)
-        val errorText = uri.getQueryParameter("error_description")
+        // Parse the raw query/fragment defensively. getQueryParameter() and
+        // URLDecoder can throw on malformed percent-encoding in an external deep link.
+        val query = parseAuthParams(uri.encodedQuery)
+        val fragment = parseAuthParams(uri.encodedFragment)
+        val errorText = query["error_description"]
             ?: fragment["error_description"]
-            ?: uri.getQueryParameter("error")
+            ?: query["error"]
             ?: fragment["error"]
 
         if (!errorText.isNullOrBlank()) {
@@ -123,7 +126,7 @@ class MainActivity : Activity() {
 
         // Accept only the one-time PKCE authorization code. Do not accept bearer
         // access/refresh tokens supplied directly in a custom-scheme URL.
-        val authCode = uri.getQueryParameter("code").orEmpty()
+        val authCode = query["code"].orEmpty()
         val pendingFlow = secureSession.pendingCodeFlowType()
         val codeVerifier = secureSession.pendingCodeVerifier()
         if (authCode.isBlank() || codeVerifier.isBlank() ||
