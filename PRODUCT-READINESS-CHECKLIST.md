@@ -19,11 +19,13 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [ ] Definir horários de funcionamento, capacidade agregada por sala e regras de intervalos/preparação.
 - [ ] Edição/reagendamento, calendário visual, lembretes, confirmações por email e regras configuráveis de cancelamento.
 - [ ] Testar concorrência em dois dispositivos e alterações ao horário de funcionamento.
-- [ ] Definir minimização de dados pessoais, acesso, conservação e eliminação.
+- [x] Os contactos/notas das reservas não são persistidos nas preferências locais e a cache legada é limpa no arranque/logout.
+- [ ] Definir minimização de dados pessoais no servidor, acesso, conservação e eliminação.
 
 ## Pedidos e serviço
 
 - [x] Mesas, pedidos, quantidade, fase do serviço, notas e estados básicos.
+- [x] Vista de cozinha separada para pedidos ativos, com tempo de espera, notas e avanço de estado; a fila ainda precisa de atualização manual.
 - [x] Histórico de criação e alteração de estado no servidor.
 - [ ] Testar duplicações por repetição após falha de rede e pedidos concorrentes.
 - [ ] Testar cancelamentos, sessão expirada, reconexão e sincronização entre dispositivos.
@@ -47,9 +49,10 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 ## Administração e equipa
 
 - [x] Separação de contas, papéis owner/staff e código de adesão de equipa.
-- [ ] Permissões granulares por função; atualmente as operações da equipa são amplas. O novo inventário/reservas verifica que o utilizador pertence ao restaurante, mas ainda não distingue por função quem pode consultar/modificar cada módulo.
-- [ ] Remover/suspender funcionário e revogar imediatamente acessos.
-- [ ] Rever rotação de códigos, acesso a dados exportados e trilho de auditoria administrativo completo.
+- [x] Proprietário pode consultar membros, remover o acesso de um funcionário e renovar automaticamente o código de adesão após a remoção.
+- [ ] Permissões granulares por função; atualmente os funcionários têm permissões operacionais gerais.
+- [ ] Suspensão temporária, horários/turnos e trilho de auditoria administrativo completo.
+- [ ] Verificar em testes que a revogação é refletida em todos os dispositivos; ecrãs ativos podem continuar a mostrar dados já carregados até atualizar/reabrir.
 - [ ] Testar que uma conta nunca consegue aceder a outro restaurante.
 
 ## Segurança e continuidade
@@ -69,7 +72,7 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 ## Lançamento e suporte
 
 - [x] Workflow atual compila APKs de demonstração/debug.
-- [x] Configuração atualizada para compileSdk/targetSdk 36 e AGP 8.10.2 para suportar a API 36; a compilação do workflow tem de confirmar esta alteração.
+- [x] Configuração usa compileSdk/targetSdk 36, AGP 8.10.0 e Gradle 8.11.1; a última execução verificada compilou e carregou os cinco APKs debug de demonstração.
 - [ ] Não reutilizar a assinatura debug para uma versão comercial.
 - [ ] Criar release assinada com chave de produção protegida fora do repositório.
 - [ ] Automatizar testes e análise estática e guardar os resultados de cada release.
