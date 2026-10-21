@@ -125,3 +125,4 @@ Estes casos foram acrescentados após a revisão do código. **Estado inicial: p
 | REL-09 | Stock / perda de resposta | Registar uma entrada/saída, perder a resposta após a gravação e repetir o mesmo formulário | Um único movimento é registado; a quantidade só muda uma vez |
 | REL-10 | Fidelização / perda de resposta | Atribuir/descontar pontos, perder a resposta e repetir o mesmo formulário | Uma única transação é registada; o saldo só muda uma vez |
 | REL-11 | Idempotência / payload alterado | Reutilizar diretamente uma chave de stock/pontos com outro artigo, cliente ou valor | A operação é rejeitada; o movimento/saldo original não é alterado |
+| REL-12 | Compatibilidade / versão antiga | Tentar executar um RPC antigo não idempotente após a migração | A role de cliente recebe erro de permissão; a operação não altera dados |
