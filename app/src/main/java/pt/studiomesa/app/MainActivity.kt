@@ -1174,8 +1174,8 @@ class MainActivity : Activity() {
             val cost = costField.text.toString().trim().replace(',', '.').toDoubleOrNull()
             val percentage = percentageField.text.toString().trim().replace(',', '.').toDoubleOrNull()
             when {
-                cost == null || cost < 0.0 -> costField.error = "Introduz um custo válido"
-                percentage == null || percentage <= 0.0 || percentage > 100.0 -> percentageField.error = "Usa uma percentagem entre 0 e 100"
+                cost == null || !cost.isFinite() || cost < 0.0 -> costField.error = "Introduz um custo válido"
+                percentage == null || !percentage.isFinite() || percentage <= 0.0 || percentage > 100.0 -> percentageField.error = "Usa uma percentagem entre 0 e 100"
                 else -> {
                     val suggested = cost / (percentage / 100.0)
                     val gross = suggested - cost
@@ -3162,8 +3162,8 @@ class MainActivity : Activity() {
                     name.isBlank() || name.length > 120 -> nameField.error = "Usa entre 1 e 120 caracteres"
                     category.isBlank() || category.length > 60 -> categoryField.error = "Usa entre 1 e 60 caracteres"
                     description.length > 500 -> descriptionField.error = "A descrição pode ter no máximo 500 caracteres"
-                    price == null || price < 0.0 -> priceField.error = "Preço inválido"
-                    cost == null || cost < 0.0 -> costField.error = "Custo inválido"
+                    price == null || !price.isFinite() || price < 0.0 -> priceField.error = "Preço inválido"
+                    cost == null || !cost.isFinite() || cost < 0.0 -> costField.error = "Custo inválido"
                     allergens.length > 300 -> allergensField.error = "Usa no máximo 300 caracteres"
                     else -> {
                         if (hasRemoteRestaurant() && !itemId.isNullOrBlank()) {
@@ -3242,8 +3242,8 @@ class MainActivity : Activity() {
                     name.isBlank() || name.length > 120 -> nameField.error = "Usa entre 1 e 120 caracteres"
                     category.isBlank() || category.length > 60 -> categoryField.error = "Usa entre 1 e 60 caracteres"
                     description.length > 500 -> descriptionField.error = "A descrição pode ter no máximo 500 caracteres"
-                    price == null || price < 0.0 -> priceField.error = "Preço inválido"
-                    cost == null || cost < 0.0 -> costField.error = "Custo inválido"
+                    price == null || !price.isFinite() || price < 0.0 -> priceField.error = "Preço inválido"
+                    cost == null || !cost.isFinite() || cost < 0.0 -> costField.error = "Custo inválido"
                     allergens.length > 300 -> allergensField.error = "Usa no máximo 300 caracteres"
                     else -> {
                         if (hasRemoteRestaurant()) {
