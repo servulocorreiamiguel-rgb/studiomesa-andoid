@@ -58,7 +58,7 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 ## Segurança e continuidade
 
 - [x] RLS ativa nas tabelas principais do esquema público inspecionado.
-- [ ] Rever a tabela privada `private.restaurant_join_codes`, cuja RLS está desativada no projeto observado. Os papéis `anon` e `authenticated` não tinham uso de esquema nem privilégios diretos sobre essa tabela na consulta realizada; ainda assim, é necessária uma decisão explícita sobre defesa em profundidade.
+- [ ] Rever a tabela privada `private.restaurant_join_codes`, cuja RLS continua desativada. Na consulta de 21/10/2026, `anon` não tem USAGE no esquema; `authenticated` tem USAGE, mas nem `anon` nem `authenticated` têm privilégios diretos de leitura/escrita sobre a tabela. O Security Advisor continua a sinalizar a RLS desativada. A alteração não foi aplicada automaticamente: validar primeiro o comportamento das funções `SECURITY DEFINER` e decidir a defesa em profundidade.
 - [x] As funções `SECURITY DEFINER` inspecionadas exigem sessão e as permissões de execução para `anon` estavam revogadas para os RPCs listados pelo Security Advisor.
 - [ ] Proteção contra palavras-passe comprometidas no Supabase Auth.
 - [x] Sessões guardadas com cifragem AES-GCM usando Android Keystore no código inspecionado.
