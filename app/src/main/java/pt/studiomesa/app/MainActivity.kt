@@ -2657,10 +2657,12 @@ class MainActivity : Activity() {
                             reservationsLoaded = true
                             "OK"
                         }) {
+                            // Close the form only after the server confirmed the save.
+                            // If the request fails, runBackend shows the error and the
+                            // user's entered reservation details remain available to retry.
                             dialog.dismiss()
                             renderApp()
                         }
-                        dialog.dismiss()
                     }
                 }
             }
