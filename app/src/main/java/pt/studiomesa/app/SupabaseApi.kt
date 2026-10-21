@@ -585,4 +585,23 @@ object SupabaseApi {
         )
     }
 
+    fun listRestaurantTeam(token: String): JSONArray {
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/list_restaurant_team",
+            JSONObject(),
+            token
+        ))
+    }
+
+    fun removeRestaurantStaff(token: String, userId: String) {
+        require(userId.isNotBlank()) { "Seleciona um membro válido da equipa." }
+        call(
+            "POST",
+            "/rest/v1/rpc/remove_restaurant_staff",
+            JSONObject().put("p_user_id", userId),
+            token
+        )
+    }
+
 }
