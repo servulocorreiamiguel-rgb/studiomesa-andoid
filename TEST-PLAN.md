@@ -89,6 +89,15 @@ Não marcar um caso como aprovado sem guardar a evidência do teste. Uma compila
 Estes casos foram acrescentados ao plano após a revisão do fluxo de autenticação. **Não foram executados num dispositivo real**; dependem de OAuth/email configurados e contas de teste. A compilação do APK só valida sintaxe/compilação, não prova os resultados de autenticação.
 
 
+## Regressão do perfil local do cliente
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| PROFILE-01 | Privacidade / logout | Guardar um nome de perfil local, terminar sessão e voltar ao ecrã de cliente | O nome da conta anterior não aparece no modo sem sessão |
+| PROFILE-02 | Privacidade / troca de conta | Iniciar sessão com uma conta sem cartão de fidelização depois de uma conta com perfil | O nome local anterior não reaparece; só é mostrado um nome carregado para a nova conta |
+
+Estes casos estão cobertos pela limpeza local no código, mas continuam pendentes de validação manual num dispositivo Android real.
+
 ## Regressão da cache após autenticação
 
 | ID | Categoria | Ação / dados | Resultado esperado |

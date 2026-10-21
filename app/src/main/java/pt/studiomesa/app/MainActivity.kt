@@ -1378,6 +1378,7 @@ class MainActivity : Activity() {
             throw IllegalStateException("O servidor não devolveu um identificador de conta válido.")
         }
 
+        store.clearCustomerLocalIdentity()
         backendPrefs.edit()
             .remove("user_id").remove("user_email")
             .remove("access_token").remove("refresh_token")
@@ -2050,6 +2051,7 @@ class MainActivity : Activity() {
                 Thread { runCatching { SupabaseApi.signOut(tokenToRevoke) } }.start()
             }
             secureSession.clear()
+            store.clearCustomerLocalIdentity()
             backendPrefs.edit().remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
                 .remove("restaurant_id").remove("restaurant_name").remove("join_code")
                 .remove("staff_join_code").remove("restaurant_role")
@@ -2468,6 +2470,7 @@ class MainActivity : Activity() {
                 Thread { runCatching { SupabaseApi.signOut(tokenToRevoke) } }.start()
             }
             secureSession.clear()
+            store.clearCustomerLocalIdentity()
             backendPrefs.edit()
                 .remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
                 .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")

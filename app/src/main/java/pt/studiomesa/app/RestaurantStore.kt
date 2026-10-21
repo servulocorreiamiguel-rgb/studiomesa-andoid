@@ -191,6 +191,17 @@ class RestaurantStore(context: Context) {
         prefs.edit().putString("customer_profile_name", name.trim()).apply()
     }
 
+    /**
+     * The display name and synthetic member code belong to the local demo identity,
+     * not to a newly authenticated account. Remove them at auth/logout boundaries.
+     */
+    fun clearCustomerLocalIdentity() {
+        prefs.edit()
+            .remove("customer_profile_name")
+            .remove("customer_member_code")
+            .apply()
+    }
+
     fun getCustomerMemberCode(): String {
         val existing = prefs.getString("customer_member_code", null)
         if (!existing.isNullOrBlank()) return existing
