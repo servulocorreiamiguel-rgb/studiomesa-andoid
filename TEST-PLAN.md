@@ -126,3 +126,4 @@ Estes casos foram acrescentados após a revisão do código. **Estado inicial: p
 | REL-10 | Fidelização / perda de resposta | Atribuir/descontar pontos, perder a resposta e repetir o mesmo formulário | Uma única transação é registada; o saldo só muda uma vez |
 | REL-11 | Idempotência / payload alterado | Reutilizar diretamente uma chave de stock/pontos com outro artigo, cliente ou valor | A operação é rejeitada; o movimento/saldo original não é alterado |
 | REL-12 | Compatibilidade / versão antiga | Tentar executar um RPC antigo não idempotente após a migração | A role de cliente recebe erro de permissão; a operação não altera dados |
+| REL-13 | Reservas / perda de resposta | Confirmar uma reserva, perder a resposta e repetir o mesmo estado | A repetição é tratada como sucesso; a reserva continua num único estado, sem falso erro |

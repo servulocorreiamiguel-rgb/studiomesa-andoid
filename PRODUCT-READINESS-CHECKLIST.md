@@ -14,6 +14,8 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 
 ## Reservas
 
+- [x] A atualização de estado no servidor trata uma repetição do mesmo estado como sucesso, evitando um falso erro após perda de resposta. O cenário de perda de rede tem de ser validado em Android real.
+
 - [x] Fluxo inicial de registo e estados (pendente, confirmada, cancelada, concluída, não compareceu).
 - [x] Validação no servidor da capacidade da mesa e da sobreposição de reservas pendentes/confirmadas atribuídas à mesma mesa.
 - [ ] Definir horários de funcionamento, capacidade agregada por sala e regras de intervalos/preparação.
