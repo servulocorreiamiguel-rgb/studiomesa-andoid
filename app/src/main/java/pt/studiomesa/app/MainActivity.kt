@@ -94,14 +94,7 @@ class MainActivity : Activity() {
     }
 
     private fun parseAuthParams(raw: String?): Map<String, String> =
-        raw.orEmpty().split("&").mapNotNull { part ->
-            val separator = part.indexOf('=')
-            if (separator <= 0) null else runCatching {
-                val key = java.net.URLDecoder.decode(part.substring(0, separator), "UTF-8")
-                val value = java.net.URLDecoder.decode(part.substring(separator + 1), "UTF-8")
-                key to value
-            }.getOrNull()
-        }.filter { (key, _) -> key.isNotBlank() }.toMap()
+        AuthCallbackParser.parse(raw)
 
     private fun handleAuthCallback(callbackIntent: android.content.Intent?) {
         val uri = callbackIntent?.data ?: return
