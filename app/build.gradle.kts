@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "pt.studiomesa.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         // Use a separate application ID for the repaired test builds so they
@@ -13,9 +13,9 @@ android {
         // Keep this ID stable for subsequent test builds.
         applicationId = "pt.studiomesa.preview"
         minSdk = 24
-        targetSdk = 35
-        versionCode = 6
-        versionName = "1.4.0"
+        targetSdk = 36
+        versionCode = 7
+        versionName = "1.5.0"
     }
 
     buildFeatures {
