@@ -14,11 +14,10 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 
 ## Reservas
 
-- [ ] Ainda não existe um fluxo de reservas completo identificado na versão inspecionada.
-- [ ] Definir horários, duração, capacidade por sala/mesa, número de pessoas e intervalos de preparação.
-- [ ] Evitar reservas sobrepostas com validação no servidor e transações.
-- [ ] Estados da reserva: pedido, confirmada, cancelada, não compareceu e concluída.
-- [ ] Confirmações, lembretes, cancelamento e tratamento de falhas de email/mensagens.
+- [x] Fluxo inicial de registo e estados (pendente, confirmada, cancelada, concluída, não compareceu).
+- [x] Validação no servidor da capacidade da mesa e da sobreposição de reservas pendentes/confirmadas atribuídas à mesma mesa.
+- [ ] Definir horários de funcionamento, capacidade agregada por sala e regras de intervalos/preparação.
+- [ ] Edição/reagendamento, calendário visual, lembretes, confirmações por email e regras configuráveis de cancelamento.
 - [ ] Testar concorrência em dois dispositivos e alterações ao horário de funcionamento.
 - [ ] Definir minimização de dados pessoais, acesso, conservação e eliminação.
 
@@ -38,10 +37,17 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [ ] Testar saldos negativos, limites, concorrência e reconciliação dos movimentos.
 - [ ] Proteger os dados dos clientes e confirmar que cada cliente só vê o próprio cartão/histórico.
 
+## Stock e inventário
+
+- [x] Artigos com unidade, quantidade atual e limite mínimo; estado de baixo stock/esgotado no ecrã.
+- [x] Entradas e saídas transacionais no servidor, com saldo após movimento, nota, data e utilizador no histórico.
+- [ ] Testar concorrência, valores-limite, sessão expirada e isolamento entre restaurantes.
+- [ ] Avisos automáticos, fornecedores/encomendas, consumo automático de ingredientes por receita, desperdício e inventário por local.
+
 ## Administração e equipa
 
 - [x] Separação de contas, papéis owner/staff e código de adesão de equipa.
-- [ ] Permissões granulares por função; atualmente as operações da equipa são amplas.
+- [ ] Permissões granulares por função; atualmente as operações da equipa são amplas. O novo inventário/reservas verifica que o utilizador pertence ao restaurante, mas ainda não distingue por função quem pode consultar/modificar cada módulo.
 - [ ] Remover/suspender funcionário e revogar imediatamente acessos.
 - [ ] Rever rotação de códigos, acesso a dados exportados e trilho de auditoria administrativo completo.
 - [ ] Testar que uma conta nunca consegue aceder a outro restaurante.
@@ -63,6 +69,7 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 ## Lançamento e suporte
 
 - [x] Workflow atual compila APKs de demonstração/debug.
+- [x] Configuração atualizada para compileSdk/targetSdk 36 e AGP 8.10.2 para suportar a API 36; a compilação do workflow tem de confirmar esta alteração.
 - [ ] Não reutilizar a assinatura debug para uma versão comercial.
 - [ ] Criar release assinada com chave de produção protegida fora do repositório.
 - [ ] Automatizar testes e análise estática e guardar os resultados de cada release.
