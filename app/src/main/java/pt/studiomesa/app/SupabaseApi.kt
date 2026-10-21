@@ -527,13 +527,70 @@ object SupabaseApi {
             null, token))
     }
 
-    fun adjustPoints(token: String, memberId: String, delta: Int, note: String? = null): JSONObject {
-        val body = JSONObject().put("p_member_id", memberId).put("p_delta", delta)
-        if (!note.isNullOrBlank()) body.put("p_note", note)
-        val response = call("POST", "/rest/v1/rpc/adjust_loyalty_points", body, token)
-        val array = JSONArray(response)
-        if (array.length() == 0) throw IllegalStateException("Não foi devolvido o novo saldo.")
-        return array.getJSONObject(0)
+    fun adjustPoints(
+        token: String,
+        restaurantId: String,
+        memberId: String,
+        delta: Int,
+        note: String?,
+        requestId: String
+    ): JSONObject {
+        require(runCatching { java.util.UUID.fromString(requestId).toString() == requestId }.getOrDefault(false)) {
+            "O identificador da tentativa de pontos não é válido."
+        }
+        val normalizedNote = note?.trim()?.takeIf { it.isNotEmpty() }
+        val body = JSONObject()
+            .put("p_client_request_id", requestId)
+            .put("p_member_id", memberId)
+            .put("p_delta", delta)
+        if (normalizedNote != null) body.put("p_note", normalizedNote)
+
+        try {
+            val response = call("POST", "/rest/v1/rpc/adjust_loyalty_points_idempotent", body, token)
+            val array = JSONArray(response)
+            if (array.length() == 0) throw IllegalStateException("Não foi devolvido o novo saldo.")
+            val result = array.getJSONObject(0)
+            if (result.optString("member_id") != memberId || result.optInt("points", -1) < 0) {
+                throw IllegalStateException("O servidor devolveu um saldo de pontos inválido.")
+            }
+            return result
+        } catch (writeError: Exception) {
+            // A transaction may have committed even if the HTTP response was lost.
+            // Verify the exact request before interpreting the operation as successful.
+            val existing = runCatching {
+                val userId = getUser(token).optString("id")
+                if (userId.isBlank()) return@runCatching null
+                val encodedRestaurant = URLEncoder.encode(restaurantId, "UTF-8")
+                val encodedUser = URLEncoder.encode(userId, "UTF-8")
+                val encodedRequest = URLEncoder.encode(requestId, "UTF-8")
+                val rows = JSONArray(call(
+                    "GET",
+                    "/rest/v1/loyalty_transactions?select=id,restaurant_id,member_id,created_by,points_delta,points_after,note,client_request_id&restaurant_id=eq.$encodedRestaurant&created_by=eq.$encodedUser&client_request_id=eq.$encodedRequest",
+                    null,
+                    token
+                ))
+                val row = rows.optJSONObject(0) ?: return@runCatching null
+                if (
+                    row.optString("restaurant_id") == restaurantId &&
+                    row.optString("created_by") == userId &&
+                    row.optString("client_request_id") == requestId &&
+                    row.optString("member_id") == memberId &&
+                    row.optInt("points_delta", Int.MIN_VALUE) == delta &&
+                    row.optString("note") == (normalizedNote ?: "")
+                ) row else null
+            }.getOrNull() ?: throw writeError
+            if (existing.optString("id").isBlank()) throw writeError
+
+            val currentMember = runCatching { getMember(token, memberId) }.getOrElse { throw writeError }
+            if (currentMember.optString("restaurant_id") != restaurantId) throw writeError
+            return JSONObject()
+                .put("member_id", memberId)
+                .put("member_code", currentMember.optString("member_code"))
+                .put("points", currentMember.optInt("points", -1))
+                .also {
+                    if (it.optInt("points", -1) < 0) throw writeError
+                }
+        }
     }
 
     fun listMemberTransactions(token: String, memberId: String): JSONArray {
@@ -585,20 +642,71 @@ object SupabaseApi {
         return call("POST", "/rest/v1/rpc/save_inventory_item", body, token).trim().trim('"')
     }
 
-    fun adjustInventoryStock(token: String, itemId: String, delta: Double, note: String): Double {
-        val response = call(
-            "POST",
-            "/rest/v1/rpc/adjust_inventory_stock",
-            JSONObject()
-                .put("p_item_id", itemId)
-                .put("p_delta", delta)
-                .put("p_note", note.trim()),
-            token
-        )
-        val rows = JSONArray(response)
-        if (rows.length() == 0) throw IllegalStateException("O servidor não devolveu a quantidade atualizada.")
-        return rows.getJSONObject(0).optDouble("quantity", Double.NaN).also {
-            if (it.isNaN() || it < 0.0) throw IllegalStateException("A quantidade devolvida pelo servidor não é válida.")
+    fun adjustInventoryStock(
+        token: String,
+        restaurantId: String,
+        itemId: String,
+        delta: Double,
+        note: String,
+        requestId: String
+    ): Double {
+        require(runCatching { java.util.UUID.fromString(requestId).toString() == requestId }.getOrDefault(false)) {
+            "O identificador da tentativa de stock não é válido."
+        }
+        val normalizedNote = note.trim().take(500)
+        val body = JSONObject()
+            .put("p_client_request_id", requestId)
+            .put("p_item_id", itemId)
+            .put("p_delta", delta)
+            .put("p_note", normalizedNote)
+        try {
+            val response = call("POST", "/rest/v1/rpc/adjust_inventory_stock_idempotent", body, token)
+            val rows = JSONArray(response)
+            if (rows.length() == 0) throw IllegalStateException("O servidor não devolveu a quantidade atualizada.")
+            val row = rows.getJSONObject(0)
+            val resultItem = row.optString("item_id")
+            val quantity = row.optDouble("quantity", Double.NaN)
+            if (resultItem != itemId || !quantity.isFinite() || quantity < 0.0) {
+                throw IllegalStateException("O servidor devolveu uma quantidade de stock inválida.")
+            }
+            return quantity
+        } catch (writeError: Exception) {
+            // The database may have committed the movement before the response was lost.
+            // Only accept a retry when the original movement exactly matches this request.
+            val movementMatches = runCatching {
+                val userId = getUser(token).optString("id")
+                if (userId.isBlank()) return@runCatching false
+                val encodedRestaurant = URLEncoder.encode(restaurantId, "UTF-8")
+                val encodedUser = URLEncoder.encode(userId, "UTF-8")
+                val encodedRequest = URLEncoder.encode(requestId, "UTF-8")
+                val rows = JSONArray(call(
+                    "GET",
+                    "/rest/v1/restaurant_inventory_movements?select=id,restaurant_id,item_id,delta,quantity_after,note,created_by,client_request_id&restaurant_id=eq.$encodedRestaurant&created_by=eq.$encodedUser&client_request_id=eq.$encodedRequest",
+                    null,
+                    token
+                ))
+                val row = rows.optJSONObject(0) ?: return@runCatching false
+                row.optString("restaurant_id") == restaurantId &&
+                    row.optString("item_id") == itemId &&
+                    row.optString("created_by") == userId &&
+                    row.optString("client_request_id") == requestId &&
+                    kotlin.math.abs(row.optDouble("delta", Double.NaN) - delta) < 0.000001 &&
+                    row.optString("note") == normalizedNote
+            }.getOrDefault(false)
+            if (!movementMatches) throw writeError
+
+            // Return the current quantity after refreshing: later valid movements may
+            // have followed the original idempotent movement.
+            val latest = runCatching { listInventoryItems(token, restaurantId) }.getOrElse { throw writeError }
+            for (i in 0 until latest.length()) {
+                val item = latest.optJSONObject(i) ?: continue
+                if (item.optString("id") == itemId) {
+                    val currentQuantity = item.optDouble("quantity", Double.NaN)
+                    if (currentQuantity.isFinite() && currentQuantity >= 0.0) return currentQuantity
+                    throw writeError
+                }
+            }
+            throw writeError
         }
     }
 

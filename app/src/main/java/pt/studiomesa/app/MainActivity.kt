@@ -2212,6 +2212,7 @@ class MainActivity : Activity() {
     }
 
     private fun showCustomerPointsDialog(customer: LoyaltyCustomer, redeem: Boolean) {
+        val requestIdsByPayload = mutableMapOf<String, String>()
         val amountField = inputField("Número inteiro de pontos", InputType.TYPE_CLASS_NUMBER)
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -2236,9 +2237,23 @@ class MainActivity : Activity() {
                     else -> {
                         val delta = if (redeem) -amount else amount
                         if (customer.backendId != null && backendToken().isNotBlank()) {
+                            val memberId = customer.backendId
+                            val restaurantId = backendRestaurantId()
+                            val noteText = if (redeem) "Desconto manual" else "Atribuição manual"
+                            val signature = JSONObject()
+                                .put("restaurant_id", restaurantId)
+                                .put("member_id", memberId)
+                                .put("delta", delta)
+                                .put("note", noteText)
+                                .toString()
+                            val requestId = requestIdsByPayload.getOrPut(signature) {
+                                java.util.UUID.randomUUID().toString()
+                            }
                             runBackend({
-                                SupabaseApi.adjustPoints(backendToken(), customer.backendId, delta, if (redeem) "Desconto manual" else "Atribuição manual")
-                                val members = SupabaseApi.listMembers(backendToken(), backendRestaurantId())
+                                SupabaseApi.adjustPoints(
+                                    backendToken(), restaurantId, memberId, delta, noteText, requestId
+                                )
+                                val members = SupabaseApi.listMembers(backendToken(), restaurantId)
                                 backendPrefs.edit().putString("remote_members_json", members.toString()).apply()
                                 "OK"
                             }) {
@@ -2893,6 +2908,7 @@ class MainActivity : Activity() {
     }
 
     private fun showStockAdjustmentDialog(itemId: String, itemName: String, unit: String, isInbound: Boolean) {
+        val requestIdsByPayload = mutableMapOf<String, String>()
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(8), dp(18), dp(10))
@@ -2923,9 +2939,22 @@ class MainActivity : Activity() {
                     note.error = "Máximo de 500 caracteres."
                 } else {
                     val delta = if (isInbound) value else -value
+                    val normalizedNote = note.text.toString().trim().take(500)
+                    val restaurantId = backendRestaurantId()
+                    val signature = JSONObject()
+                        .put("restaurant_id", restaurantId)
+                        .put("item_id", itemId)
+                        .put("delta", delta)
+                        .put("note", normalizedNote)
+                        .toString()
+                    val requestId = requestIdsByPayload.getOrPut(signature) {
+                        java.util.UUID.randomUUID().toString()
+                    }
                     runBackend({
-                        SupabaseApi.adjustInventoryStock(backendToken(), itemId, delta, note.text.toString())
-                        val latest = SupabaseApi.listInventoryItems(backendToken(), backendRestaurantId())
+                        SupabaseApi.adjustInventoryStock(
+                            backendToken(), restaurantId, itemId, delta, normalizedNote, requestId
+                        )
+                        val latest = SupabaseApi.listInventoryItems(backendToken(), restaurantId)
                         backendPrefs.edit().putString("remote_inventory_json", latest.toString())
                             .putBoolean("inventory_loaded", true).apply()
                         "OK"

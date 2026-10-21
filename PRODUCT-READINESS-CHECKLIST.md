@@ -35,6 +35,8 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 
 ## Fidelização
 
+- [x] Movimentos manuais de pontos têm identificador de tentativa e deduplicação no servidor; a validação com perda real de rede num dispositivo ainda está pendente.
+
 - [x] Associação por código, saldo partilhado e registo de movimentos.
 - [ ] Automatizar regras de acumulação/resgate só depois de definir regras comerciais e prevenção de fraude.
 - [ ] Limitar tentativas repetidas de adivinhar códigos e monitorizar abusos.
@@ -42,6 +44,8 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [ ] Proteger os dados dos clientes e confirmar que cada cliente só vê o próprio cartão/histórico.
 
 ## Stock e inventário
+
+- [x] Movimentos de stock têm identificador de tentativa e deduplicação no servidor; a validação com perda real de rede num dispositivo ainda está pendente.
 
 - [x] Artigos com unidade, quantidade atual e limite mínimo; estado de baixo stock/esgotado no ecrã.
 - [x] Entradas e saídas transacionais no servidor, com saldo após movimento, nota, data e utilizador no histórico.

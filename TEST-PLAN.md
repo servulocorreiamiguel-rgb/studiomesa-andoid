@@ -122,3 +122,6 @@ Estes casos foram acrescentados após a revisão do código. **Estado inicial: p
 | REL-06 | Pedidos / perda de resposta | Enviar um pedido, simular perda da resposta após a gravação e repetir sem alterar os campos | Mantém-se um só pedido; a repetição reconhece o registo original pelo UUID |
 | REL-07 | Reservas / perda de resposta | Guardar uma reserva, perder a resposta e repetir os mesmos dados | Mantém-se uma só reserva; a função RPC devolve o ID original |
 | REL-08 | Idempotência / payload alterado | Reutilizar deliberadamente uma chave de reserva com conteúdo diferente | Operação rejeitada; o registo original não é alterado |
+| REL-09 | Stock / perda de resposta | Registar uma entrada/saída, perder a resposta após a gravação e repetir o mesmo formulário | Um único movimento é registado; a quantidade só muda uma vez |
+| REL-10 | Fidelização / perda de resposta | Atribuir/descontar pontos, perder a resposta e repetir o mesmo formulário | Uma única transação é registada; o saldo só muda uma vez |
+| REL-11 | Idempotência / payload alterado | Reutilizar diretamente uma chave de stock/pontos com outro artigo, cliente ou valor | A operação é rejeitada; o movimento/saldo original não é alterado |
