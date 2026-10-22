@@ -32,6 +32,7 @@ class MainActivity : Activity() {
     private var activePage = "Início"
     private val backendPrefs by lazy { getSharedPreferences("studiomesa_backend", MODE_PRIVATE) }
     private val secureSession by lazy { SecureSessionStore(this) }
+    private val pendingRequestIds by lazy { PendingRequestIds(this) }
     // Reservation contacts are kept in memory only, not persisted to SharedPreferences.
     private var reservationCache = JSONArray()
     private var reservationsLoaded = false
@@ -2212,7 +2213,6 @@ class MainActivity : Activity() {
     }
 
     private fun showCustomerPointsDialog(customer: LoyaltyCustomer, redeem: Boolean) {
-        val requestIdsByPayload = mutableMapOf<String, String>()
         val amountField = inputField("Número inteiro de pontos", InputType.TYPE_CLASS_NUMBER)
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -2246,8 +2246,13 @@ class MainActivity : Activity() {
                                 .put("delta", delta)
                                 .put("note", noteText)
                                 .toString()
-                            val requestId = requestIdsByPayload.getOrPut(signature) {
-                                java.util.UUID.randomUUID().toString()
+                            val requestOperation = "loyalty_adjust"
+                            val requestAccountId = backendPrefs.getString("user_id", "").orEmpty()
+                            val requestId = try {
+                                pendingRequestIds.getOrCreate(requestOperation, requestAccountId, signature)
+                            } catch (_: Exception) {
+                                amountField.error = "Não foi possível guardar a referência segura. Tenta novamente."
+                                return@setOnClickListener
                             }
                             runBackend({
                                 SupabaseApi.adjustPoints(
@@ -2259,6 +2264,7 @@ class MainActivity : Activity() {
                             }) {
                                 dialog.dismiss()
                                 renderApp()
+                                pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
                             }
                         } else if (store.adjustCustomerPoints(customer.code, delta)) {
                             dialog.dismiss()
@@ -2658,7 +2664,6 @@ class MainActivity : Activity() {
     }
 
     private fun showReservationDialog() {
-        val requestIdsByPayload = mutableMapOf<String, String>()
         if (!hasRemoteRestaurant()) {
             AlertDialog.Builder(this).setMessage("Liga primeiro o restaurante na secção Conta.")
                 .setPositiveButton("OK", null).show()
@@ -2732,8 +2737,13 @@ class MainActivity : Activity() {
                             .toString()
                         // If the server committed but the reply was lost, the same payload
                         // reuses its UUID; changed form data receives a different UUID.
-                        val requestId = requestIdsByPayload.getOrPut(signature) {
-                            java.util.UUID.randomUUID().toString()
+                        val requestOperation = "reservation_create"
+                        val requestAccountId = backendPrefs.getString("user_id", "").orEmpty()
+                        val requestId = try {
+                            pendingRequestIds.getOrCreate(requestOperation, requestAccountId, signature)
+                        } catch (_: Exception) {
+                            notes.error = "Não foi possível guardar a referência segura. Tenta novamente."
+                            return@setOnClickListener
                         }
                         runBackend({
                             SupabaseApi.createReservation(
@@ -2751,6 +2761,7 @@ class MainActivity : Activity() {
                             // user's entered reservation details remain available to retry.
                             dialog.dismiss()
                             renderApp()
+                            pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
                         }
                     }
                 }
@@ -2912,7 +2923,6 @@ class MainActivity : Activity() {
     }
 
     private fun showStockAdjustmentDialog(itemId: String, itemName: String, unit: String, isInbound: Boolean) {
-        val requestIdsByPayload = mutableMapOf<String, String>()
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(8), dp(18), dp(10))
@@ -2954,8 +2964,13 @@ class MainActivity : Activity() {
                         .put("delta", delta)
                         .put("note", normalizedNote)
                         .toString()
-                    val requestId = requestIdsByPayload.getOrPut(signature) {
-                        java.util.UUID.randomUUID().toString()
+                    val requestOperation = "stock_adjust"
+                    val requestAccountId = backendPrefs.getString("user_id", "").orEmpty()
+                    val requestId = try {
+                        pendingRequestIds.getOrCreate(requestOperation, requestAccountId, signature)
+                    } catch (_: Exception) {
+                        amount.error = "Não foi possível guardar a referência segura. Tenta novamente."
+                        return@setOnClickListener
                     }
                     runBackend({
                         SupabaseApi.adjustInventoryStock(
@@ -2968,6 +2983,7 @@ class MainActivity : Activity() {
                     }) {
                         dialog.dismiss()
                         renderApp()
+                        pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
                     }
                 }
             }
@@ -3098,7 +3114,6 @@ class MainActivity : Activity() {
     }
 
     private fun showCreateOrderDialog() {
-        val requestIdsByPayload = mutableMapOf<String, String>()
         val cloudMode = hasRemoteRestaurant()
         val items = if (cloudMode) remoteMenuEntries() else store.getMenu()
         if (items.isEmpty()) {
@@ -3194,8 +3209,13 @@ class MainActivity : Activity() {
                                 .put("notes", notes)
                                 .toString()
                             // Exact retries reuse the same key; edits get a new key.
-                            val requestId = requestIdsByPayload.getOrPut(signature) {
-                                java.util.UUID.randomUUID().toString()
+                            val requestOperation = "order_create"
+                            val requestAccountId = backendPrefs.getString("user_id", "").orEmpty()
+                            val requestId = try {
+                                pendingRequestIds.getOrCreate(requestOperation, requestAccountId, signature)
+                            } catch (_: Exception) {
+                                quantityField.error = "Não foi possível guardar a referência segura. Tenta novamente."
+                                return@setOnClickListener
                             }
                             runBackend({
                                 val token = backendToken()
@@ -3209,6 +3229,7 @@ class MainActivity : Activity() {
                                 dialog.dismiss()
                                 activePage = "Pedidos"
                                 renderApp()
+                                pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
                             }
                         } else {
                             val now = System.currentTimeMillis()
