@@ -195,31 +195,25 @@ class MainActivity : Activity() {
      * accumulate padding as the system UI changes (for example, on rotation).
      */
     private fun applySystemBarInsets(root: View) {
+        // Traditional decor fitting already keeps content below the system bars on
+        // Android 14 and earlier, so manual padding is only needed from API 35 onward.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) return
+
         val baseLeft = root.paddingLeft
         val baseTop = root.paddingTop
         val baseRight = root.paddingRight
         val baseBottom = root.paddingBottom
 
         root.setOnApplyWindowInsetsListener { view, insets ->
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                val safeInsets = insets.getInsets(
-                    WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()
-                )
-                view.setPadding(
-                    baseLeft + safeInsets.left,
-                    baseTop + safeInsets.top,
-                    baseRight + safeInsets.right,
-                    baseBottom + safeInsets.bottom
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                view.setPadding(
-                    baseLeft + insets.systemWindowInsetLeft,
-                    baseTop + insets.systemWindowInsetTop,
-                    baseRight + insets.systemWindowInsetRight,
-                    baseBottom + insets.systemWindowInsetBottom
-                )
-            }
+            val safeInsets = insets.getInsets(
+                WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()
+            )
+            view.setPadding(
+                baseLeft + safeInsets.left,
+                baseTop + safeInsets.top,
+                baseRight + safeInsets.right,
+                baseBottom + safeInsets.bottom
+            )
             insets
         }
     }
