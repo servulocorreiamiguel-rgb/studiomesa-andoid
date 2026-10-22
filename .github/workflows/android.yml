@@ -85,8 +85,8 @@ jobs:
       - name: Compile app
         run: gradle --no-daemon assembleEssencialRestauranteDebug assembleProfissionalRestauranteDebug assembleProfissionalClienteDebug assemblePremiumRestauranteDebug assemblePremiumClienteDebug
 
-      - name: Run authentication parser unit tests
-        run: gradle --no-daemon testEssencialRestauranteDebugUnitTest
+      - name: Run unit tests for every distributed variant
+        run: gradle --no-daemon testEssencialRestauranteDebugUnitTest testProfissionalRestauranteDebugUnitTest testProfissionalClienteDebugUnitTest testPremiumRestauranteDebugUnitTest testPremiumClienteDebugUnitTest
 
       - name: Run Android lint
         run: gradle --no-daemon lint
