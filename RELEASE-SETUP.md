@@ -58,6 +58,18 @@ No separador **Variables**, cria a variável `STUDIOMESA_RELEASE_APPLICATION_ID`
 
 Se a variável de identificador ou qualquer segredo estiver em falta, a execução falha com uma mensagem explícita. O workflow **não** envia os AAB para a Google Play nem publica a aplicação.
 
+## Requisitos da Google Play e conta do programador
+
+Antes de submeter a aplicação, confirma os requisitos oficiais atuais:
+
+- A aplicação já usa `targetSdk = 36`, o nível de API exigido pela política de destino da Google Play para novas aplicações/atualizações desde 31 de agosto de 2026: https://support.google.com/googleplay/android-developer/answer/11926878?hl=pt
+- É obrigatória uma política de privacidade pública, com ligação na Play Console e dentro da aplicação, e o formulário **Data safety** tem de refletir a recolha, partilha, segurança e eliminação reais dos dados: https://support.google.com/googleplay/android-developer/answer/10144311
+- A eliminação de conta está implementada, mas tem de ser testada de ponta a ponta com contas descartáveis antes do lançamento. A ligação/ação de eliminação deve permanecer acessível ao utilizador.
+- As contas pessoais de programador criadas depois de 13 de novembro de 2023 têm de cumprir o requisito de teste fechado com pelo menos 12 participantes inscritos continuamente durante 14 dias consecutivos antes de pedir acesso à produção; confirma se esse requisito se aplica ao tipo de conta que vai publicar: https://support.google.com/googleplay/android-developer/answer/14151465?hl=pt
+- O titular de uma conta de programador da Google Play tem de ter pelo menos 18 anos e concluir os passos de registo/verificação aplicáveis; a taxa de registo é cobrada pela Google e deve ser confirmada no fluxo oficial: https://support.google.com/googleplay/android-developer/answer/6112435?hl=pt
+
+Não publiques ainda: continuam pendentes os testes ponta a ponta de login/recuperação, separação entre restaurantes, criação/repetição de operações e eliminação de conta, bem como a política de privacidade e o formulário Data safety.
+
 ## O que ainda tem de ser concluído antes de vender
 
 - Testes ponta a ponta dos pedidos, reservas, inventário, fidelização, permissões, login, recuperação e logout em dispositivos reais e com contas de teste separadas.
