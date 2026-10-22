@@ -681,6 +681,39 @@ object SupabaseApi {
         return call("POST", "/rest/v1/rpc/save_inventory_item", body, token).trim().trim('"')
     }
 
+    fun createInventoryItem(
+        token: String,
+        requestId: String,
+        restaurantId: String,
+        name: String,
+        unit: String,
+        quantity: Double,
+        lowStockThreshold: Double,
+        note: String
+    ): String {
+        require(runCatching { java.util.UUID.fromString(requestId).toString() == requestId }.getOrDefault(false)) {
+            "O identificador da tentativa de criação de stock não é válido."
+        }
+        val body = JSONObject()
+            .put("p_client_request_id", requestId)
+            .put("p_restaurant_id", restaurantId)
+            .put("p_name", name.trim())
+            .put("p_unit", unit.trim())
+            .put("p_quantity", quantity)
+            .put("p_low_stock_threshold", lowStockThreshold)
+            .put("p_note", note.trim())
+        val itemId = call(
+            "POST",
+            "/rest/v1/rpc/create_inventory_item_idempotent",
+            body,
+            token
+        ).trim().trim('"')
+        require(runCatching { java.util.UUID.fromString(itemId).toString() == itemId }.getOrDefault(false)) {
+            "O servidor não confirmou a criação do artigo de stock."
+        }
+        return itemId
+    }
+
     fun adjustInventoryStock(
         token: String,
         restaurantId: String,
