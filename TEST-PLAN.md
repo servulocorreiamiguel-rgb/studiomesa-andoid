@@ -39,6 +39,15 @@
 | ORD-21 | Regressão | Abrir um pedido antigo criado antes dos novos campos | Valores predefinidos coerentes; a aplicação não falha |
 | ORD-22 | Regressão | Reiniciar a aplicação e consultar o pedido | Dados persistem conforme a origem local/remota |
 
+## Casos de regressão da calculadora de preços
+
+Os casos PC-01 a PC-04 são cobertos por `PriceCalculatorTest`; os respetivos resultados só devem ser considerados aprovados depois de a execução CI do commit candidato passar.
+
+| PC-01 | Calculadora de preço | Custo 3,20 € e custo pretendido 30% | Preço 10,67 €, lucro bruto estimado 7,47 €, custo/preço 30,0% e margem bruta 70,0% |
+| PC-02 | Calculadora de preço | Custo 1,00 € e custo pretendido 30% | Preço arredondado a 3,33 € antes do cálculo de lucro; lucro bruto 2,33 € |
+| PC-03 | Calculadora de preço | Custo 12,99 € e custo pretendido 100% | Preço 12,99 €, lucro bruto 0,00 € e margem 0,0% |
+| PC-04 | Validação da calculadora | Custo zero, custo com mais de duas casas decimais, percentagem <= 0 ou > 100, texto inválido/NaN/infinito | Entrada rejeitada com mensagem no campo correto; sem crash nem resultado não numérico |
+
 ## Execução automatizada disponível
 
 O workflow `.github/workflows/android.yml` compila as cinco variantes debug, executa os testes unitários das cinco variantes de distribuição e Android Lint. Os testes unitários cobrem a descodificação de parâmetros de autenticação (incluindo componentes malformados) e a regra de até três casas decimais para os valores de stock. Não existem testes instrumentados identificados; os fluxos de autenticação contra o servidor, reservas, pedidos, stock, permissões e sincronização continuam a exigir testes manuais em Android.
