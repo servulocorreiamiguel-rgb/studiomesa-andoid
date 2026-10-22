@@ -48,6 +48,19 @@ Os casos PC-01 a PC-04 são cobertos por `PriceCalculatorTest`; os respetivos re
 | PC-03 | Calculadora de preço | Custo 12,99 € e custo pretendido 100% | Preço 12,99 €, lucro bruto 0,00 € e margem 0,0% |
 | PC-04 | Validação da calculadora | Custo zero, custo com mais de duas casas decimais, percentagem <= 0 ou > 100, texto inválido/NaN/infinito | Entrada rejeitada com mensagem no campo correto; sem crash nem resultado não numérico |
 
+## Eliminação de conta e proteção de dados
+
+Os casos ACCT-01 a ACCT-06 são **pendentes de teste ponta a ponta com contas descartáveis**. Nunca os executar com uma conta real que contenha dados necessários.
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| ACCT-01 | Autorização / sem sessão | Enviar pedido de eliminação sem token de sessão válido | Endpoint rejeita o pedido; nenhuma conta ou dado é alterado |
+| ACCT-02 | Conta pessoal | Eliminar uma conta de teste que não seja proprietária | A conta deixa de autenticar; associação de fidelização é removida; as referências de autoria dos registos operacionais preservados ficam nulas |
+| ACCT-03 | Proprietário / segurança | Pedir eliminação do proprietário sem confirmação explícita dos dados do restaurante | Pedido recusado; restaurante e todos os dados permanecem |
+| ACCT-04 | Proprietário / equipa | Pedir eliminação do proprietário quando ainda há membros adicionais | Pedido recusado; nenhum dado do restaurante é apagado |
+| ACCT-05 | Proprietário / confirmação | Remover os restantes membros da conta de teste, confirmar duas vezes e eliminar proprietário | Conta, restaurante e dados operacionais associados são eliminados; não sobra fila de eliminação pendente |
+| ACCT-06 | Erro / expiração | Forçar falha antes de o Auth Admin apagar o utilizador ou deixar a fila ultrapassar 15 minutos | A fila é cancelada ou expira e não elimina o restaurante por si só |
+
 ## Execução automatizada disponível
 
 O workflow `.github/workflows/android.yml` compila as cinco variantes debug, executa os testes unitários das cinco variantes de distribuição e Android Lint. Os testes unitários cobrem a descodificação de parâmetros de autenticação (incluindo componentes malformados) e a regra de até três casas decimais para os valores de stock. Não existem testes instrumentados identificados; os fluxos de autenticação contra o servidor, reservas, pedidos, stock, permissões e sincronização continuam a exigir testes manuais em Android.
