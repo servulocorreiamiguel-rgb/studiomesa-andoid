@@ -60,6 +60,8 @@ Os casos ACCT-01 a ACCT-06 são **pendentes de teste ponta a ponta com contas de
 | ACCT-04 | Proprietário / equipa | Pedir eliminação do proprietário quando ainda há membros adicionais | Pedido recusado; nenhum dado do restaurante é apagado |
 | ACCT-05 | Proprietário / confirmação | Remover os restantes membros da conta de teste, confirmar duas vezes e eliminar proprietário | Conta, restaurante e dados operacionais associados são eliminados; não sobra fila de eliminação pendente |
 | ACCT-06 | Erro / expiração | Forçar falha antes de o Auth Admin apagar o utilizador ou deixar a fila ultrapassar 15 minutos | A fila é cancelada ou expira e não elimina o restaurante por si só |
+| ACCT-07 | Eliminação web / email | Pedir ligação na página externa, abrir a ligação no mesmo navegador, escolher eliminação de conta e confirmar | O utilizador autenticado consegue enviar um pedido; email inválido/sem conta não revela se a conta existe; a conta é eliminada apenas após confirmação e verificação do servidor |
+| ACCT-08 | Redirecionamento web | Tentar magic link antes e depois de permitir o URL da página em Supabase Auth Redirect URLs | Antes da configuração, a ligação falha de forma segura; depois de autorizado, regressa à página externa e estabelece uma sessão válida |
 
 ## Execução automatizada disponível
 
