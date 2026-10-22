@@ -99,17 +99,17 @@ jobs:
           set -euo pipefail
           KEYSTORE_PATH="$RUNNER_TEMP/studiomesa-ci-release.jks"
           CI_KEY_PASSWORD="ci-only-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          keytool -genkeypair -noprompt -keystore "$KEYSTORE_PATH" -storetype JKS \\
-            -storepass "$CI_KEY_PASSWORD" -alias "studiomesa-ci" \\
-            -keypass "$CI_KEY_PASSWORD" -keyalg RSA -keysize 2048 -validity 365 \\
+          keytool -genkeypair -noprompt -keystore "$KEYSTORE_PATH" -storetype JKS \
+            -storepass "$CI_KEY_PASSWORD" -alias "studiomesa-ci" \
+            -keypass "$CI_KEY_PASSWORD" -keyalg RSA -keysize 2048 -validity 365 \
             -dname "CN=StudioMesa CI,O=Example,C=PT"
           export STUDIOMESA_KEYSTORE_PATH="$KEYSTORE_PATH"
           export ANDROID_KEYSTORE_PASSWORD="$CI_KEY_PASSWORD"
           export ANDROID_KEY_ALIAS="studiomesa-ci"
           export ANDROID_KEY_PASSWORD="$CI_KEY_PASSWORD"
-          gradle --no-daemon \\
-            -PstudiomesaCommercialRelease=true \\
-            -PstudiomesaReleaseApplicationId=pt.studiomesa.ci \\
+          gradle --no-daemon \
+            -PstudiomesaCommercialRelease=true \
+            -PstudiomesaReleaseApplicationId=pt.studiomesa.ci \
             bundleEssencialRestauranteRelease
           find app/build/outputs/bundle -type f -name '*.aab' -print -quit | grep -q .
           rm -f "$KEYSTORE_PATH"
