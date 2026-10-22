@@ -69,6 +69,14 @@ internal class PendingRequestIds(context: Context) {
         }
     }
 
+    fun clearAll() {
+        synchronized(lock) {
+            if (!preferences.edit().clear().commit()) {
+                throw IllegalStateException("Não foi possível limpar os identificadores locais de operações.")
+            }
+        }
+    }
+
     private fun isUuid(value: String): Boolean =
         runCatching { UUID.fromString(value).toString() == value }.getOrDefault(false)
 
