@@ -3391,14 +3391,32 @@ class MainActivity : Activity() {
                     else -> {
                         if (hasRemoteRestaurant()) {
                             val restaurantId = backendRestaurantId()
+                            val signature = JSONObject()
+                                .put("restaurant_id", restaurantId)
+                                .put("name", name)
+                                .put("category", category)
+                                .put("description", description)
+                                .put("price", price)
+                                .put("cost", cost)
+                                .put("allergens", allergens)
+                                .toString()
+                            val requestOperation = "menu_add"
+                            val requestAccountId = backendPrefs.getString("user_id", "").orEmpty()
+                            val requestId = try {
+                                pendingRequestIds.getOrCreate(requestOperation, requestAccountId, signature)
+                            } catch (_: Exception) {
+                                nameField.error = "Não foi possível guardar a referência segura. Tenta novamente."
+                                return@setOnClickListener
+                            }
                             runBackend({
                                 val token = backendToken()
-                                SupabaseApi.addMenuItem(token, restaurantId, name, category, description, price, cost, allergens)
+                                SupabaseApi.addMenuItem(token, restaurantId, requestId, name, category, description, price, cost, allergens)
                                 cacheRemoteOperations(token, restaurantId)
                                 "OK"
                             }) {
                                 dialog.dismiss()
                                 renderApp()
+                                pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
                             }
                         } else {
                             val menu = store.getMenu()
