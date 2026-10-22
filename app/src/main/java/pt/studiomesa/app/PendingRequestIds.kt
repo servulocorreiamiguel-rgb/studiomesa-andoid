@@ -6,9 +6,9 @@ import java.security.MessageDigest
 import java.util.UUID
 
 /**
- * Creates non-reversible preference keys for retry state. Raw payloads can contain
- * customer names, reservation contacts or notes, so only their SHA-256 digest is used
- * as a key; the raw payload is never persisted here.
+ * Creates SHA-256-derived preference keys for retry state. Raw payloads can contain
+ * customer names, reservation contacts or notes, so the raw payload is never persisted
+ * here. A digest is not encryption; it is used only to avoid storing those values directly.
  */
 internal object PendingRequestKey {
     fun from(operation: String, accountId: String, payloadSignature: String): String {
