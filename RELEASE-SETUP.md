@@ -70,6 +70,25 @@ Antes de submeter a aplicação, confirma os requisitos oficiais atuais:
 
 Não publiques ainda: continuam pendentes os testes ponta a ponta de login/recuperação, separação entre restaurantes, criação/repetição de operações e eliminação de conta, bem como a política de privacidade e o formulário Data safety.
 
+## Recurso web externo para eliminação de conta
+
+A página pública já está ativa em:
+
+**https://svwvkfsyevuyabelrtjk.supabase.co/functions/v1/account-deletion-web**
+
+A página envia uma ligação única ao email da conta; depois de a pessoa autenticar a sessão, permite pedir a eliminação. Não é seguro permitir eliminação apenas por introduzir um email.
+
+**Configuração obrigatória antes de testar o email:**
+
+1. Abre o [Dashboard do Supabase](https://supabase.com/dashboard/project/svwvkfsyevuyabelrtjk/auth/url-configuration) e entra em **Authentication → URL Configuration**.
+2. Em **Redirect URLs**, adiciona exatamente:
+   `https://svwvkfsyevuyabelrtjk.supabase.co/functions/v1/account-deletion-web`
+3. Não substituas o URL principal do projeto nem removas os redirecionamentos Android já necessários para `studiomesa://auth-callback`.
+4. Confirma que o fornecedor de email está ativo. Antes de produção, configura um SMTP próprio com um endereço de envio controlado pelo responsável pela app; o envio padrão de teste do Supabase pode estar sujeito a limites.
+5. Com uma conta descartável, testa pedido de ligação, clique na ligação no mesmo navegador, eliminação de conta não proprietária e bloqueio de proprietário com membros. Não uses uma conta real para estes testes.
+
+A página foi verificada por carregamento HTTP público, mas **o percurso completo por email ainda não foi validado**. O endereço acima pode ser indicado como recurso externo de eliminação na Play Console só depois de concluir os testes.
+
 ## O que ainda tem de ser concluído antes de vender
 
 - Testes ponta a ponta dos pedidos, reservas, inventário, fidelização, permissões, login, recuperação e logout em dispositivos reais e com contas de teste separadas.
