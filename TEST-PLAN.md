@@ -10,7 +10,7 @@
 - Usar uma conta de teste de proprietário e outra de funcionário do mesmo restaurante; criar também uma conta de outro restaurante e uma conta de cliente.
 - Confirmar que só existem dados de teste. Não usar nomes, contactos ou pedidos de clientes reais.
 - Guardar o commit, a variante instalada e os resultados de cada execução.
-- O workflow compila as cinco variantes debug, executa `testEssencialRestauranteDebugUnitTest` (testes unitários do parser de autenticação e da validação da precisão decimal de stock) e Android Lint. Estes controlos não substituem os testes funcionais abaixo.
+- O workflow compila as cinco variantes debug, executa os testes unitários das cinco variantes de distribuição (parser de autenticação e validação da precisão decimal de stock) e Android Lint. Estes controlos não substituem os testes funcionais abaixo.
 
 ## Casos de teste
 
@@ -41,7 +41,7 @@
 
 ## Execução automatizada disponível
 
-O workflow `.github/workflows/android.yml` compila as cinco variantes debug, executa `testEssencialRestauranteDebugUnitTest` e Android Lint. Os testes unitários cobrem a descodificação de parâmetros de autenticação (incluindo componentes malformados) e a regra de até três casas decimais para os valores de stock. Não existem testes instrumentados identificados; os fluxos de autenticação contra o servidor, reservas, pedidos, stock, permissões e sincronização continuam a exigir testes manuais em Android.
+O workflow `.github/workflows/android.yml` compila as cinco variantes debug, executa os testes unitários das cinco variantes de distribuição e Android Lint. Os testes unitários cobrem a descodificação de parâmetros de autenticação (incluindo componentes malformados) e a regra de até três casas decimais para os valores de stock. Não existem testes instrumentados identificados; os fluxos de autenticação contra o servidor, reservas, pedidos, stock, permissões e sincronização continuam a exigir testes manuais em Android.
 
 Comando de compilação usado pelo workflow:
 
