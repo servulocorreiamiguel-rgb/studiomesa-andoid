@@ -1176,26 +1176,29 @@ class MainActivity : Activity() {
             background = rounded(paper, 12)
         }
         form.addView(primaryButton("Calcular preço sugerido") {
-            val cost = costField.text.toString().trim().replace(',', '.').toDoubleOrNull()
-            val percentage = percentageField.text.toString().trim().replace(',', '.').toDoubleOrNull()
-            when {
-                cost == null || !cost.isFinite() || cost <= 0.0 -> costField.error = "Introduz um custo superior a zero"
-                percentage == null || !percentage.isFinite() || percentage <= 0.0 || percentage > 100.0 -> percentageField.error = "Usa uma percentagem entre 0 e 100"
-                else -> {
-                    val suggested = cost / (percentage / 100.0)
-                    if (!suggested.isFinite()) {
-                        costField.error = "Os valores são demasiado elevados para calcular um preço."
-                        return@primaryButton
-                    }
-                    val gross = suggested - cost
-                    val marginPercent = String.format(Locale("pt", "PT"), "%.1f%%", (gross / suggested) * 100.0)
-                    result.text = "PREÇO INDICATIVO\n" + money(suggested) +
-                        "\n\nCusto por unidade: " + money(cost) +
-                        "\nMargem bruta estimada: " + money(gross) +
-                        "\nMargem bruta: " + marginPercent
-                    result.setTextColor(forest)
+            val calculation = try {
+                PriceCalculator.calculate(
+                    costField.text.toString(),
+                    percentageField.text.toString()
+                )
+            } catch (error: PriceCalculationException) {
+                when (error.field) {
+                    PriceInputField.COST -> costField.error = error.message
+                    PriceInputField.TARGET_COST_PERCENT -> percentageField.error = error.message
                 }
+                return@primaryButton
             }
+
+            result.text = "PREÇO INDICATIVO\n" + money(calculation.suggestedPrice.toDouble()) +
+                "\n\nCusto por unidade: " + money(calculation.cost.toDouble()) +
+                "\nCusto sobre o preço final: " + String.format(
+                    Locale("pt", "PT"), "%.1f%%", calculation.actualCostPercent.toDouble()
+                ) +
+                "\nMargem bruta estimada: " + money(calculation.grossProfit.toDouble()) +
+                "\nMargem bruta: " + String.format(
+                    Locale("pt", "PT"), "%.1f%%", calculation.grossMarginPercent.toDouble()
+                )
+            result.setTextColor(forest)
         }, LinearLayout.LayoutParams(-1, dp(48)))
         addGap(form, 10)
         form.addView(result)
