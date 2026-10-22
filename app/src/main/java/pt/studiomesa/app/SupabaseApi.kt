@@ -224,6 +224,30 @@ object SupabaseApi {
         call("POST", "/auth/v1/logout?scope=local", accessToken = accessToken)
     }
 
+    /**
+     * Requests deletion of the currently authenticated user's account.
+     * The Edge Function verifies the caller and uses server-only Supabase admin
+     * credentials; no privileged key is embedded in the Android client.
+     */
+    fun deleteAccount(accessToken: String, deleteRestaurantData: Boolean): Boolean {
+        require(accessToken.isNotBlank()) { "Inicia sessão antes de eliminar a conta." }
+        val response = call(
+            "POST",
+            "/functions/v1/delete-account",
+            JSONObject().put("delete_restaurant_data", deleteRestaurantData),
+            accessToken
+        )
+        val result = try {
+            JSONObject(response)
+        } catch (_: Exception) {
+            throw IllegalStateException("O servidor não devolveu uma confirmação válida da eliminação.")
+        }
+        if (!result.optBoolean("deleted", false)) {
+            throw IllegalStateException("O servidor não confirmou a eliminação da conta.")
+        }
+        return result.optBoolean("restaurant_data_deleted", false)
+    }
+
     fun isOAuthProviderEnabled(provider: String): Boolean {
         require(provider == "google" || provider == "azure") { "Fornecedor de início de sessão inválido." }
         val settings = jsonCall("GET", "/auth/v1/settings")
