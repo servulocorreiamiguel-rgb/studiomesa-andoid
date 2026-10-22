@@ -45,6 +45,8 @@ O endpoint exige uma sessão de utilizador validada por `withSupabase({ auth: "u
 
 Verificações efetuadas depois das migrações: fila sem pedidos pendentes, coluna `loyalty_transactions.created_by` nullable, chave estrangeira com `ON DELETE SET NULL` e um gatilho de eliminação presente. **Ainda falta testar a experiência completa com contas descartáveis dedicadas** (conta sem restaurante, funcionário e proprietário sem outros membros). Não uses contas reais nem dados de clientes nos testes.
 
+A página externa `https://svwvkfsyevuyabelrtjk.supabase.co/functions/v1/account-deletion-web` está ativa e foi verificada por carregamento público. O fluxo de email ainda exige que o URL exato seja adicionado a Authentication → URL Configuration → Redirect URLs. Antes de produção, configura SMTP próprio e confirma magic link/OTP com contas descartáveis; não considerar o recurso operacional até esses testes passarem.
+
 ## Estado verificado do backend (21/10/2026)
 
 - `private.restaurant_join_codes` tem RLS ativa, sem políticas para acesso direto; as contas `anon` e `authenticated` não têm permissões diretas de leitura/escrita. As funções proprietárias de `postgres` foram mantidas e o utilizador `postgres` tem `BYPASSRLS`, para permitir os fluxos `SECURITY DEFINER` que fazem verificações explícitas.
