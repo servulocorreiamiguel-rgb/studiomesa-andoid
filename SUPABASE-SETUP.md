@@ -77,7 +77,7 @@ Não se considera um backup verificado até existir evidência de um restauro te
 - Testar códigos de cliente/equipa inválidos, tentativas repetidas e renovação de códigos.
 - Confirmar que a aplicação de cliente nunca recebe custos internos, saldos de outros clientes ou dados da equipa.
 - Confirmar permissões e papéis de funcionário/proprietário, cópias de segurança e o procedimento de recuperação.
-- Gerar uma versão de produção assinada com uma chave privada guardada fora do repositório. O workflow atual gera apenas APKs de demonstração/debug.
+- Gerar uma versão de produção assinada com uma chave privada guardada fora do repositório. O workflow normal continua a gerar APKs de demonstração/debug; foi adicionado um workflow manual para AABs assinados, documentado em `RELEASE-SETUP.md`, que ainda exige identificador de pacote final, keystore privado e segredos de GitHub configurados.
 
 ## Limitações conhecidas
 
