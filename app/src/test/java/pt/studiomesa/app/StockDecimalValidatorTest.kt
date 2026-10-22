@@ -9,6 +9,8 @@ class StockDecimalValidatorTest {
     fun acceptsIntegersAndWholeNumbers() {
         assertTrue(StockDecimalValidator.hasAtMostThreeDecimalPlaces("0"))
         assertTrue(StockDecimalValidator.hasAtMostThreeDecimalPlaces("123"))
+        assertTrue(StockDecimalValidator.hasAtMostThreeDecimalPlaces("+12"))
+        assertTrue(StockDecimalValidator.hasAtMostThreeDecimalPlaces("-1"))
     }
 
     @Test
@@ -39,5 +41,19 @@ class StockDecimalValidatorTest {
     fun rejectsMultipleDecimalSeparators() {
         assertFalse(StockDecimalValidator.hasAtMostThreeDecimalPlaces("1.2.3"))
         assertFalse(StockDecimalValidator.hasAtMostThreeDecimalPlaces("1,2,3"))
+    }
+
+    @Test
+    fun rejectsScientificNotationAndNonNumericText() {
+        listOf("1e3", "1E3", "NaN", "Infinity", "abc", "1,2e2").forEach { value ->
+            assertFalse("$value must not be accepted", StockDecimalValidator.hasAtMostThreeDecimalPlaces(value))
+        }
+    }
+
+    @Test
+    fun rejectsEmptyOrIncompleteNumericInput() {
+        listOf("", ".", ",", "+", "-", "+.", "-.").forEach { value ->
+            assertFalse("'$value' must not be accepted", StockDecimalValidator.hasAtMostThreeDecimalPlaces(value))
+        }
     }
 }
