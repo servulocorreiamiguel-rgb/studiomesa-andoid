@@ -112,7 +112,7 @@ BEGIN
 
   RETURN QUERY SELECT p_item_id, v_new_quantity::numeric;
 END;
-$function$
+$function$;
 
 CREATE OR REPLACE FUNCTION public.adjust_loyalty_points_idempotent(p_client_request_id uuid, p_member_id uuid, p_delta integer, p_note text DEFAULT NULL::text)
  RETURNS TABLE(member_id uuid, member_code text, points integer)
@@ -224,7 +224,7 @@ BEGIN
 
   RETURN QUERY SELECT p_member_id, v_member_code, v_new_points;
 END;
-$function$
+$function$;
 
 REVOKE ALL ON FUNCTION public.adjust_inventory_stock_idempotent(uuid, uuid, numeric, text)
   FROM PUBLIC, anon;
