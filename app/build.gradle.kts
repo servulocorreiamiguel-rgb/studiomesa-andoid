@@ -12,7 +12,7 @@ val releaseKeyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").orNull
 val releaseKeyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").orNull
 
 if (commercialRelease) {
-    val applicationIdPattern = Regex("^[A-Za-z][A-Za-z0-9_]*(\\\\.[A-Za-z][A-Za-z0-9_]*)+$")
+    val applicationIdPattern = Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+$")
     if (releaseApplicationId.isNullOrBlank() || !applicationIdPattern.matches(releaseApplicationId)) {
         throw GradleException(
             "A release requires -PstudiomesaReleaseApplicationId with the final, valid base package ID. " +
