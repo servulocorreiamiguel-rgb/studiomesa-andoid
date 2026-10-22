@@ -83,7 +83,9 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [ ] Confirmar backups disponíveis, retenção e executar um restauro de teste num ambiente separado.
 - [x] Implementado o fluxo de eliminação de conta autenticada no Android e no Supabase; as contas de proprietário exigem confirmação dos dados do restaurante e não podem ser eliminadas enquanto houver outros membros.
 - [ ] Testar eliminação de conta com contas de teste dedicadas (não foram apagadas contas reais); confirmar anonimização de autoria, cascatas e expiração da fila.
-- [ ] Publicar uma política de privacidade e configurar a secção Data safety na Play Console; confirmar exportação, conservação e resposta a incidentes.
+- [x] Publicada a página web externa para iniciar pedidos de eliminação: `https://svwvkfsyevuyabelrtjk.supabase.co/functions/v1/account-deletion-web`.
+- [ ] Autorizar o URL de redirecionamento em Supabase Auth e testar envio/click de magic link com contas de teste.
+- [ ] Publicar uma política de privacidade pública e configurar a secção Data safety na Play Console; confirmar exportação, conservação e resposta a incidentes.
 - [ ] Não colocar chaves `service_role` ou `sb_secret_...` na aplicação. A chave `sb_publishable_...` incorporada no cliente é pública por natureza e depende de RLS/políticas corretas.
 
 ## Lançamento e suporte
