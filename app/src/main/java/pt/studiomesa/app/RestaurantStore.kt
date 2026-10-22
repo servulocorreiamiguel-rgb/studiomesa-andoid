@@ -202,6 +202,17 @@ class RestaurantStore(context: Context) {
             .apply()
     }
 
+    /**
+     * The local restaurant store is demonstration-only. Clear it at authentication
+     * boundaries so names, demo customers, orders or menu edits from a previous device
+     * user cannot appear under another account.
+     */
+    fun clearLocalDemoData() {
+        if (!prefs.edit().clear().commit()) {
+            throw IllegalStateException("Não foi possível limpar os dados locais de demonstração.")
+        }
+    }
+
     fun getCustomerMemberCode(): String {
         val existing = prefs.getString("customer_member_code", null)
         if (!existing.isNullOrBlank()) return existing

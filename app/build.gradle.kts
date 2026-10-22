@@ -3,6 +3,35 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// Commercial builds are opt-in. Ordinary debug builds retain the existing preview package IDs.
+val commercialRelease = providers.gradleProperty("studiomesaCommercialRelease").orNull == "true"
+val releaseApplicationId = providers.gradleProperty("studiomesaReleaseApplicationId").orNull
+val releaseKeystorePath = providers.environmentVariable("STUDIOMESA_KEYSTORE_PATH").orNull
+val releaseKeystorePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orNull
+val releaseKeyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").orNull
+val releaseKeyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").orNull
+
+if (commercialRelease) {
+    val applicationIdPattern = Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+$")
+    if (releaseApplicationId.isNullOrBlank() || !applicationIdPattern.matches(releaseApplicationId)) {
+        throw GradleException(
+            "A release requires -PstudiomesaReleaseApplicationId with the final, valid base package ID. " +
+                "Choose it before publishing; Google Play package IDs cannot be changed after publication."
+        )
+    }
+    if (releaseKeystorePath.isNullOrBlank() || !file(releaseKeystorePath).isFile) {
+        throw GradleException("A release requires a signing keystore at STUDIOMESA_KEYSTORE_PATH.")
+    }
+    val missingSigningValues = listOf(
+        "ANDROID_KEYSTORE_PASSWORD" to releaseKeystorePassword,
+        "ANDROID_KEY_ALIAS" to releaseKeyAlias,
+        "ANDROID_KEY_PASSWORD" to releaseKeyPassword
+    ).filter { it.second.isNullOrBlank() }.map { it.first }
+    if (missingSigningValues.isNotEmpty()) {
+        throw GradleException("Missing release signing environment values: ${missingSigningValues.joinToString()}.")
+    }
+}
+
 android {
     namespace = "pt.studiomesa.app"
     compileSdk = 36
@@ -11,11 +40,31 @@ android {
         // Use a separate application ID for the repaired test builds so they
         // install alongside any older APK signed with a different temporary key.
         // Keep this ID stable for subsequent test builds.
-        applicationId = "pt.studiomesa.preview"
+        applicationId = if (commercialRelease) requireNotNull(releaseApplicationId) else "pt.studiomesa.preview"
         minSdk = 24
         targetSdk = 36
         versionCode = 7
         versionName = "1.5.0"
+    }
+
+    signingConfigs {
+        if (commercialRelease) {
+            create("commercial") {
+                storeFile = file(requireNotNull(releaseKeystorePath))
+                storePassword = requireNotNull(releaseKeystorePassword)
+                keyAlias = requireNotNull(releaseKeyAlias)
+                keyPassword = requireNotNull(releaseKeyPassword)
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            if (commercialRelease) {
+                signingConfig = signingConfigs.getByName("commercial")
+                isDebuggable = false
+            }
+        }
     }
 
     buildFeatures {

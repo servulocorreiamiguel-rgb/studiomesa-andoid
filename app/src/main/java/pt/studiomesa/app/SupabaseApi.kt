@@ -224,6 +224,30 @@ object SupabaseApi {
         call("POST", "/auth/v1/logout?scope=local", accessToken = accessToken)
     }
 
+    /**
+     * Requests deletion of the currently authenticated user's account.
+     * The Edge Function verifies the caller and uses server-only Supabase admin
+     * credentials; no privileged key is embedded in the Android client.
+     */
+    fun deleteAccount(accessToken: String, deleteRestaurantData: Boolean): Boolean {
+        require(accessToken.isNotBlank()) { "Inicia sessão antes de eliminar a conta." }
+        val response = call(
+            "POST",
+            "/functions/v1/delete-account",
+            JSONObject().put("delete_restaurant_data", deleteRestaurantData),
+            accessToken
+        )
+        val result = try {
+            JSONObject(response)
+        } catch (_: Exception) {
+            throw IllegalStateException("O servidor não devolveu uma confirmação válida da eliminação.")
+        }
+        if (!result.optBoolean("deleted", false)) {
+            throw IllegalStateException("O servidor não confirmou a eliminação da conta.")
+        }
+        return result.optBoolean("restaurant_data_deleted", false)
+    }
+
     fun isOAuthProviderEnabled(provider: String): Boolean {
         require(provider == "google" || provider == "azure") { "Fornecedor de início de sessão inválido." }
         val settings = jsonCall("GET", "/auth/v1/settings")
@@ -318,9 +342,14 @@ object SupabaseApi {
         ))
     }
 
+    /**
+     * Uses the client-generated row ID as the retry key. If a POST committed but its
+     * response was lost, a retry can verify the same row instead of creating a duplicate.
+     */
     fun addMenuItem(
         token: String,
         restaurantId: String,
+        itemId: String,
         name: String,
         category: String,
         description: String,
@@ -328,21 +357,55 @@ object SupabaseApi {
         cost: Double,
         allergens: String
     ) {
-        mutateRows(
-            "POST",
-            "/rest/v1/menu_items",
-            JSONObject()
-                .put("restaurant_id", restaurantId)
-                .put("name", name.trim())
-                .put("category", category.trim())
-                .put("description", description.trim())
-                .put("price", price)
-                .put("cost", cost)
-                .put("allergens", allergens.trim())
-                .put("is_active", true),
-            token,
-            "O servidor não confirmou a criação do artigo da carta."
-        )
+        require(runCatching { java.util.UUID.fromString(itemId).toString() == itemId }.getOrDefault(false)) {
+            "O identificador do artigo não é válido."
+        }
+        val normalizedName = name.trim()
+        val normalizedCategory = category.trim()
+        val normalizedDescription = description.trim()
+        val normalizedAllergens = allergens.trim()
+        val body = JSONObject()
+            .put("id", itemId)
+            .put("restaurant_id", restaurantId)
+            .put("name", normalizedName)
+            .put("category", normalizedCategory)
+            .put("description", normalizedDescription)
+            .put("price", price)
+            .put("cost", cost)
+            .put("allergens", normalizedAllergens)
+            .put("is_active", true)
+
+        try {
+            mutateRows(
+                "POST",
+                "/rest/v1/menu_items",
+                body,
+                token,
+                "O servidor não confirmou a criação do artigo da carta."
+            )
+        } catch (writeError: Exception) {
+            val existingMatches = runCatching {
+                val encodedId = URLEncoder.encode(itemId, "UTF-8")
+                val rows = JSONArray(call(
+                    "GET",
+                    "/rest/v1/menu_items?select=id,restaurant_id,name,category,description,price,cost,allergens,is_active&id=eq.$encodedId",
+                    null,
+                    token
+                ))
+                val row = rows.optJSONObject(0)
+                row != null &&
+                    row.optString("id") == itemId &&
+                    row.optString("restaurant_id") == restaurantId &&
+                    row.optString("name") == normalizedName &&
+                    row.optString("category") == normalizedCategory &&
+                    row.optString("description") == normalizedDescription &&
+                    kotlin.math.abs(row.optDouble("price", Double.NaN) - price) < 0.000001 &&
+                    kotlin.math.abs(row.optDouble("cost", Double.NaN) - cost) < 0.000001 &&
+                    row.optString("allergens") == normalizedAllergens &&
+                    row.optBoolean("is_active", false)
+            }.getOrDefault(false)
+            if (!existingMatches) throw writeError
+        }
     }
 
     fun updateMenuItem(
@@ -640,6 +703,39 @@ object SupabaseApi {
             .put("p_low_stock_threshold", lowStockThreshold)
             .put("p_note", note.trim())
         return call("POST", "/rest/v1/rpc/save_inventory_item", body, token).trim().trim('"')
+    }
+
+    fun createInventoryItem(
+        token: String,
+        requestId: String,
+        restaurantId: String,
+        name: String,
+        unit: String,
+        quantity: Double,
+        lowStockThreshold: Double,
+        note: String
+    ): String {
+        require(runCatching { java.util.UUID.fromString(requestId).toString() == requestId }.getOrDefault(false)) {
+            "O identificador da tentativa de criação de stock não é válido."
+        }
+        val body = JSONObject()
+            .put("p_client_request_id", requestId)
+            .put("p_restaurant_id", restaurantId)
+            .put("p_name", name.trim())
+            .put("p_unit", unit.trim())
+            .put("p_quantity", quantity)
+            .put("p_low_stock_threshold", lowStockThreshold)
+            .put("p_note", note.trim())
+        val itemId = call(
+            "POST",
+            "/rest/v1/rpc/create_inventory_item_idempotent",
+            body,
+            token
+        ).trim().trim('"')
+        require(runCatching { java.util.UUID.fromString(itemId).toString() == itemId }.getOrDefault(false)) {
+            "O servidor não confirmou a criação do artigo de stock."
+        }
+        return itemId
     }
 
     fun adjustInventoryStock(

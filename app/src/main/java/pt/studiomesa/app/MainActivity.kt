@@ -32,6 +32,7 @@ class MainActivity : Activity() {
     private var activePage = "Início"
     private val backendPrefs by lazy { getSharedPreferences("studiomesa_backend", MODE_PRIVATE) }
     private val secureSession by lazy { SecureSessionStore(this) }
+    private val pendingRequestIds by lazy { PendingRequestIds(this) }
     // Reservation contacts are kept in memory only, not persisted to SharedPreferences.
     private var reservationCache = JSONArray()
     private var reservationsLoaded = false
@@ -71,6 +72,13 @@ class MainActivity : Activity() {
             .remove("reservations_loaded")
             .apply()
         store = RestaurantStore(this)
+        // Remove pre-release local demo records from accounts that were already signed in
+        // when this privacy isolation was introduced.
+        if (backendPrefs.getString("user_id", "").orEmpty().isNotBlank() &&
+            !backendPrefs.getBoolean("local_demo_data_isolated_v1", false)) {
+            store.clearLocalDemoData()
+            backendPrefs.edit().putBoolean("local_demo_data_isolated_v1", true).apply()
+        }
         window.statusBarColor = forestDeep
         window.navigationBarColor = forestDeep
         renderApp()
@@ -1168,26 +1176,29 @@ class MainActivity : Activity() {
             background = rounded(paper, 12)
         }
         form.addView(primaryButton("Calcular preço sugerido") {
-            val cost = costField.text.toString().trim().replace(',', '.').toDoubleOrNull()
-            val percentage = percentageField.text.toString().trim().replace(',', '.').toDoubleOrNull()
-            when {
-                cost == null || !cost.isFinite() || cost <= 0.0 -> costField.error = "Introduz um custo superior a zero"
-                percentage == null || !percentage.isFinite() || percentage <= 0.0 || percentage > 100.0 -> percentageField.error = "Usa uma percentagem entre 0 e 100"
-                else -> {
-                    val suggested = cost / (percentage / 100.0)
-                    if (!suggested.isFinite()) {
-                        costField.error = "Os valores são demasiado elevados para calcular um preço."
-                        return@primaryButton
-                    }
-                    val gross = suggested - cost
-                    val marginPercent = String.format(Locale("pt", "PT"), "%.1f%%", (gross / suggested) * 100.0)
-                    result.text = "PREÇO INDICATIVO\n" + money(suggested) +
-                        "\n\nCusto por unidade: " + money(cost) +
-                        "\nMargem bruta estimada: " + money(gross) +
-                        "\nMargem bruta: " + marginPercent
-                    result.setTextColor(forest)
+            val calculation = try {
+                PriceCalculator.calculate(
+                    costField.text.toString(),
+                    percentageField.text.toString()
+                )
+            } catch (error: PriceCalculationException) {
+                when (error.field) {
+                    PriceInputField.COST -> costField.error = error.message
+                    PriceInputField.TARGET_COST_PERCENT -> percentageField.error = error.message
                 }
+                return@primaryButton
             }
+
+            result.text = "PREÇO INDICATIVO\n" + money(calculation.suggestedPrice.toDouble()) +
+                "\n\nCusto por unidade: " + money(calculation.cost.toDouble()) +
+                "\nCusto sobre o preço final: " + String.format(
+                    Locale("pt", "PT"), "%.1f%%", calculation.actualCostPercent.toDouble()
+                ) +
+                "\nMargem bruta estimada: " + money(calculation.grossProfit.toDouble()) +
+                "\nMargem bruta: " + String.format(
+                    Locale("pt", "PT"), "%.1f%%", calculation.grossMarginPercent.toDouble()
+                )
+            result.setTextColor(forest)
         }, LinearLayout.LayoutParams(-1, dp(48)))
         addGap(form, 10)
         form.addView(result)
@@ -1378,8 +1389,9 @@ class MainActivity : Activity() {
             throw IllegalStateException("O servidor não devolveu um identificador de conta válido.")
         }
 
-        store.clearCustomerLocalIdentity()
+        store.clearLocalDemoData()
         backendPrefs.edit()
+            .putBoolean("local_demo_data_isolated_v1", true)
             .remove("user_id").remove("user_email")
             .remove("access_token").remove("refresh_token")
             .remove("restaurant_id").remove("restaurant_name").remove("join_code")
@@ -2048,14 +2060,21 @@ class MainActivity : Activity() {
         }
         container.addView(card, cardParams())
         addGap(container, 3)
+        if (token.isNotBlank()) {
+            container.addView(secondaryButton("Eliminar conta permanentemente") {
+                showDeleteAccountConfirmation()
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+            addGap(container, 7)
+        }
         container.addView(secondaryButton("Terminar sessão neste dispositivo") {
             val tokenToRevoke = backendToken()
             if (tokenToRevoke.isNotBlank()) {
                 Thread { runCatching { SupabaseApi.signOut(tokenToRevoke) } }.start()
             }
             secureSession.clear()
-            store.clearCustomerLocalIdentity()
-            backendPrefs.edit().remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
+            store.clearLocalDemoData()
+            backendPrefs.edit().putBoolean("local_demo_data_isolated_v1", true)
+                .remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
                 .remove("restaurant_id").remove("restaurant_name").remove("join_code")
                 .remove("staff_join_code").remove("restaurant_role")
                 .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
@@ -2070,6 +2089,86 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(-1, dp(44)))
         addGap(container, 10)
         container.addView(label("As funções de gestão e os dados de cada restaurante são controlados por permissões no servidor.", 12f, false, muted))
+    }
+
+    private fun showDeleteAccountConfirmation() {
+        if (backendToken().isBlank()) {
+            AlertDialog.Builder(this)
+                .setTitle("Inicia sessão")
+                .setMessage("Inicia sessão na conta que pretendes eliminar e tenta novamente.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+
+        val isOwner = backendPrefs.getString("restaurant_role", "").orEmpty() == "owner" &&
+            backendRestaurantId().isNotBlank()
+
+        if (isOwner) {
+            AlertDialog.Builder(this)
+                .setTitle("Eliminar conta e restaurante?")
+                .setMessage(
+                    "A eliminação de uma conta de proprietário também elimina permanentemente o restaurante, " +
+                        "a carta, as mesas, os pedidos, as reservas, o stock, os códigos e os dados de fidelização " +
+                        "associados. Esta ação não pode ser desfeita. Os outros membros da equipa têm de ser " +
+                        "removidos primeiro; o servidor verifica esta condição antes de eliminar qualquer dado."
+                )
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Continuar") { _, _ ->
+                    AlertDialog.Builder(this)
+                        .setTitle("Confirmação final")
+                        .setMessage("Confirma que queres eliminar definitivamente a tua conta e todos os dados deste restaurante?")
+                        .setNegativeButton("Manter conta", null)
+                        .setPositiveButton("Eliminar definitivamente") { _, _ ->
+                            performAccountDeletion(deleteRestaurantData = true)
+                        }
+                        .show()
+                }
+                .show()
+        } else {
+            AlertDialog.Builder(this)
+                .setTitle("Eliminar conta?")
+                .setMessage(
+                    "A conta será eliminada e a associação ao cartão de fidelização será removida. " +
+                        "Os registos operacionais partilhados do restaurante são preservados quando possível, " +
+                        "e a autoria desta conta é anonimizada no histórico. Esta ação não pode ser desfeita."
+                )
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Eliminar conta") { _, _ ->
+                    performAccountDeletion(deleteRestaurantData = false)
+                }
+                .show()
+        }
+    }
+
+    private fun performAccountDeletion(deleteRestaurantData: Boolean) {
+        runBackend({
+            val restaurantDeleted = SupabaseApi.deleteAccount(backendToken(), deleteRestaurantData)
+            if (restaurantDeleted) "DELETED_RESTAURANT" else "DELETED_ACCOUNT"
+        }) { result ->
+            secureSession.clear()
+            runCatching { pendingRequestIds.clearAll() }
+            store.clearLocalDemoData()
+            backendPrefs.edit()
+                .clear()
+                .putBoolean("local_demo_data_isolated_v1", true)
+                .apply()
+            reservationCache = JSONArray()
+            reservationsLoaded = false
+
+            if (isCustomerApp) renderCustomerApp() else renderApp()
+
+            val message = if (result == "DELETED_RESTAURANT") {
+                "A conta e os dados do restaurante foram eliminados permanentemente."
+            } else {
+                "A conta foi eliminada. A associação de fidelização foi removida e a autoria dos registos operacionais preservados foi anonimizada."
+            }
+            AlertDialog.Builder(this)
+                .setTitle("Conta eliminada")
+                .setMessage(message)
+                .setPositiveButton("OK", null)
+                .show()
+        }
     }
 
     private fun loadRemoteCustomers(): MutableList<LoyaltyCustomer> {
@@ -2212,7 +2311,6 @@ class MainActivity : Activity() {
     }
 
     private fun showCustomerPointsDialog(customer: LoyaltyCustomer, redeem: Boolean) {
-        val requestIdsByPayload = mutableMapOf<String, String>()
         val amountField = inputField("Número inteiro de pontos", InputType.TYPE_CLASS_NUMBER)
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -2246,8 +2344,13 @@ class MainActivity : Activity() {
                                 .put("delta", delta)
                                 .put("note", noteText)
                                 .toString()
-                            val requestId = requestIdsByPayload.getOrPut(signature) {
-                                java.util.UUID.randomUUID().toString()
+                            val requestOperation = "loyalty_adjust"
+                            val requestAccountId = backendPrefs.getString("user_id", "").orEmpty()
+                            val requestId = try {
+                                pendingRequestIds.getOrCreate(requestOperation, requestAccountId, signature)
+                            } catch (_: Exception) {
+                                amountField.error = "Não foi possível guardar a referência segura. Tenta novamente."
+                                return@setOnClickListener
                             }
                             runBackend({
                                 SupabaseApi.adjustPoints(
@@ -2259,6 +2362,7 @@ class MainActivity : Activity() {
                             }) {
                                 dialog.dismiss()
                                 renderApp()
+                                pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
                             }
                         } else if (store.adjustCustomerPoints(customer.code, delta)) {
                             dialog.dismiss()
@@ -2482,6 +2586,13 @@ class MainActivity : Activity() {
         syncNote.addView(label(if (backendMemberId().isBlank()) "Para ver o saldo real, inicia sessão e associa a conta com o código fornecido pelo restaurante." else "Restaurante associado: " + (backendPrefs.getString("member_restaurant_name", "Restaurante") ?: "Restaurante") + ". Atualiza o saldo quando quiseres consultar as alterações mais recentes.", 12f, false, muted))
         content.addView(syncNote, cardParams())
 
+        if (backendToken().isNotBlank()) {
+            content.addView(secondaryButton("Eliminar conta permanentemente") {
+                showDeleteAccountConfirmation()
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+            addGap(content, 7)
+        }
+
         content.addView(secondaryButton("Terminar sessão neste dispositivo") {
             val tokenToRevoke = backendToken()
             if (tokenToRevoke.isNotBlank()) {
@@ -2658,7 +2769,6 @@ class MainActivity : Activity() {
     }
 
     private fun showReservationDialog() {
-        val requestIdsByPayload = mutableMapOf<String, String>()
         if (!hasRemoteRestaurant()) {
             AlertDialog.Builder(this).setMessage("Liga primeiro o restaurante na secção Conta.")
                 .setPositiveButton("OK", null).show()
@@ -2732,8 +2842,13 @@ class MainActivity : Activity() {
                             .toString()
                         // If the server committed but the reply was lost, the same payload
                         // reuses its UUID; changed form data receives a different UUID.
-                        val requestId = requestIdsByPayload.getOrPut(signature) {
-                            java.util.UUID.randomUUID().toString()
+                        val requestOperation = "reservation_create"
+                        val requestAccountId = backendPrefs.getString("user_id", "").orEmpty()
+                        val requestId = try {
+                            pendingRequestIds.getOrCreate(requestOperation, requestAccountId, signature)
+                        } catch (_: Exception) {
+                            notes.error = "Não foi possível guardar a referência segura. Tenta novamente."
+                            return@setOnClickListener
                         }
                         runBackend({
                             SupabaseApi.createReservation(
@@ -2751,6 +2866,7 @@ class MainActivity : Activity() {
                             // user's entered reservation details remain available to retry.
                             dialog.dismiss()
                             renderApp()
+                            pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
                         }
                     }
                 }
@@ -2890,18 +3006,51 @@ class MainActivity : Activity() {
                     !StockDecimalValidator.hasAtMostThreeDecimalPlaces(lowText) -> threshold.error = "Usa no máximo três casas decimais."
                     note.text.toString().length > 500 -> note.error = "Máximo de 500 caracteres."
                     else -> {
+                        val restaurantId = backendRestaurantId()
+                        val itemNote = note.text.toString().trim()
+                        val requestOperation = "stock_item_create"
+                        val requestAccountId = backendPrefs.getString("user_id", "").orEmpty()
+                        val signature = if (item == null) {
+                            JSONObject()
+                                .put("restaurant_id", restaurantId)
+                                .put("name", itemName)
+                                .put("unit", itemUnit)
+                                .put("quantity", qty)
+                                .put("low_stock_threshold", low)
+                                .put("note", itemNote)
+                                .toString()
+                        } else ""
+                        val requestId = if (item == null) {
+                            try {
+                                pendingRequestIds.getOrCreate(requestOperation, requestAccountId, signature)
+                            } catch (_: Exception) {
+                                name.error = "Não foi possível guardar a referência segura. Tenta novamente."
+                                return@setOnClickListener
+                            }
+                        } else null
                         runBackend({
-                            SupabaseApi.saveInventoryItem(
-                                backendToken(), backendRestaurantId(), item?.optString("id"),
-                                itemName, itemUnit, qty, low, note.text.toString()
-                            )
-                            val latest = SupabaseApi.listInventoryItems(backendToken(), backendRestaurantId())
+                            val token = backendToken()
+                            if (item == null) {
+                                SupabaseApi.createInventoryItem(
+                                    token, requireNotNull(requestId), restaurantId,
+                                    itemName, itemUnit, qty, low, itemNote
+                                )
+                            } else {
+                                SupabaseApi.saveInventoryItem(
+                                    token, restaurantId, item.optString("id"),
+                                    itemName, itemUnit, qty, low, itemNote
+                                )
+                            }
+                            val latest = SupabaseApi.listInventoryItems(token, restaurantId)
                             backendPrefs.edit().putString("remote_inventory_json", latest.toString())
                                 .putBoolean("inventory_loaded", true).apply()
                             "OK"
                         }) {
                             dialog.dismiss()
                             renderApp()
+                            if (requestId != null) {
+                                pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
+                            }
                         }
                     }
                 }
@@ -2912,7 +3061,6 @@ class MainActivity : Activity() {
     }
 
     private fun showStockAdjustmentDialog(itemId: String, itemName: String, unit: String, isInbound: Boolean) {
-        val requestIdsByPayload = mutableMapOf<String, String>()
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(8), dp(18), dp(10))
@@ -2954,8 +3102,13 @@ class MainActivity : Activity() {
                         .put("delta", delta)
                         .put("note", normalizedNote)
                         .toString()
-                    val requestId = requestIdsByPayload.getOrPut(signature) {
-                        java.util.UUID.randomUUID().toString()
+                    val requestOperation = "stock_adjust"
+                    val requestAccountId = backendPrefs.getString("user_id", "").orEmpty()
+                    val requestId = try {
+                        pendingRequestIds.getOrCreate(requestOperation, requestAccountId, signature)
+                    } catch (_: Exception) {
+                        amount.error = "Não foi possível guardar a referência segura. Tenta novamente."
+                        return@setOnClickListener
                     }
                     runBackend({
                         SupabaseApi.adjustInventoryStock(
@@ -2968,6 +3121,7 @@ class MainActivity : Activity() {
                     }) {
                         dialog.dismiss()
                         renderApp()
+                        pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
                     }
                 }
             }
@@ -3098,7 +3252,6 @@ class MainActivity : Activity() {
     }
 
     private fun showCreateOrderDialog() {
-        val requestIdsByPayload = mutableMapOf<String, String>()
         val cloudMode = hasRemoteRestaurant()
         val items = if (cloudMode) remoteMenuEntries() else store.getMenu()
         if (items.isEmpty()) {
@@ -3194,8 +3347,13 @@ class MainActivity : Activity() {
                                 .put("notes", notes)
                                 .toString()
                             // Exact retries reuse the same key; edits get a new key.
-                            val requestId = requestIdsByPayload.getOrPut(signature) {
-                                java.util.UUID.randomUUID().toString()
+                            val requestOperation = "order_create"
+                            val requestAccountId = backendPrefs.getString("user_id", "").orEmpty()
+                            val requestId = try {
+                                pendingRequestIds.getOrCreate(requestOperation, requestAccountId, signature)
+                            } catch (_: Exception) {
+                                quantityField.error = "Não foi possível guardar a referência segura. Tenta novamente."
+                                return@setOnClickListener
                             }
                             runBackend({
                                 val token = backendToken()
@@ -3209,6 +3367,7 @@ class MainActivity : Activity() {
                                 dialog.dismiss()
                                 activePage = "Pedidos"
                                 renderApp()
+                                pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
                             }
                         } else {
                             val now = System.currentTimeMillis()
@@ -3370,14 +3529,32 @@ class MainActivity : Activity() {
                     else -> {
                         if (hasRemoteRestaurant()) {
                             val restaurantId = backendRestaurantId()
+                            val signature = JSONObject()
+                                .put("restaurant_id", restaurantId)
+                                .put("name", name)
+                                .put("category", category)
+                                .put("description", description)
+                                .put("price", price)
+                                .put("cost", cost)
+                                .put("allergens", allergens)
+                                .toString()
+                            val requestOperation = "menu_add"
+                            val requestAccountId = backendPrefs.getString("user_id", "").orEmpty()
+                            val requestId = try {
+                                pendingRequestIds.getOrCreate(requestOperation, requestAccountId, signature)
+                            } catch (_: Exception) {
+                                nameField.error = "Não foi possível guardar a referência segura. Tenta novamente."
+                                return@setOnClickListener
+                            }
                             runBackend({
                                 val token = backendToken()
-                                SupabaseApi.addMenuItem(token, restaurantId, name, category, description, price, cost, allergens)
+                                SupabaseApi.addMenuItem(token, restaurantId, requestId, name, category, description, price, cost, allergens)
                                 cacheRemoteOperations(token, restaurantId)
                                 "OK"
                             }) {
                                 dialog.dismiss()
                                 renderApp()
+                                pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
                             }
                         } else {
                             val menu = store.getMenu()

@@ -10,7 +10,7 @@
 - Usar uma conta de teste de proprietário e outra de funcionário do mesmo restaurante; criar também uma conta de outro restaurante e uma conta de cliente.
 - Confirmar que só existem dados de teste. Não usar nomes, contactos ou pedidos de clientes reais.
 - Guardar o commit, a variante instalada e os resultados de cada execução.
-- O workflow compila as cinco variantes debug, executa `testEssencialRestauranteDebugUnitTest` (testes unitários do parser de autenticação e da validação da precisão decimal de stock) e Android Lint. Estes controlos não substituem os testes funcionais abaixo.
+- O workflow compila as cinco variantes debug, executa os testes unitários das cinco variantes de distribuição (parser de autenticação e validação da precisão decimal de stock) e Android Lint. Estes controlos não substituem os testes funcionais abaixo.
 
 ## Casos de teste
 
@@ -39,9 +39,34 @@
 | ORD-21 | Regressão | Abrir um pedido antigo criado antes dos novos campos | Valores predefinidos coerentes; a aplicação não falha |
 | ORD-22 | Regressão | Reiniciar a aplicação e consultar o pedido | Dados persistem conforme a origem local/remota |
 
+## Casos de regressão da calculadora de preços
+
+Os casos PC-01 a PC-04 são cobertos por `PriceCalculatorTest`; os respetivos resultados só devem ser considerados aprovados depois de a execução CI do commit candidato passar.
+
+| PC-01 | Calculadora de preço | Custo 3,20 € e custo pretendido 30% | Preço 10,67 €, lucro bruto estimado 7,47 €, custo/preço 30,0% e margem bruta 70,0% |
+| PC-02 | Calculadora de preço | Custo 1,00 € e custo pretendido 30% | Preço arredondado a 3,33 € antes do cálculo de lucro; lucro bruto 2,33 € |
+| PC-03 | Calculadora de preço | Custo 12,99 € e custo pretendido 100% | Preço 12,99 €, lucro bruto 0,00 € e margem 0,0% |
+| PC-04 | Validação da calculadora | Custo zero, custo com mais de duas casas decimais, percentagem <= 0 ou > 100, texto inválido/NaN/infinito | Entrada rejeitada com mensagem no campo correto; sem crash nem resultado não numérico |
+
+## Eliminação de conta e proteção de dados
+
+Os casos ACCT-01 a ACCT-06 são **pendentes de teste ponta a ponta com contas descartáveis**. Nunca os executar com uma conta real que contenha dados necessários.
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| ACCT-01 | Autorização / sem sessão | Enviar pedido de eliminação sem token de sessão válido | Endpoint rejeita o pedido; nenhuma conta ou dado é alterado |
+| ACCT-02 | Conta pessoal | Eliminar uma conta de teste que não seja proprietária | A conta deixa de autenticar; associação de fidelização é removida; as referências de autoria dos registos operacionais preservados ficam nulas |
+| ACCT-03 | Proprietário / segurança | Pedir eliminação do proprietário sem confirmação explícita dos dados do restaurante | Pedido recusado; restaurante e todos os dados permanecem |
+| ACCT-04 | Proprietário / equipa | Pedir eliminação do proprietário quando ainda há membros adicionais | Pedido recusado; nenhum dado do restaurante é apagado |
+| ACCT-05 | Proprietário / confirmação | Remover os restantes membros da conta de teste, confirmar duas vezes e eliminar proprietário | Conta, restaurante e dados operacionais associados são eliminados; não sobra fila de eliminação pendente |
+| ACCT-06 | Erro / expiração | Forçar falha antes de o Auth Admin apagar o utilizador ou deixar a fila ultrapassar 15 minutos | A fila é cancelada ou expira e não elimina o restaurante por si só |
+| ACCT-07 | Eliminação web / email | Pedir ligação na página externa, abrir a ligação no mesmo navegador, escolher eliminação de conta e confirmar | O utilizador autenticado consegue enviar um pedido; email inválido/sem conta não revela se a conta existe; a conta é eliminada apenas após confirmação e verificação do servidor |
+| ACCT-08 | Redirecionamento web | Tentar magic link antes e depois de permitir o URL da página em Supabase Auth Redirect URLs | Antes da configuração, a ligação falha de forma segura; depois de autorizado, regressa à página externa e estabelece uma sessão válida |
+| ACCT-09 | Concorrência / proprietário | Entre a confirmação inicial e a eliminação autenticada, associar um segundo membro ao restaurante de teste | O gatilho volta a verificar os membros e reverte a eliminação do Auth; não elimina o restaurante nem a nova equipa |
+
 ## Execução automatizada disponível
 
-O workflow `.github/workflows/android.yml` compila as cinco variantes debug, executa `testEssencialRestauranteDebugUnitTest` e Android Lint. Os testes unitários cobrem a descodificação de parâmetros de autenticação (incluindo componentes malformados) e a regra de até três casas decimais para os valores de stock. Não existem testes instrumentados identificados; os fluxos de autenticação contra o servidor, reservas, pedidos, stock, permissões e sincronização continuam a exigir testes manuais em Android.
+O workflow `.github/workflows/android.yml` compila as cinco variantes debug, executa os testes unitários das cinco variantes de distribuição e Android Lint. Os testes unitários cobrem a descodificação de parâmetros de autenticação (incluindo componentes malformados) e a regra de até três casas decimais para os valores de stock. Não existem testes instrumentados identificados; os fluxos de autenticação contra o servidor, reservas, pedidos, stock, permissões e sincronização continuam a exigir testes manuais em Android.
 
 Comando de compilação usado pelo workflow:
 
@@ -128,3 +153,7 @@ Estes casos foram acrescentados após a revisão do código. **Estado inicial: p
 | REL-11 | Idempotência / payload alterado | Reutilizar diretamente uma chave de stock/pontos com outro artigo, cliente ou valor | A operação é rejeitada; o movimento/saldo original não é alterado |
 | REL-12 | Compatibilidade / versão antiga | Tentar executar um RPC antigo não idempotente após a migração | A role de cliente recebe erro de permissão; a operação não altera dados |
 | REL-13 | Reservas / perda de resposta | Confirmar uma reserva, perder a resposta e repetir o mesmo estado | A repetição é tratada como sucesso; a reserva continua num único estado, sem falso erro |
+| REL-14 | Criação de stock / perda de resposta | Criar um artigo, perder a resposta após a gravação e repetir a mesma tentativa | Devolve o mesmo ID; existe um artigo e, quando a quantidade inicial é positiva, apenas um movimento inicial |
+| REL-15 | Reutilização de chave / stock | Repetir o identificador de criação de stock com nome, unidade, quantidade, limite ou nota diferentes | A operação é rejeitada; o artigo e o movimento originais permanecem inalterados |
+| REL-16 | Regressão / processo terminado | Interromper o processo Android durante a gravação de pedido, reserva, ajuste de stock ou pontos e repetir o mesmo payload | A chave pendente é reutilizada; o servidor não regista operações duplicadas |
+| REL-17 | Carta / perda de resposta | Criar um artigo da carta, perder a resposta e reenviar os mesmos dados | A aplicação reconhece o artigo original através do mesmo UUID; não é criado um duplicado |

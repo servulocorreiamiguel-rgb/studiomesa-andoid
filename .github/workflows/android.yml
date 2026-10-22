@@ -19,6 +19,7 @@ jobs:
   build:
     name: Compile debug APK
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout source
         uses: actions/checkout@v7
@@ -85,11 +86,35 @@ jobs:
       - name: Compile app
         run: gradle --no-daemon assembleEssencialRestauranteDebug assembleProfissionalRestauranteDebug assembleProfissionalClienteDebug assemblePremiumRestauranteDebug assemblePremiumClienteDebug
 
-      - name: Run authentication parser unit tests
-        run: gradle --no-daemon testEssencialRestauranteDebugUnitTest
+      - name: Run unit tests for every distributed variant
+        run: gradle --no-daemon testEssencialRestauranteDebugUnitTest testProfissionalRestauranteDebugUnitTest testProfissionalClienteDebugUnitTest testPremiumRestauranteDebugUnitTest testPremiumClienteDebugUnitTest
 
       - name: Run Android lint
+        timeout-minutes: 10
         run: gradle --no-daemon lint
+
+      # Build one commercial variant with a throwaway CI key. This validates the
+      # release Gradle/signing path without using or uploading the owner's key.
+      - name: Validate commercial release configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          KEYSTORE_PATH="$RUNNER_TEMP/studiomesa-ci-release.jks"
+          CI_KEY_PASSWORD="ci-only-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          keytool -genkeypair -noprompt -keystore "$KEYSTORE_PATH" -storetype JKS \
+            -storepass "$CI_KEY_PASSWORD" -alias "studiomesa-ci" \
+            -keypass "$CI_KEY_PASSWORD" -keyalg RSA -keysize 2048 -validity 365 \
+            -dname "CN=StudioMesa CI,O=Example,C=PT"
+          export STUDIOMESA_KEYSTORE_PATH="$KEYSTORE_PATH"
+          export ANDROID_KEYSTORE_PASSWORD="$CI_KEY_PASSWORD"
+          export ANDROID_KEY_ALIAS="studiomesa-ci"
+          export ANDROID_KEY_PASSWORD="$CI_KEY_PASSWORD"
+          gradle --no-daemon \
+            -PstudiomesaCommercialRelease=true \
+            -PstudiomesaReleaseApplicationId=pt.studiomesa.ci \
+            bundleEssencialRestauranteRelease
+          find app/build/outputs/bundle -type f -name '*.aab' -print -quit | grep -q .
+          rm -f "$KEYSTORE_PATH"
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4

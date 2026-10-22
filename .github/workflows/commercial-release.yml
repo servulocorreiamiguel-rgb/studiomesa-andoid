@@ -1,0 +1,132 @@
+name: Build signed StudioMesa commercial AABs
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type BUILD to create signed commercial bundles"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: studiomesa-commercial-release
+  cancel-in-progress: false
+
+jobs:
+  build-signed-bundles:
+    name: Test and build signed AABs
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Require explicit confirmation
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != "BUILD" ]; then
+            echo "Stopped: type BUILD in the workflow input to confirm."
+            exit 1
+          fi
+
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Configure Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+          echo "$SDK_ROOT/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          if [ -x "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
+            SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          elif command -v sdkmanager >/dev/null 2>&1; then
+            SDKMANAGER="$(command -v sdkmanager)"
+          else
+            echo "Android SDK command-line tools were not found."
+            exit 1
+          fi
+          yes | "$SDKMANAGER" --licenses || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Validate signing secrets and keystore
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          STUDIOMESA_RELEASE_APPLICATION_ID: ${{ vars.STUDIOMESA_RELEASE_APPLICATION_ID }}
+        run: |
+          set -euo pipefail
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD STUDIOMESA_RELEASE_APPLICATION_ID; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing required GitHub Actions secret/variable: $name"
+              exit 1
+            fi
+          done
+          KEYSTORE_PATH="$RUNNER_TEMP/studiomesa-release.jks"
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          test -s "$KEYSTORE_PATH"
+          keytool -list -keystore "$KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" >/dev/null
+          echo "STUDIOMESA_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+
+      - name: Run unit tests for every distributed variant
+        run: gradle --no-daemon testEssencialRestauranteDebugUnitTest testProfissionalRestauranteDebugUnitTest testProfissionalClienteDebugUnitTest testPremiumRestauranteDebugUnitTest testPremiumClienteDebugUnitTest
+
+      - name: Run Android lint
+        timeout-minutes: 10
+        run: gradle --no-daemon lint
+
+      - name: Build signed commercial bundles
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          STUDIOMESA_RELEASE_APPLICATION_ID: ${{ vars.STUDIOMESA_RELEASE_APPLICATION_ID }}
+        run: |
+          set -euo pipefail
+          gradle --no-daemon \
+            -PstudiomesaCommercialRelease=true \
+            -PstudiomesaReleaseApplicationId="$STUDIOMESA_RELEASE_APPLICATION_ID" \
+            bundleEssencialRestauranteRelease \
+            bundleProfissionalRestauranteRelease \
+            bundleProfissionalClienteRelease \
+            bundlePremiumRestauranteRelease \
+            bundlePremiumClienteRelease
+          mapfile -d '' bundles < <(find app/build/outputs/bundle -type f -name '*.aab' -print0)
+          if [ "${#bundles[@]}" -ne 5 ]; then
+            echo "Expected five AABs, found ${#bundles[@]}."
+            exit 1
+          fi
+          for bundle in "${bundles[@]}"; do
+            jarsigner -verify "$bundle"
+          done
+          sha256sum "${bundles[@]}" > release-checksums.txt
+
+      - name: Upload signed AABs and checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudioMesa-Commercial-AABs
+          path: |
+            app/build/outputs/bundle/**/*.aab
+            release-checksums.txt
+          if-no-files-found: error
+          retention-days: 14

@@ -11,6 +11,7 @@ local.properties
 
 # Never commit production signing material or local credentials
 *.jks
+*.jks.base64
 *.keystore
 keystore.properties
 .env

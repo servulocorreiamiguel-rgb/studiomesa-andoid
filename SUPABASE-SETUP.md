@@ -31,6 +31,22 @@ Os RPCs antigos não idempotentes `public.adjust_inventory_stock`, `public.adjus
 
 A tabela `public.restaurant_reservations` tem a coluna `client_request_id` e um índice único composto parcial (`restaurant_id`, `created_by`, `client_request_id`). A função `public.create_restaurant_reservation_idempotent` exige uma sessão, valida a pertença ao restaurante e devolve o ID existente quando recebe a mesma chave e o mesmo payload. Uma chave repetida com payload diferente é rejeitada. A app mantém a chave por conteúdo no formulário para que uma repetição após perda de resposta não crie outra reserva. A confirmação ponta a ponta com falha de rede ainda está pendente.
 
+## Criação idempotente de artigos de stock (22/10/2026)
+
+A migração `20261022093532_inventory_item_creation_idempotency.sql` foi aplicada ao projeto Supabase `svwvkfsyevuyabelrtjk` e a sua presença no catálogo foi confirmada. Acrescenta o identificador e o payload original da criação de artigos de inventário e a função `public.create_inventory_item_idempotent`. A função exige sessão e pertença ao restaurante, valida a precisão decimal, devolve o mesmo ID para um reenvio com a mesma chave e os mesmos dados e rejeita a reutilização da chave com dados diferentes. O registo do artigo e do movimento inicial é transacional; uma repetição válida não acrescenta um segundo movimento.
+
+A nova função tem `search_path` vazio, não pode ser executada por `anon` e concede execução a `authenticated` e `service_role`. A função é um endpoint privilegiado intencional e tem de continuar a ser revista como parte da auditoria de `SECURITY DEFINER`. A implementação Android foi preparada no ramo `prepare-commercial-release`; a verificação final depende de passar o CI e de executar o teste ponta a ponta com contas de teste.
+
+## Eliminação de conta e dados associados (22/10/2026)
+
+A migração `20261022134124_account_deletion_support.sql` foi aplicada ao Supabase. A migração `20261022134453_index_account_deletion_queue.sql` cria o índice da fila temporária de pedidos de eliminação. A migração `20261022140116_account_deletion_concurrency_guard.sql` adiciona uma verificação de segurança na transação. A migração `20261022140721_account_deletion_lock_guard.sql` reforça-a bloqueando a linha do restaurante (`FOR UPDATE`) antes de verificar a equipa; assim, a verificação é serializada com adesões concorrentes e a eliminação é revertida se ainda houver membros associados. A Edge Function `delete-account` está implementada no repositório em `supabase/functions/delete-account/index.ts` e ativa no projeto.
+
+O endpoint exige uma sessão de utilizador validada por `withSupabase({ auth: "user" })`; o cliente móvel nunca recebe uma chave privilegiada. O pedido de eliminação é preparado por `public.prepare_account_deletion`, com prazo de 15 minutos, e o endpoint só responde como concluído depois de o Auth Admin confirmar a eliminação do utilizador. Um proprietário tem de confirmar explicitamente a eliminação do restaurante e o servidor recusa o pedido enquanto houver outros membros da equipa. Quando a eliminação é aceite, o gatilho `z_studiomesa_finalize_account_deletion` apaga o restaurante sem membros e os dados operacionais em cascata. No caso de contas que não são proprietárias, as associações de fidelização são removidas e as referências de autoria que têm `ON DELETE SET NULL` são anonimizadas; os registos operacionais partilhados não são apagados por defeito.
+
+Verificações efetuadas depois das migrações: fila sem pedidos pendentes, coluna `loyalty_transactions.created_by` nullable, chave estrangeira com `ON DELETE SET NULL` e um gatilho de eliminação presente. **Ainda falta testar a experiência completa com contas descartáveis dedicadas** (conta sem restaurante, funcionário e proprietário sem outros membros). Não uses contas reais nem dados de clientes nos testes.
+
+A página externa `https://svwvkfsyevuyabelrtjk.supabase.co/functions/v1/account-deletion-web` está ativa e foi verificada por carregamento público. O fluxo de email ainda exige que o URL exato seja adicionado a Authentication → URL Configuration → Redirect URLs. Antes de produção, configura SMTP próprio e confirma magic link/OTP com contas descartáveis; não considerar o recurso operacional até esses testes passarem.
+
 ## Estado verificado do backend (21/10/2026)
 
 - `private.restaurant_join_codes` tem RLS ativa, sem políticas para acesso direto; as contas `anon` e `authenticated` não têm permissões diretas de leitura/escrita. As funções proprietárias de `postgres` foram mantidas e o utilizador `postgres` tem `BYPASSRLS`, para permitir os fluxos `SECURITY DEFINER` que fazem verificações explícitas.
@@ -77,7 +93,7 @@ Não se considera um backup verificado até existir evidência de um restauro te
 - Testar códigos de cliente/equipa inválidos, tentativas repetidas e renovação de códigos.
 - Confirmar que a aplicação de cliente nunca recebe custos internos, saldos de outros clientes ou dados da equipa.
 - Confirmar permissões e papéis de funcionário/proprietário, cópias de segurança e o procedimento de recuperação.
-- Gerar uma versão de produção assinada com uma chave privada guardada fora do repositório. O workflow atual gera apenas APKs de demonstração/debug.
+- Gerar uma versão de produção assinada com uma chave privada guardada fora do repositório. O workflow normal continua a gerar APKs de demonstração/debug; foi adicionado um workflow manual para AABs assinados, documentado em `RELEASE-SETUP.md`, que ainda exige identificador de pacote final, keystore privado e segredos de GitHub configurados.
 
 ## Limitações conhecidas
 
