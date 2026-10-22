@@ -5,10 +5,12 @@ import android.app.AlertDialog
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
+import android.view.WindowInsets
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
@@ -184,6 +186,44 @@ class MainActivity : Activity() {
         return pages
     }
 
+    /**
+     * Android 15+ enforces edge-to-edge for apps targeting API 35+, and Android 16
+     * removes the opt-out for apps targeting API 36. Keep interactive content out
+     * from behind status/navigation bars and display cutouts on every supported version.
+     *
+     * Padding is always based on the root's original values so inset updates never
+     * accumulate padding as the system UI changes (for example, on rotation).
+     */
+    private fun applySystemBarInsets(root: View) {
+        val baseLeft = root.paddingLeft
+        val baseTop = root.paddingTop
+        val baseRight = root.paddingRight
+        val baseBottom = root.paddingBottom
+
+        root.setOnApplyWindowInsetsListener { view, insets ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val safeInsets = insets.getInsets(
+                    WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()
+                )
+                view.setPadding(
+                    baseLeft + safeInsets.left,
+                    baseTop + safeInsets.top,
+                    baseRight + safeInsets.right,
+                    baseBottom + safeInsets.bottom
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                view.setPadding(
+                    baseLeft + insets.systemWindowInsetLeft,
+                    baseTop + insets.systemWindowInsetTop,
+                    baseRight + insets.systemWindowInsetRight,
+                    baseBottom + insets.systemWindowInsetBottom
+                )
+            }
+            insets
+        }
+    }
+
     private fun renderApp() {
         if (isCustomerApp) {
             renderCustomerApp()
@@ -195,6 +235,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(paper)
         }
+        applySystemBarInsets(appRoot)
 
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -2440,6 +2481,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(paper)
         }
+        applySystemBarInsets(appRoot)
 
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
