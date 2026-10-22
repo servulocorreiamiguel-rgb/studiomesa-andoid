@@ -318,9 +318,14 @@ object SupabaseApi {
         ))
     }
 
+    /**
+     * Uses the client-generated row ID as the retry key. If a POST committed but its
+     * response was lost, a retry can verify the same row instead of creating a duplicate.
+     */
     fun addMenuItem(
         token: String,
         restaurantId: String,
+        itemId: String,
         name: String,
         category: String,
         description: String,
@@ -328,21 +333,55 @@ object SupabaseApi {
         cost: Double,
         allergens: String
     ) {
-        mutateRows(
-            "POST",
-            "/rest/v1/menu_items",
-            JSONObject()
-                .put("restaurant_id", restaurantId)
-                .put("name", name.trim())
-                .put("category", category.trim())
-                .put("description", description.trim())
-                .put("price", price)
-                .put("cost", cost)
-                .put("allergens", allergens.trim())
-                .put("is_active", true),
-            token,
-            "O servidor não confirmou a criação do artigo da carta."
-        )
+        require(runCatching { java.util.UUID.fromString(itemId).toString() == itemId }.getOrDefault(false)) {
+            "O identificador do artigo não é válido."
+        }
+        val normalizedName = name.trim()
+        val normalizedCategory = category.trim()
+        val normalizedDescription = description.trim()
+        val normalizedAllergens = allergens.trim()
+        val body = JSONObject()
+            .put("id", itemId)
+            .put("restaurant_id", restaurantId)
+            .put("name", normalizedName)
+            .put("category", normalizedCategory)
+            .put("description", normalizedDescription)
+            .put("price", price)
+            .put("cost", cost)
+            .put("allergens", normalizedAllergens)
+            .put("is_active", true)
+
+        try {
+            mutateRows(
+                "POST",
+                "/rest/v1/menu_items",
+                body,
+                token,
+                "O servidor não confirmou a criação do artigo da carta."
+            )
+        } catch (writeError: Exception) {
+            val existingMatches = runCatching {
+                val encodedId = URLEncoder.encode(itemId, "UTF-8")
+                val rows = JSONArray(call(
+                    "GET",
+                    "/rest/v1/menu_items?select=id,restaurant_id,name,category,description,price,cost,allergens,is_active&id=eq.$encodedId",
+                    null,
+                    token
+                ))
+                val row = rows.optJSONObject(0)
+                row != null &&
+                    row.optString("id") == itemId &&
+                    row.optString("restaurant_id") == restaurantId &&
+                    row.optString("name") == normalizedName &&
+                    row.optString("category") == normalizedCategory &&
+                    row.optString("description") == normalizedDescription &&
+                    kotlin.math.abs(row.optDouble("price", Double.NaN) - price) < 0.000001 &&
+                    kotlin.math.abs(row.optDouble("cost", Double.NaN) - cost) < 0.000001 &&
+                    row.optString("allergens") == normalizedAllergens &&
+                    row.optBoolean("is_active", false)
+            }.getOrDefault(false)
+            if (!existingMatches) throw writeError
+        }
     }
 
     fun updateMenuItem(
