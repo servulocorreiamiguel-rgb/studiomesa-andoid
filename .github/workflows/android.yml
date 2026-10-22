@@ -24,6 +24,9 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v7
 
+      - name: Validate SQL migration function delimiters
+        run: python3 scripts/check_sql_function_delimiters.py
+
       - name: Set up Java 17
         uses: actions/setup-java@v6
         with:
