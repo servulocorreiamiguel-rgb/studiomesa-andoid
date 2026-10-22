@@ -31,6 +31,12 @@ Os RPCs antigos não idempotentes `public.adjust_inventory_stock`, `public.adjus
 
 A tabela `public.restaurant_reservations` tem a coluna `client_request_id` e um índice único composto parcial (`restaurant_id`, `created_by`, `client_request_id`). A função `public.create_restaurant_reservation_idempotent` exige uma sessão, valida a pertença ao restaurante e devolve o ID existente quando recebe a mesma chave e o mesmo payload. Uma chave repetida com payload diferente é rejeitada. A app mantém a chave por conteúdo no formulário para que uma repetição após perda de resposta não crie outra reserva. A confirmação ponta a ponta com falha de rede ainda está pendente.
 
+## Criação idempotente de artigos de stock (22/10/2026)
+
+A migração `20261022093532_inventory_item_creation_idempotency.sql` foi aplicada ao projeto Supabase `svwvkfsyevuyabelrtjk` e a sua presença no catálogo foi confirmada. Acrescenta o identificador e o payload original da criação de artigos de inventário e a função `public.create_inventory_item_idempotent`. A função exige sessão e pertença ao restaurante, valida a precisão decimal, devolve o mesmo ID para um reenvio com a mesma chave e os mesmos dados e rejeita a reutilização da chave com dados diferentes. O registo do artigo e do movimento inicial é transacional; uma repetição válida não acrescenta um segundo movimento.
+
+A nova função tem `search_path` vazio, não pode ser executada por `anon` e concede execução a `authenticated` e `service_role`. A função é um endpoint privilegiado intencional e tem de continuar a ser revista como parte da auditoria de `SECURITY DEFINER`. A implementação Android foi preparada no ramo `prepare-commercial-release`; a verificação final depende de passar o CI e de executar o teste ponta a ponta com contas de teste.
+
 ## Estado verificado do backend (21/10/2026)
 
 - `private.restaurant_join_codes` tem RLS ativa, sem políticas para acesso direto; as contas `anon` e `authenticated` não têm permissões diretas de leitura/escrita. As funções proprietárias de `postgres` foram mantidas e o utilizador `postgres` tem `BYPASSRLS`, para permitir os fluxos `SECURITY DEFINER` que fazem verificações explícitas.
