@@ -37,6 +37,14 @@ A migração `20261022093532_inventory_item_creation_idempotency.sql` foi aplica
 
 A nova função tem `search_path` vazio, não pode ser executada por `anon` e concede execução a `authenticated` e `service_role`. A função é um endpoint privilegiado intencional e tem de continuar a ser revista como parte da auditoria de `SECURITY DEFINER`. A implementação Android foi preparada no ramo `prepare-commercial-release`; a verificação final depende de passar o CI e de executar o teste ponta a ponta com contas de teste.
 
+## Eliminação de conta e dados associados (22/10/2026)
+
+A migração `20261022134124_account_deletion_support.sql` foi aplicada ao Supabase. A migração `20261022134453_index_account_deletion_queue.sql` cria o índice da fila temporária de pedidos de eliminação. A Edge Function `delete-account` está implementada no repositório em `supabase/functions/delete-account/index.ts` e ativa no projeto.
+
+O endpoint exige uma sessão de utilizador validada por `withSupabase({ auth: "user" })`; o cliente móvel nunca recebe uma chave privilegiada. O pedido de eliminação é preparado por `public.prepare_account_deletion`, com prazo de 15 minutos, e o endpoint só responde como concluído depois de o Auth Admin confirmar a eliminação do utilizador. Um proprietário tem de confirmar explicitamente a eliminação do restaurante e o servidor recusa o pedido enquanto houver outros membros da equipa. Quando a eliminação é aceite, o gatilho `z_studiomesa_finalize_account_deletion` apaga o restaurante sem membros e os dados operacionais em cascata. No caso de contas que não são proprietárias, as associações de fidelização são removidas e as referências de autoria que têm `ON DELETE SET NULL` são anonimizadas; os registos operacionais partilhados não são apagados por defeito.
+
+Verificações efetuadas depois das migrações: fila sem pedidos pendentes, coluna `loyalty_transactions.created_by` nullable, chave estrangeira com `ON DELETE SET NULL` e um gatilho de eliminação presente. **Ainda falta testar a experiência completa com contas descartáveis dedicadas** (conta sem restaurante, funcionário e proprietário sem outros membros). Não uses contas reais nem dados de clientes nos testes.
+
 ## Estado verificado do backend (21/10/2026)
 
 - `private.restaurant_join_codes` tem RLS ativa, sem políticas para acesso direto; as contas `anon` e `authenticated` não têm permissões diretas de leitura/escrita. As funções proprietárias de `postgres` foram mantidas e o utilizador `postgres` tem `BYPASSRLS`, para permitir os fluxos `SECURITY DEFINER` que fazem verificações explícitas.
