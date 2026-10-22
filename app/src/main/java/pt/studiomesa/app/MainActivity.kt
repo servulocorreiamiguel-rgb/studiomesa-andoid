@@ -72,6 +72,13 @@ class MainActivity : Activity() {
             .remove("reservations_loaded")
             .apply()
         store = RestaurantStore(this)
+        // Remove pre-release local demo records from accounts that were already signed in
+        // when this privacy isolation was introduced.
+        if (backendPrefs.getString("user_id", "").orEmpty().isNotBlank() &&
+            !backendPrefs.getBoolean("local_demo_data_isolated_v1", false)) {
+            store.clearLocalDemoData()
+            backendPrefs.edit().putBoolean("local_demo_data_isolated_v1", true).apply()
+        }
         window.statusBarColor = forestDeep
         window.navigationBarColor = forestDeep
         renderApp()
@@ -1379,8 +1386,9 @@ class MainActivity : Activity() {
             throw IllegalStateException("O servidor não devolveu um identificador de conta válido.")
         }
 
-        store.clearCustomerLocalIdentity()
+        store.clearLocalDemoData()
         backendPrefs.edit()
+            .putBoolean("local_demo_data_isolated_v1", true)
             .remove("user_id").remove("user_email")
             .remove("access_token").remove("refresh_token")
             .remove("restaurant_id").remove("restaurant_name").remove("join_code")
@@ -2055,8 +2063,9 @@ class MainActivity : Activity() {
                 Thread { runCatching { SupabaseApi.signOut(tokenToRevoke) } }.start()
             }
             secureSession.clear()
-            store.clearCustomerLocalIdentity()
-            backendPrefs.edit().remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
+            store.clearLocalDemoData()
+            backendPrefs.edit().putBoolean("local_demo_data_isolated_v1", true)
+                .remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
                 .remove("restaurant_id").remove("restaurant_name").remove("join_code")
                 .remove("staff_join_code").remove("restaurant_role")
                 .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
