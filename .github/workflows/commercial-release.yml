@@ -19,6 +19,7 @@ jobs:
   build-signed-bundles:
     name: Test and build signed AABs
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - name: Require explicit confirmation
         env:
@@ -90,6 +91,7 @@ jobs:
         run: gradle --no-daemon testEssencialRestauranteDebugUnitTest testProfissionalRestauranteDebugUnitTest testProfissionalClienteDebugUnitTest testPremiumRestauranteDebugUnitTest testPremiumClienteDebugUnitTest
 
       - name: Run Android lint
+        timeout-minutes: 10
         run: gradle --no-daemon lint
 
       - name: Build signed commercial bundles
