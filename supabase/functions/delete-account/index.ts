@@ -60,6 +60,15 @@ Deno.serve(
         // If Auth rejects deletion, clear the short-lived staged request when
         // the user's session is still valid. The database expiry is a fallback.
         await ctx.supabase.rpc("cancel_account_deletion");
+
+        const deletionMessage = deletionError.message ?? "";
+        if (deletionMessage.includes("A equipa do restaurante mudou durante o pedido")) {
+          return Response.json(
+            { message: "A equipa do restaurante mudou enquanto processávamos o pedido. A conta não foi eliminada. Atualiza a equipa e volta a confirmar a eliminação." },
+            { status: 409 },
+          );
+        }
+
         return Response.json(
           { message: "Não foi possível confirmar a eliminação da conta. Inicia sessão e verifica o estado antes de tentares novamente." },
           { status: 502 },
