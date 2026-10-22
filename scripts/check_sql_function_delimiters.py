@@ -13,7 +13,7 @@ def main() -> int:
         return 1
 
     errors: list[str] = []
-    function_open = re.compile(r"\\bAS\\s+\\$function\\$\\s*$", re.IGNORECASE)
+    function_open = re.compile(r"\bAS\s+\$function\$\s*$", re.IGNORECASE)
 
     for path in migrations:
         inside_function = False
