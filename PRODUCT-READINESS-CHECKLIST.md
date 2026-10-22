@@ -86,10 +86,11 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 
 ## Lançamento e suporte
 
-- [x] Workflow atual compila APKs de demonstração/debug.
+- [x] Workflow atual compila APKs de demonstração/debug e executa testes unitários nas cinco variantes de distribuição.
 - [x] Configuração usa compileSdk/targetSdk 36, AGP 8.10.0 e Gradle 8.11.1; a última execução verificada compilou e carregou os cinco APKs debug de demonstração.
-- [ ] Não reutilizar a assinatura debug para uma versão comercial.
-- [ ] Criar release assinada com chave de produção protegida fora do repositório.
+- [x] Adicionado workflow manual que prepara cinco AABs comerciais assinados, exige confirmação explícita, executa testes e Lint e verifica as assinaturas.
+- [ ] Escolher e validar o identificador base definitivo, criar o keystore privado, configurar os GitHub Actions Secrets/Variables e executar o workflow comercial com sucesso.
+- [ ] Terminar os testes ponta a ponta antes de instalar a versão comercial num restaurante real.
 - [ ] Automatizar testes e análise estática e guardar os resultados de cada release.
 - [ ] Definir monitorização, canal de suporte, prazo de resposta, atualizações, manutenção e procedimento de recuperação.
 - [ ] Definir contrato, âmbito funcional, titularidade dos dados, privacidade, conservação e responsabilidades com aconselhamento adequado.
