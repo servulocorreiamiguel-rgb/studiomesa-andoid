@@ -48,4 +48,4 @@ begin
   set status = p_status, updated_at = now()
   where id = p_reservation_id;
 end;
-$function$
+$function$;
