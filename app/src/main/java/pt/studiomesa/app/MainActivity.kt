@@ -2901,18 +2901,51 @@ class MainActivity : Activity() {
                     !StockDecimalValidator.hasAtMostThreeDecimalPlaces(lowText) -> threshold.error = "Usa no máximo três casas decimais."
                     note.text.toString().length > 500 -> note.error = "Máximo de 500 caracteres."
                     else -> {
+                        val restaurantId = backendRestaurantId()
+                        val itemNote = note.text.toString().trim()
+                        val requestOperation = "stock_item_create"
+                        val requestAccountId = backendPrefs.getString("user_id", "").orEmpty()
+                        val signature = if (item == null) {
+                            JSONObject()
+                                .put("restaurant_id", restaurantId)
+                                .put("name", itemName)
+                                .put("unit", itemUnit)
+                                .put("quantity", qty)
+                                .put("low_stock_threshold", low)
+                                .put("note", itemNote)
+                                .toString()
+                        } else ""
+                        val requestId = if (item == null) {
+                            try {
+                                pendingRequestIds.getOrCreate(requestOperation, requestAccountId, signature)
+                            } catch (_: Exception) {
+                                name.error = "Não foi possível guardar a referência segura. Tenta novamente."
+                                return@setOnClickListener
+                            }
+                        } else null
                         runBackend({
-                            SupabaseApi.saveInventoryItem(
-                                backendToken(), backendRestaurantId(), item?.optString("id"),
-                                itemName, itemUnit, qty, low, note.text.toString()
-                            )
-                            val latest = SupabaseApi.listInventoryItems(backendToken(), backendRestaurantId())
+                            val token = backendToken()
+                            if (item == null) {
+                                SupabaseApi.createInventoryItem(
+                                    token, requireNotNull(requestId), restaurantId,
+                                    itemName, itemUnit, qty, low, itemNote
+                                )
+                            } else {
+                                SupabaseApi.saveInventoryItem(
+                                    token, restaurantId, item.optString("id"),
+                                    itemName, itemUnit, qty, low, itemNote
+                                )
+                            }
+                            val latest = SupabaseApi.listInventoryItems(token, restaurantId)
                             backendPrefs.edit().putString("remote_inventory_json", latest.toString())
                                 .putBoolean("inventory_loaded", true).apply()
                             "OK"
                         }) {
                             dialog.dismiss()
                             renderApp()
+                            if (requestId != null) {
+                                pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
+                            }
                         }
                     }
                 }
