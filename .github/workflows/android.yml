@@ -19,6 +19,7 @@ jobs:
   build:
     name: Compile debug APK
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout source
         uses: actions/checkout@v7
@@ -89,6 +90,7 @@ jobs:
         run: gradle --no-daemon testEssencialRestauranteDebugUnitTest testProfissionalRestauranteDebugUnitTest testProfissionalClienteDebugUnitTest testPremiumRestauranteDebugUnitTest testPremiumClienteDebugUnitTest
 
       - name: Run Android lint
+        timeout-minutes: 10
         run: gradle --no-daemon lint
 
       # Build one commercial variant with a throwaway CI key. This validates the
