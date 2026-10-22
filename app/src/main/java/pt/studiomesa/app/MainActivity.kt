@@ -2060,6 +2060,12 @@ class MainActivity : Activity() {
         }
         container.addView(card, cardParams())
         addGap(container, 3)
+        if (token.isNotBlank()) {
+            container.addView(secondaryButton("Eliminar conta permanentemente") {
+                showDeleteAccountConfirmation()
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+            addGap(container, 7)
+        }
         container.addView(secondaryButton("Terminar sessão neste dispositivo") {
             val tokenToRevoke = backendToken()
             if (tokenToRevoke.isNotBlank()) {
@@ -2083,6 +2089,86 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(-1, dp(44)))
         addGap(container, 10)
         container.addView(label("As funções de gestão e os dados de cada restaurante são controlados por permissões no servidor.", 12f, false, muted))
+    }
+
+    private fun showDeleteAccountConfirmation() {
+        if (backendToken().isBlank()) {
+            AlertDialog.Builder(this)
+                .setTitle("Inicia sessão")
+                .setMessage("Inicia sessão na conta que pretendes eliminar e tenta novamente.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+
+        val isOwner = backendPrefs.getString("restaurant_role", "").orEmpty() == "owner" &&
+            backendRestaurantId().isNotBlank()
+
+        if (isOwner) {
+            AlertDialog.Builder(this)
+                .setTitle("Eliminar conta e restaurante?")
+                .setMessage(
+                    "A eliminação de uma conta de proprietário também elimina permanentemente o restaurante, " +
+                        "a carta, as mesas, os pedidos, as reservas, o stock, os códigos e os dados de fidelização " +
+                        "associados. Esta ação não pode ser desfeita. Os outros membros da equipa têm de ser " +
+                        "removidos primeiro; o servidor verifica esta condição antes de eliminar qualquer dado."
+                )
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Continuar") { _, _ ->
+                    AlertDialog.Builder(this)
+                        .setTitle("Confirmação final")
+                        .setMessage("Confirma que queres eliminar definitivamente a tua conta e todos os dados deste restaurante?")
+                        .setNegativeButton("Manter conta", null)
+                        .setPositiveButton("Eliminar definitivamente") { _, _ ->
+                            performAccountDeletion(deleteRestaurantData = true)
+                        }
+                        .show()
+                }
+                .show()
+        } else {
+            AlertDialog.Builder(this)
+                .setTitle("Eliminar conta?")
+                .setMessage(
+                    "A conta será eliminada e a associação ao cartão de fidelização será removida. " +
+                        "Os registos operacionais partilhados do restaurante são preservados quando possível, " +
+                        "e a autoria desta conta é anonimizada no histórico. Esta ação não pode ser desfeita."
+                )
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Eliminar conta") { _, _ ->
+                    performAccountDeletion(deleteRestaurantData = false)
+                }
+                .show()
+        }
+    }
+
+    private fun performAccountDeletion(deleteRestaurantData: Boolean) {
+        runBackend({
+            val restaurantDeleted = SupabaseApi.deleteAccount(backendToken(), deleteRestaurantData)
+            if (restaurantDeleted) "DELETED_RESTAURANT" else "DELETED_ACCOUNT"
+        }) { result ->
+            secureSession.clear()
+            runCatching { pendingRequestIds.clearAll() }
+            store.clearLocalDemoData()
+            backendPrefs.edit()
+                .clear()
+                .putBoolean("local_demo_data_isolated_v1", true)
+                .apply()
+            reservationCache = JSONArray()
+            reservationsLoaded = false
+
+            if (isCustomerApp) renderCustomerApp() else renderApp()
+
+            val message = if (result == "DELETED_RESTAURANT") {
+                "A conta e os dados do restaurante foram eliminados permanentemente."
+            } else {
+                "A conta foi eliminada. A associação de fidelização foi removida e a autoria dos registos operacionais preservados foi anonimizada."
+            }
+            AlertDialog.Builder(this)
+                .setTitle("Conta eliminada")
+                .setMessage(message)
+                .setPositiveButton("OK", null)
+                .show()
+        }
     }
 
     private fun loadRemoteCustomers(): MutableList<LoyaltyCustomer> {
@@ -2499,6 +2585,13 @@ class MainActivity : Activity() {
         addGap(syncNote, 5)
         syncNote.addView(label(if (backendMemberId().isBlank()) "Para ver o saldo real, inicia sessão e associa a conta com o código fornecido pelo restaurante." else "Restaurante associado: " + (backendPrefs.getString("member_restaurant_name", "Restaurante") ?: "Restaurante") + ". Atualiza o saldo quando quiseres consultar as alterações mais recentes.", 12f, false, muted))
         content.addView(syncNote, cardParams())
+
+        if (backendToken().isNotBlank()) {
+            content.addView(secondaryButton("Eliminar conta permanentemente") {
+                showDeleteAccountConfirmation()
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+            addGap(content, 7)
+        }
 
         content.addView(secondaryButton("Terminar sessão neste dispositivo") {
             val tokenToRevoke = backendToken()
