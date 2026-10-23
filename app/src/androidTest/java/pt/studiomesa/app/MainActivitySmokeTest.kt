@@ -60,9 +60,15 @@ class MainActivitySmokeTest {
         }
     }
 
+    private fun hasCalculator(): Boolean {
+        val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
+        return !isCustomerVariant() &&
+            (packageName.contains(".profissional.") || packageName.contains(".premium."))
+    }
+
     @Test
     fun restaurantPriceCalculatorProducesAnIndicativePrice() {
-        assumeFalse("Customer variant has no management calculator.", isCustomerVariant())
+        assumeTrue("The price calculator is not included in Essential or customer tiers.", hasCalculator())
 
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withText("ABRIR CALCULADORA"))
