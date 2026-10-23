@@ -60,6 +60,29 @@ class MainActivitySmokeTest {
         }
     }
 
+    private fun isPremiumVariant(): Boolean {
+        val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
+        return !isCustomerVariant() && packageName.contains(".premium.")
+    }
+
+    @Test
+    fun premiumRestaurantCanSeeTheSafeOrderReportExportAction() {
+        assumeTrue("CSV order reporting is a Premium restaurant feature.", isPremiumVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withText("VER ANÁLISE"))
+                .perform(scrollTo(), click())
+
+            onView(withText("Exportar pedidos em CSV"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+
+            onView(withText(containsString("Não inclui notas internas")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+        }
+    }
+
     private fun hasCalculator(): Boolean {
         val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
         return !isCustomerVariant() &&
