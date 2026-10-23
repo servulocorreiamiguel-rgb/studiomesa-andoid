@@ -2,6 +2,12 @@
 
 > **Importante:** este documento substitui instruções antigas de configuração. O código e a base de dados evoluíram; não executes o ficheiro `supabase/schema.sql` no projeto ligado à aplicação sem antes comparar o esquema e validar uma migração. Esse ficheiro é um protótipo inicial da parte de fidelização e não representa, por si só, todo o esquema atualmente utilizado pela aplicação.
 
+## Bloqueio conhecido: historial de migrações a reconciliar
+
+Na auditoria de 23/10/2026, o Supabase ativo reportou migrações aplicadas desde `20261019155521`, mas o repositório não contém os ficheiros correspondentes a essas primeiras 18 migrações. Também existem três diferenças entre os números de versão dos primeiros ficheiros locais e os números registados na base de dados ativa. O detalhe e o procedimento de recuperação estão em [issue #16](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/issues/16).
+
+**Não executar `supabase db push`, não editar a tabela de histórico remoto e não correr `schema.sql` como substituto.** O ficheiro `schema.sql` é um protótipo parcial antigo; não recria o backend atual. Primeiro é necessário recuperar/reconstruir o historial numa base de dados descartável e comparar funções, tabelas, permissões, RLS, índices, gatilhos e Edge Functions. A consulta de auditoria não alterou o projeto ativo.
+
 ## Estado técnico
 
 - A aplicação Android é nativa, escrita em Kotlin.
