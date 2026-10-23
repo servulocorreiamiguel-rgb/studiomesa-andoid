@@ -48,7 +48,7 @@ Estes valores são propostas de referência para avaliação comercial, não pag
 
 ## Segurança na aplicação Android
 
-O Manifest declara \`allowBackup=false\` e \`usesCleartextTraffic=false\`. O workflow inclui um verificador estático que falha se forem adicionados componentes inesperadamente exportados, permissões sensíveis sem revisão, um URL Supabase sem HTTPS, padrões de chaves secretas na aplicação, armazenamento de sessão sem Android Keystore/AES-GCM ou um \`targetSdk\` abaixo do mínimo definido. O verificador é uma proteção contra regressões, não substitui auditoria independente, testes do backend alojado ou testes num dispositivo real. A nova verificação e os respetivos testes têm de passar no GitHub Actions antes de integrar o ramo.
+O Manifest declara `allowBackup=false` e `usesCleartextTraffic=false`. O workflow inclui um verificador estático que falha se forem adicionados componentes inesperadamente exportados, permissões sensíveis sem revisão, um URL Supabase sem HTTPS, padrões de chaves secretas na aplicação, armazenamento de sessão sem Android Keystore/AES-GCM ou um `targetSdk` abaixo do mínimo definido. O verificador é uma proteção contra regressões, não substitui auditoria independente, testes do backend alojado ou testes num dispositivo real. A nova verificação e os respetivos testes têm de passar no GitHub Actions antes de integrar o ramo.
 
 ## Configuração técnica
 
