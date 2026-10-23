@@ -1,7 +1,14 @@
 # StudioMesa — lista de preparação para uso profissional
 
-**Estado de lançamento nesta revisão: não pronto para operação comercial real.**  
+**Estado de lançamento nesta revisão (23/10/2026): não pronto para operação comercial real.**  
 Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige desenvolvimento/testes. Um botão presente na interface não prova que uma funcionalidade esteja completa.
+
+### Resultados de verificação confirmados nesta revisão
+
+- [x] GitHub Actions executou compilação, testes unitários, Android Lint, validação do caminho de assinatura comercial com uma chave temporária de CI e testes de interface no emulador Android 16. Execução: [run #247](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/39923900578).
+- [x] Os relatórios XML dos testes de interface registaram **5 testes aprovados, 0 falhas e 3 casos ignorados intencionalmente** por variarem entre os modos de gestão e cliente. Isto é um smoke test de demonstração, não uma validação ponta a ponta do backend.
+- [x] A consulta read-only ao PostgreSQL confirmou RLS ativa nas tabelas principais públicas e sem permissões de execução para `anon` nas funções inspecionadas. As funções públicas `SECURITY DEFINER` verificadas usam `SET search_path TO ''` e fazem referência a `auth.uid()`; falta validar isolamento com duas contas reais de restaurantes diferentes.
+- [ ] Bloqueio de reprodutibilidade do backend: a base de dados ativa contém migrações de 19/10 que não estão no repositório; além disso, as primeiras três migrações locais têm versões diferentes das versões registadas no Supabase. A discrepância está registada em [issue #16](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/issues/16). Não executar `db push` nem editar a história remota até reconciliar e testar numa base de dados descartável.
 
 ## Carta e menu
 
@@ -73,7 +80,7 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [x] O código de acesso da equipa é `NOT NULL` e continua protegido pelo índice único existente `restaurant_join_codes_staff_code_idx`. A migração corretiva `20261021154348` remove o índice duplicado criado temporariamente em `20261021154106`.
 - [x] RLS ativada na tabela privada `private.restaurant_join_codes` (migração `20261021152901`). Não existem políticas de acesso direto; confirmado que `anon` e `authenticated` não têm privilégios diretos de leitura/escrita. As funções necessárias são propriedade de `postgres`, com `BYPASSRLS`. O aviso atual do Security Advisor é informativo: RLS ativa sem política, intencional para esta tabela privada.
 - [x] As funções `SECURITY DEFINER` inspecionadas exigem sessão e as permissões de execução para `anon` estavam revogadas para os RPCs listados pelo Security Advisor.
-- [ ] Proteção contra palavras-passe comprometidas no Supabase Auth. O alerta está ativo e o plano da organização é Free; a documentação do Supabase indica esta proteção nos planos Pro ou superiores. Rever antes de produção ([documentação oficial](https://supabase.com/docs/guides/auth/password-security)).
+- [ ] Proteção contra palavras-passe comprometidas no Supabase Auth. O alerta está ativo. A documentação oficial indica que a funcionalidade não está incluída no plano Free e está disponível no Pro ou superior; não atualizar o plano sem decisão explícita sobre o custo. Confirmar disponibilidade e custos na altura da ativação ([documentação oficial](https://supabase.com/docs/guides/auth/password-security), [planos](https://supabase.com/pricing)).
 - [x] Sessões guardadas com cifragem AES-GCM usando Android Keystore no código inspecionado.
 - [x] Código PKCE em OAuth, registo e recuperação, com verificador cifrado e rejeição de tokens bearer na ligação de retorno.
 - [x] Logout local limpa os tokens e inicia a revogação da sessão atual no Supabase em segundo plano.
@@ -96,7 +103,8 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [x] Adicionado workflow manual que prepara cinco AABs comerciais assinados, exige confirmação explícita, executa testes e Lint e verifica as assinaturas.
 - [ ] Escolher e validar o identificador base definitivo, criar o keystore privado, configurar os GitHub Actions Secrets/Variables e executar o workflow comercial com sucesso.
 - [ ] Terminar os testes ponta a ponta antes de instalar a versão comercial num restaurante real.
-- [ ] Automatizar testes e análise estática e guardar os resultados de cada release.
+- [x] Automatizados os controlos de separadores SQL e adicionada uma verificação CI de contratos mínimos para funções `SECURITY DEFINER`; a execução de cada commit candidato tem de passar.
+- [ ] Expandir a cobertura com testes ponta a ponta do backend, incluindo isolamento entre restaurantes, autenticação, reservas, pedidos, stock, fidelização e eliminação de conta, e guardar os resultados de cada release.
 - [ ] Definir monitorização, canal de suporte, prazo de resposta, atualizações, manutenção e procedimento de recuperação.
 - [ ] Definir contrato, âmbito funcional, titularidade dos dados, privacidade, conservação e responsabilidades com aconselhamento adequado.
 
