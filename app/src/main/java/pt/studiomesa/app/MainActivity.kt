@@ -2,6 +2,7 @@ package pt.studiomesa.app
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -21,6 +22,7 @@ import android.widget.Spinner
 import android.widget.TextView
 import org.json.JSONArray
 import org.json.JSONObject
+import java.math.BigDecimal
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -29,6 +31,10 @@ import java.util.Locale
 import java.util.TimeZone
 
 class MainActivity : Activity() {
+    companion object {
+        private const val REQUEST_EXPORT_ORDERS_CSV = 7812
+    }
+
     private lateinit var store: RestaurantStore
     private lateinit var appRoot: LinearLayout
     private var activePage = "Início"
@@ -38,6 +44,8 @@ class MainActivity : Activity() {
     // Reservation contacts are kept in memory only, not persisted to SharedPreferences.
     private var reservationCache = JSONArray()
     private var reservationsLoaded = false
+    // Kept in memory only until the user-selected document receives the export.
+    private var pendingCsvExport: String? = null
 
     private val flavor = BuildConfig.FLAVOR.lowercase(Locale.ROOT)
     private val isCustomerApp = flavor.contains("cliente")
@@ -94,6 +102,39 @@ class MainActivity : Activity() {
             } else if (!isCustomerApp && hasRemoteRestaurant()) {
                 refreshRemoteOperations()
             }
+        }
+    }
+
+    @Deprecated("Uses Android's document picker result contract for compatibility with Activity.")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_EXPORT_ORDERS_CSV) return
+        val csv = pendingCsvExport
+        pendingCsvExport = null
+        if (resultCode != RESULT_OK || data?.data == null) return
+        if (csv == null) {
+            AlertDialog.Builder(this)
+                .setTitle("Exportação interrompida")
+                .setMessage("O relatório deixou de estar disponível. Abre Análise e inicia a exportação novamente.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        try {
+            val output = contentResolver.openOutputStream(data.data!!)
+                ?: throw IllegalStateException("Não foi possível abrir o ficheiro escolhido.")
+            output.use { it.write(csv.toByteArray(Charsets.UTF_8)) }
+            AlertDialog.Builder(this)
+                .setTitle("Relatório exportado")
+                .setMessage("O CSV foi guardado no destino escolhido. Contém dados operacionais, não comprovativos de pagamento ou contabilidade oficial.")
+                .setPositiveButton("OK", null)
+                .show()
+        } catch (_: Exception) {
+            AlertDialog.Builder(this)
+                .setTitle("Não foi possível exportar")
+                .setMessage("Não foi possível guardar o ficheiro. Escolhe outro destino com espaço disponível e tenta novamente.")
+                .setPositiveButton("OK", null)
+                .show()
         }
     }
 
@@ -3199,6 +3240,74 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun exportOrdersCsv() {
+        try {
+            val records = if (hasRemoteRestaurant()) {
+                val orders = remoteOrders()
+                (0 until orders.length()).mapNotNull { index ->
+                    val order = orders.optJSONObject(index) ?: return@mapNotNull null
+                    val amount = order.optDouble("amount", Double.NaN)
+                    require(amount.isFinite() && amount >= 0.0) {
+                        "O relatório contém um preço inválido. Corrige o pedido antes de exportar."
+                    }
+                    OrderReportRecord(
+                        orderId = order.optString("id"),
+                        createdAt = reportDate(parseOrderTimestamp(order.optString("created_at"))),
+                        tableNumber = order.optInt("table_number", 0),
+                        itemName = order.optString("item_name", "Artigo"),
+                        quantity = order.optInt("quantity", 1).coerceIn(1, 99),
+                        unitPrice = BigDecimal.valueOf(amount),
+                        status = order.optString("status", "Desconhecido")
+                    )
+                }
+            } else {
+                store.getOrders().map { order ->
+                    require(order.amount.isFinite() && order.amount >= 0.0) {
+                        "O relatório contém um preço inválido. Corrige o pedido antes de exportar."
+                    }
+                    OrderReportRecord(
+                        orderId = order.id.toString(),
+                        createdAt = reportDate(order.createdAt),
+                        tableNumber = order.table,
+                        itemName = order.itemName,
+                        quantity = order.quantity.coerceIn(1, 99),
+                        unitPrice = BigDecimal.valueOf(order.amount),
+                        status = order.status
+                    )
+                }
+            }
+            if (records.isEmpty()) {
+                AlertDialog.Builder(this)
+                    .setTitle("Sem pedidos para exportar")
+                    .setMessage("Cria ou sincroniza pelo menos um pedido antes de gerar o relatório.")
+                    .setPositiveButton("OK", null)
+                    .show()
+                return
+            }
+
+            pendingCsvExport = ReportCsvExporter.toCsv(records)
+            val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+            val picker = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "text/csv"
+                putExtra(Intent.EXTRA_TITLE, "studiomesa-pedidos-$date.csv")
+            }
+            startActivityForResult(picker, REQUEST_EXPORT_ORDERS_CSV)
+        } catch (error: Exception) {
+            pendingCsvExport = null
+            AlertDialog.Builder(this)
+                .setTitle("Relatório não preparado")
+                .setMessage(error.message ?: "Verifica os dados dos pedidos e tenta novamente.")
+                .setPositiveButton("OK", null)
+                .show()
+        }
+    }
+
+    private fun reportDate(epochMillis: Long): String {
+        if (epochMillis <= 0L) return ""
+        return SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(Date(epochMillis))
+    }
+
     private fun renderAnalysis(container: LinearLayout) {
         pageIntro(container, "Análise", if (hasRemoteRestaurant())
             "Indicadores operacionais dos dados partilhados no servidor."
@@ -3252,6 +3361,11 @@ class MainActivity : Activity() {
             addGap(note, 5)
             note.addView(label("Os dados são partilhados no servidor. O valor representa pedidos marcados como concluídos, não pagamentos confirmados nem vendas contabilísticas. Ainda não inclui IVA, custos indiretos, desperdício ou integração com caixa.", 12.5f, false, ink))
             container.addView(note, cardParams())
+            addGap(container, 8)
+            container.addView(primaryButton("Exportar pedidos em CSV") { exportOrdersCsv() },
+                LinearLayout.LayoutParams(-1, dp(48)))
+            addGap(container, 6)
+            container.addView(label("O ficheiro é criado apenas quando escolhes o destino. Não inclui notas internas nem dados pessoais de clientes.", 11.5f, false, muted))
             return
         }
 
@@ -3285,6 +3399,11 @@ class MainActivity : Activity() {
         addGap(note, 5)
         note.addView(label("Os valores representam os registos guardados neste dispositivo. Não são pagamentos confirmados, não incluem IVA nem constituem contabilidade ou relatório financeiro oficial.", 12.5f, false, ink))
         container.addView(note, cardParams())
+        addGap(container, 8)
+        container.addView(primaryButton("Exportar pedidos em CSV") { exportOrdersCsv() },
+            LinearLayout.LayoutParams(-1, dp(48)))
+        addGap(container, 6)
+        container.addView(label("O ficheiro é criado apenas quando escolhes o destino. Não inclui notas internas nem dados pessoais de clientes.", 11.5f, false, muted))
     }
 
     private fun showCreateOrderDialog() {
