@@ -67,14 +67,14 @@ class SecurityDefinerGuardTests(unittest.TestCase):
         LANGUAGE plpgsql
         SECURITY DEFINER
         SET search_path TO ''
-        AS \\u0024\\u0024
+        AS \u0024\u0024
         BEGIN
           IF auth.uid() IS NULL THEN
             RAISE EXCEPTION 'Login required';
           END IF;
           RETURN true;
         END;
-        \\u0024\\u0024;
+        \u0024\u0024;
         """
         count, errors = scan_sql_text(source, "fixture.sql")
         self.assertEqual(count, 1)
