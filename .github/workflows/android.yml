@@ -27,6 +27,11 @@ jobs:
       - name: Validate SQL migration function delimiters
         run: python3 scripts/check_sql_function_delimiters.py
 
+      - name: Validate privileged SQL function security contracts
+        run: |
+          python3 scripts/check_sql_security_definers.py
+          python3 -m unittest discover -s scripts -p 'test_*.py' -v
+
       - name: Set up Java 17
         uses: actions/setup-java@v6
         with:
