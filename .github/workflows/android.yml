@@ -261,3 +261,7 @@ jobs:
           END;
           $check$;
           SQL
+
+      - name: Test cross-restaurant authorization and idempotency
+        shell: bash
+        run: bash scripts/ci/check_postgres_authorization_contracts.sh
