@@ -30,6 +30,7 @@ internal object PriceCalculator {
     private val decimalInput = Regex("^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)$")
     private val zero = BigDecimal.ZERO
     private val oneHundred = BigDecimal("100")
+    private const val MAX_INPUT_LENGTH = 64
 
     fun calculate(costText: String, targetCostPercentText: String): PriceCalculationResult {
         val costEntered = parseDecimal(costText, PriceInputField.COST, "Introduz um custo numérico válido.")
@@ -89,6 +90,11 @@ internal object PriceCalculator {
         field: PriceInputField,
         errorMessage: String
     ): BigDecimal {
+        // Bound input size before constructing BigDecimal to avoid wasting CPU/memory
+        // on pasted or generated strings that no restaurant price needs.
+        if (rawText.length > MAX_INPUT_LENGTH) {
+            throw PriceCalculationException(field, errorMessage)
+        }
         val normalized = rawText.trim().replace(',', '.')
         if (normalized.isEmpty() || !decimalInput.matches(normalized)) {
             throw PriceCalculationException(field, errorMessage)
