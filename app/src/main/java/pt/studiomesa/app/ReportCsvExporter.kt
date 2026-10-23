@@ -65,7 +65,7 @@ internal object ReportCsvExporter {
             .replace('\r', ' ')
             .replace('\n', ' ')
         val firstMeaningful = clean.trimStart().firstOrNull()
-        val safe = if (firstMeaningful in setOf('=', '+', '-', '@')) "'$clean" else clean
-        return "\"\${safe.replace("\"", "\"\"")}\""
+        val safe = if (firstMeaningful != null && firstMeaningful in setOf('=', '+', '-', '@')) "'$clean" else clean
+        return "\"" + safe.replace("\"", "\"\"") + "\""
     }
 }
