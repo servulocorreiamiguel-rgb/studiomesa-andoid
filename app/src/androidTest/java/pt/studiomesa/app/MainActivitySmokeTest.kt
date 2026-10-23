@@ -62,7 +62,7 @@ class MainActivitySmokeTest {
 
     private fun isPremiumVariant(): Boolean {
         val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
-        return !isCustomerVariant() && packageName.contains(".premium.")
+        return !isCustomerVariant() && packageName.endsWith(".premium")
     }
 
     @Test
@@ -86,7 +86,7 @@ class MainActivitySmokeTest {
     private fun hasCalculator(): Boolean {
         val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
         return !isCustomerVariant() &&
-            (packageName.contains(".profissional.") || packageName.contains(".premium."))
+            (packageName.endsWith(".profissional") || packageName.endsWith(".premium"))
     }
 
     @Test
