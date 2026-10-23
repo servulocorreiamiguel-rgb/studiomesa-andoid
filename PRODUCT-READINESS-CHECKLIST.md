@@ -66,6 +66,12 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 
 ## Segurança e continuidade
 
+- [x] Adicionados ao ramo de desenvolvimento \`android:allowBackup="false"\` e \`android:usesCleartextTraffic="false"\` explícitos no Manifest.
+- [x] Criado verificador estático de CI para componentes exportados, permissões sensíveis, transporte HTTPS, padrões de segredos na APK, Android Keystore/AES-GCM e versão mínima de \`targetSdk\`.
+- [x] Incluídos testes unitários para configurações seguras e regressões intencionais do verificador.
+- [ ] Aguardar CI verde para estes novos controlos, rever eventuais falsos positivos e confirmar que o workflow final que for integrado mantém também os controlos SQL existentes no PR #17.
+- [ ] A verificação estática não substitui testes de autorização no Supabase alojado, auditoria de dependências, teste de penetração ou ensaios em Android real.
+
 - [x] RLS ativa nas tabelas principais do esquema público inspecionado.
 - [x] Permissões de execução revogadas para os RPCs antigos não idempotentes de reservas, stock e pontos; a app atual usa as variantes com chaves de idempotência. Confirmado no catálogo PostgreSQL que os três endpoints antigos não são executáveis por `anon` nem por `authenticated`.
 - [x] Retiradas permissões de tabela desnecessárias: `anon` já não tem acesso direto a carta, pedidos ou mesas; `authenticated` conserva apenas `SELECT`, `INSERT` e `UPDATE` nessas tabelas. RLS mantém-se ativa.
