@@ -6,6 +6,7 @@ import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.action.ViewActions.replaceText
 import androidx.test.espresso.action.ViewActions.scrollTo
 import androidx.test.espresso.assertion.ViewAssertions.matches
+import androidx.test.espresso.matcher.ViewMatchers.hasErrorText
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withHint
 import androidx.test.espresso.matcher.ViewMatchers.withText
@@ -80,6 +81,25 @@ class MainActivitySmokeTest {
             onView(withText(containsString("10,67")))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
+    fun calculatorShowsValidationForExcessivelyLongCostInput() {
+        assumeFalse("Customer variant has no management calculator.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withText("ABRIR CALCULADORA"))
+                .perform(scrollTo(), click())
+
+            onView(withHint("Ex.: 3,20"))
+                .perform(replaceText("9".repeat(65)))
+
+            onView(withText("Calcular preço sugerido"))
+                .perform(scrollTo(), click())
+
+            onView(withHint("Ex.: 3,20"))
+                .check(matches(hasErrorText("Introduz um custo numérico válido.")))
         }
     }
 
