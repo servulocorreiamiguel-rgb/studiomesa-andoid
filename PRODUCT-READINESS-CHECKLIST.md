@@ -88,6 +88,15 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [ ] Publicar uma política de privacidade pública e configurar a secção Data safety na Play Console; confirmar exportação, conservação e resposta a incidentes.
 - [ ] Não colocar chaves `service_role` ou `sb_secret_...` na aplicação. A chave `sb_publishable_...` incorporada no cliente é pública por natureza e depende de RLS/políticas corretas.
 
+## Relatórios e exportação
+
+- [x] Ecrã Análise disponibiliza exportação CSV dos pedidos para o destino escolhido pelo utilizador via Android Storage Access Framework, sem pedir permissões gerais de armazenamento.
+- [x] O relatório limita os campos a ID, data, mesa, artigo, quantidade, preço unitário, valor nominal e estado; exclui notas internas e contactos de reservas.
+- [x] O serializador usa delimitador ponto e vírgula, BOM UTF-8, decimais com vírgula e neutralização de fórmulas em campos de texto que começam por `=`, `+`, `-` ou `@`.
+- [x] Testes unitários adicionados para cabeçalhos/formatos portugueses, cálculo nominal, escaping de aspas, exportação vazia e proteção contra CSV formula injection. A aprovação CI ainda tem de ser observada para o ramo que inclui esta alteração.
+- [ ] Testar no Android real o seletor de destino, gravação cancelada, falha de armazenamento, abertura em Excel/LibreOffice/Sheets e ficheiros com muitos pedidos.
+- [ ] Deixar explícito ao utilizador que o valor nominal de pedidos concluídos não prova pagamentos recebidos nem substitui faturação ou contabilidade.
+
 ## Lançamento e suporte
 
 
