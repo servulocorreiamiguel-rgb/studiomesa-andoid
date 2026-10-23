@@ -29,6 +29,10 @@ object SupabaseApi {
             requestMethod = method
             connectTimeout = 12000
             readTimeout = 12000
+            // Supabase REST/Auth endpoints should return API responses, not redirects.
+            // Fail closed instead of following an unexpected redirect with session headers.
+            instanceFollowRedirects = false
+            useCaches = false
             setRequestProperty("apikey", API_KEY)
             setRequestProperty("Accept", "application/json")
             setRequestProperty("Content-Type", "application/json")
