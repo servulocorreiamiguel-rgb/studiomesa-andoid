@@ -66,8 +66,8 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 
 ## Segurança e continuidade
 
-- [x] Adicionados ao ramo de desenvolvimento \`android:allowBackup="false"\` e \`android:usesCleartextTraffic="false"\` explícitos no Manifest.
-- [x] Criado verificador estático de CI para componentes exportados, permissões sensíveis, transporte HTTPS, padrões de segredos na APK, Android Keystore/AES-GCM e versão mínima de \`targetSdk\`.
+- [x] Adicionados ao ramo de desenvolvimento `android:allowBackup="false"` e `android:usesCleartextTraffic="false"` explícitos no Manifest.
+- [x] Criado verificador estático de CI para componentes exportados, permissões sensíveis, transporte HTTPS, padrões de segredos na APK, Android Keystore/AES-GCM e versão mínima de `targetSdk`.
 - [x] Incluídos testes unitários para configurações seguras e regressões intencionais do verificador.
 - [ ] Aguardar CI verde para estes novos controlos, rever eventuais falsos positivos e confirmar que o workflow final que for integrado mantém também os controlos SQL existentes no PR #17.
 - [ ] A verificação estática não substitui testes de autorização no Supabase alojado, auditoria de dependências, teste de penetração ou ensaios em Android real.
