@@ -45,6 +45,7 @@ android {
         targetSdk = 36
         versionCode = 7
         versionName = "1.5.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -114,4 +115,10 @@ android {
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
+
+    // Device/emulator smoke tests for real Android Activity and UI behavior.
+    androidTestImplementation("androidx.test:core:1.7.0")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
 }
