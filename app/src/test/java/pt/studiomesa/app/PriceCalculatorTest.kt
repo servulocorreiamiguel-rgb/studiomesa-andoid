@@ -77,7 +77,7 @@ class PriceCalculatorTest {
     @Test
     fun rejectsExcessivelyLongPercentageInputBeforeParsing() {
         val error = assertThrows(PriceCalculationException::class.java) {
-            PriceCalculator.calculate("3.20", "9".repeat(65))
+            PriceCalculator.calculate("3.20", "0." + "0".repeat(62) + "1")
         }
         assertEquals(PriceInputField.TARGET_COST_PERCENT, error.field)
     }
