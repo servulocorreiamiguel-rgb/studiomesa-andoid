@@ -60,6 +60,26 @@ class SecurityDefinerGuardTests(unittest.TestCase):
         self.assertEqual(count, 1)
         self.assertEqual(errors, [])
 
+    def test_supports_untagged_dollar_quoted_bodies(self) -> None:
+        source = """
+        CREATE OR REPLACE FUNCTION public.legacy_rpc()
+        RETURNS boolean
+        LANGUAGE plpgsql
+        SECURITY DEFINER
+        SET search_path TO ''
+        AS $
+        BEGIN
+          IF auth.uid() IS NULL THEN
+            RAISE EXCEPTION 'Login required';
+          END IF;
+          RETURN true;
+        END;
+        $;
+        """
+        count, errors = scan_sql_text(source, "fixture.sql")
+        self.assertEqual(count, 1)
+        self.assertEqual(errors, [])
+
     def test_ignores_security_invoker_functions(self) -> None:
         source = """
         CREATE OR REPLACE FUNCTION public.read_only_function()
