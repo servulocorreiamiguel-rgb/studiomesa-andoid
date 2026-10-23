@@ -46,6 +46,10 @@ Estes valores são propostas de referência para avaliação comercial, não pag
 - Configuração de release comercial assinada e workflow manual para gerar AABs com uma chave privada guardada em GitHub Actions Secrets. Ainda é necessário escolher o identificador de pacote definitivo, configurar a chave, executar o workflow e validar as variantes em dispositivos reais; o workflow não publica automaticamente na Google Play.
 - A configuração de compilação usa compileSdk/targetSdk 36, Android Gradle Plugin 8.10.0 e Gradle 8.11.1. O workflow compila os cinco APKs de demonstração/debug, executa testes unitários nas cinco variantes de distribuição e Android Lint. Mesmo com CI aprovado, a app continua a exigir testes ponta a ponta; os APKs atuais não são versões comerciais assinadas.
 
+## Segurança na aplicação Android
+
+O Manifest declara \`allowBackup=false\` e \`usesCleartextTraffic=false\`. O workflow inclui um verificador estático que falha se forem adicionados componentes inesperadamente exportados, permissões sensíveis sem revisão, um URL Supabase sem HTTPS, padrões de chaves secretas na aplicação, armazenamento de sessão sem Android Keystore/AES-GCM ou um \`targetSdk\` abaixo do mínimo definido. O verificador é uma proteção contra regressões, não substitui auditoria independente, testes do backend alojado ou testes num dispositivo real. A nova verificação e os respetivos testes têm de passar no GitHub Actions antes de integrar o ramo.
+
 ## Configuração técnica
 
 O backend usa Supabase Auth e PostgreSQL com Row Level Security. Os códigos de adesão dos clientes ficam num esquema privado, separados das tabelas expostas à aplicação. As tabelas de mesas, carta e pedidos usam políticas de segurança por restaurante. Algumas funções protegidas usam SECURITY DEFINER para executar operações verificadas do lado da base de dados; as regras devem continuar a ser auditadas.
