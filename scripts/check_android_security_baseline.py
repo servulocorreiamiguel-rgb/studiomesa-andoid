@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Fail CI when the Android client regresses core privacy/security defaults."""
 from pathlib import Path
+import base64
+import json
 import re
 import sys
 import xml.etree.ElementTree as ET
@@ -27,6 +29,21 @@ BLOCKED_PERMISSIONS = {
     "android.permission.WRITE_CALENDAR",
 }
 COMPONENT_TAGS = {"activity", "activity-alias", "service", "receiver", "provider"}
+
+
+
+def contains_privileged_supabase_jwt(source: str) -> bool:
+    """Detect legacy three-part Supabase JWT keys by the role in their payload."""
+    for token in re.findall(r"\b(eyJ[A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)", source):
+        payload = token[1]
+        try:
+            padding = "=" * (-len(payload) % 4)
+            claims = json.loads(base64.urlsafe_b64decode(payload + padding).decode("utf-8"))
+        except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if isinstance(claims, dict) and claims.get("role") in {"service_role", "supabase_admin", "postgres"}:
+            return True
+    return False
 
 
 def inspect_android_security_baseline(
@@ -72,11 +89,11 @@ def inspect_android_security_baseline(
         errors.append("Supabase BASE_URL must be an explicit HTTPS URL.")
     if re.search(r'(?i)\bsb_secret_[A-Za-z0-9_-]+', application_sources or api_source):
         errors.append("A Supabase secret key prefix was found in Android application sources.")
-    if re.search(
-        r'(?i)\bservice_role\s*[:=]\s*["\'][^"\']{8,}["\']|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----',
-        application_sources or api_source,
-    ):
+    sources = application_sources or api_source
+    if re.search(r'(?i)\bservice_role\s*[:=]\s*["\'][^"\']{8,}["\']|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----', sources):
         errors.append("A service_role credential or private key pattern was found in Android application sources.")
+    if contains_privileged_supabase_jwt(sources):
+        errors.append("A legacy Supabase JWT with a privileged service role was found in Android application sources.")
 
     if "AndroidKeyStore" not in session_source or "AES/GCM/NoPadding" not in session_source:
         errors.append("Session storage must retain Android Keystore-backed AES-GCM encryption.")
