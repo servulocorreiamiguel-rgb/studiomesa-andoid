@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Unit tests for the Android security baseline CI guard."""
+import base64
+import json
 import unittest
 
 from check_android_security_baseline import inspect_android_security_baseline
@@ -61,6 +63,13 @@ class AndroidSecurityBaselineTests(unittest.TestCase):
         self.assertTrue(any("secret key prefix" in error for error in errors))
         errors = self.inspect(sources=SAFE_API + "\n-----BEGIN PRIVATE KEY-----")
         self.assertTrue(any("private key pattern" in error for error in errors))
+
+
+    def test_rejects_legacy_privileged_supabase_jwt(self):
+        payload = base64.urlsafe_b64encode(json.dumps({"role": "service_role"}).encode("utf-8")).decode("ascii").rstrip("=")
+        token = "eyJhbGciOiJub25lIn0." + payload + ".signature"
+        errors = self.inspect(sources=SAFE_API + '\nval oldApiKey = "' + token + '"')
+        self.assertTrue(any("legacy Supabase JWT" in error for error in errors))
 
     def test_requires_android_keystore_aes_gcm_and_modern_target_sdk(self):
         errors = self.inspect(session='Cipher.getInstance("AES/CBC/PKCS5Padding")', gradle="targetSdk = 34")
