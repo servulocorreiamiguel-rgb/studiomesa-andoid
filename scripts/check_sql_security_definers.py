@@ -14,9 +14,10 @@ FUNCTION_PATTERN = re.compile(
     \bCREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+
     (?P<schema>"[^"]+"|[A-Za-z_][A-Za-z_0-9]*)\s*\.\s*
     (?P<name>"[^"]+"|[A-Za-z_][A-Za-z_0-9]*)\s*
-    \(.*?\bAS\s+\$function\$
+    \(.*?\bAS\s+
+    (?P<tag>\$(?:[A-Za-z_][A-Za-z_0-9]*)?\$)
     (?P<body>.*?)
-    \$function\$\s*;
+    (?P=tag)\s*;
     """,
     re.IGNORECASE | re.DOTALL | re.VERBOSE,
 )
@@ -33,8 +34,7 @@ def scan_sql_text(source: str, source_name: str = "<memory>") -> tuple[int, list
     errors: list[str] = []
 
     for match in FUNCTION_PATTERN.finditer(source):
-        header_start = match.start()
-        header = source[header_start : match.start("body")]
+        header = source[match.start() : match.start("body")]
         body = match.group("body")
         if not SECURITY_DEFINER.search(header):
             continue
