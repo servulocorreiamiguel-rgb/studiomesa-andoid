@@ -21,8 +21,7 @@ import org.junit.Test
  */
 class MainActivitySmokeTest {
     private fun isCustomerVariant(): Boolean =
-        InstrumentationRegistry.getInstrumentation()
-            .targetContext.packageName.endsWith(".cliente")
+        BuildConfig.FLAVOR.contains("cliente", ignoreCase = true)
 
     @Test
     fun appLaunchesIntoTheExpectedDemoExperience() {
@@ -60,10 +59,8 @@ class MainActivitySmokeTest {
         }
     }
 
-    private fun isPremiumVariant(): Boolean {
-        val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
-        return !isCustomerVariant() && packageName.endsWith(".premium")
-    }
+    private fun isPremiumVariant(): Boolean =
+        !isCustomerVariant() && BuildConfig.FLAVOR.contains("premium", ignoreCase = true)
 
     @Test
     fun premiumRestaurantCanSeeTheSafeOrderReportExportAction() {
@@ -83,11 +80,10 @@ class MainActivitySmokeTest {
         }
     }
 
-    private fun hasCalculator(): Boolean {
-        val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
-        return !isCustomerVariant() &&
-            (packageName.endsWith(".profissional") || packageName.endsWith(".premium"))
-    }
+    private fun hasCalculator(): Boolean =
+        !isCustomerVariant() &&
+            (BuildConfig.FLAVOR.contains("profissional", ignoreCase = true) ||
+                BuildConfig.FLAVOR.contains("premium", ignoreCase = true))
 
     @Test
     fun restaurantPriceCalculatorProducesAnIndicativePrice() {
