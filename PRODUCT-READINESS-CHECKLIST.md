@@ -75,6 +75,12 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 
 ## Segurança e continuidade
 
+- [x] No ramo de desenvolvimento, o Manifest declara \`android:allowBackup="false"\` e \`android:usesCleartextTraffic="false"\` explicitamente.
+- [x] Criado verificador estático de CI para componentes exportados, permissões sensíveis, transporte HTTPS, padrões de chaves secretas na aplicação, Android Keystore/AES-GCM e versão mínima de \`targetSdk\`.
+- [x] Incluídos testes unitários para configurações seguras e regressões intencionais do verificador.
+- [ ] A execução completa de CI desta combinação de alterações tem de passar antes da integração.
+- [ ] A verificação estática não substitui testes de autorização no Supabase alojado, auditoria independente ou ensaios em Android real.
+
 - [x] RLS ativa nas tabelas principais do esquema público inspecionado.
 - [x] Permissões de execução revogadas para os RPCs antigos não idempotentes de reservas, stock e pontos; a app atual usa as variantes com chaves de idempotência. Confirmado no catálogo PostgreSQL que os três endpoints antigos não são executáveis por `anon` nem por `authenticated`.
 - [x] Retiradas permissões de tabela desnecessárias: `anon` já não tem acesso direto a carta, pedidos ou mesas; `authenticated` conserva apenas `SELECT`, `INSERT` e `UPDATE` nessas tabelas. RLS mantém-se ativa.
@@ -96,6 +102,15 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [ ] Autorizar o URL de redirecionamento em Supabase Auth e testar envio/click de magic link com contas de teste.
 - [ ] Publicar uma política de privacidade pública e configurar a secção Data safety na Play Console; confirmar exportação, conservação e resposta a incidentes.
 - [ ] Não colocar chaves `service_role` ou `sb_secret_...` na aplicação. A chave `sb_publishable_...` incorporada no cliente é pública por natureza e depende de RLS/políticas corretas.
+
+## Relatórios e exportação
+
+- [x] Ecrã Análise disponibiliza exportação CSV dos pedidos, de origem local ou do servidor, para o destino escolhido pelo utilizador via Android Storage Access Framework, sem permissões gerais de armazenamento.
+- [x] O relatório contém apenas ID, data, mesa, artigo, quantidade, preço unitário, valor nominal e estado; exclui notas internas e contactos de reservas.
+- [x] O serializador usa ponto e vírgula, BOM UTF-8, decimais com vírgula e neutralização de fórmulas em campos de texto que começam por \`=\`, \`+\`, \`-\` ou \`@\`.
+- [x] Testes unitários adicionados para formatação portuguesa, aspas/quebras de linha, relatório vazio e proteção contra CSV formula injection.
+- [ ] Testar num dispositivo Android real o seletor de destino, cancelamento, falha de armazenamento e abertura em Excel/LibreOffice/Sheets.
+- [ ] Reforçar no produto que os valores nominais dos pedidos não provam pagamentos nem substituem faturação ou contabilidade.
 
 ## Lançamento e suporte
 
