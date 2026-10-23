@@ -9,7 +9,6 @@ import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withHint
 import androidx.test.espresso.matcher.ViewMatchers.withText
-import androidx.test.platform.app.InstrumentationRegistry
 import org.hamcrest.Matchers.containsString
 import org.junit.Assume.assumeFalse
 import org.junit.Assume.assumeTrue
