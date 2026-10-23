@@ -3241,10 +3241,17 @@ class MainActivity : Activity() {
     }
 
     private fun exportOrdersCsv() {
-        try {
-            val records = if (hasRemoteRestaurant()) {
-                val orders = remoteOrders()
-                (0 until orders.length()).mapNotNull { index ->
+        if (hasRemoteRestaurant()) {
+            // Always fetch the latest server rows before producing a shared report.
+            // Do not silently export a stale SharedPreferences cache if the request fails.
+            runBackend({
+                val token = backendToken()
+                val restaurantId = backendRestaurantId()
+                if (token.isBlank() || restaurantId.isBlank()) {
+                    throw IllegalStateException("Inicia sessão e seleciona um restaurante antes de exportar.")
+                }
+                val orders = SupabaseApi.listOrders(token, restaurantId)
+                val records = (0 until orders.length()).mapNotNull { index ->
                     val order = orders.optJSONObject(index) ?: return@mapNotNull null
                     val amount = order.optDouble("amount", Double.NaN)
                     require(amount.isFinite() && amount >= 0.0) {
@@ -3260,32 +3267,54 @@ class MainActivity : Activity() {
                         status = order.optString("status", "Desconhecido")
                     )
                 }
-            } else {
-                store.getOrders().map { order ->
-                    require(order.amount.isFinite() && order.amount >= 0.0) {
-                        "O relatório contém um preço inválido. Corrige o pedido antes de exportar."
-                    }
-                    OrderReportRecord(
-                        orderId = order.id.toString(),
-                        createdAt = reportDate(order.createdAt),
-                        tableNumber = order.table,
-                        itemName = order.itemName,
-                        quantity = order.quantity.coerceIn(1, 99),
-                        unitPrice = BigDecimal.valueOf(order.amount),
-                        status = order.status
-                    )
+                backendPrefs.edit().putString("remote_orders_json", orders.toString()).apply()
+                if (records.isEmpty()) "" else ReportCsvExporter.toCsv(records)
+            }) { csv ->
+                if (csv.isBlank()) showNoOrdersForExport() else launchCsvDocumentPicker(csv)
+            }
+            return
+        }
+
+        try {
+            val records = store.getOrders().map { order ->
+                require(order.amount.isFinite() && order.amount >= 0.0) {
+                    "O relatório contém um preço inválido. Corrige o pedido antes de exportar."
                 }
+                OrderReportRecord(
+                    orderId = order.id.toString(),
+                    createdAt = reportDate(order.createdAt),
+                    tableNumber = order.table,
+                    itemName = order.itemName,
+                    quantity = order.quantity.coerceIn(1, 99),
+                    unitPrice = BigDecimal.valueOf(order.amount),
+                    status = order.status
+                )
             }
             if (records.isEmpty()) {
-                AlertDialog.Builder(this)
-                    .setTitle("Sem pedidos para exportar")
-                    .setMessage("Cria ou sincroniza pelo menos um pedido antes de gerar o relatório.")
-                    .setPositiveButton("OK", null)
-                    .show()
+                showNoOrdersForExport()
                 return
             }
+            launchCsvDocumentPicker(ReportCsvExporter.toCsv(records))
+        } catch (error: Exception) {
+            AlertDialog.Builder(this)
+                .setTitle("Relatório não preparado")
+                .setMessage(error.message ?: "Verifica os dados dos pedidos e tenta novamente.")
+                .setPositiveButton("OK", null)
+                .show()
+        }
+    }
 
-            pendingCsvExport = ReportCsvExporter.toCsv(records)
+    private fun showNoOrdersForExport() {
+        AlertDialog.Builder(this)
+            .setTitle("Sem pedidos para exportar")
+            .setMessage("Cria ou sincroniza pelo menos um pedido antes de gerar o relatório.")
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
+    private fun launchCsvDocumentPicker(csv: String) {
+        try {
+            pendingCsvExport = csv
             val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
             val picker = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
@@ -3297,7 +3326,7 @@ class MainActivity : Activity() {
             pendingCsvExport = null
             AlertDialog.Builder(this)
                 .setTitle("Relatório não preparado")
-                .setMessage(error.message ?: "Verifica os dados dos pedidos e tenta novamente.")
+                .setMessage(error.message ?: "Não foi possível abrir o seletor de ficheiros. Tenta novamente.")
                 .setPositiveButton("OK", null)
                 .show()
         }
