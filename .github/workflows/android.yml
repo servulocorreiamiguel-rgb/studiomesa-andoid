@@ -26,6 +26,11 @@ jobs:
 
       - name: Validate SQL migration function delimiters
         run: python3 scripts/check_sql_function_delimiters.py
+      - name: Check Android security baseline
+        run: python3 scripts/check_android_security_baseline.py
+
+      - name: Test Android security baseline guard
+        run: python3 scripts/test_check_android_security_baseline.py
 
       - name: Set up Java 17
         uses: actions/setup-java@v6
