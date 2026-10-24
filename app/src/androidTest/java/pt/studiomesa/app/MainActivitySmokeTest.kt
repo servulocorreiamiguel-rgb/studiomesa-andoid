@@ -35,6 +35,9 @@ class MainActivitySmokeTest {
     fun clearingSecureSessionAlsoRemovesLegacyPlaintextTokens() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val legacyPrefs = context.getSharedPreferences("studiomesa_backend", Context.MODE_PRIVATE)
+        val store = SecureSessionStore(context)
+        store.clear()
+        store.save("secure-access-token", "secure-refresh-token")
 
         org.junit.Assert.assertTrue(
             "Could not seed legacy test preferences.",
@@ -44,10 +47,12 @@ class MainActivitySmokeTest {
                 .commit()
         )
 
-        SecureSessionStore(context).clear()
+        store.clear()
 
         org.junit.Assert.assertNull(legacyPrefs.getString("access_token", null))
         org.junit.Assert.assertNull(legacyPrefs.getString("refresh_token", null))
+        org.junit.Assert.assertEquals("", store.accessToken())
+        org.junit.Assert.assertEquals("", store.refreshToken())
     }
 
     @Test

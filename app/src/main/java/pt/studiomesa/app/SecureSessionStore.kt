@@ -43,15 +43,17 @@ class SecureSessionStore(context: Context) {
             throw IllegalStateException("Não foi possível guardar a sessão cifrada neste dispositivo.")
         }
         // Finish deleting the plaintext legacy copy before returning from migration/login.
-        legacyPrefs.edit()
-            .remove("access_token")
-            .remove("refresh_token")
-            .commit()
+        if (!legacyPrefs.edit()
+                .remove("access_token")
+                .remove("refresh_token")
+                .commit()) {
+            throw IllegalStateException("Não foi possível remover a sessão antiga em texto simples.")
+        }
     }
 
     @Synchronized
     fun clear() {
-        securePrefs.edit()
+        val secureCleared = securePrefs.edit()
             .remove("access_token")
             .remove("refresh_token")
             .remove("pending_code_verifier")
@@ -59,7 +61,13 @@ class SecureSessionStore(context: Context) {
             .commit()
         // Persist legacy-token removal synchronously so a process exit cannot restore a
         // plaintext session that the caller has just cleared.
-        legacyPrefs.edit().remove("access_token").remove("refresh_token").commit()
+        val legacyCleared = legacyPrefs.edit()
+            .remove("access_token")
+            .remove("refresh_token")
+            .commit()
+        if (!secureCleared || !legacyCleared) {
+            throw IllegalStateException("Não foi possível limpar completamente a sessão neste dispositivo.")
+        }
     }
 
     /**
@@ -113,7 +121,9 @@ class SecureSessionStore(context: Context) {
     private fun getToken(key: String): String {
         val encrypted = securePrefs.getString(key, null)
         if (!encrypted.isNullOrBlank()) {
-            legacyPrefs.edit().remove(key).commit()
+            if (!legacyPrefs.edit().remove(key).commit()) {
+                throw IllegalStateException("Não foi possível remover a cópia antiga do token.")
+            }
             return try {
                 decrypt(encrypted)
             } catch (_: Exception) {
