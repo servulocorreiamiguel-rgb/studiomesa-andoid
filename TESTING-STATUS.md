@@ -123,3 +123,9 @@ Consulta read-only aos avisos atuais do Supabase e leitura das definições de f
 6. Escolher o ID de pacote final, configurar/guardar a chave comercial e secrets, testar AABs assinados e concluir política de privacidade, Data safety e revisão pré-publicação.
 
 **Estado:** não aprovado para produção até à resolução e validação das pendências acima.
+
+## Continuação da auditoria — cadeia de dependências CI/CD — 24-10-2026
+
+- Os workflows Android e de release comercial foram atualizados para fixar as GitHub Actions usadas a commits completos, em vez de etiquetas móveis: `actions/checkout` v7.0.1, `actions/setup-java` v6.1.0, `gradle/actions/setup-gradle` v6.4.0, `actions/upload-artifact` v4.6.2 e `ReactiveCircus/android-emulator-runner` v2.38.0. Isto torna a referência à ação determinística; as atualizações futuras devem rever os novos commits e respetivas notas antes de atualizar os pins.
+- A execução `40112220200` corresponde ao commit anterior a esta alteração e tinha passado compilação, testes unitários das cinco variantes e Lint, além da validação de delimitadores SQL e da configuração Supabase; a fase de configuração de bundle comercial ainda estava em execução. Não a tratar como CI final, porque não valida estes pins novos.
+- A alteração de pins e deste registo requer uma nova CI sobre a nova cabeça da branch. A validação final exige sucesso de ambos os jobs: compilação/testes/Lint/configuração comercial e testes de interface no emulador Android 16 nas cinco variantes.
