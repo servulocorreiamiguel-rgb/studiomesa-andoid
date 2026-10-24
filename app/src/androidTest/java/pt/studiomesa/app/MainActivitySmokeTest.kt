@@ -1,5 +1,9 @@
 package pt.studiomesa.app
 
+import android.content.Context
+import android.view.View
+import android.view.ViewGroup
+import android.widget.TextView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.click
@@ -7,6 +11,7 @@ import androidx.test.espresso.action.ViewActions.replaceText
 import androidx.test.espresso.action.ViewActions.scrollTo
 import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
 import androidx.test.espresso.assertion.ViewAssertions.matches
+import androidx.test.espresso.matcher.ViewMatchers.hasErrorText
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withHint
 import androidx.test.espresso.matcher.ViewMatchers.withText
@@ -21,6 +26,96 @@ import org.junit.Test
  * Keep these independent of production credentials: all actions use fresh local demo data.
  */
 class MainActivitySmokeTest {
+    private fun collectViewText(view: View): String = when (view) {
+        is TextView -> view.text?.toString().orEmpty()
+        is ViewGroup -> (0 until view.childCount).joinToString(" ") {
+            collectViewText(view.getChildAt(it))
+        }
+        else -> ""
+    }
+
+    @Test
+    fun existingSessionDoesNotRenderCachedTenantDataBeforeServerAuthorization() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val prefs = context.getSharedPreferences("studiomesa_backend", Context.MODE_PRIVATE)
+        val secureSession = SecureSessionStore(context)
+        secureSession.clear()
+        prefs.edit().clear()
+            .putString("user_id", "fixture-user")
+            .putString("restaurant_id", "old-restaurant-id")
+            .putString("restaurant_name", "PRIVATE_RESTAURANT_SENTINEL")
+            .putString("restaurant_role", "owner")
+            .putString("member_id", "old-member-id")
+            .putString("member_restaurant_name", "PRIVATE_RESTAURANT_SENTINEL")
+            .putString("remote_menu_json", """[{"name":"PRIVATE_RESTAURANT_SENTINEL"}]""")
+            .putString("remote_orders_json", """[{"restaurant":"PRIVATE_RESTAURANT_SENTINEL"}]""")
+            .putString("customer_menu_json", """[{"name":"PRIVATE_RESTAURANT_SENTINEL"}]""")
+            .putBoolean("local_demo_data_isolated_v1", true)
+            .commit()
+        secureSession.save("not-a-valid-session-token", "")
+
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    val displayed = collectViewText(
+                        activity.findViewById(android.R.id.content)
+                    )
+                    org.junit.Assert.assertFalse(
+                        "Cached tenant data was displayed before server authorization.",
+                        displayed.contains("PRIVATE_RESTAURANT_SENTINEL")
+                    )
+                    org.junit.Assert.assertTrue(
+                        "The app should show a restricted verification state.",
+                        displayed.contains("A verificar autorização da conta") ||
+                            displayed.contains("Não foi possível confirmar o acesso")
+                    )
+                }
+            }
+        } finally {
+            secureSession.clear()
+            prefs.edit().clear().commit()
+        }
+    }
+
+    @Test
+    fun failedSessionVerificationOffersSignInRecoveryWithoutDeletingServerData() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val prefs = context.getSharedPreferences("studiomesa_backend", Context.MODE_PRIVATE)
+        val secureSession = SecureSessionStore(context)
+        secureSession.clear()
+        prefs.edit().clear().commit()
+
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    // Render the failure state directly so this UI test never depends on
+                    // network availability or the hosted Supabase project.
+                    val method = MainActivity::class.java.getDeclaredMethod(
+                        "renderSessionVerificationScreen",
+                        Boolean::class.javaPrimitiveType
+                    )
+                    method.isAccessible = true
+                    method.invoke(activity, false)
+                }
+
+                onView(withText("Terminar sessão e voltar a entrar"))
+                    .check(matches(isDisplayed()))
+                onView(withText(containsString("a conta e os dados no servidor não serão eliminados.")))
+                    .check(matches(isDisplayed()))
+
+                onView(withText("Terminar sessão e voltar a entrar"))
+                    .perform(click())
+
+                onView(withText("Criar conta / iniciar sessão"))
+                    .perform(scrollTo())
+                    .check(matches(isDisplayed()))
+            }
+        } finally {
+            secureSession.clear()
+            prefs.edit().clear().commit()
+        }
+    }
+
     private fun isCustomerVariant(): Boolean =
         InstrumentationRegistry.getInstrumentation()
             .targetContext.packageName.endsWith(".cliente")
@@ -28,6 +123,53 @@ class MainActivitySmokeTest {
     private fun isCalculatorAvailable(): Boolean {
         val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
         return packageName.contains(".profissional.") || packageName.contains(".premium.")
+    }
+
+    @Test
+    fun clearingSecureSessionAlsoRemovesLegacyPlaintextTokens() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val legacyPrefs = context.getSharedPreferences("studiomesa_backend", Context.MODE_PRIVATE)
+        val store = SecureSessionStore(context)
+        store.clear()
+        store.save("secure-access-token", "secure-refresh-token")
+
+        org.junit.Assert.assertTrue(
+            "Could not seed legacy test preferences.",
+            legacyPrefs.edit()
+                .putString("access_token", "legacy-access-token")
+                .putString("refresh_token", "legacy-refresh-token")
+                .commit()
+        )
+
+        store.clear()
+
+        org.junit.Assert.assertNull(legacyPrefs.getString("access_token", null))
+        org.junit.Assert.assertNull(legacyPrefs.getString("refresh_token", null))
+        org.junit.Assert.assertEquals("", store.accessToken())
+        org.junit.Assert.assertEquals("", store.refreshToken())
+    }
+
+    @Test
+    fun migratingLegacySessionTokensRemovesPlaintextCopies() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val legacyPrefs = context.getSharedPreferences("studiomesa_backend", Context.MODE_PRIVATE)
+        val store = SecureSessionStore(context)
+        store.clear()
+
+        org.junit.Assert.assertTrue(
+            "Could not seed legacy test preferences.",
+            legacyPrefs.edit()
+                .putString("access_token", "migration-access-token")
+                .putString("refresh_token", "migration-refresh-token")
+                .commit()
+        )
+
+        org.junit.Assert.assertEquals("migration-access-token", store.accessToken())
+        org.junit.Assert.assertEquals("migration-refresh-token", store.refreshToken())
+        org.junit.Assert.assertNull(legacyPrefs.getString("access_token", null))
+        org.junit.Assert.assertNull(legacyPrefs.getString("refresh_token", null))
+
+        store.clear()
     }
 
     @Test
@@ -87,6 +229,28 @@ class MainActivitySmokeTest {
             onView(withText(containsString("10,67")))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
+    fun calculatorShowsValidationForExcessivelyLongCostInput() {
+        assumeTrue(
+            "The calculator is only available in management variants.",
+            isCalculatorAvailable() && !isCustomerVariant()
+        )
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withText("ABRIR CALCULADORA"))
+                .perform(scrollTo(), click())
+
+            onView(withHint("Ex.: 3,20"))
+                .perform(replaceText("9".repeat(65)))
+
+            onView(withText("Calcular preço sugerido"))
+                .perform(scrollTo(), click())
+
+            onView(withHint("Ex.: 3,20"))
+                .check(matches(hasErrorText("Introduz um custo numérico válido.")))
         }
     }
 
