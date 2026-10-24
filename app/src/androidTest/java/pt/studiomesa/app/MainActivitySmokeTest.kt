@@ -1,5 +1,6 @@
 package pt.studiomesa.app
 
+import android.content.Context
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.click
@@ -7,6 +8,7 @@ import androidx.test.espresso.action.ViewActions.replaceText
 import androidx.test.espresso.action.ViewActions.scrollTo
 import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
 import androidx.test.espresso.assertion.ViewAssertions.matches
+import androidx.test.espresso.matcher.ViewMatchers.hasErrorText
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withHint
 import androidx.test.espresso.matcher.ViewMatchers.withText
@@ -28,6 +30,53 @@ class MainActivitySmokeTest {
     private fun isCalculatorAvailable(): Boolean {
         val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
         return packageName.contains(".profissional.") || packageName.contains(".premium.")
+    }
+
+    @Test
+    fun clearingSecureSessionAlsoRemovesLegacyPlaintextTokens() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val legacyPrefs = context.getSharedPreferences("studiomesa_backend", Context.MODE_PRIVATE)
+        val store = SecureSessionStore(context)
+        store.clear()
+        store.save("secure-access-token", "secure-refresh-token")
+
+        org.junit.Assert.assertTrue(
+            "Could not seed legacy test preferences.",
+            legacyPrefs.edit()
+                .putString("access_token", "legacy-access-token")
+                .putString("refresh_token", "legacy-refresh-token")
+                .commit()
+        )
+
+        store.clear()
+
+        org.junit.Assert.assertNull(legacyPrefs.getString("access_token", null))
+        org.junit.Assert.assertNull(legacyPrefs.getString("refresh_token", null))
+        org.junit.Assert.assertEquals("", store.accessToken())
+        org.junit.Assert.assertEquals("", store.refreshToken())
+    }
+
+    @Test
+    fun migratingLegacySessionTokensRemovesPlaintextCopies() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val legacyPrefs = context.getSharedPreferences("studiomesa_backend", Context.MODE_PRIVATE)
+        val store = SecureSessionStore(context)
+        store.clear()
+
+        org.junit.Assert.assertTrue(
+            "Could not seed legacy test preferences.",
+            legacyPrefs.edit()
+                .putString("access_token", "migration-access-token")
+                .putString("refresh_token", "migration-refresh-token")
+                .commit()
+        )
+
+        org.junit.Assert.assertEquals("migration-access-token", store.accessToken())
+        org.junit.Assert.assertEquals("migration-refresh-token", store.refreshToken())
+        org.junit.Assert.assertNull(legacyPrefs.getString("access_token", null))
+        org.junit.Assert.assertNull(legacyPrefs.getString("refresh_token", null))
+
+        store.clear()
     }
 
     @Test
@@ -87,6 +136,28 @@ class MainActivitySmokeTest {
             onView(withText(containsString("10,67")))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
+    fun calculatorShowsValidationForExcessivelyLongCostInput() {
+        assumeTrue(
+            "The calculator is only available in management variants.",
+            isCalculatorAvailable() && !isCustomerVariant()
+        )
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withText("ABRIR CALCULADORA"))
+                .perform(scrollTo(), click())
+
+            onView(withHint("Ex.: 3,20"))
+                .perform(replaceText("9".repeat(65)))
+
+            onView(withText("Calcular preço sugerido"))
+                .perform(scrollTo(), click())
+
+            onView(withHint("Ex.: 3,20"))
+                .check(matches(hasErrorText("Introduz um custo numérico válido.")))
         }
     }
 
