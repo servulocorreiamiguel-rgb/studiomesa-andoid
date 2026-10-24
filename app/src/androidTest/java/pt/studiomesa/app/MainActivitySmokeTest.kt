@@ -6,10 +6,10 @@ import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.action.ViewActions.replaceText
 import androidx.test.espresso.action.ViewActions.scrollTo
 import androidx.test.espresso.assertion.ViewAssertions.matches
+import androidx.test.espresso.matcher.ViewMatchers.hasErrorText
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withHint
 import androidx.test.espresso.matcher.ViewMatchers.withText
-import androidx.test.platform.app.InstrumentationRegistry
 import org.hamcrest.Matchers.containsString
 import org.junit.Assume.assumeFalse
 import org.junit.Assume.assumeTrue
@@ -21,8 +21,7 @@ import org.junit.Test
  */
 class MainActivitySmokeTest {
     private fun isCustomerVariant(): Boolean =
-        InstrumentationRegistry.getInstrumentation()
-            .targetContext.packageName.endsWith(".cliente")
+        BuildConfig.FLAVOR.contains("cliente", ignoreCase = true)
 
     @Test
     fun appLaunchesIntoTheExpectedDemoExperience() {
@@ -60,9 +59,35 @@ class MainActivitySmokeTest {
         }
     }
 
+    private fun isPremiumVariant(): Boolean =
+        !isCustomerVariant() && BuildConfig.FLAVOR.contains("premium", ignoreCase = true)
+
+    @Test
+    fun premiumRestaurantCanSeeTheSafeOrderReportExportAction() {
+        assumeTrue("CSV order reporting is a Premium restaurant feature.", isPremiumVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withText("VER ANÁLISE"))
+                .perform(scrollTo(), click())
+
+            onView(withText("Exportar pedidos em CSV"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+
+            onView(withText(containsString("Não inclui notas internas")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+        }
+    }
+
+    private fun hasCalculator(): Boolean =
+        !isCustomerVariant() &&
+            (BuildConfig.FLAVOR.contains("profissional", ignoreCase = true) ||
+                BuildConfig.FLAVOR.contains("premium", ignoreCase = true))
+
     @Test
     fun restaurantPriceCalculatorProducesAnIndicativePrice() {
-        assumeFalse("Customer variant has no management calculator.", isCustomerVariant())
+        assumeTrue("The price calculator is not included in Essential or customer tiers.", hasCalculator())
 
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withText("ABRIR CALCULADORA"))
@@ -80,6 +105,28 @@ class MainActivitySmokeTest {
             onView(withText(containsString("10,67")))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
+    fun calculatorShowsValidationForExcessivelyLongCostInput() {
+        assumeTrue(
+            "The price calculator is not included in Essential or customer tiers.",
+            hasCalculator()
+        )
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withText("ABRIR CALCULADORA"))
+                .perform(scrollTo(), click())
+
+            onView(withHint("Ex.: 3,20"))
+                .perform(replaceText("9".repeat(65)))
+
+            onView(withText("Calcular preço sugerido"))
+                .perform(scrollTo(), click())
+
+            onView(withHint("Ex.: 3,20"))
+                .check(matches(hasErrorText("Introduz um custo numérico válido.")))
         }
     }
 

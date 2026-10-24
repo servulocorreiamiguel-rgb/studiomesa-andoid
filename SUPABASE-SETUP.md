@@ -2,6 +2,14 @@
 
 > **Importante:** este documento substitui instruções antigas de configuração. O código e a base de dados evoluíram; não executes o ficheiro `supabase/schema.sql` no projeto ligado à aplicação sem antes comparar o esquema e validar uma migração. Esse ficheiro é um protótipo inicial da parte de fidelização e não representa, por si só, todo o esquema atualmente utilizado pela aplicação.
 
+## Estado do historial de migrações (verificado em 23/10/2026)
+
+A auditoria inicial detetou que 18 migrações aplicadas desde 19/10/2026 não estavam versionadas no repositório, e que três ficheiros posteriores usavam números de versão diferentes dos registados no Supabase. O SQL original foi recuperado em modo de leitura a partir de `supabase_migrations.schema_migrations.statements`; os 18 ficheiros foram repostos e os três nomes/versões foram alinhados com o histórico ativo.
+
+Verificação cruzada posterior: **37 ficheiros locais e 37 migrações ativas, com correspondência exata por versão e nome**. A sequência recuperada está na [PR #17](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/17). Nenhuma migração foi executada novamente na base de dados ativa durante a auditoria.
+
+**Ainda falta reproduzir a instalação desde zero numa base de dados Supabase/PostgreSQL descartável** e comparar tabelas, constraints, RLS/policies, índices, funções, triggers, grants e Edge Functions. Não executar `supabase db push`, não editar o histórico de migrações remoto e não correr `schema.sql` como substituto. O ficheiro `schema.sql` é um protótipo parcial antigo; não recria o backend atual. Ver [issue #16](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/issues/16).
+
 ## Estado técnico
 
 - A aplicação Android é nativa, escrita em Kotlin.

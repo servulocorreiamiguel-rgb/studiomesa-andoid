@@ -1,7 +1,16 @@
 # StudioMesa — lista de preparação para uso profissional
 
-**Estado de lançamento nesta revisão: não pronto para operação comercial real.**  
+**Estado de lançamento nesta revisão (24/10/2026): não pronto para operação comercial real.**  
 Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige desenvolvimento/testes. Um botão presente na interface não prova que uma funcionalidade esteja completa.
+
+### Resultados de verificação confirmados nesta revisão
+
+- [x] GitHub Actions executou compilação, testes unitários, Android Lint, validação do caminho de assinatura comercial com uma chave temporária de CI e testes de interface no emulador Android 16. Execução completa mais recente: [run #40091298746](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40091298746), commit `b8df3d7`.
+- [x] Os cinco relatórios XML do emulador Android 16 registaram **30 execuções de testes: 15 aprovadas, 15 ignoradas intencionalmente por não se aplicarem à variante e 0 falhas/erros**. Incluem lançamento, pedido local de demonstração, calculadora e exportação CSV Premium. Isto é um smoke test; não prova integração ponta a ponta com o backend alojado.
+- [x] A consulta read-only ao PostgreSQL confirmou RLS ativa nas tabelas principais públicas e sem permissões de execução para `anon` nas funções inspecionadas. As funções públicas `SECURITY DEFINER` verificadas usam `SET search_path TO ''` e fazem referência a `auth.uid()`; falta validar isolamento com duas contas reais de restaurantes diferentes.
+- [x] Recuperadas de forma read-only as 18 migrações originais em falta a partir de `supabase_migrations.schema_migrations.statements` e corrigidos os nomes/versões dos três ficheiros seguintes. Na verificação de 23/10/2026 havia **37 ficheiros locais e 37 registos remotos**. Em 24/10 foi acrescentada ao ramo de desenvolvimento a migração corretiva `20261024110000_fix_join_restaurant_staff_conflict_target.sql`; existem agora **38 migrações locais e a migração nova ainda não está aplicada nem registada na base alojada**. A base de dados ativa não foi alterada. PR: [#17](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/17).
+- [x] A execução #40091298746 aplicou **38 migrações** numa base PostgreSQL 17.6 vazia, com shim de Auth exclusivo para testes; os contratos de isolamento entre restaurantes, idempotência, permissões `anon` e eliminação de conta passaram. A correção de `join_restaurant_staff` está validada neste ambiente descartável, ainda não no Supabase alojado.
+- [ ] **Ainda por validar:** comparar o esquema completo (constraints, policies, grants, índices, funções e triggers) e as Edge Functions com um ambiente Supabase descartável completo. A base de dados de produção não foi alterada; não executar `db push` nem editar o histórico remoto para este teste. Ver [issue #16](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/issues/16).
 
 ## Carta e menu
 
@@ -66,6 +75,12 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 
 ## Segurança e continuidade
 
+- [x] No ramo de desenvolvimento, o Manifest declara `android:allowBackup="false"` e `android:usesCleartextTraffic="false"` explicitamente.
+- [x] Criado verificador estático de CI para componentes exportados, permissões sensíveis, transporte HTTPS, padrões de chaves secretas na aplicação, Android Keystore/AES-GCM e versão mínima de `targetSdk`.
+- [x] Incluídos testes unitários para configurações seguras e regressões intencionais do verificador.
+- [x] A execução completa de CI para o commit `b8df3d7` passou: 38 migrações, testes de autorização/eliminação de conta, compilação Android, testes unitários, Lint, validação do bundle comercial com chave temporária e interface no emulador Android 16. [Ver execução #40091298746](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40091298746).
+- [ ] A verificação estática não substitui testes de autorização no Supabase alojado, auditoria independente ou ensaios em Android real.
+
 - [x] RLS ativa nas tabelas principais do esquema público inspecionado.
 - [x] Permissões de execução revogadas para os RPCs antigos não idempotentes de reservas, stock e pontos; a app atual usa as variantes com chaves de idempotência. Confirmado no catálogo PostgreSQL que os três endpoints antigos não são executáveis por `anon` nem por `authenticated`.
 - [x] Retiradas permissões de tabela desnecessárias: `anon` já não tem acesso direto a carta, pedidos ou mesas; `authenticated` conserva apenas `SELECT`, `INSERT` e `UPDATE` nessas tabelas. RLS mantém-se ativa.
@@ -73,7 +88,7 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [x] O código de acesso da equipa é `NOT NULL` e continua protegido pelo índice único existente `restaurant_join_codes_staff_code_idx`. A migração corretiva `20261021154348` remove o índice duplicado criado temporariamente em `20261021154106`.
 - [x] RLS ativada na tabela privada `private.restaurant_join_codes` (migração `20261021152901`). Não existem políticas de acesso direto; confirmado que `anon` e `authenticated` não têm privilégios diretos de leitura/escrita. As funções necessárias são propriedade de `postgres`, com `BYPASSRLS`. O aviso atual do Security Advisor é informativo: RLS ativa sem política, intencional para esta tabela privada.
 - [x] As funções `SECURITY DEFINER` inspecionadas exigem sessão e as permissões de execução para `anon` estavam revogadas para os RPCs listados pelo Security Advisor.
-- [ ] Proteção contra palavras-passe comprometidas no Supabase Auth. O alerta está ativo e o plano da organização é Free; a documentação do Supabase indica esta proteção nos planos Pro ou superiores. Rever antes de produção ([documentação oficial](https://supabase.com/docs/guides/auth/password-security)).
+- [ ] Proteção contra palavras-passe comprometidas no Supabase Auth. O alerta está ativo. A documentação oficial indica que a funcionalidade não está incluída no plano Free e está disponível no Pro ou superior; não atualizar o plano sem decisão explícita sobre o custo. Confirmar disponibilidade e custos na altura da ativação ([documentação oficial](https://supabase.com/docs/guides/auth/password-security), [planos](https://supabase.com/pricing)).
 - [x] Sessões guardadas com cifragem AES-GCM usando Android Keystore no código inspecionado.
 - [x] Código PKCE em OAuth, registo e recuperação, com verificador cifrado e rejeição de tokens bearer na ligação de retorno.
 - [x] Logout local limpa os tokens e inicia a revogação da sessão atual no Supabase em segundo plano.
@@ -82,21 +97,33 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [ ] Testar login, recuperação, registo e revogação de sessão num dispositivo real; o logout remoto é best effort quando a rede falha.
 - [ ] Confirmar backups disponíveis, retenção e executar um restauro de teste num ambiente separado.
 - [x] Implementado o fluxo de eliminação de conta autenticada no Android e no Supabase; as contas de proprietário exigem confirmação dos dados do restaurante e não podem ser eliminadas enquanto houver outros membros.
-- [ ] Testar eliminação de conta com contas de teste dedicadas (não foram apagadas contas reais); confirmar anonimização de autoria, cascatas e expiração da fila.
+- [x] CI numa base PostgreSQL descartável testa confirmação obrigatória do proprietário, bloqueio com membros presentes, eliminação em cascata do restaurante e preservação do restaurante ao eliminar um funcionário; nenhuma conta real foi apagada.
+- [ ] Testar eliminação ponta a ponta com contas dedicadas no Supabase alojado; confirmar anonimização de autoria, expiração da fila e e-mail/ligação. Não foram apagadas contas reais.
 - [x] Publicada a página web externa para iniciar pedidos de eliminação: `https://svwvkfsyevuyabelrtjk.supabase.co/functions/v1/account-deletion-web`.
 - [ ] Autorizar o URL de redirecionamento em Supabase Auth e testar envio/click de magic link com contas de teste.
 - [ ] Publicar uma política de privacidade pública e configurar a secção Data safety na Play Console; confirmar exportação, conservação e resposta a incidentes.
 - [ ] Não colocar chaves `service_role` ou `sb_secret_...` na aplicação. A chave `sb_publishable_...` incorporada no cliente é pública por natureza e depende de RLS/políticas corretas.
 
+## Relatórios e exportação
+
+- [x] Ecrã Análise disponibiliza exportação CSV dos pedidos, de origem local ou do servidor, para o destino escolhido pelo utilizador via Android Storage Access Framework, sem permissões gerais de armazenamento.
+- [x] O relatório contém apenas ID, data, mesa, artigo, quantidade, preço unitário, valor nominal e estado; exclui notas internas e contactos de reservas.
+- [x] O serializador usa ponto e vírgula, BOM UTF-8, decimais com vírgula e neutralização de fórmulas em campos de texto que começam por `=`, `+`, `-` ou `@`.
+- [x] Testes unitários adicionados para formatação portuguesa, aspas/quebras de linha, relatório vazio e proteção contra CSV formula injection.
+- [ ] Testar num dispositivo Android real o seletor de destino, cancelamento, falha de armazenamento e abertura em Excel/LibreOffice/Sheets.
+- [ ] Reforçar no produto que os valores nominais dos pedidos não provam pagamentos nem substituem faturação ou contabilidade.
+
 ## Lançamento e suporte
 
 
 - [x] Workflow atual compila APKs de demonstração/debug e executa testes unitários nas cinco variantes de distribuição.
-- [x] Configuração usa compileSdk/targetSdk 36, AGP 8.10.0 e Gradle 8.11.1; a última execução verificada compilou e carregou os cinco APKs debug de demonstração.
+- [x] Configuração usa compileSdk/targetSdk 36, AGP 8.10.0 e Gradle 8.11.1; a execução #40091298746 compilou os cinco APKs debug e concluiu os testes de interface nas cinco variantes.
 - [x] Adicionado workflow manual que prepara cinco AABs comerciais assinados, exige confirmação explícita, executa testes e Lint e verifica as assinaturas.
-- [ ] Escolher e validar o identificador base definitivo, criar o keystore privado, configurar os GitHub Actions Secrets/Variables e executar o workflow comercial com sucesso.
+- [ ] Escolher e validar o identificador base definitivo, criar o keystore privado, configurar os GitHub Actions Secrets/Variables e executar o workflow comercial com sucesso. O CI validou apenas o caminho de assinatura com uma chave temporária, nunca com a chave privada de lançamento.
+- [ ] Rever e, após backup/aprovação, aplicar a migração `20261024110000_fix_join_restaurant_staff_conflict_target.sql` no Supabase alojado; permanece deliberadamente só no ramo de desenvolvimento.
 - [ ] Terminar os testes ponta a ponta antes de instalar a versão comercial num restaurante real.
-- [ ] Automatizar testes e análise estática e guardar os resultados de cada release.
+- [x] Automatizados os controlos de separadores SQL e adicionada uma verificação CI de contratos mínimos para funções `SECURITY DEFINER`; a execução de cada commit candidato tem de passar.
+- [ ] Expandir a cobertura com testes ponta a ponta do backend, incluindo isolamento entre restaurantes, autenticação, reservas, pedidos, stock, fidelização e eliminação de conta, e guardar os resultados de cada release.
 - [ ] Definir monitorização, canal de suporte, prazo de resposta, atualizações, manutenção e procedimento de recuperação.
 - [ ] Definir contrato, âmbito funcional, titularidade dos dados, privacidade, conservação e responsabilidades com aconselhamento adequado.
 

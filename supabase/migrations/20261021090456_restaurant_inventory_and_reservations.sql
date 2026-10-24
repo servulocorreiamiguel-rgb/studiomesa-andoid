@@ -1,9 +1,3 @@
--- StudioMesa: shared inventory and reservation workflows.
--- All writes are performed by authorization-checked RPCs; team members may only
--- read records belonging to restaurants they are assigned to.
-
-begin;
-
 create table if not exists public.restaurant_inventory_items (
   id uuid primary key default gen_random_uuid(),
   restaurant_id uuid not null references public.restaurants(id) on delete cascade,
@@ -361,5 +355,3 @@ grant execute on function public.save_inventory_item(uuid, uuid, text, text, num
 grant execute on function public.adjust_inventory_stock(uuid, numeric, text) to authenticated;
 grant execute on function public.create_restaurant_reservation(uuid, text, text, integer, timestamptz, integer, integer, text) to authenticated;
 grant execute on function public.update_restaurant_reservation_status(uuid, text) to authenticated;
-
-commit;
