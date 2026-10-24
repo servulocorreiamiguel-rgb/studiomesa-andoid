@@ -43,31 +43,44 @@ class SecureSessionStore(context: Context) {
             throw IllegalStateException("Não foi possível guardar a sessão cifrada neste dispositivo.")
         }
         // Finish deleting the plaintext legacy copy before returning from migration/login.
-        if (!legacyPrefs.edit()
-                .remove("access_token")
-                .remove("refresh_token")
-                .commit()) {
+        if (!runCatching {
+                legacyPrefs.edit()
+                    .remove("access_token")
+                    .remove("refresh_token")
+                    .commit()
+            }.getOrDefault(false)) {
+            clear()
             throw IllegalStateException("Não foi possível remover a sessão antiga em texto simples.")
         }
     }
 
     @Synchronized
-    fun clear() {
-        val secureCleared = securePrefs.edit()
-            .remove("access_token")
-            .remove("refresh_token")
-            .remove("pending_code_verifier")
-            .remove("pending_code_flow")
-            .commit()
+    fun clear(): Boolean {
+        val secureCleared = runCatching {
+            securePrefs.edit()
+                .remove("access_token")
+                .remove("refresh_token")
+                .remove("pending_code_verifier")
+                .remove("pending_code_flow")
+                .commit()
+        }.getOrDefault(false)
+
         // Persist legacy-token removal synchronously so a process exit cannot restore a
         // plaintext session that the caller has just cleared.
-        val legacyCleared = legacyPrefs.edit()
-            .remove("access_token")
-            .remove("refresh_token")
-            .commit()
-        if (!secureCleared || !legacyCleared) {
-            throw IllegalStateException("Não foi possível limpar completamente a sessão neste dispositivo.")
-        }
+        val legacyCleared = runCatching {
+            legacyPrefs.edit().remove("access_token").remove("refresh_token").commit()
+        }.getOrDefault(false)
+
+        // If preference persistence fails, invalidating the Keystore key prevents stale
+        // encrypted tokens or PKCE verifiers from being recovered after a process restart.
+        val keyInvalidated = runCatching {
+            KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(KEY_ALIAS)
+            true
+        }.getOrDefault(false)
+
+        // Report success if the encrypted store was cleared OR its key was invalidated,
+        // and the plaintext legacy tokens were removed.
+        return legacyCleared && (secureCleared || keyInvalidated)
     }
 
     /**
@@ -121,8 +134,9 @@ class SecureSessionStore(context: Context) {
     private fun getToken(key: String): String {
         val encrypted = securePrefs.getString(key, null)
         if (!encrypted.isNullOrBlank()) {
-            if (!legacyPrefs.edit().remove(key).commit()) {
-                throw IllegalStateException("Não foi possível remover a cópia antiga do token.")
+            if (!runCatching { legacyPrefs.edit().remove(key).commit() }.getOrDefault(false)) {
+                clear()
+                return ""
             }
             return try {
                 decrypt(encrypted)
