@@ -43,6 +43,19 @@ COMMIT;
 SQL
 }
 
+adjust_inventory_stock() {
+  local user_id="$1" item_id="$2" request_id="$3" delta="$4" note="$5"
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT quantity FROM public.adjust_inventory_stock_idempotent(
+  '$request_id'::uuid, '$item_id'::uuid, '$delta'::numeric, '$note'
+);
+COMMIT;
+SQL
+}
+
 RESTAURANT_A="$(create_restaurant "$USER_A" "CI Restaurant A" "SMOKEAA001")"
 RESTAURANT_B="$(create_restaurant "$USER_B" "CI Restaurant B" "SMOKEBB001")"
 test -n "$RESTAURANT_A"
@@ -107,6 +120,55 @@ then
   exit 1
 fi
 echo "PASS: changing a payload while reusing its idempotency key is rejected."
+
+# A retried stock adjustment must not mutate the quantity a second time, and
+# the idempotency key must not be reusable with different adjustment data.
+STOCK_ADJUST_REQUEST="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+STOCK_FOREIGN_REQUEST="ffffffff-ffff-4fff-8fff-ffffffffffff"
+ADJUSTMENT_FIRST="$(adjust_inventory_stock "$USER_A" "$ITEM_A" "$STOCK_ADJUST_REQUEST" "-2" "CI retry test")"
+ADJUSTMENT_RETRY="$(adjust_inventory_stock "$USER_A" "$ITEM_A" "$STOCK_ADJUST_REQUEST" "-2" "CI retry test")"
+if [ "$ADJUSTMENT_FIRST" != "$ADJUSTMENT_RETRY" ]; then
+  echo "ERROR: retrying the same stock adjustment returned a different quantity." >&2
+  exit 1
+fi
+
+stock_quantity_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT quantity = 8 FROM public.restaurant_inventory_items WHERE id = '$ITEM_A'::uuid;")"
+movement_count_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*) = 1 FROM public.restaurant_inventory_movements WHERE created_by = '$USER_A'::uuid AND client_request_id = '$STOCK_ADJUST_REQUEST'::uuid;")"
+if [ "$stock_quantity_ok" != "t" ] || [ "$movement_count_ok" != "t" ]; then
+  echo "ERROR: repeated stock adjustment was applied more than once." >&2
+  exit 1
+fi
+echo "PASS: repeated stock adjustment is idempotent and records exactly one movement."
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.adjust_inventory_stock_idempotent(
+  '$STOCK_FOREIGN_REQUEST'::uuid, '$ITEM_B'::uuid, 1, 'Unauthorized adjustment'
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: user A unexpectedly adjusted stock belonging to restaurant B." >&2
+  exit 1
+fi
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.adjust_inventory_stock_idempotent(
+  '$STOCK_ADJUST_REQUEST'::uuid, '$ITEM_A'::uuid, -3, 'CI retry test'
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: the same stock idempotency key was accepted with a different delta." >&2
+  exit 1
+fi
+echo "PASS: cross-restaurant stock adjustments and changed idempotency payloads are rejected."
 
 
 expect_prepare_account_deletion_rejection() {
