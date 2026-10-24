@@ -99,14 +99,12 @@ class MainActivitySmokeTest {
                 }
 
                 onView(withText("Terminar sessão e voltar a entrar"))
-                    .perform(scrollTo())
                     .check(matches(isDisplayed()))
                 onView(withText(containsString("a conta e os dados no servidor não serão eliminados.")))
-                    .perform(scrollTo())
                     .check(matches(isDisplayed()))
 
                 onView(withText("Terminar sessão e voltar a entrar"))
-                    .perform(scrollTo(), click())
+                    .perform(click())
 
                 onView(withText("Criar conta / iniciar sessão"))
                     .perform(scrollTo())
