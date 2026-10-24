@@ -33,6 +33,19 @@ class SessionAuthorizationErrorClassifierTest {
     }
 
     @Test
+    fun rejectedRefreshTokenRequiresSessionReverificationEvenOnHttp400() {
+        assertTrue(
+            SessionAuthorizationErrorClassifier.requiresReverification(
+                BackendHttpException(
+                    400,
+                    "/auth/v1/token?grant_type=refresh_token",
+                    "Invalid Refresh Token: Already Used"
+                )
+            )
+        )
+    }
+
+    @Test
     fun signupAndRecoveryErrorsStayOnTheirForms() {
         assertFalse(
             SessionAuthorizationErrorClassifier.requiresReverification(
