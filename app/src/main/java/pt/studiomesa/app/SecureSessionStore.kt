@@ -42,10 +42,11 @@ class SecureSessionStore(context: Context) {
         if (!editor.commit()) {
             throw IllegalStateException("Não foi possível guardar a sessão cifrada neste dispositivo.")
         }
+        // Finish deleting the plaintext legacy copy before returning from migration/login.
         legacyPrefs.edit()
             .remove("access_token")
             .remove("refresh_token")
-            .apply()
+            .commit()
     }
 
     @Synchronized
