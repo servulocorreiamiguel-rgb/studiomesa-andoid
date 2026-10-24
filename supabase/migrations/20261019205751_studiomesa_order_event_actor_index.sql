@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS restaurant_order_events_actor_user_idx ON public.restaurant_order_events (actor_user_id);
