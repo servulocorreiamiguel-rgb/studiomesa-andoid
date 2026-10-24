@@ -17,9 +17,29 @@ concurrency:
 
 jobs:
   build-signed-bundles:
-    name: Test and build signed AABs
+    name: Verify and build signed AABs
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 75
+    services:
+      postgres:
+        image: postgres:17.6
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: studiomesa_release_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d studiomesa_release_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: studiomesa_release_test
     steps:
       - name: Require explicit confirmation
         env:
@@ -32,6 +52,103 @@ jobs:
 
       - name: Check out source
         uses: actions/checkout@v7
+
+      - name: Validate signing secrets and keystore
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          STUDIOMESA_RELEASE_APPLICATION_ID: ${{ vars.STUDIOMESA_RELEASE_APPLICATION_ID }}
+        run: |
+          set -euo pipefail
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD STUDIOMESA_RELEASE_APPLICATION_ID; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing required GitHub Actions secret/variable: $name"
+              exit 1
+            fi
+          done
+          KEYSTORE_PATH="$RUNNER_TEMP/studiomesa-release.jks"
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          test -s "$KEYSTORE_PATH"
+          keytool -list -keystore "$KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" >/dev/null
+          echo "STUDIOMESA_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+
+      - name: Validate SQL migration function delimiters
+        run: python3 scripts/check_sql_function_delimiters.py
+
+      - name: Check Android security baseline
+        run: python3 scripts/check_android_security_baseline.py
+
+      - name: Test Android security baseline guard
+        run: python3 scripts/test_check_android_security_baseline.py
+
+      - name: Validate privileged SQL function security contracts
+        run: |
+          python3 scripts/check_sql_security_definers.py
+          python3 -m unittest discover -s scripts -p 'test_*.py' -v
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y postgresql-client
+
+      - name: Bootstrap isolated Supabase Auth compatibility shim
+        run: psql --no-psqlrc --set ON_ERROR_STOP=1 --file scripts/ci/supabase_postgres_shim.sql
+
+      - name: Replay migration history from an empty database
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=0
+          while IFS= read -r migration; do
+            echo "Replaying ${migration}"
+            psql --no-psqlrc --set ON_ERROR_STOP=1 --file "${migration}"
+            count=$((count + 1))
+          done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
+          test "${count}" -eq 37
+          echo "Successfully replayed ${count} versioned migration files."
+
+      - name: Assert core schema, RLS and RPCs exist
+        run: |
+          psql --no-psqlrc --set ON_ERROR_STOP=1 <<'SQL'
+          DO $check$
+          BEGIN
+            IF to_regclass('public.restaurants') IS NULL
+              OR to_regclass('public.restaurant_orders') IS NULL
+              OR to_regclass('public.restaurant_reservations') IS NULL
+              OR to_regclass('public.restaurant_inventory_items') IS NULL
+              OR to_regclass('public.loyalty_members') IS NULL
+              OR to_regclass('private.restaurant_join_codes') IS NULL THEN
+              RAISE EXCEPTION 'Core StudioMesa tables are missing after clean migration replay.';
+            END IF;
+
+            IF to_regprocedure('public.create_restaurant(text,text)') IS NULL
+              OR to_regprocedure('public.create_restaurant_reservation_idempotent(uuid,uuid,text,text,integer,timestamp with time zone,integer,integer,text)') IS NULL
+              OR to_regprocedure('public.adjust_inventory_stock_idempotent(uuid,uuid,numeric,text)') IS NULL
+              OR to_regprocedure('public.adjust_loyalty_points_idempotent(uuid,uuid,integer,text)') IS NULL THEN
+              RAISE EXCEPTION 'A required RPC is missing after clean migration replay.';
+            END IF;
+
+            IF EXISTS (
+              SELECT 1
+              FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public'
+                AND c.relkind = 'r'
+                AND NOT c.relrowsecurity
+            ) THEN
+              RAISE EXCEPTION 'At least one public table was created without RLS enabled.';
+            END IF;
+          END;
+          $check$;
+          SQL
+
+      - name: Test cross-restaurant authorization and idempotency
+        shell: bash
+        run: bash scripts/ci/check_postgres_authorization_contracts.sh
 
       - name: Set up Java 17
         uses: actions/setup-java@v6
@@ -64,35 +181,32 @@ jobs:
           yes | "$SDKMANAGER" --licenses || true
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Validate signing secrets and keystore
-        shell: bash
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          STUDIOMESA_RELEASE_APPLICATION_ID: ${{ vars.STUDIOMESA_RELEASE_APPLICATION_ID }}
-        run: |
-          set -euo pipefail
-          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD STUDIOMESA_RELEASE_APPLICATION_ID; do
-            if [ -z "${!name:-}" ]; then
-              echo "Missing required GitHub Actions secret/variable: $name"
-              exit 1
-            fi
-          done
-          KEYSTORE_PATH="$RUNNER_TEMP/studiomesa-release.jks"
-          umask 077
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
-          test -s "$KEYSTORE_PATH"
-          keytool -list -keystore "$KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" >/dev/null
-          echo "STUDIOMESA_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
-
       - name: Run unit tests for every distributed variant
         run: gradle --no-daemon testEssencialRestauranteDebugUnitTest testProfissionalRestauranteDebugUnitTest testProfissionalClienteDebugUnitTest testPremiumRestauranteDebugUnitTest testPremiumClienteDebugUnitTest
 
       - name: Run Android lint
         timeout-minutes: 10
         run: gradle --no-daemon lint
+
+      - name: Run UI smoke tests on Android 16 emulator
+        uses: ReactiveCircus/android-emulator-runner@v2.38.0
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot
+          script: gradle --no-daemon connectedEssencialRestauranteDebugAndroidTest connectedProfissionalRestauranteDebugAndroidTest connectedProfissionalClienteDebugAndroidTest connectedPremiumRestauranteDebugAndroidTest connectedPremiumClienteDebugAndroidTest
+
+      - name: Upload emulator test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudioMesa-Commercial-Emulator-Test-Results
+          path: app/build/outputs/androidTest-results/connected/**/*.xml
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Build signed commercial bundles
         shell: bash
