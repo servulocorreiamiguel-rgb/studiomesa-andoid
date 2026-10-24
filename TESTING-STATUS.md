@@ -70,6 +70,18 @@ Artefactos desta execução: [APKs de demonstração e relatórios](https://gith
 - Mensagens de erro do servidor limitadas a 400 caracteres, em linha única e apenas a partir de campos JSON reconhecidos.
 - Redirecionamentos HTTP automáticos e cache desativados na camada de comunicação REST/Auth.
 
+## Auditoria adicional de segurança — 24-10-2026
+
+Consulta read-only aos avisos atuais do Supabase e leitura das definições de funções privilegiadas:
+
+- O projeto Supabase está ativo e saudável.
+- O advisor de segurança assinala a proteção contra palavras-passe comprometidas desativada. **Pendente:** ativar nas definições de Auth e validar o fluxo de registo/alteração de palavra-passe.
+- O advisor assinala 19 funções `SECURITY DEFINER` executáveis por utilizadores autenticados. Isto não prova, por si só, uma vulnerabilidade: várias funções verificam a sessão e a pertença ao restaurante. É obrigatório testar cada operação com proprietário, funcionário, utilizador de outro restaurante e utilizador sem sessão, e rever as verificações de autorização antes de alterar privilégios.
+- As tabelas `private.account_deletion_queue` e `private.restaurant_join_codes` têm RLS ativo sem políticas. O advisor classifica isto como informativo; confirmar que a ausência de políticas é intencional e que o acesso é feito apenas pelas funções privilegiadas autorizadas.
+- A inspeção read-only de `create_restaurant`, `create_restaurant_reservation_idempotent`, `get_member_restaurant_menu`, `prepare_account_deletion`, `save_inventory_item`, `adjust_inventory_stock_idempotent` e `update_restaurant_reservation_status` mostrou verificações explícitas de sessão e, nas operações relevantes, pertença ao restaurante. Esta leitura estática não substitui testes de autorização com identidades separadas.
+- O advisor de desempenho também assinala índices não utilizados; não foram removidos, pois isso exige dados de carga reais e pode prejudicar consultas que ainda não foram executadas.
+- Não foram feitas alterações ao esquema nem aos dados de produção durante esta auditoria.
+
 ## Pendências antes de vender/publicar
 
 1. Confirmar o CI de cada alteração futura; não presumir que uma execução anterior valida código posterior.
