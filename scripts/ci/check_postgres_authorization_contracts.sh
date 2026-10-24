@@ -8,6 +8,8 @@ USER_A="11111111-1111-4111-8111-111111111111"
 USER_B="22222222-2222-4222-8222-222222222222"
 USER_C="33333333-3333-4333-8333-333333333333"
 USER_D="44444444-4444-4444-8444-444444444444"
+USER_E="55555555-5555-4555-8555-555555555555"
+USER_F="66666666-6666-4666-8666-666666666666"
 REQUEST_A="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 REQUEST_B="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 
@@ -47,7 +49,9 @@ INSERT INTO auth.users (id, email)
 VALUES ('$USER_A', 'ci-owner-a@example.invalid'),
        ('$USER_B', 'ci-owner-b@example.invalid'),
        ('$USER_C', 'ci-staff-c@example.invalid'),
-       ('$USER_D', 'ci-staff-d@example.invalid');
+       ('$USER_D', 'ci-staff-d@example.invalid'),
+       ('$USER_E', 'ci-customer-e@example.invalid'),
+       ('$USER_F', 'ci-customer-f@example.invalid');
 SQL
 
 create_restaurant() {
@@ -82,6 +86,44 @@ SELECT set_config('request.jwt.claim.sub', '$user_id', true);
 SET LOCAL ROLE authenticated;
 SELECT quantity FROM public.adjust_inventory_stock_idempotent(
   '$request_id'::uuid, '$item_id'::uuid, '$delta'::numeric, '$note'
+);
+COMMIT;
+SQL
+}
+
+join_customer() {
+  local user_id="$1" join_code="$2" display_name="$3"
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT member_id FROM public.join_restaurant('$join_code', '$display_name');
+COMMIT;
+SQL
+}
+
+adjust_loyalty_points() {
+  local user_id="$1" member_id="$2" request_id="$3" delta="$4" note="$5"
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT points FROM public.adjust_loyalty_points_idempotent(
+  '$request_id'::uuid, '$member_id'::uuid, '$delta'::integer, '$note'
+);
+COMMIT;
+SQL
+}
+
+create_restaurant_reservation() {
+  local user_id="$1" restaurant_id="$2" request_id="$3" guest_name="$4" reservation_at="$5"
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT public.create_restaurant_reservation_idempotent(
+  '$request_id'::uuid, '$restaurant_id'::uuid, '$guest_name', '', 2,
+  '$reservation_at'::timestamptz, 60, NULL::integer, 'CI reservation isolation test'
 );
 COMMIT;
 SQL
@@ -200,6 +242,143 @@ then
   exit 1
 fi
 echo "PASS: cross-restaurant stock adjustments and changed idempotency payloads are rejected."
+
+
+# Customer-card, loyalty and reservation authorization checks use separate synthetic
+# users for restaurants A/B. All records are created only in this disposable database.
+MEMBER_A="$(join_customer "$USER_E" "SMOKEAA001" "CI Customer A")"
+MEMBER_B="$(join_customer "$USER_F" "SMOKEBB001" "CI Customer B")"
+test -n "$MEMBER_A"
+test -n "$MEMBER_B"
+test "$MEMBER_A" != "$MEMBER_B"
+
+own_menu_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*) FROM public.get_member_restaurant_menu('$MEMBER_A'::uuid);
+ROLLBACK;
+SQL
+)"
+test -n "$own_menu_rows"
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.get_member_restaurant_menu('$MEMBER_B'::uuid);
+COMMIT;
+SQL
+then
+  echo "ERROR: customer A unexpectedly read the menu via customer B's loyalty card." >&2
+  exit 1
+fi
+echo "PASS: a customer can query only the menu associated with their own loyalty card."
+
+LOYALTY_REQUEST="77777777-7777-4777-8777-777777777777"
+LOYALTY_FOREIGN_REQUEST="88888888-8888-4888-8888-888888888888"
+LOYALTY_FIRST="$(adjust_loyalty_points "$USER_A" "$MEMBER_A" "$LOYALTY_REQUEST" "10" "CI loyalty retry")"
+LOYALTY_RETRY="$(adjust_loyalty_points "$USER_A" "$MEMBER_A" "$LOYALTY_REQUEST" "10" "CI loyalty retry")"
+if [ "$LOYALTY_FIRST" != "$LOYALTY_RETRY" ]; then
+  echo "ERROR: repeating a loyalty-points request returned a different balance." >&2
+  exit 1
+fi
+loyalty_balance_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT points = 10 FROM public.loyalty_members WHERE id = '$MEMBER_A'::uuid;")"
+loyalty_transaction_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*) = 1 FROM public.loyalty_transactions WHERE created_by = '$USER_A'::uuid AND client_request_id = '$LOYALTY_REQUEST'::uuid;")"
+if [ "$loyalty_balance_ok" != "t" ] || [ "$loyalty_transaction_ok" != "t" ]; then
+  echo "ERROR: repeated loyalty adjustment changed the balance twice or recorded duplicate transactions." >&2
+  exit 1
+fi
+echo "PASS: repeated loyalty-point adjustments are idempotent and create one transaction."
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.adjust_loyalty_points_idempotent(
+  '$LOYALTY_FOREIGN_REQUEST'::uuid, '$MEMBER_B'::uuid, 10, 'Cross-restaurant attempt'
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: owner A unexpectedly adjusted points for a member of restaurant B." >&2
+  exit 1
+fi
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.adjust_loyalty_points_idempotent(
+  '$LOYALTY_REQUEST'::uuid, '$MEMBER_A'::uuid, -5, 'CI loyalty retry'
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: loyalty idempotency key was accepted with a changed delta." >&2
+  exit 1
+fi
+echo "PASS: cross-restaurant loyalty changes and changed idempotency payloads are rejected."
+
+RESERVATION_REQUEST="99999999-9999-4999-8999-999999999999"
+RESERVATION_FOREIGN_REQUEST="abababab-abab-4bab-8bab-abababababab"
+RESERVATION_AT="$(date -u -d '+30 days' '+%Y-%m-%d %H:%M:%S+00:00')"
+RESERVATION_A="$(create_restaurant_reservation "$USER_A" "$RESTAURANT_A" "$RESERVATION_REQUEST" "CI Guest" "$RESERVATION_AT")"
+RESERVATION_RETRY="$(create_restaurant_reservation "$USER_A" "$RESTAURANT_A" "$RESERVATION_REQUEST" "CI Guest" "$RESERVATION_AT")"
+if [ -z "$RESERVATION_A" ] || [ "$RESERVATION_A" != "$RESERVATION_RETRY" ]; then
+  echo "ERROR: retrying the same reservation request did not return the original reservation." >&2
+  exit 1
+fi
+reservation_count_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*) = 1 FROM public.restaurant_reservations WHERE id = '$RESERVATION_A'::uuid AND restaurant_id = '$RESTAURANT_A'::uuid AND created_by = '$USER_A'::uuid AND client_request_id = '$RESERVATION_REQUEST'::uuid;")"
+if [ "$reservation_count_ok" != "t" ]; then
+  echo "ERROR: repeated reservation creation produced a duplicate or misplaced reservation." >&2
+  exit 1
+fi
+echo "PASS: repeated reservation creation returns the original reservation exactly once."
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.create_restaurant_reservation_idempotent(
+  '$RESERVATION_FOREIGN_REQUEST'::uuid, '$RESTAURANT_B'::uuid, 'Unauthorized Guest', '',
+  2, '$RESERVATION_AT'::timestamptz, 60, NULL::integer, 'Should be rejected'
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: user A unexpectedly created a reservation for restaurant B." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
+SET LOCAL ROLE authenticated;
+SELECT public.update_restaurant_reservation_status('$RESERVATION_A'::uuid, 'Confirmada');
+COMMIT;
+SQL
+then
+  echo "ERROR: user B unexpectedly changed a reservation belonging to restaurant A." >&2
+  exit 1
+fi
+psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.update_restaurant_reservation_status('$RESERVATION_A'::uuid, 'Confirmada');
+SELECT public.update_restaurant_reservation_status('$RESERVATION_A'::uuid, 'Confirmada');
+COMMIT;
+SQL
+reservation_status_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT status = 'Confirmada' FROM public.restaurant_reservations WHERE id = '$RESERVATION_A'::uuid;")"
+if [ "$reservation_status_ok" != "t" ]; then
+  echo "ERROR: owner A could not confirm their reservation or retry the same status." >&2
+  exit 1
+fi
+echo "PASS: reservation status changes are idempotent and cross-restaurant updates are rejected."
 
 
 expect_prepare_account_deletion_rejection() {
