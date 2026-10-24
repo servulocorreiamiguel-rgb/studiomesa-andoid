@@ -60,7 +60,7 @@ object SupabaseApi {
                 } catch (_: Exception) {
                     null
                 }
-                throw IllegalStateException(ApiErrorMessage.sanitize(message, code))
+                throw BackendHttpException(code, path, ApiErrorMessage.sanitize(message, code))
             }
             return text
         } finally {
