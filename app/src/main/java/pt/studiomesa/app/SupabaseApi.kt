@@ -50,14 +50,17 @@ object SupabaseApi {
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
             val text = ResponseBodyReader.read(stream)
             if (code !in 200..299) {
+                // Only show recognized message fields. Never surface an arbitrary HTML or
+                // proxy body to the UI, and always cap the text shown to the user.
                 val message = try {
-                    JSONObject(text).optString("msg").ifBlank {
-                        JSONObject(text).optString("message").ifBlank {
-                            JSONObject(text).optString("error_description").ifBlank { text }
-                        }
-                    }
-                } catch (_: Exception) { text }
-                throw IllegalStateException(message.ifBlank { "Erro de ligação ($code)." })
+                    val error = JSONObject(text)
+                    sequenceOf("msg", "message", "error_description")
+                        .map { key -> error.optString(key, "") }
+                        .firstOrNull { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+                } catch (_: Exception) {
+                    null
+                }
+                throw IllegalStateException(ApiErrorMessage.sanitize(message, code))
             }
             return text
         } finally {
