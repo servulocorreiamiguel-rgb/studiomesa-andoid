@@ -1448,7 +1448,7 @@ class MainActivity : Activity() {
             if (isVerifying) {
                 "Os dados do restaurante só aparecem depois de confirmar no servidor a tua associação e as permissões."
             } else {
-                "Por segurança, os dados guardados neste dispositivo estão ocultos. Verifica a ligação e tenta novamente."
+                "Por segurança, os dados guardados neste dispositivo estão ocultos. Verifica a ligação e tenta novamente. Se a sessão expirou, podes terminar a sessão neste dispositivo e voltar a entrar; a conta e os dados no servidor não serão eliminados."
             },
             14f, false, muted
         ))
@@ -1457,8 +1457,48 @@ class MainActivity : Activity() {
             appRoot.addView(primaryButton("Tentar novamente") {
                 verifyExistingSessionAndRender()
             }, LinearLayout.LayoutParams(-1, dp(48)))
+            addGap(appRoot, 8)
+            appRoot.addView(secondaryButton("Terminar sessão e voltar a entrar") {
+                returnToAuthenticationAfterSessionFailure()
+            }, LinearLayout.LayoutParams(-1, dp(48)))
         }
         setContentView(appRoot)
+    }
+
+    /**
+     * Provides a recovery path when the stored session is expired or revoked.
+     * This clears credentials and local cached data only; it never deletes the server account.
+     */
+    private fun returnToAuthenticationAfterSessionFailure() {
+        val sessionCleared = secureSession.clear()
+        if (isCustomerApp) {
+            store.clearCustomerLocalIdentity()
+        } else {
+            store.clearLocalDemoData()
+            backendPrefs.edit().putBoolean("local_demo_data_isolated_v1", true).apply()
+        }
+        clearCachedTenantState()
+        backendPrefs.edit()
+            .remove("access_token")
+            .remove("refresh_token")
+            .remove("user_id")
+            .remove("user_email")
+            .apply()
+
+        if (isCustomerApp) {
+            renderCustomerApp()
+        } else {
+            activePage = "Conta"
+            renderApp()
+        }
+
+        if (!sessionCleared) {
+            AlertDialog.Builder(this)
+                .setTitle("Aviso de segurança")
+                .setMessage("Não foi possível confirmar a limpeza completa das credenciais locais. A conta e os dados no servidor não foram eliminados. Reinicia a aplicação antes de voltares a utilizá-la.")
+                .setPositiveButton("OK", null)
+                .show()
+        }
     }
 
     private fun hasRemoteRestaurant(): Boolean =
