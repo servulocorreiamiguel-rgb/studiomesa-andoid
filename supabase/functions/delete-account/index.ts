@@ -30,7 +30,7 @@ Deno.serve(
       );
     }
 
-    const userId = ctx.userClaims?.sub;
+    const userId = ctx.userClaims?.id;
     if (!userId || typeof userId !== "string") {
       return Response.json({ message: "A sessão não identifica uma conta válida. Inicia sessão novamente." }, { status: 401 });
     }
