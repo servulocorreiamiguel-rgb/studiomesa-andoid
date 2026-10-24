@@ -1617,24 +1617,8 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun requiresSessionReverification(error: Exception): Boolean {
-        val message = error.message.orEmpty().lowercase(Locale.ROOT)
-        return listOf(
-            "não foi possível confirmar as permissões da conta",
-            "não foi possível confirmar o acesso aos dados da conta",
-            "unauthorized",
-            "not authorized",
-            "permission denied",
-            "invalid jwt",
-            "jwt expired",
-            "forbidden",
-            "não autorizado",
-            "sem autorização",
-            "não pertence a",
-            "401",
-            "403"
-        ).any(message::contains)
-    }
+    private fun requiresSessionReverification(error: Exception): Boolean =
+        SessionAuthorizationErrorClassifier.requiresReverification(error)
 
     private fun runBackend(
         task: () -> String,
@@ -1662,11 +1646,14 @@ class MainActivity : Activity() {
                 runOnUiThread {
                     if (!isFinishing) {
                         progress.dismiss()
-                        if (onError != null) {
-                            onError(error)
-                        } else if (requiresSessionReverification(error)) {
+                        if (requiresSessionReverification(error)) {
+                            // Authorization failures take precedence over screen-specific
+                            // handlers: never leave cached tenant data visible after access
+                            // could not be confirmed.
                             clearCachedTenantState()
                             renderSessionVerificationScreen(isVerifying = false)
+                        } else if (onError != null) {
+                            onError(error)
                         } else {
                             AlertDialog.Builder(this)
                                 .setTitle("Não foi possível concluir")
