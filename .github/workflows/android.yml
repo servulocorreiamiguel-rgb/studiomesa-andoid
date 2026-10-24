@@ -178,3 +178,91 @@ jobs:
           path: app/build/outputs/androidTest-results/connected/**/*.xml
           if-no-files-found: warn
           retention-days: 14
+
+  migration-replay-tests:
+    name: Replay all Supabase migrations on empty PostgreSQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17.6
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: studiomesa_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d studiomesa_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: studiomesa_test
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y postgresql-client
+
+      - name: Bootstrap isolated Supabase Auth compatibility shim
+        run: psql --no-psqlrc --set ON_ERROR_STOP=1 --file scripts/ci/supabase_postgres_shim.sql
+
+      - name: Replay migration history from an empty database
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=0
+          while IFS= read -r migration; do
+            echo "Replaying ${migration}"
+            psql --no-psqlrc --set ON_ERROR_STOP=1 --file "${migration}"
+            count=$((count + 1))
+          done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
+          test "${count}" -eq 38
+          echo "Successfully replayed ${count} versioned migration files."
+
+      - name: Assert core schema, RLS and RPCs exist
+        run: |
+          psql --no-psqlrc --set ON_ERROR_STOP=1 <<'SQL'
+          DO $check$
+          BEGIN
+            IF to_regclass('public.restaurants') IS NULL
+              OR to_regclass('public.restaurant_orders') IS NULL
+              OR to_regclass('public.restaurant_reservations') IS NULL
+              OR to_regclass('public.restaurant_inventory_items') IS NULL
+              OR to_regclass('public.loyalty_members') IS NULL
+              OR to_regclass('private.restaurant_join_codes') IS NULL THEN
+              RAISE EXCEPTION 'Core StudioMesa tables are missing after clean migration replay.';
+            END IF;
+
+            IF to_regprocedure('public.create_restaurant(text,text)') IS NULL
+              OR to_regprocedure('public.create_restaurant_reservation_idempotent(uuid,uuid,text,text,integer,timestamp with time zone,integer,integer,text)') IS NULL
+              OR to_regprocedure('public.adjust_inventory_stock_idempotent(uuid,uuid,numeric,text)') IS NULL
+              OR to_regprocedure('public.adjust_loyalty_points_idempotent(uuid,uuid,integer,text)') IS NULL THEN
+              RAISE EXCEPTION 'A required RPC is missing after clean migration replay.';
+            END IF;
+
+            IF EXISTS (
+              SELECT 1
+              FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public'
+                AND c.relkind = 'r'
+                AND NOT c.relrowsecurity
+            ) THEN
+              RAISE EXCEPTION 'At least one public table was created without RLS enabled.';
+            END IF;
+          END;
+          $check$;
+          SQL
+
+      - name: Test cross-restaurant authorization and idempotency
+        shell: bash
+        run: bash scripts/ci/check_postgres_authorization_contracts.sh
