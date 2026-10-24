@@ -43,7 +43,7 @@ jobs:
       # Persist the Android debug keystore across workflow runs so that
       # future test APKs can update earlier test APKs without a signature mismatch.
       - name: Restore persistent debug signing key
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.android/debug.keystore
           key: studiomesa-android-debug-signing-key-v1
