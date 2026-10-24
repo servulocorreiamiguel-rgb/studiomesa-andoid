@@ -1617,6 +1617,25 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun requiresSessionReverification(error: Exception): Boolean {
+        val message = error.message.orEmpty().lowercase(Locale.ROOT)
+        return listOf(
+            "não foi possível confirmar as permissões da conta",
+            "não foi possível confirmar o acesso aos dados da conta",
+            "unauthorized",
+            "not authorized",
+            "permission denied",
+            "invalid jwt",
+            "jwt expired",
+            "forbidden",
+            "não autorizado",
+            "sem autorização",
+            "não pertence a",
+            "401",
+            "403"
+        ).any(message::contains)
+    }
+
     private fun runBackend(
         task: () -> String,
         refreshSession: Boolean = true,
@@ -1645,6 +1664,9 @@ class MainActivity : Activity() {
                         progress.dismiss()
                         if (onError != null) {
                             onError(error)
+                        } else if (requiresSessionReverification(error)) {
+                            clearCachedTenantState()
+                            renderSessionVerificationScreen(isVerifying = false)
                         } else {
                             AlertDialog.Builder(this)
                                 .setTitle("Não foi possível concluir")
@@ -1893,7 +1915,14 @@ class MainActivity : Activity() {
                                             .putString("user_id", user.optString("id"))
                                             .putString("user_email", email)
                                             .apply()
-                                        if (isCustomerApp) restoreCustomerMembership(token) else restoreOwnedRestaurant(token)
+                                        val restored = if (isCustomerApp) {
+                                            restoreCustomerMembership(token)
+                                        } else {
+                                            restoreOwnedRestaurant(token)
+                                        }
+                                        if (!restored) {
+                                            throw IllegalStateException("Não foi possível confirmar as permissões da conta. Verifica a ligação e tenta novamente.")
+                                        }
                                         "SIGNED_IN"
                                     }
                                     user != null -> {
@@ -1915,7 +1944,14 @@ class MainActivity : Activity() {
                                     .putString("user_id", session.userId)
                                     .putString("user_email", session.email)
                                     .apply()
-                                if (isCustomerApp) restoreCustomerMembership(session.accessToken) else restoreOwnedRestaurant(session.accessToken)
+                                val restored = if (isCustomerApp) {
+                                    restoreCustomerMembership(session.accessToken)
+                                } else {
+                                    restoreOwnedRestaurant(session.accessToken)
+                                }
+                                if (!restored) {
+                                    throw IllegalStateException("Não foi possível confirmar as permissões da conta. Verifica a ligação e tenta novamente.")
+                                }
                                 "SIGNED_IN"
                             }
                         }, refreshSession = false) { result ->
@@ -1973,7 +2009,9 @@ class MainActivity : Activity() {
                     runBackend({
                         val token = backendToken()
                         val restaurantId = SupabaseApi.createRestaurant(token, name, code)
-                        restoreOwnedRestaurant(token)
+                        if (!restoreOwnedRestaurant(token)) {
+                            throw IllegalStateException("Não foi possível confirmar as permissões da conta. Verifica a ligação e tenta novamente.")
+                        }
                         restaurantId
                     }) { restaurantId ->
                         dialog.dismiss()
@@ -2180,7 +2218,9 @@ class MainActivity : Activity() {
                     runBackend({
                         val token = backendToken()
                         SupabaseApi.joinRestaurantStaff(token, code)
-                        restoreOwnedRestaurant(token)
+                        if (!restoreOwnedRestaurant(token)) {
+                            throw IllegalStateException("Não foi possível confirmar as permissões da conta. Verifica a ligação e tenta novamente.")
+                        }
                         "OK"
                     }) {
                         dialog.dismiss()
