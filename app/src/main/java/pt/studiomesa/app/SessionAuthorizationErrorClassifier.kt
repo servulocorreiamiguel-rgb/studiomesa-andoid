@@ -33,6 +33,14 @@ internal object SessionAuthorizationErrorClassifier {
         // reported in their own forms rather than redirecting to session recovery.
         if (authenticationFormEndpoints.any(endpoint::startsWith)) return false
 
+        // An invalid/revoked refresh token can be reported as HTTP 400 (invalid_grant),
+        // not only 401/403. The cached tenant data must still be hidden in that case.
+        if (
+            backendError != null &&
+            endpoint.startsWith("/auth/v1/token?grant_type=refresh_token") &&
+            backendError.statusCode in 400..499
+        ) return true
+
         if (backendError?.statusCode == 401 || backendError?.statusCode == 403) return true
 
         val message = error.message.orEmpty().lowercase(Locale.ROOT)
