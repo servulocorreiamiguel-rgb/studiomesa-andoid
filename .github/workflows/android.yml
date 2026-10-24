@@ -146,7 +146,7 @@ jobs:
     name: UI smoke tests on Android 16 emulator
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - name: Checkout source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -177,7 +177,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot
-          script: gradle --no-daemon connectedEssencialRestauranteDebugAndroidTest connectedProfissionalRestauranteDebugAndroidTest connectedProfissionalClienteDebugAndroidTest connectedPremiumRestauranteDebugAndroidTest connectedPremiumClienteDebugAndroidTest
+          script: gradle --no-daemon --max-workers=1 connectedEssencialRestauranteDebugAndroidTest connectedProfissionalRestauranteDebugAndroidTest connectedProfissionalClienteDebugAndroidTest connectedPremiumRestauranteDebugAndroidTest connectedPremiumClienteDebugAndroidTest
 
       - name: Upload emulator test results
         if: always()
