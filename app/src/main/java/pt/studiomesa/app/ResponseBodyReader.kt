@@ -23,7 +23,18 @@ internal object ResponseBodyReader {
             while (true) {
                 val count = input.read(buffer)
                 if (count < 0) break
-                if (count == 0) continue
+                if (count == 0) {
+                    // Defensive fallback for non-conforming InputStreams: avoid a busy
+                    // loop if a bulk read repeatedly reports zero bytes without EOF.
+                    val singleByte = input.read()
+                    if (singleByte < 0) break
+                    if (totalBytes >= maxBytes) {
+                        throw IllegalStateException("A resposta do servidor excede o limite permitido.")
+                    }
+                    output.write(singleByte)
+                    totalBytes++
+                    continue
+                }
 
                 if (count > maxBytes - totalBytes) {
                     throw IllegalStateException("A resposta do servidor excede o limite permitido.")
