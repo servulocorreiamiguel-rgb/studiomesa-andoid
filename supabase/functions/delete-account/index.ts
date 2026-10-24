@@ -1,4 +1,5 @@
-import { withSupabase } from "npm:@supabase/server";
+import { withSupabase } from "npm:@supabase/server@1";
+import { isDeletionConflictMessage } from "./error-classification.ts";
 
 /**
  * Deletes only the account represented by the verified user session.
@@ -41,11 +42,7 @@ Deno.serve(
 
     if (preparationError) {
       const message = preparationError.message ?? "";
-      if (
-        message.includes("restantes membros da equipa") ||
-        message.includes("confirma explicitamente") ||
-        message.includes("não é proprietária")
-      ) {
+      if (isDeletionConflictMessage(message)) {
         return Response.json({ message }, { status: 409 });
       }
       return Response.json(
