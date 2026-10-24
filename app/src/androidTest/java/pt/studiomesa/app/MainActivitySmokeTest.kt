@@ -1,6 +1,9 @@
 package pt.studiomesa.app
 
 import android.content.Context
+import android.view.View
+import android.view.ViewGroup
+import android.widget.TextView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.click
@@ -23,6 +26,57 @@ import org.junit.Test
  * Keep these independent of production credentials: all actions use fresh local demo data.
  */
 class MainActivitySmokeTest {
+    private fun collectViewText(view: View): String = when (view) {
+        is TextView -> view.text?.toString().orEmpty()
+        is ViewGroup -> (0 until view.childCount).joinToString(" ") {
+            collectViewText(view.getChildAt(it))
+        }
+        else -> ""
+    }
+
+    @Test
+    fun existingSessionDoesNotRenderCachedTenantDataBeforeServerAuthorization() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val prefs = context.getSharedPreferences("studiomesa_backend", Context.MODE_PRIVATE)
+        val secureSession = SecureSessionStore(context)
+        secureSession.clear()
+        prefs.edit().clear()
+            .putString("user_id", "fixture-user")
+            .putString("restaurant_id", "old-restaurant-id")
+            .putString("restaurant_name", "PRIVATE_RESTAURANT_SENTINEL")
+            .putString("restaurant_role", "owner")
+            .putString("member_id", "old-member-id")
+            .putString("member_restaurant_name", "PRIVATE_RESTAURANT_SENTINEL")
+            .putString("remote_menu_json", """[{"name":"PRIVATE_RESTAURANT_SENTINEL"}]""")
+            .putString("remote_orders_json", """[{"restaurant":"PRIVATE_RESTAURANT_SENTINEL"}]""")
+            .putString("customer_menu_json", """[{"name":"PRIVATE_RESTAURANT_SENTINEL"}]""")
+            .putBoolean("local_demo_data_isolated_v1", true)
+            .commit()
+        secureSession.save("not-a-valid-session-token", "")
+
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    val displayed = collectViewText(
+                        activity.findViewById(android.R.id.content)
+                    )
+                    org.junit.Assert.assertFalse(
+                        "Cached tenant data was displayed before server authorization.",
+                        displayed.contains("PRIVATE_RESTAURANT_SENTINEL")
+                    )
+                    org.junit.Assert.assertTrue(
+                        "The app should show a restricted verification state.",
+                        displayed.contains("A verificar autorização da conta") ||
+                            displayed.contains("Não foi possível confirmar o acesso")
+                    )
+                }
+            }
+        } finally {
+            secureSession.clear()
+            prefs.edit().clear().commit()
+        }
+    }
+
     private fun isCustomerVariant(): Boolean =
         InstrumentationRegistry.getInstrumentation()
             .targetContext.packageName.endsWith(".cliente")
