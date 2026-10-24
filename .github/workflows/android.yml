@@ -26,6 +26,8 @@ jobs:
 
       - name: Validate SQL migration function delimiters
         run: python3 scripts/check_sql_function_delimiters.py
+      - name: Validate Supabase Edge Function gateway settings
+        run: python3 scripts/check_supabase_function_config.py
 
       - name: Set up Java 17
         uses: actions/setup-java@v6
