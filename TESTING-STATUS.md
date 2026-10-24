@@ -1,15 +1,16 @@
 # StudioMesa — registo de testes e estado de lançamento
 
-**Última revisão registada:** 2026-10-24  
+**Última revisão registada:** 2026-10-24 (atualizada após o CI mais recente)  
 **PR de trabalho:** [#19 — Reforçar validação, rede e testes Android](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/19)  
 **Branch:** `fix/price-calculator-input-bounds`  
-**Commit de código validado:** `b346539bbf2c052f6587f215fd2035946c1dafb3`  
-**Execução GitHub Actions:** [run #295 / ID 40081574672](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40081574672)  
+**Último commit de código validado pelo CI:** `f3034a74273971507321dd232b523babe9fb0245`  
+**Última execução GitHub Actions:** [ID 40094415428](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40094415428)  
+**Execução anterior com XML detalhados verificados:** [ID 40081574672](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40081574672)  
 **Resultado dessa execução:** sucesso (ambos os jobs).
 
 > Este registo distingue testes automáticos de validações de leitura e de testes manuais ainda não executados. A compilação e o emulador não substituem os testes ponta a ponta num restaurante ou em dispositivos reais.
 
-## Testes automáticos concluídos — commit b346539
+## Testes automáticos concluídos — commit b346539 (execução anterior com resultados XML verificados)
 
 | Verificação | Resultado |
 |---|---|
@@ -23,7 +24,7 @@
 
 O job de compilação executou as tarefas de teste unitário de Essencial, Profissional e Premium, incluindo variantes de gestão/cliente. O teste de release usou uma identidade de pacote e uma chave temporárias; **não** representa a assinatura comercial final e não publica na Google Play.
 
-### Resultados dos testes de interface
+### Resultados dos testes de interface — execução anterior (ID 40081574672)
 
 Os cinco XMLs do artefacto `StudioMesa-Android16-Emulator-Test-Results` indicam 25 execuções de casos de teste em cinco variantes:
 
@@ -36,6 +37,21 @@ Os casos exercitaram o arranque, criação local de um pedido, abertura do fluxo
 
 Artefacto dos relatórios: [resultado da execução #295](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40081574672).  
 Artefacto dos APKs: `StudioMesa-1.5.0-Demo-APKs`, criado pela mesma execução e com retenção até 2026-11-07.
+
+## Execução CI mais recente — commit f3034a7
+
+Execução [GitHub Actions ID 40094415428](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40094415428), concluída em 24-10-2026:
+
+| Verificação | Resultado |
+|---|---|
+| Compilação das cinco variantes de demonstração | Passou |
+| Testes unitários das cinco variantes | Passou |
+| Android Lint | Passou |
+| Validação da configuração de bundle comercial com chave temporária | Passou |
+| Testes de interface no emulador Android 16, nas cinco variantes | Passou |
+| Publicação dos APKs e dos relatórios de interface | Passou |
+
+Artefactos desta execução: [APKs de demonstração e relatórios](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40094415428). O estado global e os dois jobs foram confirmados como sucesso. A contagem detalhada de casos deve ser lida dos XML desta execução; os números 14 aprovados/11 ignorados acima pertencem à execução anterior cujos XML foram inspecionados. Isto continua a ser validação de CI/emulador, não teste num telemóvel real nem prova de prontidão comercial.
 
 ## Verificações adicionais efetuadas
 
@@ -56,7 +72,7 @@ Artefacto dos APKs: `StudioMesa-1.5.0-Demo-APKs`, criado pela mesma execução e
 
 ## Pendências antes de vender/publicar
 
-1. Confirmar o CI que será gerado por esta atualização documental e por futuras alterações.
+1. Confirmar o CI de cada alteração futura; não presumir que uma execução anterior valida código posterior.
 2. Testes ponta a ponta em Android real: criar conta, confirmar email, iniciar sessão, terminar sessão, recuperação de palavra-passe, OAuth (quando estiver configurado), renovação/expiração de sessão e revogação de acesso.
 3. Testes com duas contas e dois restaurantes para provar que pedidos, reservas, stock, carta e pontos não podem ser lidos ou alterados entre restaurantes.
 4. Testes de rede interrompida, timeout, respostas repetidas e reenvio das operações idempotentes com contas e dados de teste descartáveis.
