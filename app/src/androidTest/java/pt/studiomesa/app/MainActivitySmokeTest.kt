@@ -51,6 +51,29 @@ class MainActivitySmokeTest {
     }
 
     @Test
+    fun migratingLegacySessionTokensRemovesPlaintextCopies() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val legacyPrefs = context.getSharedPreferences("studiomesa_backend", Context.MODE_PRIVATE)
+        val store = SecureSessionStore(context)
+        store.clear()
+
+        org.junit.Assert.assertTrue(
+            "Could not seed legacy test preferences.",
+            legacyPrefs.edit()
+                .putString("access_token", "migration-access-token")
+                .putString("refresh_token", "migration-refresh-token")
+                .commit()
+        )
+
+        org.junit.Assert.assertEquals("migration-access-token", store.accessToken())
+        org.junit.Assert.assertEquals("migration-refresh-token", store.refreshToken())
+        org.junit.Assert.assertNull(legacyPrefs.getString("access_token", null))
+        org.junit.Assert.assertNull(legacyPrefs.getString("refresh_token", null))
+
+        store.clear()
+    }
+
+    @Test
     fun appLaunchesIntoTheExpectedDemoExperience() {
         ActivityScenario.launch(MainActivity::class.java).use {
             if (isCustomerVariant()) {
