@@ -5,7 +5,7 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 
 ### Resultados de verificação confirmados nesta revisão
 
-- [x] GitHub Actions executou compilação, testes unitários, Android Lint, validação do caminho de assinatura comercial com uma chave temporária de CI e testes de interface no emulador Android 16. Execução: [run #247](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/39923900578).
+- [x] GitHub Actions executou compilação, testes unitários, Android Lint, validação do caminho de assinatura comercial com uma chave temporária de CI e testes de interface no emulador Android 16. Execução de CI completa mais recente nesta revisão: [run #39985505800](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/39985505800).
 - [x] Os relatórios XML dos testes de interface registaram **5 testes aprovados, 0 falhas e 3 casos ignorados intencionalmente** por variarem entre os modos de gestão e cliente. Isto é um smoke test de demonstração, não uma validação ponta a ponta do backend.
 - [x] A consulta read-only ao PostgreSQL confirmou RLS ativa nas tabelas principais públicas e sem permissões de execução para `anon` nas funções inspecionadas. As funções públicas `SECURITY DEFINER` verificadas usam `SET search_path TO ''` e fazem referência a `auth.uid()`; falta validar isolamento com duas contas reais de restaurantes diferentes.
 - [x] Recuperadas de forma read-only as 18 migrações originais em falta a partir de `supabase_migrations.schema_migrations.statements` e corrigidos os nomes/versões dos três ficheiros seguintes. Verificação cruzada em 23/10/2026: **37 ficheiros locais, 37 registos remotos, nenhuma diferença de versão/nome**. A base de dados ativa não foi alterada. PR com esta recuperação: [#17](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/17).
@@ -78,7 +78,7 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [x] No ramo de desenvolvimento, o Manifest declara `android:allowBackup="false"` e `android:usesCleartextTraffic="false"` explicitamente.
 - [x] Criado verificador estático de CI para componentes exportados, permissões sensíveis, transporte HTTPS, padrões de chaves secretas na aplicação, Android Keystore/AES-GCM e versão mínima de `targetSdk`.
 - [x] Incluídos testes unitários para configurações seguras e regressões intencionais do verificador.
-- [ ] A execução completa de CI desta combinação de alterações tem de passar antes da integração.
+- [x] A execução completa de CI desta combinação de alterações passou: migrações PostgreSQL, compilação Android e testes de interface no emulador Android 16. [Ver execução #39985505800](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/39985505800).
 - [ ] A verificação estática não substitui testes de autorização no Supabase alojado, auditoria independente ou ensaios em Android real.
 
 - [x] RLS ativa nas tabelas principais do esquema público inspecionado.
