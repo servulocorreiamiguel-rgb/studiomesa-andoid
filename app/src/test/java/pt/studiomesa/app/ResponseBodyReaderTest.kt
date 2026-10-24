@@ -33,4 +33,22 @@ class ResponseBodyReaderTest {
     fun handlesAnAbsentResponseStream() {
         assertEquals("", ResponseBodyReader.read(null, maxBytes = 0))
     }
+
+    @Test
+    fun makesProgressWhenBulkReadReturnsZero() {
+        val bytes = "resposta".toByteArray(Charsets.UTF_8)
+        val input = object : ByteArrayInputStream(bytes) {
+            private var returnZeroOnce = true
+
+            override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                if (returnZeroOnce) {
+                    returnZeroOnce = false
+                    return 0
+                }
+                return super.read(buffer, offset, length)
+            }
+        }
+
+        assertEquals("resposta", ResponseBodyReader.read(input, maxBytes = bytes.size))
+    }
 }
