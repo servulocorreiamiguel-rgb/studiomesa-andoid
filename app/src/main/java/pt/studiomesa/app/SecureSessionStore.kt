@@ -113,7 +113,7 @@ class SecureSessionStore(context: Context) {
     private fun getToken(key: String): String {
         val encrypted = securePrefs.getString(key, null)
         if (!encrypted.isNullOrBlank()) {
-            legacyPrefs.edit().remove(key).apply()
+            legacyPrefs.edit().remove(key).commit()
             return try {
                 decrypt(encrypted)
             } catch (_: Exception) {
