@@ -3,8 +3,8 @@
 **Última revisão registada:** 2026-10-24 (atualizada após o CI mais recente)  
 **PR de trabalho:** [#19 — Reforçar validação, rede e testes Android](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/19)  
 **Branch:** `fix/price-calculator-input-bounds`  
-**Último commit de código validado pelo CI:** `f3034a74273971507321dd232b523babe9fb0245`  
-**Última execução GitHub Actions:** [ID 40094415428](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40094415428)  
+**Último commit de código validado pelo CI:** `865673fca1aa20890765d460293cc8e78ad2243d`  
+**Última execução GitHub Actions:** [ID 40106562821](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40106562821)  
 **Execução anterior com XML detalhados verificados:** [ID 40081574672](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40081574672)  
 **Resultado dessa execução:** sucesso (ambos os jobs).
 
@@ -38,9 +38,9 @@ Os casos exercitaram o arranque, criação local de um pedido, abertura do fluxo
 Artefacto dos relatórios: [resultado da execução #295](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40081574672).  
 Artefacto dos APKs: `StudioMesa-1.5.0-Demo-APKs`, criado pela mesma execução e com retenção até 2026-11-07.
 
-## Execução CI mais recente — commit f3034a7
+## Execução CI mais recente — commit 865673f
 
-Execução [GitHub Actions ID 40094415428](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40094415428), concluída em 24-10-2026:
+Execução [GitHub Actions ID 40106562821](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40106562821), concluída em 24-10-2026:
 
 | Verificação | Resultado |
 |---|---|
@@ -51,7 +51,7 @@ Execução [GitHub Actions ID 40094415428](https://github.com/servulocorreiamigu
 | Testes de interface no emulador Android 16, nas cinco variantes | Passou |
 | Publicação dos APKs e dos relatórios de interface | Passou |
 
-Artefactos desta execução: [APKs de demonstração e relatórios](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40094415428). O estado global e os dois jobs foram confirmados como sucesso. A contagem detalhada de casos deve ser lida dos XML desta execução; os números 14 aprovados/11 ignorados acima pertencem à execução anterior cujos XML foram inspecionados. Isto continua a ser validação de CI/emulador, não teste num telemóvel real nem prova de prontidão comercial.
+Artefactos desta execução: [APKs de demonstração e relatórios](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40106562821). O estado global e os dois jobs foram confirmados como sucesso: compilação/testes unitários/Lint/configuração de bundle comercial e testes de interface no emulador Android 16. A execução atual alargou os testes de interface às cinco variantes. A contagem detalhada de casos desta execução ainda não foi inspecionada a partir dos XML. Isto continua a ser validação de CI/emulador, não teste num telemóvel real nem prova de prontidão comercial.
 
 ## Verificações adicionais efetuadas
 
