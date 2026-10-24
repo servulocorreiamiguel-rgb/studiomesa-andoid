@@ -11,6 +11,37 @@ USER_D="44444444-4444-4444-8444-444444444444"
 REQUEST_A="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 REQUEST_B="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 
+# Inspect the catalog after all migrations have run, not just source text.
+# Privileged functions must pin an empty search_path and must not be executable by anon.
+unsafe_definer_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<'SQL'
+SELECT count(*)::text
+FROM pg_proc AS p
+JOIN pg_namespace AS n ON n.oid = p.pronamespace
+WHERE n.nspname IN ('public', 'private')
+  AND p.prosecdef
+  AND (
+    NOT COALESCE(p.proconfig @> ARRAY['search_path=""']::text[], false)
+    OR has_function_privilege('anon', p.oid, 'EXECUTE')
+  );
+SQL
+)"
+if [ "$unsafe_definer_count" != "0" ]; then
+  echo "ERROR: found $unsafe_definer_count SECURITY DEFINER function(s) without a pinned empty search_path or executable by anon." >&2
+  psql --no-psqlrc --tuples-only --no-align --set ON_ERROR_STOP=1 -c "
+    SELECT n.nspname || '.' || p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')'
+    FROM pg_proc AS p
+    JOIN pg_namespace AS n ON n.oid = p.pronamespace
+    WHERE n.nspname IN ('public', 'private')
+      AND p.prosecdef
+      AND (
+        NOT COALESCE(p.proconfig @> ARRAY['search_path=""']::text[], false)
+        OR has_function_privilege('anon', p.oid, 'EXECUTE')
+      );
+  " >&2
+  exit 1
+fi
+echo "PASS: application SECURITY DEFINER functions pin an empty search_path and are not executable by anon."
+
 psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL
 INSERT INTO auth.users (id, email)
 VALUES ('$USER_A', 'ci-owner-a@example.invalid'),

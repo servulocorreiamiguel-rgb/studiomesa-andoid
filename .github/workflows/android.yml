@@ -29,7 +29,7 @@ jobs:
       - name: Validate privileged SQL function security contracts
         run: python3 scripts/check_sql_security_definers.py
       - name: Test privileged SQL function security guard
-        run: python3 -m unittest discover -s scripts -p 'test_check_sql_security_definers.py' -v
+        run: python3 -m unittest discover -s scripts -p 'test_check_*.py' -v
       - name: Validate Supabase Edge Function gateway settings
         run: python3 scripts/check_supabase_function_config.py
 
@@ -102,13 +102,13 @@ jobs:
         timeout-minutes: 10
         run: gradle --no-daemon lint
 
-      # Build one commercial variant with a throwaway CI key. This validates the
-      # release Gradle/signing path without using or uploading the owner's key.
-      - name: Validate commercial release configuration
+      # Build all release combinations using a throwaway key; never publish these AABs.
+      - name: Validate all commercial release variants
         shell: bash
         run: |
           set -euo pipefail
           KEYSTORE_PATH="$RUNNER_TEMP/studiomesa-ci-release.jks"
+          trap 'rm -f "$KEYSTORE_PATH"' EXIT
           CI_KEY_PASSWORD="ci-only-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           keytool -genkeypair -noprompt -keystore "$KEYSTORE_PATH" -storetype JKS \
             -storepass "$CI_KEY_PASSWORD" -alias "studiomesa-ci" \
@@ -121,10 +121,19 @@ jobs:
           gradle --no-daemon \
             -PstudiomesaCommercialRelease=true \
             -PstudiomesaReleaseApplicationId=pt.studiomesa.ci \
-            bundleEssencialRestauranteRelease
-          find app/build/outputs/bundle -type f -name '*.aab' -print -quit | grep -q .
-          rm -f "$KEYSTORE_PATH"
-
+            bundleEssencialRestauranteRelease \
+            bundleProfissionalRestauranteRelease \
+            bundleProfissionalClienteRelease \
+            bundlePremiumRestauranteRelease \
+            bundlePremiumClienteRelease
+          bundle_count="$(find app/build/outputs/bundle -type f -name '*.aab' | wc -l | tr -d ' ')"
+          if [ "$bundle_count" -ne 5 ]; then
+            echo "Expected five commercial-flavor test AABs, found $bundle_count." >&2
+            exit 1
+          fi
+          while IFS= read -r bundle; do
+            jarsigner -verify "$bundle"
+          done < <(find app/build/outputs/bundle -type f -name '*.aab')
       - name: Upload debug APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
