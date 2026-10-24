@@ -101,3 +101,25 @@ Consulta read-only aos avisos atuais do Supabase e leitura das definições de f
 8. Preparar política de privacidade, Data safety da Google Play, processo de backup/restauro e revisão independente de segurança.
 
 **Estado de lançamento:** não aprovado para produção. O PR permanece em rascunho e não altera diretamente `main`.
+
+## Continuação da auditoria — 24-10-2026 (pipeline comercial e configuração Supabase)
+
+- Foram alinhados os nomes de três ficheiros de migração com as versões remotas: `20261021090456_restaurant_inventory_and_reservations`, `20261021090901_restaurant_team_management` e `20261021091127_rotate_team_code_on_staff_removal`. Foi uma alteração apenas de ficheiros no GitHub; não executei DDL nem alterei dados de produção.
+- A discrepância histórica continua: 37 versões no histórico remoto e 19 ficheiros SQL locais. As 18 versões antigas de 19-10-2026 não foram recriadas artificialmente. `supabase/schema.sql` é um script de baseline, mas não prova, por si só, que as alterações incrementais estejam reproduzidas. Não declarar reconstrução limpa reproduzível até recuperar/verificar essas migrações e executar a reconstrução numa base descartável.
+- Foram versionadas as definições de gateway de `delete-account` e `account-deletion-web` em `supabase/config.toml`, ambas com `verify_jwt = false`. A função `delete-account` valida a sessão no handler com `withSupabase({ auth: "user" })`; a página web é pública e exige autenticação de utilização única antes de chamar o endpoint destrutivo. Foi acrescentado `scripts/check_supabase_function_config.py` e a CI principal executa-o para evitar alterações acidentais a esta configuração.
+- O fluxo de release comercial agora valida os delimitadores das migrações e a configuração de gateway, corre os testes unitários e Android Lint, e exige testes de interface Android 16 nas cinco variantes antes de construir/assinar AABs. Os resultados de emulador são publicados como artefacto mesmo se um teste falhar.
+- Auditoria read-only adicional ao catálogo PostgreSQL: as funções `SECURITY DEFINER` analisadas usam `search_path = ''`; nenhuma das funções listadas pode ser executada por `anon`. As funções RPC expostas a `authenticated` continuam a necessitar de testes comportamentais com proprietário, funcionário, utilizador de outro restaurante e sessão ausente; os avisos do advisor não são prova isolada de uma exploração.
+- A proteção contra palavras-passe comprometidas continua desativada no Supabase Auth; não a alterei nesta auditoria. Também não removi os 21 índices assinalados como não usados, porque a decisão exige dados de carga e risco de regressão.
+- Na execução CI `40112220200` sobre o commit de código imediatamente anterior a esta atualização documental, compilação e testes unitários das cinco variantes passaram; as verificações de delimitadores SQL e configuração do Supabase passaram; Android Lint estava em curso quando o registo foi preparado. Essa execução não deve ser considerada validação final. O commit documental desencadeia nova CI; só considerar a branch atual validada quando todos os jobs, incluindo os testes de interface Android 16, concluírem com sucesso.
+- O PR `#19` continua em rascunho, separado de `main`; não foi efetuado merge nem publicação comercial.
+
+## Bloqueios de lançamento — atualizados em 24-10-2026
+
+1. Reconciliar as 18 migrações históricas em falta e testar a reconstrução numa base de dados descartável.
+2. Concluir a CI relativa ao commit final, incluindo testes de interface nas cinco variantes.
+3. Fazer testes ponta a ponta com identidades diferentes e dois restaurantes, incluindo permissões, códigos de acesso, pedidos, reservas, inventário, menu, fidelização e eliminação de conta.
+4. Ativar e testar a proteção contra palavras-passe comprometidas no Auth; validar email/SMTP, URLs de retorno e fluxos de conta.
+5. Testar em telemóvel Android real rede interrompida, expiração/renovação de sessão, recuperação de palavra-passe, revogação de acesso e eliminação de conta.
+6. Escolher o ID de pacote final, configurar/guardar a chave comercial e secrets, testar AABs assinados e concluir política de privacidade, Data safety e revisão pré-publicação.
+
+**Estado:** não aprovado para produção até à resolução e validação das pendências acima.
