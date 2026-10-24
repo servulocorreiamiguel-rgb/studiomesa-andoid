@@ -56,7 +56,9 @@ class SecureSessionStore(context: Context) {
             .remove("pending_code_verifier")
             .remove("pending_code_flow")
             .commit()
-        legacyPrefs.edit().remove("access_token").remove("refresh_token").apply()
+        // Persist legacy-token removal synchronously so a process exit cannot restore a
+        // plaintext session that the caller has just cleared.
+        legacyPrefs.edit().remove("access_token").remove("refresh_token").commit()
     }
 
     /**
