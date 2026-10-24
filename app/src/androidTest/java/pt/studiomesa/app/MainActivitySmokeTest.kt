@@ -5,6 +5,7 @@ import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.action.ViewActions.replaceText
 import androidx.test.espresso.action.ViewActions.scrollTo
+import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withHint
@@ -86,6 +87,36 @@ class MainActivitySmokeTest {
             onView(withText(containsString("10,67")))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
+    fun planSpecificManagementFeaturesMatchSelectedVariant() {
+        assumeFalse("Customer variants do not expose restaurant management screens.", isCustomerVariant())
+        val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            when {
+                packageName.contains(".essencial.") -> {
+                    onView(withText("ABRIR CALCULADORA")).check(doesNotExist())
+                    onView(withText("GERIR STOCK")).check(doesNotExist())
+                }
+                packageName.contains(".profissional.") -> {
+                    onView(withText("ABRIR CALCULADORA"))
+                        .perform(scrollTo())
+                        .check(matches(isDisplayed()))
+                    onView(withText("GERIR STOCK")).check(doesNotExist())
+                }
+                packageName.contains(".premium.") -> {
+                    onView(withText("ABRIR CALCULADORA"))
+                        .perform(scrollTo())
+                        .check(matches(isDisplayed()))
+                    onView(withText("GERIR STOCK"))
+                        .perform(scrollTo())
+                        .check(matches(isDisplayed()))
+                }
+                else -> throw AssertionError("Unexpected restaurant application package: $packageName")
+            }
         }
     }
 
