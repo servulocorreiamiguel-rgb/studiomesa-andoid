@@ -6,6 +6,7 @@ import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.action.ViewActions.replaceText
 import androidx.test.espresso.action.ViewActions.scrollTo
+import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.hasErrorText
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
@@ -26,9 +27,9 @@ class MainActivitySmokeTest {
         InstrumentationRegistry.getInstrumentation()
             .targetContext.packageName.endsWith(".cliente")
 
-    private fun hasCalculator(): Boolean {
+    private fun isCalculatorAvailable(): Boolean {
         val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
-        return packageName.contains(".profissional") || packageName.contains(".premium")
+        return packageName.contains(".profissional.") || packageName.contains(".premium.")
     }
 
     @Test
@@ -116,7 +117,8 @@ class MainActivitySmokeTest {
 
     @Test
     fun restaurantPriceCalculatorProducesAnIndicativePrice() {
-        assumeTrue("Calculator is only included in Profissional and Premium management variants.", hasCalculator() && !isCustomerVariant())
+        assumeFalse("Customer variant has no management calculator.", isCustomerVariant())
+        assumeTrue("The Essential plan does not include the price calculator.", isCalculatorAvailable())
 
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withText("ABRIR CALCULADORA"))
@@ -140,8 +142,8 @@ class MainActivitySmokeTest {
     @Test
     fun calculatorShowsValidationForExcessivelyLongCostInput() {
         assumeTrue(
-            "Calculator is only included in Profissional and Premium management variants.",
-            hasCalculator() && !isCustomerVariant()
+            "The calculator is only available in management variants.",
+            isCalculatorAvailable() && !isCustomerVariant()
         )
 
         ActivityScenario.launch(MainActivity::class.java).use {
@@ -156,6 +158,36 @@ class MainActivitySmokeTest {
 
             onView(withHint("Ex.: 3,20"))
                 .check(matches(hasErrorText("Introduz um custo numérico válido.")))
+        }
+    }
+
+    @Test
+    fun planSpecificManagementFeaturesMatchSelectedVariant() {
+        assumeFalse("Customer variants do not expose restaurant management screens.", isCustomerVariant())
+        val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            when {
+                packageName.contains(".essencial.") -> {
+                    onView(withText("ABRIR CALCULADORA")).check(doesNotExist())
+                    onView(withText("GERIR STOCK")).check(doesNotExist())
+                }
+                packageName.contains(".profissional.") -> {
+                    onView(withText("ABRIR CALCULADORA"))
+                        .perform(scrollTo())
+                        .check(matches(isDisplayed()))
+                    onView(withText("GERIR STOCK")).check(doesNotExist())
+                }
+                packageName.contains(".premium.") -> {
+                    onView(withText("ABRIR CALCULADORA"))
+                        .perform(scrollTo())
+                        .check(matches(isDisplayed()))
+                    onView(withText("GERIR STOCK"))
+                        .perform(scrollTo())
+                        .check(matches(isDisplayed()))
+                }
+                else -> throw AssertionError("Unexpected restaurant application package: $packageName")
+            }
         }
     }
 
