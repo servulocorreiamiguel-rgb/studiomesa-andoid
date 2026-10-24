@@ -2,8 +2,6 @@ package pt.studiomesa.app
 
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -50,7 +48,7 @@ object SupabaseApi {
             }
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-            val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            val text = ResponseBodyReader.read(stream)
             if (code !in 200..299) {
                 val message = try {
                     JSONObject(text).optString("msg").ifBlank {
