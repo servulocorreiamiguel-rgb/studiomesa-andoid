@@ -91,7 +91,10 @@ class MainActivitySmokeTest {
 
     @Test
     fun calculatorShowsValidationForExcessivelyLongCostInput() {
-        assumeFalse("Customer variant has no management calculator.", isCustomerVariant())
+        assumeTrue(
+            "Calculator is only included in Profissional and Premium management variants.",
+            hasCalculator() && !isCustomerVariant()
+        )
 
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withText("ABRIR CALCULADORA"))
