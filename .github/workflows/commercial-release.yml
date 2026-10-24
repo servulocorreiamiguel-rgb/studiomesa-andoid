@@ -76,6 +76,18 @@ jobs:
           keytool -list -keystore "$KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" >/dev/null
           echo "STUDIOMESA_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
 
+      - name: Set up Deno for Edge Function checks
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+          cache: true
+
+      - name: Test account-deletion error classification
+        run: deno test supabase/functions/delete-account/error-classification.test.ts
+
+      - name: Type-check Supabase Edge Functions
+        run: deno check supabase/functions/account-deletion-web/index.ts supabase/functions/delete-account/index.ts
+
       - name: Validate SQL migration function delimiters
         run: python3 scripts/check_sql_function_delimiters.py
 
