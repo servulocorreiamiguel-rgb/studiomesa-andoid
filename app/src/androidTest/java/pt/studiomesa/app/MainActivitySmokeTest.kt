@@ -77,6 +77,47 @@ class MainActivitySmokeTest {
         }
     }
 
+    @Test
+    fun failedSessionVerificationOffersSignInRecoveryWithoutDeletingServerData() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val prefs = context.getSharedPreferences("studiomesa_backend", Context.MODE_PRIVATE)
+        val secureSession = SecureSessionStore(context)
+        secureSession.clear()
+        prefs.edit().clear().commit()
+
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    // Render the failure state directly so this UI test never depends on
+                    // network availability or the hosted Supabase project.
+                    val method = MainActivity::class.java.getDeclaredMethod(
+                        "renderSessionVerificationScreen",
+                        Boolean::class.javaPrimitiveType
+                    )
+                    method.isAccessible = true
+                    method.invoke(activity, false)
+                }
+
+                onView(withText("Terminar sessão e voltar a entrar"))
+                    .perform(scrollTo())
+                    .check(matches(isDisplayed()))
+                onView(withText(containsString("a conta e os dados no servidor não serão eliminados.")))
+                    .perform(scrollTo())
+                    .check(matches(isDisplayed()))
+
+                onView(withText("Terminar sessão e voltar a entrar"))
+                    .perform(scrollTo(), click())
+
+                onView(withText("Criar conta / iniciar sessão"))
+                    .perform(scrollTo())
+                    .check(matches(isDisplayed()))
+            }
+        } finally {
+            secureSession.clear()
+            prefs.edit().clear().commit()
+        }
+    }
+
     private fun isCustomerVariant(): Boolean =
         InstrumentationRegistry.getInstrumentation()
             .targetContext.packageName.endsWith(".cliente")
