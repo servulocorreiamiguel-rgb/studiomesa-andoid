@@ -1,5 +1,6 @@
 package pt.studiomesa.app
 
+import android.content.Context
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.click
@@ -28,6 +29,25 @@ class MainActivitySmokeTest {
     private fun hasCalculator(): Boolean {
         val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
         return packageName.contains(".profissional") || packageName.contains(".premium")
+    }
+
+    @Test
+    fun clearingSecureSessionAlsoRemovesLegacyPlaintextTokens() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val legacyPrefs = context.getSharedPreferences("studiomesa_backend", Context.MODE_PRIVATE)
+
+        org.junit.Assert.assertTrue(
+            "Could not seed legacy test preferences.",
+            legacyPrefs.edit()
+                .putString("access_token", "legacy-access-token")
+                .putString("refresh_token", "legacy-refresh-token")
+                .commit()
+        )
+
+        SecureSessionStore(context).clear()
+
+        org.junit.Assert.assertNull(legacyPrefs.getString("access_token", null))
+        org.junit.Assert.assertNull(legacyPrefs.getString("refresh_token", null))
     }
 
     @Test
