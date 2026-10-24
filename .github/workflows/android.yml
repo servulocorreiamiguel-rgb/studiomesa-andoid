@@ -12,7 +12,7 @@ permissions:
 
 # Keep the newest build in flight; older queued builds should not delay the latest code.
 concurrency:
-  group: studiomesa-android-debug-build
+  group: studiomesa-android-debug-build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
