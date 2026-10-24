@@ -94,6 +94,34 @@ jobs:
         timeout-minutes: 10
         run: gradle --no-daemon lint
 
+      # A successful compile is not enough to publish: exercise all distributed
+      # UI variants on the same Android API level before signing release bundles.
+      - name: Enable KVM for Android emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run Android 16 UI smoke tests before release
+        uses: ReactiveCircus/android-emulator-runner@v2.38.0
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot
+          script: gradle --no-daemon connectedEssencialRestauranteDebugAndroidTest connectedProfissionalRestauranteDebugAndroidTest connectedProfissionalClienteDebugAndroidTest connectedPremiumRestauranteDebugAndroidTest connectedPremiumClienteDebugAndroidTest
+
+      - name: Upload pre-release emulator results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudioMesa-Commercial-PreRelease-Emulator-Results
+          path: app/build/outputs/androidTest-results/connected/**/*.xml
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Build signed commercial bundles
         shell: bash
         env:
