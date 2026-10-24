@@ -36,6 +36,12 @@ jobs:
       - name: Validate SQL migration function delimiters
         run: python3 scripts/check_sql_function_delimiters.py
 
+      - name: Validate privileged SQL function security contracts
+        run: python3 scripts/check_sql_security_definers.py
+
+      - name: Test privileged SQL function security guard
+        run: python3 -m unittest discover -s scripts -p 'test_check_sql_security_definers.py' -v
+
       - name: Validate Supabase Edge Function gateway settings
         run: python3 scripts/check_supabase_function_config.py
 
