@@ -27,6 +27,18 @@ jobs:
       - name: Validate commercial release workflow YAML
         run: ruby -e 'require "yaml"; YAML.parse_file(".github/workflows/commercial-release.yml"); puts "Commercial release workflow YAML syntax is valid."'
 
+      - name: Set up Deno for Edge Function checks
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+          cache: true
+
+      - name: Test account-deletion error classification
+        run: deno test supabase/functions/delete-account/error-classification.test.ts
+
+      - name: Type-check Supabase Edge Functions
+        run: deno check supabase/functions/account-deletion-web/index.ts supabase/functions/delete-account/index.ts
+
       - name: Validate SQL migration function delimiters
         run: python3 scripts/check_sql_function_delimiters.py
       - name: Check Android security baseline
