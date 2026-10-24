@@ -82,6 +82,13 @@ Consulta read-only aos avisos atuais do Supabase e leitura das definições de f
 - O advisor de desempenho também assinala índices não utilizados; não foram removidos, pois isso exige dados de carga reais e pode prejudicar consultas que ainda não foram executadas.
 - Não foram feitas alterações ao esquema nem aos dados de produção durante esta auditoria.
 
+## Continuação da auditoria — 24-10-2026 (reconciliação de migrações)
+
+- Confirmei novamente a execução CI [40106562821](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40106562821): os dois jobs terminaram com sucesso. O job de compilação passou a compilação, testes unitários das cinco variantes, Android Lint e validação da configuração comercial; o job de interface no emulador Android 16 também passou. Os relatórios XML desta execução ainda precisam de inspeção para contar casos aprovados/ignorados.
+- Comparei o histórico de migrações do projeto Supabase com os ficheiros versionados no repositório: a base de dados regista 37 migrações, mas a branch contém 19 ficheiros SQL em `supabase/migrations/`. As versões mais antigas, incluindo as registadas em 19-10-2026, não estão todas representadas por ficheiros de migração no repositório. **Bloqueio importante:** não executar uma reconstrução limpa nem declarar que o backend é reproduzível até reconciliar o histórico com cuidado e validar numa base de dados de teste.
+- Os avisos atuais do Supabase continuam a listar 19 funções `SECURITY DEFINER` executáveis por utilizadores autenticados e duas tabelas do esquema `private` com RLS sem políticas diretas. Estes avisos não provam exploração; exigem validação das permissões pretendidas e testes com identidades distintas. Não fiz alterações à base de dados nesta ronda.
+- A proteção contra palavras-passe comprometidas continua desativada. A ativação tem de ser feita na configuração Auth e depois validada com testes de registo/alteração de palavra-passe; não foi alterada nesta ronda.
+
 ## Pendências antes de vender/publicar
 
 1. Confirmar o CI de cada alteração futura; não presumir que uma execução anterior valida código posterior.
