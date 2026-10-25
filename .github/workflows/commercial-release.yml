@@ -44,6 +44,8 @@ jobs:
 
       - name: Validate Supabase Edge Function gateway settings
         run: python3 scripts/check_supabase_function_config.py
+      - name: Validate restaurant AI assistant security gates
+        run: python3 scripts/check_restaurant_ai_function.py
 
       - name: Set up Java 17
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
