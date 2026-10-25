@@ -36,7 +36,7 @@ class SupabaseFunctionConfigTests(unittest.TestCase):
         )
 
     def test_rejects_missing_functions_configuration(self) -> None:
-        errors = validate_configuration({}, VALID_DELETE_ACCOUNT_SOURCE)
+        errors = validate_configuration({}, VALID_DELETE_ACCOUNT_SOURCE, VALID_ACCOUNT_DELETION_WEB_SOURCE)
         self.assertTrue(any("[functions]" in error for error in errors))
 
     def test_rejects_gateway_jwt_verification_for_public_page(self) -> None:
