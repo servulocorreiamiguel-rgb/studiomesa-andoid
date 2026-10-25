@@ -56,7 +56,7 @@ type OwnerContext =
 async function getOwnerContext(ctx: {
   userClaims?: unknown;
   supabase: {
-    rpc: (name: string, args?: Record<string, unknown>) => Promise<{
+    rpc: (name: string, args?: Record<string, unknown>) => PromiseLike<{
       data: unknown;
       error: { message?: string } | null;
     }>;
