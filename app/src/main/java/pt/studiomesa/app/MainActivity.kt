@@ -68,6 +68,16 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // One-time cleanup for reservation contact data stored by older demo builds.
+        // Current reservations stay in memory; this removes only legacy local preference keys,
+        // not reservations stored on the server. The marker and removals are committed together.
+        if (!backendPrefs.getBoolean("legacy_reservation_cache_removed_v1", false)) {
+            backendPrefs.edit()
+                .remove("remote_reservations_json")
+                .remove("reservations_loaded")
+                .putBoolean("legacy_reservation_cache_removed_v1", true)
+                .commit()
+        }
         store = RestaurantStore(this)
         // Remove pre-release local demo records from accounts that were already signed in
         // when this privacy isolation was introduced.
