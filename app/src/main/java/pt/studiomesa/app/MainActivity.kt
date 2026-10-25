@@ -219,7 +219,7 @@ class MainActivity : Activity() {
             pages.add("Reservas")
             pages.add("Preço Justo")
         }
-        if (isPremium) {
+        if (isPremium && !isCustomerApp) {
             pages.add("Stock")
             pages.add("Análise")
             pages.add("Conteúdo IA")
