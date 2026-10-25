@@ -85,6 +85,8 @@ def validate_ai_function(
         errors.append("The AI content page must be limited to the Premium management variant.")
     if "SupabaseApi.restaurantAiStatus" not in main_activity or "SupabaseApi.generateRestaurantContent" not in main_activity:
         errors.append("The Android page must use the authenticated AI status and generation methods.")
+    if "fornecedor externo de IA configurado no servidor" not in main_activity:
+        errors.append("The Android UI must disclose that prompt text is sent to the configured external AI provider.")
     if "/functions/v1/restaurant-ai-assistant" not in api_source:
         errors.append("The Android API must call the server function endpoint.")
     if re.search(r"OPENAI_API_KEY|sk-[A-Za-z0-9]{12,}", api_source, re.IGNORECASE):
