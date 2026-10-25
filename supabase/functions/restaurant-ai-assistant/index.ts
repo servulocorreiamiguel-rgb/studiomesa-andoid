@@ -49,24 +49,47 @@ async function readBoundedBody(req: Request): Promise<Record<string, unknown> | 
   return parsed as Record<string, unknown>;
 }
 
-async function getOwnerContext(ctx: { userClaims?: { sub?: unknown }; supabase: { rpc: (name: string, args?: Record<string, unknown>) => Promise<{ data: unknown; error: { message?: string } | null }> } }) {
+type OwnerContext =
+  | { ok: false; response: Response }
+  | { ok: true; restaurantId: string };
+
+async function getOwnerContext(ctx: {
+  userClaims?: { sub?: unknown } | null;
+  supabase: {
+    rpc: (name: string, args?: Record<string, unknown>) => Promise<{
+      data: unknown;
+      error: { message?: string } | null;
+    }>;
+  };
+}): Promise<OwnerContext> {
   const userId = ctx.userClaims?.sub;
   if (typeof userId !== "string" || !userId) {
-    return { error: jsonResponse({ message: "A sessão não identifica uma conta válida." }, 401) };
+    return {
+      ok: false,
+      response: jsonResponse({ message: "A sessão não identifica uma conta válida." }, 401),
+    };
   }
 
   const { data, error } = await ctx.supabase.rpc("get_my_restaurant_details");
   if (error) {
-    return { error: jsonResponse({ message: "Não foi possível confirmar o acesso ao restaurante." }, 403) };
+    return {
+      ok: false,
+      response: jsonResponse({ message: "Não foi possível confirmar o acesso ao restaurante." }, 403),
+    };
   }
 
   const rows = Array.isArray(data) ? data : (data ? [data] : []);
   const restaurant = rows[0] as Record<string, unknown> | undefined;
   if (!restaurant || restaurant.user_role !== "owner" || typeof restaurant.restaurant_id !== "string") {
-    return { error: jsonResponse({ message: "O assistente de IA está reservado ao proprietário de um restaurante associado à conta." }, 403) };
+    return {
+      ok: false,
+      response: jsonResponse({
+        message: "O assistente de IA está reservado ao proprietário de um restaurante associado à conta.",
+      }, 403),
+    };
   }
 
-  return { restaurantId: restaurant.restaurant_id };
+  return { ok: true, restaurantId: restaurant.restaurant_id };
 }
 
 Deno.serve(
@@ -76,7 +99,7 @@ Deno.serve(
     }
 
     const owner = await getOwnerContext(ctx);
-    if ("error" in owner) return owner.error;
+    if (!owner.ok) return owner.response;
 
     if (req.method === "GET") {
       return jsonResponse({
