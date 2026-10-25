@@ -57,7 +57,7 @@ def validate_ai_function(config: dict, source: str, migration: str, main_activit
         if not re.search(pattern, migration, re.IGNORECASE):
             errors.append("The AI quota migration " + description + ".")
 
-    if not re.search(r'if\s*\(isPremium\)\s*\{[^}]*pages\.add\(["\']Conteúdo IA["\']\)', main_activity, re.DOTALL):
+    if not re.search(r'if\s*\(isPremium\s*&&\s*!isCustomerApp\)\s*\{[^}]*pages\.add\(["\']Conteúdo IA["\']\)', main_activity, re.DOTALL):
         errors.append("The AI content page must be limited to the Premium management variant.")
     if 'SupabaseApi.restaurantAiStatus' not in main_activity or 'SupabaseApi.generateRestaurantContent' not in main_activity:
         errors.append("The Android page must use the authenticated AI status and generation methods.")
