@@ -2,6 +2,7 @@ import { withSupabase } from "npm:@supabase/server@1";
 import {
   MAX_BODY_BYTES,
   isBodyWithinLimit,
+  readBoundedUtf8Body,
   validateGeneratedDraft,
   validateRequestPayload,
 } from "./validation.ts";
@@ -35,8 +36,8 @@ async function readBoundedBody(req: Request): Promise<Record<string, unknown> | 
   const statedLength = Number(req.headers.get("content-length") ?? "0");
   if (Number.isFinite(statedLength) && statedLength > MAX_BODY_BYTES) return null;
 
-  const raw = await req.text();
-  if (!isBodyWithinLimit(raw)) return null;
+  const raw = await readBoundedUtf8Body(req.body, MAX_BODY_BYTES);
+  if (raw === null || !isBodyWithinLimit(raw)) return null;
 
   let parsed: unknown;
   try {
@@ -181,7 +182,11 @@ Deno.serve(
 
     let providerData: Record<string, unknown>;
     try {
-      providerData = await providerResponse.json() as Record<string, unknown>;
+      const rawProviderBody = await readBoundedUtf8Body(providerResponse.body, 64 * 1024);
+      if (rawProviderBody === null) {
+        return jsonResponse({ message: "A resposta do serviço de IA excedeu o limite permitido." }, 502);
+      }
+      providerData = JSON.parse(rawProviderBody) as Record<string, unknown>;
     } catch {
       return jsonResponse({ message: "O serviço de IA devolveu uma resposta inválida." }, 502);
     }
