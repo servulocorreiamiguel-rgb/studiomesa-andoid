@@ -285,6 +285,26 @@ class MainActivitySmokeTest {
     }
 
     @Test
+    fun aiAssistantNavigationIsRestrictedToPremiumRestaurantManagement() {
+        val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
+        val expected = packageName.contains(".premium.") && !isCustomerVariant()
+
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                val method = MainActivity::class.java.getDeclaredMethod("availablePages")
+                method.isAccessible = true
+                @Suppress("UNCHECKED_CAST")
+                val pages = method.invoke(activity) as List<String>
+                org.junit.Assert.assertEquals(
+                    "AI assistant navigation must only exist for Premium restaurant management builds.",
+                    expected,
+                    pages.contains("Conteúdo IA")
+                )
+            }
+        }
+    }
+
+    @Test
     fun customerCanOpenAccountChooserWithoutNetworkCredentials() {
         assumeTrue("Restaurant variant uses the management account flow.", isCustomerVariant())
 
