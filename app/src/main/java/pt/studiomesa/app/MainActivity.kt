@@ -3503,7 +3503,7 @@ class MainActivity : Activity() {
             statusCard.addView(label("Assistente disponível · rascunhos sujeitos a revisão", 14f, true, forest))
             addGap(statusCard, 5)
             statusCard.addView(label(
-                "Não são enviados registos de clientes. Confirma todos os factos e edita o texto antes de o usar; nada é publicado automaticamente.",
+                "O assunto e os factos introduzidos são enviados para o fornecedor externo de IA configurado no servidor para gerar o rascunho. Não incluas dados pessoais de clientes nem informação confidencial. Revê o texto antes de o usar; nada é publicado automaticamente.",
                 12.5f, false, muted
             ))
             renderAiAssistantForm(container)
