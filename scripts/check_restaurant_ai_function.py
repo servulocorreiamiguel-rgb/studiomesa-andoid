@@ -8,11 +8,19 @@ import tomllib
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "supabase" / "config.toml"
 FUNCTION_PATH = ROOT / "supabase" / "functions" / "restaurant-ai-assistant" / "index.ts"
+VALIDATION_PATH = ROOT / "supabase" / "functions" / "restaurant-ai-assistant" / "validation.ts"
 MIGRATION_PATH = ROOT / "supabase" / "migrations" / "20261025230000_restaurant_ai_quota.sql"
 MAIN_ACTIVITY_PATH = ROOT / "app" / "src" / "main" / "java" / "pt" / "studiomesa" / "app" / "MainActivity.kt"
 SUPABASE_API_PATH = ROOT / "app" / "src" / "main" / "java" / "pt" / "studiomesa" / "app" / "SupabaseApi.kt"
 
-def validate_ai_function(config: dict, source: str, migration: str, main_activity: str, api_source: str) -> list[str]:
+def validate_ai_function(
+    config: dict,
+    source: str,
+    validation_source: str,
+    migration: str,
+    main_activity: str,
+    api_source: str,
+) -> list[str]:
     errors: list[str] = []
     functions = config.get("functions")
     ai_config = functions.get("restaurant-ai-assistant") if isinstance(functions, dict) else None
@@ -28,14 +36,30 @@ def validate_ai_function(config: dict, source: str, migration: str, main_activit
         (r'\.rpc\(["\']consume_restaurant_ai_quota["\']\)', "must enforce a server-side usage quota"),
         (r'AbortSignal\.timeout', "must set an upstream timeout"),
         (r'MAX_BODY_BYTES', "must bound request size"),
-        (r'MAX_OUTPUT_CHARS', "must bound generated output"),
+        (r'validateRequestPayload', "must call the shared request validator"),
+        (r'isBodyWithinLimit', "must bound actual UTF-8 request size"),
+        (r'validateGeneratedDraft', "must validate model output"),
         (r'review_required:\s*true', "must mark the output as requiring human review"),
-        (r'containsCustomerContactData', "must reject contact details in user input"),
         (r'Nunca inventes ingredientes', "must prohibit invented restaurant facts"),
     ]
     for pattern, description in required_source_patterns:
         if not re.search(pattern, source, re.IGNORECASE):
             errors.append("The restaurant AI function " + description + ".")
+
+    required_validation_patterns = [
+        (r'MAX_BODY_BYTES\s*=\s*4096', "must cap request bodies at 4096 bytes"),
+        (r'MAX_TITLE_CHARS\s*=\s*120', "must cap the title field"),
+        (r'MAX_FACTS_CHARS\s*=\s*1500', "must cap the facts field"),
+        (r'MAX_OUTPUT_CHARS\s*=\s*4000', "must cap generated text"),
+        (r'containsCustomerContactData', "must check for customer contact data"),
+        (r'EMAIL_PATTERN', "must reject email addresses in prompt text"),
+        (r'PORTUGAL_PHONE_PATTERN', "must reject Portuguese phone patterns in prompt text"),
+        (r'!\["content_type",\s*"title",\s*"facts"\]\.includes\(key\)', "must reject unapproved request properties"),
+        (r'validateGeneratedDraft', "must reject empty or oversized model responses"),
+    ]
+    for pattern, description in required_validation_patterns:
+        if not re.search(pattern, validation_source, re.IGNORECASE):
+            errors.append("The AI request validation " + description + ".")
 
     if re.search(r'\b(?:console\.log|console\.debug)\s*\(', source):
         errors.append("The restaurant AI function must not log request content or generated drafts.")
@@ -59,11 +83,11 @@ def validate_ai_function(config: dict, source: str, migration: str, main_activit
 
     if not re.search(r'if\s*\(isPremium\s*&&\s*!isCustomerApp\)\s*\{[^}]*pages\.add\(["\']Conteúdo IA["\']\)', main_activity, re.DOTALL):
         errors.append("The AI content page must be limited to the Premium management variant.")
-    if 'SupabaseApi.restaurantAiStatus' not in main_activity or 'SupabaseApi.generateRestaurantContent' not in main_activity:
+    if "SupabaseApi.restaurantAiStatus" not in main_activity or "SupabaseApi.generateRestaurantContent" not in main_activity:
         errors.append("The Android page must use the authenticated AI status and generation methods.")
-    if '/functions/v1/restaurant-ai-assistant' not in api_source:
+    if "/functions/v1/restaurant-ai-assistant" not in api_source:
         errors.append("The Android API must call the server function endpoint.")
-    if re.search(r'OPENAI_API_KEY|sk-[A-Za-z0-9]{12,}', api_source, re.IGNORECASE):
+    if re.search(r"OPENAI_API_KEY|sk-[A-Za-z0-9]{12,}", api_source, re.IGNORECASE):
         errors.append("The Android client must never contain the provider API key.")
 
     return errors
@@ -73,6 +97,7 @@ def main() -> int:
         with CONFIG_PATH.open("rb") as stream:
             config = tomllib.load(stream)
         source = FUNCTION_PATH.read_text(encoding="utf-8")
+        validation_source = VALIDATION_PATH.read_text(encoding="utf-8")
         migration = MIGRATION_PATH.read_text(encoding="utf-8")
         main_activity = MAIN_ACTIVITY_PATH.read_text(encoding="utf-8")
         api_source = SUPABASE_API_PATH.read_text(encoding="utf-8")
@@ -80,7 +105,7 @@ def main() -> int:
         print("Cannot read AI function configuration/source: " + str(exc), file=sys.stderr)
         return 1
 
-    errors = validate_ai_function(config, source, migration, main_activity, api_source)
+    errors = validate_ai_function(config, source, validation_source, migration, main_activity, api_source)
     if errors:
         print("Restaurant AI security guard FAILED:")
         for error in errors:
