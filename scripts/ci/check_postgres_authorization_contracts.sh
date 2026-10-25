@@ -177,6 +177,50 @@ if [ "$STAFF_C_RESTAURANT" != "$RESTAURANT_A" ]; then
 fi
 echo "PASS: staff join RPC works, repeated joins are idempotent, and a staff account cannot join a second restaurant."
 
+consume_ai_quota() {
+  local user_id="$1"
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT allowed::text || '|' || requests_used::text || '|' || daily_limit::text
+FROM public.consume_restaurant_ai_quota();
+COMMIT;
+SQL
+}
+
+# AI quota is scoped to a restaurant, permits only owners, and enforces a daily
+# maximum atomically. This runs only against the disposable PostgreSQL test DB.
+for expected_used in $(seq 1 10); do
+  quota_result="$(consume_ai_quota "$USER_A")"
+  expected_result="t|$expected_used|10"
+  if [ "$quota_result" != "$expected_result" ]; then
+    echo "ERROR: restaurant A AI quota returned '$quota_result'; expected '$expected_result'." >&2
+    exit 1
+  fi
+done
+quota_blocked="$(consume_ai_quota "$USER_A")"
+if [ "$quota_blocked" != "f|10|10" ]; then
+  echo "ERROR: restaurant A's eleventh daily AI request was not blocked." >&2
+  exit 1
+fi
+quota_restaurant_b="$(consume_ai_quota "$USER_B")"
+if [ "$quota_restaurant_b" != "t|1|10" ]; then
+  echo "ERROR: restaurant B did not receive an independent AI quota." >&2
+  exit 1
+fi
+if consume_ai_quota "$USER_C" >/dev/null 2>&1; then
+  echo "ERROR: a staff member unexpectedly consumed AI quota." >&2
+  exit 1
+fi
+quota_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*) FROM private.restaurant_ai_usage WHERE usage_date = (now() AT TIME ZONE 'UTC')::date;")"
+if [ "$quota_rows" != "2" ]; then
+  echo "ERROR: expected one quota row per restaurant, found $quota_rows." >&2
+  exit 1
+fi
+echo "PASS: AI quota is owner-only, independently scoped per restaurant, and blocks requests above the daily cap."
+
 ITEM_A="$(create_inventory_item "$USER_A" "$RESTAURANT_A" "$REQUEST_A" "Flour A" "10")"
 ITEM_A_RETRY="$(create_inventory_item "$USER_A" "$RESTAURANT_A" "$REQUEST_A" "Flour A" "10")"
 ITEM_B="$(create_inventory_item "$USER_B" "$RESTAURANT_B" "$REQUEST_B" "Flour B" "20")"
