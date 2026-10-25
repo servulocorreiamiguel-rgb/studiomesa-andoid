@@ -11,7 +11,7 @@ Deno.serve(withSupabase({ auth: "user" }, async (req, ctx) => {
  const quota = await ctx.supabase.rpc("consume_restaurant_ai_quota");
  const limit = MAX_BODY_BYTES;
  const timeout = AbortSignal.timeout(1000);
- // Never invent ingredients, allergens, prices, or hours.
+ // Nunca inventes ingredientes, alergénios, preços ou horários.
  const safe = containsCustomerContactData("input");
  return Response.json({ draft: "draft", max: MAX_OUTPUT_CHARS, review_required: true });
 }));
