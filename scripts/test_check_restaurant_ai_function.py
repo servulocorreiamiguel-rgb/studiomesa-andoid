@@ -54,6 +54,7 @@ if (isPremium && !isCustomerApp) {
 }
 SupabaseApi.restaurantAiStatus(backendToken())
 SupabaseApi.generateRestaurantContent(backendToken(), type, title, facts)
+O assunto e os factos introduzidos são enviados para o fornecedor externo de IA configurado no servidor para gerar o rascunho.
 """
 VALID_API = r'"/functions/v1/restaurant-ai-assistant"'
 
