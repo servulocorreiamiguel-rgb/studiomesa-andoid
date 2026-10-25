@@ -9,6 +9,7 @@ import tomllib
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "supabase" / "config.toml"
 DELETE_ACCOUNT_PATH = ROOT / "supabase" / "functions" / "delete-account" / "index.ts"
+ACCOUNT_DELETION_WEB_PATH = ROOT / "supabase" / "functions" / "account-deletion-web" / "index.ts"
 REQUIRED_FUNCTIONS = ("delete-account", "account-deletion-web")
 
 AUTHENTICATED_HANDLER = re.compile(
@@ -20,10 +21,14 @@ VERIFIED_USER_ID = re.compile(
 DELETE_CLAIMED_USER = re.compile(
     r"""ctx\.supabaseAdmin\.auth\.admin\.deleteUser\s*\(\s*userId\s*\)"""
 )
+PKCE_FLOW = re.compile(r"""flowType\s*:\s*["']pkce["']""")
+DETECT_SESSION_IN_URL = re.compile(r"""detectSessionInUrl\s*:\s*true""")
 
 
-def validate_configuration(config: dict, delete_account_source: str) -> list[str]:
-    """Return failures for gateway settings or destructive-handler auth regressions."""
+def validate_configuration(
+    config: dict, delete_account_source: str, account_deletion_web_source: str
+) -> list[str]:
+    """Return failures for gateway settings and account-deletion auth contracts."""
     functions = config.get("functions")
     if not isinstance(functions, dict):
         return ["Supabase config must define a [functions] table."]
@@ -51,6 +56,14 @@ def validate_configuration(config: dict, delete_account_source: str) -> list[str
         errors.append(
             "Account deletion must target the userId derived from the verified session."
         )
+    if not PKCE_FLOW.search(account_deletion_web_source):
+        errors.append(
+            'The account-deletion web client must use Supabase Auth flowType "pkce" for magic-link authentication.'
+        )
+    if not DETECT_SESSION_IN_URL.search(account_deletion_web_source):
+        errors.append(
+            "The account-deletion web client must detect and exchange the PKCE callback code (detectSessionInUrl: true)."
+        )
     return errors
 
 
@@ -59,18 +72,19 @@ def main() -> int:
         with CONFIG_PATH.open("rb") as config_file:
             config = tomllib.load(config_file)
         delete_account_source = DELETE_ACCOUNT_PATH.read_text(encoding="utf-8")
+        account_deletion_web_source = ACCOUNT_DELETION_WEB_PATH.read_text(encoding="utf-8")
     except (OSError, tomllib.TOMLDecodeError) as exc:
-        print(f"Cannot read valid Supabase config or delete-account source: {exc}", file=sys.stderr)
+        print(f"Cannot read valid Supabase config or account-deletion source: {exc}", file=sys.stderr)
         return 1
 
-    errors = validate_configuration(config, delete_account_source)
+    errors = validate_configuration(config, delete_account_source, account_deletion_web_source)
     if errors:
         print("Supabase function security check FAILED:")
         for error in errors:
             print(f" - {error}", file=sys.stderr)
         return 1
 
-    print("Supabase gateway settings and delete-account session-auth checks are valid.")
+    print("Supabase gateway settings, delete-account session auth, and web PKCE callback checks are valid.")
     return 0
 
 

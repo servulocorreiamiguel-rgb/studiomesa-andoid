@@ -10,6 +10,12 @@ VALID_CONFIG = {
     }
 }
 
+VALID_ACCOUNT_DELETION_WEB_SOURCE = """
+const supabase = createClient(projectUrl, publishableKey, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "pkce" }
+});
+"""
+
 VALID_DELETE_ACCOUNT_SOURCE = """
 Deno.serve(
   withSupabase({ auth: "user" }, async (req, ctx) => {
@@ -25,7 +31,7 @@ Deno.serve(
 class SupabaseFunctionConfigTests(unittest.TestCase):
     def test_accepts_public_page_and_authenticated_delete_handler(self) -> None:
         self.assertEqual(
-            validate_configuration(VALID_CONFIG, VALID_DELETE_ACCOUNT_SOURCE),
+            validate_configuration(VALID_CONFIG, VALID_DELETE_ACCOUNT_SOURCE, VALID_ACCOUNT_DELETION_WEB_SOURCE),
             [],
         )
 
@@ -40,7 +46,7 @@ class SupabaseFunctionConfigTests(unittest.TestCase):
                 "account-deletion-web": {"verify_jwt": True},
             }
         }
-        errors = validate_configuration(config, VALID_DELETE_ACCOUNT_SOURCE)
+        errors = validate_configuration(config, VALID_DELETE_ACCOUNT_SOURCE, VALID_ACCOUNT_DELETION_WEB_SOURCE)
         self.assertTrue(any("verify_jwt = false" in error for error in errors))
 
     def test_rejects_delete_handler_without_user_auth_wrapper(self) -> None:
@@ -48,7 +54,7 @@ class SupabaseFunctionConfigTests(unittest.TestCase):
             'withSupabase({ auth: "user" },',
             "withSupabase({},",
         )
-        errors = validate_configuration(VALID_CONFIG, source)
+        errors = validate_configuration(VALID_CONFIG, source, VALID_ACCOUNT_DELETION_WEB_SOURCE)
         self.assertTrue(any("withSupabase" in error for error in errors))
 
     def test_rejects_delete_target_not_bound_to_verified_session(self) -> None:
@@ -56,7 +62,7 @@ class SupabaseFunctionConfigTests(unittest.TestCase):
             "const userId = ctx.userClaims?.sub;",
             'const userId = "arbitrary-user-id";',
         )
-        errors = validate_configuration(VALID_CONFIG, source)
+        errors = validate_configuration(VALID_CONFIG, source, VALID_ACCOUNT_DELETION_WEB_SOURCE)
         self.assertTrue(any("verified session subject" in error for error in errors))
 
     def test_rejects_admin_deletion_not_targeted_to_verified_user(self) -> None:
@@ -64,9 +70,19 @@ class SupabaseFunctionConfigTests(unittest.TestCase):
             "deleteUser(userId)",
             'deleteUser("different-user")',
         )
-        errors = validate_configuration(VALID_CONFIG, source)
+        errors = validate_configuration(VALID_CONFIG, source, VALID_ACCOUNT_DELETION_WEB_SOURCE)
         self.assertTrue(any("verified session" in error for error in errors))
 
+
+    def test_rejects_implicit_flow_on_account_deletion_page(self) -> None:
+        page = VALID_ACCOUNT_DELETION_WEB_SOURCE.replace('flowType: "pkce"', 'flowType: "implicit"')
+        errors = validate_configuration(VALID_CONFIG, VALID_DELETE_ACCOUNT_SOURCE, page)
+        self.assertTrue(any("flowType" in error for error in errors))
+
+    def test_rejects_missing_pkce_callback_detection(self) -> None:
+        page = VALID_ACCOUNT_DELETION_WEB_SOURCE.replace("detectSessionInUrl: true,", "")
+        errors = validate_configuration(VALID_CONFIG, VALID_DELETE_ACCOUNT_SOURCE, page)
+        self.assertTrue(any("detectSessionInUrl" in error for error in errors))
 
 if __name__ == "__main__":
     unittest.main()

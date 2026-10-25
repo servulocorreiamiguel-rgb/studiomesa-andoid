@@ -1,6 +1,6 @@
 # StudioMesa — estado de testes e prontidão para lançamento
 
-**Revisão:** 24-10-2026  
+**Revisão:** 25-10-2026  
 **Repositório:** https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid  
 **PR de trabalho:** https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/19  
 **CI atual:** https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions
@@ -11,10 +11,10 @@ O estado do PR e os resultados da execução mais recente no commit atual devem 
 
 - Compilação das cinco variantes APK de demonstração, testes unitários de cada variante e Android Lint.
 - Construção das cinco combinações comerciais AAB com uma chave descartável de CI e verificação da assinatura de cada bundle. Estes ficheiros de teste não são uma assinatura comercial nem devem ser publicados.
-- Testes de interface nos cinco sabores, num emulador Android 16, com relatórios XML publicados como artefacto.
+- Testes de interface nos cinco sabores, em emuladores Android 8 (API 26) e Android 16 (API 36), com relatórios XML publicados como artefactos.
 - Reconstrução das migrações SQL numa instância PostgreSQL descartável e testes de estrutura, RLS, RPCs, autorização entre restaurantes, idempotência de criação e ajuste de stock e fluxo de eliminação de conta.
 - Verificação estática das funções SECURITY DEFINER e da configuração das Edge Functions; os testes do catálogo SQL confirmam, depois da reconstrução, que as funções privilegiadas em public/private fixam um search_path vazio e não podem ser executadas por anon.
-- Verificações unitárias do guardião de configuração para impedir que o endpoint destrutivo de eliminação de conta perca a validação da sessão autenticada.
+- Verificações unitárias do guardião de configuração para manter a validação da sessão autenticada no endpoint destrutivo e exigir PKCE e deteção do callback na página web de eliminação de conta.
 
 Estes testes não substituem testes ponta a ponta contra Supabase Auth hospedado, um telemóvel Android real ou uma revisão independente de segurança.
 
@@ -40,7 +40,7 @@ A workflow de release comercial exige o identificador definitivo do pacote e os 
 1. Confirmar que todos os jobs da CI passam no commit exato que será considerado para lançamento.
 2. Planear e aplicar a migração corretiva da função join_restaurant_staff num procedimento controlado, depois confirmar a função instalada no projeto hospedado. Não aplicar migrações automaticamente durante os testes.
 3. Testar com contas e restaurantes distintos: leitura/escrita de pedidos, reservas, stock, carta, códigos da equipa e fidelização; incluir sessão ausente, utilizador de outro restaurante, reenvios idempotentes e falhas de rede.
-4. Testar no Android real a criação e confirmação de conta, início/fim de sessão, recuperação de palavra-passe, renovação/expiração de sessão e revogação de acesso.
+4. Testar no Android real a criação e confirmação de conta, início/fim de sessão, recuperação de palavra-passe, renovação/expiração de sessão e revogação de acesso. Testar também a página web de eliminação de conta com uma ligação PKCE num navegador real.
 5. Rever as definições Auth, confirmação de email, SMTP e URLs de retorno; verificar no ambiente hospedado o fluxo de eliminação de conta.
 6. Escolher os IDs finais de pacote, configurar os segredos de assinatura comercial e testar os AABs assinados finais.
 7. Preparar uma política de privacidade pública, preencher a declaração Data safety da Google Play e definir backup/restauro e resposta a incidentes.
