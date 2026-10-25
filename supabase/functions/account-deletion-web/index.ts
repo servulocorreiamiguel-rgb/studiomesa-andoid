@@ -26,7 +26,7 @@ button:disabled{opacity:.55;cursor:wait}button.danger{background:var(--danger)}[
 <body><main>
 <header><h1>StudioMesa</h1><p>Pedido de eliminação de conta e dados associados</p></header>
 <section><h2>1. Confirmar que controlas a conta</h2>
-<p>Introduz o email da conta StudioMesa. Enviaremos uma ligação de autenticação única. Abre-a no mesmo navegador para continuar. Por segurança, esta página não confirma se um email está registado.</p>
+<p>Introduz o email da conta StudioMesa. Enviaremos uma ligação de autenticação única. Abre-a no mesmo navegador e dispositivo onde pediste a ligação para continuar. Por segurança, esta página não confirma se um email está registado.</p>
 <form id="email-form"><label for="email">Email da conta</label><input id="email" name="email" type="email" autocomplete="email" required maxlength="254"><button id="send-link" type="submit">Enviar ligação segura</button></form>
 </section>
 <section id="signed-in" hidden><h2>2. Escolher o âmbito da eliminação</h2><p id="account-label"></p>
@@ -44,7 +44,7 @@ button:disabled{opacity:.55;cursor:wait}button.danger{background:var(--danger)}[
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/+esm";
 const projectUrl = "https://svwvkfsyevuyabelrtjk.supabase.co";
 const publishableKey = "sb_publishable_ioJIukpwd0_Fyajd41QL_Q_M6WKE0UH";
-const supabase = createClient(projectUrl,publishableKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,flowType:"implicit"}});
+const supabase = createClient(projectUrl,publishableKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,flowType:"pkce"}});
 const emailForm=document.querySelector("#email-form"),sendButton=document.querySelector("#send-link"),signedInPanel=document.querySelector("#signed-in"),accountLabel=document.querySelector("#account-label"),deleteForm=document.querySelector("#delete-form"),deleteButton=document.querySelector("#delete-button"),statusEl=document.querySelector("#status");
 let currentSession=null,deletionSubmitted=false;
 function showStatus(message,error=false){statusEl.textContent=message;statusEl.classList.toggle("error",error)}
@@ -52,7 +52,7 @@ function showSession(session){currentSession=session;if(!session?.access_token||
 const redirectUrl=window.location.origin+window.location.pathname;
 emailForm.addEventListener("submit",async event=>{
  event.preventDefault();sendButton.disabled=true;showStatus("A pedir uma ligação segura…");
- try{const email=document.querySelector("#email").value.trim();const {error}=await supabase.auth.signInWithOtp({email,options:{shouldCreateUser:false,emailRedirectTo:redirectUrl}});if(error)throw error;showStatus("Se a conta puder iniciar sessão por este método, receberás uma ligação no email indicado. Abre-a no mesmo navegador para continuar.")}
+ try{const email=document.querySelector("#email").value.trim();const {error}=await supabase.auth.signInWithOtp({email,options:{shouldCreateUser:false,emailRedirectTo:redirectUrl}});if(error)throw error;showStatus("Se a conta puder iniciar sessão por este método, receberás uma ligação no email indicado. Abre-a no mesmo navegador e dispositivo onde pediste a ligação para continuar.")}
  catch{showStatus("Não foi possível enviar a ligação. Confirma o endereço e tenta mais tarde. A configuração de redirecionamentos de autenticação pode precisar de atenção.",true)}
  finally{sendButton.disabled=false}
 });

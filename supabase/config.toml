@@ -1,0 +1,6 @@
+# Public deletion page; the destructive endpoint enforces user authentication.
+[functions.delete-account]
+verify_jwt = false
+
+[functions.account-deletion-web]
+verify_jwt = false
