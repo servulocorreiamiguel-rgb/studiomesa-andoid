@@ -31,7 +31,7 @@ def validate_ai_function(config: dict, source: str, migration: str, main_activit
         (r'MAX_OUTPUT_CHARS', "must bound generated output"),
         (r'review_required:\s*true', "must mark the output as requiring human review"),
         (r'containsCustomerContactData', "must reject contact details in user input"),
-        (r'Never invent ingredients', "must prohibit invented restaurant facts"),
+        (r'Nunca inventes ingredientes', "must prohibit invented restaurant facts"),
     ]
     for pattern, description in required_source_patterns:
         if not re.search(pattern, source, re.IGNORECASE):
