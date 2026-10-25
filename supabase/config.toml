@@ -4,3 +4,7 @@ verify_jwt = false
 
 [functions.account-deletion-web]
 verify_jwt = false
+
+# AI content generation is disabled until the server-side key and feature flag are configured.
+[functions.restaurant-ai-assistant]
+verify_jwt = true
