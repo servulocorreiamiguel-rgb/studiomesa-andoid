@@ -47,6 +47,17 @@ jobs:
       - name: Validate restaurant AI assistant security gates
         run: python3 scripts/check_restaurant_ai_function.py
 
+      - name: Set up Deno
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: "2.9.8"
+
+      - name: Type-check restaurant AI Edge Function
+        run: deno check supabase/functions/restaurant-ai-assistant/index.ts
+
+      - name: Test restaurant AI request validation
+        run: deno test supabase/functions/restaurant-ai-assistant/validation_test.ts
+
       - name: Set up Java 17
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
