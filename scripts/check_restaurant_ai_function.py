@@ -31,7 +31,7 @@ def validate_ai_function(
         (r'withSupabase\s*\(\s*\{\s*auth\s*:\s*["\']user["\']\s*\}', "must verify a real user session"),
         (r'Deno\.env\.get\(["\']OPENAI_API_KEY["\']\)', "must read the provider key from a server secret"),
         (r'Deno\.env\.get\(["\']STUDIOMESA_AI_ENABLED["\']\)', "must require the explicit server-side feature flag"),
-        (r'\.rpc\(["\']get_my_restaurant_details["\']\)', "must resolve the restaurant through the caller-scoped RPC"),
+        (r'\.rpc\(\s*["\']get_my_restaurant_details["\']\s*,?\s*\)', "must resolve the restaurant through the caller-scoped RPC"),
         (r'user_role\s*!==\s*["\']owner["\']', "must restrict use to an authorized owner"),
         (r'\.rpc\(["\']consume_restaurant_ai_quota["\']\)', "must enforce a server-side usage quota"),
         (r'AbortSignal\.timeout', "must set an upstream timeout"),
