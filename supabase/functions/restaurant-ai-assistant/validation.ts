@@ -27,6 +27,59 @@ export function isBodyWithinLimit(raw: string): boolean {
   return new TextEncoder().encode(raw).byteLength <= MAX_BODY_BYTES;
 }
 
+
+/**
+ * Reads a request/provider stream only up to maxBytes. Returns null when the stream
+ * exceeds the byte limit; malformed UTF-8 throws and should be handled by the caller.
+ * Cancelling immediately prevents the function from buffering an arbitrarily large body.
+ */
+export async function readBoundedUtf8Body(
+  stream: ReadableStream<Uint8Array> | null,
+  maxBytes = MAX_BODY_BYTES,
+): Promise<string | null> {
+  if (!stream) return "";
+  if (!Number.isInteger(maxBytes) || maxBytes < 0) {
+    throw new RangeError("The byte limit must be a non-negative integer.");
+  }
+
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        try {
+          await reader.cancel("Body size limit exceeded");
+        } catch {
+          // The size limit still holds even if the remote stream cannot be cancelled.
+        }
+        return null;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // A cancelled/errored stream may already have released its reader lock.
+    }
+  }
+
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+}
+
 export function containsCustomerContactData(value: string): boolean {
   return EMAIL_PATTERN.test(value) || PORTUGAL_PHONE_PATTERN.test(value);
 }
