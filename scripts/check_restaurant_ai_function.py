@@ -38,6 +38,8 @@ def validate_ai_function(
         (r'MAX_BODY_BYTES', "must bound request size"),
         (r'validateRequestPayload', "must call the shared request validator"),
         (r'isBodyWithinLimit', "must bound actual UTF-8 request size"),
+        (r'readBoundedUtf8Body\(req\.body', "must cap incoming bodies while streaming"),
+        (r'readBoundedUtf8Body\(providerResponse\.body,\s*64\s*\*\s*1024\)', "must cap provider response bodies while streaming"),
         (r'validateGeneratedDraft', "must validate model output"),
         (r'review_required:\s*true', "must mark the output as requiring human review"),
         (r'Nunca inventes ingredientes', "must prohibit invented restaurant facts"),
@@ -48,6 +50,9 @@ def validate_ai_function(
 
     required_validation_patterns = [
         (r'MAX_BODY_BYTES\s*=\s*4096', "must cap request bodies at 4096 bytes"),
+        (r'readBoundedUtf8Body', "must include bounded stream reading"),
+        (r'const reader = stream\.getReader\(\)', "must consume a body stream incrementally"),
+        (r'await reader\.cancel', "must cancel an oversized body stream"),
         (r'MAX_TITLE_CHARS\s*=\s*120', "must cap the title field"),
         (r'MAX_FACTS_CHARS\s*=\s*1500', "must cap the facts field"),
         (r'MAX_OUTPUT_CHARS\s*=\s*4000', "must cap generated text"),
