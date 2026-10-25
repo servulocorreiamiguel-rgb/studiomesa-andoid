@@ -101,8 +101,12 @@ Deno.test("rejects malformed UTF-8 when reading a bounded stream", async () => {
 
 Deno.test("applies an independent limit to provider response streams", async () => {
   const providerLimit = 16;
-  const withinLimit = new Response("short provider text").body;
-  assertEquals(await readBoundedUtf8Body(withinLimit, providerLimit), null);
+  const oversized = new Response("short provider text").body;
+  assertEquals(await readBoundedUtf8Body(oversized, providerLimit), null);
+  assertEquals(
+    await readBoundedUtf8Body(new Response("exactly 16 bytes").body, providerLimit),
+    "exactly 16 bytes",
+  );
   assertEquals(
     await readBoundedUtf8Body(new Response("short").body, providerLimit),
     "short",
