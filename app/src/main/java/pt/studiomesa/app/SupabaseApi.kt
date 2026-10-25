@@ -899,4 +899,46 @@ object SupabaseApi {
         )
     }
 
+
+    /**
+     * Checks the authenticated owner's server-side AI feature gate. No provider key
+     * is sent to or stored by this Android client.
+     */
+    fun restaurantAiStatus(token: String): JSONObject {
+        require(token.isNotBlank()) { "Inicia sessão antes de usar o assistente." }
+        return jsonCall(
+            "GET",
+            "/functions/v1/restaurant-ai-assistant",
+            token = token
+        )
+    }
+
+    /**
+     * Sends only the selected content type and restaurant-provided facts. Authorization,
+     * ownership, the daily quota and the provider key are enforced on the Edge Function.
+     */
+    fun generateRestaurantContent(
+        token: String,
+        contentType: String,
+        title: String,
+        facts: String
+    ): JSONObject {
+        require(token.isNotBlank()) { "Inicia sessão antes de usar o assistente." }
+        require(contentType in setOf("menu_description", "social_post", "campaign", "content_ideas")) {
+            "Escolhe um tipo de conteúdo válido."
+        }
+        require(title.trim().length in 2..120) { "O assunto deve ter entre 2 e 120 caracteres." }
+        require(facts.trim().length in 10..1500) { "Os factos devem ter entre 10 e 1500 caracteres." }
+        return jsonCall(
+            "POST",
+            "/functions/v1/restaurant-ai-assistant",
+            JSONObject()
+                .put("content_type", contentType)
+                .put("title", title.trim())
+                .put("facts", facts.trim()),
+            token
+        )
+    }
+
+
 }
