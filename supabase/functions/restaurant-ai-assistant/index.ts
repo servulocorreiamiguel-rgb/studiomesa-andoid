@@ -49,58 +49,37 @@ async function readBoundedBody(req: Request): Promise<Record<string, unknown> | 
   return parsed as Record<string, unknown>;
 }
 
-type OwnerContext =
-  | { ok: false; response: Response }
-  | { ok: true; restaurantId: string };
-
-async function getOwnerContext(ctx: {
-  userClaims?: unknown;
-  supabase: {
-    rpc: (name: string, args?: Record<string, unknown>) => PromiseLike<{
-      data: unknown;
-      error: { message?: string } | null;
-    }>;
-  };
-}): Promise<OwnerContext> {
-  const claims = ctx.userClaims as { sub?: unknown } | null | undefined;
-  const userId = claims?.sub;
-  if (typeof userId !== "string" || !userId) {
-    return {
-      ok: false,
-      response: jsonResponse({ message: "A sessão não identifica uma conta válida." }, 401),
-    };
-  }
-
-  const { data, error } = await ctx.supabase.rpc("get_my_restaurant_details");
-  if (error) {
-    return {
-      ok: false,
-      response: jsonResponse({ message: "Não foi possível confirmar o acesso ao restaurante." }, 403),
-    };
-  }
-
-  const rows = Array.isArray(data) ? data : (data ? [data] : []);
-  const restaurant = rows[0] as Record<string, unknown> | undefined;
-  if (!restaurant || restaurant.user_role !== "owner" || typeof restaurant.restaurant_id !== "string") {
-    return {
-      ok: false,
-      response: jsonResponse({
-        message: "O assistente de IA está reservado ao proprietário de um restaurante associado à conta.",
-      }, 403),
-    };
-  }
-
-  return { ok: true, restaurantId: restaurant.restaurant_id };
-}
-
 Deno.serve(
   withSupabase({ auth: "user" }, async (req, ctx) => {
     if (req.method !== "GET" && req.method !== "POST") {
       return jsonResponse({ message: "Método não permitido." }, 405);
     }
 
-    const owner = await getOwnerContext(ctx);
-    if (!owner.ok) return owner.response;
+    const claims = ctx.userClaims as { sub?: unknown } | null;
+    if (typeof claims?.sub !== "string" || !claims.sub) {
+      return jsonResponse({ message: "A sessão não identifica uma conta válida." }, 401);
+    }
+
+    const { data: restaurantData, error: restaurantError } = await ctx.supabase.rpc(
+      "get_my_restaurant_details",
+    );
+    if (restaurantError) {
+      return jsonResponse({ message: "Não foi possível confirmar o acesso ao restaurante." }, 403);
+    }
+
+    const restaurantRows = Array.isArray(restaurantData)
+      ? restaurantData
+      : (restaurantData ? [restaurantData] : []);
+    const restaurant = restaurantRows[0] as Record<string, unknown> | undefined;
+    if (
+      !restaurant ||
+      restaurant.user_role !== "owner" ||
+      typeof restaurant.restaurant_id !== "string"
+    ) {
+      return jsonResponse({
+        message: "O assistente de IA está reservado ao proprietário de um restaurante associado à conta.",
+      }, 403);
+    }
 
     if (req.method === "GET") {
       return jsonResponse({
