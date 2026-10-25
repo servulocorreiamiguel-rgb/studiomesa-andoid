@@ -32,7 +32,7 @@ REVOKE ALL ON FUNCTION public.consume_restaurant_ai_quota() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.consume_restaurant_ai_quota() TO authenticated;
 """
 VALID_MAIN = r"""
-if (isPremium) {
+if (isPremium && !isCustomerApp) {
  pages.add("Stock")
  pages.add("Análise")
  pages.add("Conteúdo IA")
