@@ -193,19 +193,19 @@ SQL
 # maximum atomically. This runs only against the disposable PostgreSQL test DB.
 for expected_used in $(seq 1 10); do
   quota_result="$(consume_ai_quota "$USER_A")"
-  expected_result="t|$expected_used|10"
+  expected_result="true|$expected_used|10"
   if [ "$quota_result" != "$expected_result" ]; then
     echo "ERROR: restaurant A AI quota returned '$quota_result'; expected '$expected_result'." >&2
     exit 1
   fi
 done
 quota_blocked="$(consume_ai_quota "$USER_A")"
-if [ "$quota_blocked" != "f|10|10" ]; then
+if [ "$quota_blocked" != "false|10|10" ]; then
   echo "ERROR: restaurant A's eleventh daily AI request was not blocked." >&2
   exit 1
 fi
 quota_restaurant_b="$(consume_ai_quota "$USER_B")"
-if [ "$quota_restaurant_b" != "t|1|10" ]; then
+if [ "$quota_restaurant_b" != "true|1|10" ]; then
   echo "ERROR: restaurant B did not receive an independent AI quota." >&2
   exit 1
 fi
