@@ -11,6 +11,8 @@ Deno.serve(withSupabase({ auth: "user" }, async (req, ctx) => {
  const quota = await ctx.supabase.rpc("consume_restaurant_ai_quota");
  const bodySize = MAX_BODY_BYTES;
  const bounded = isBodyWithinLimit("body");
+ const requestStream = readBoundedUtf8Body(req.body, MAX_BODY_BYTES);
+ const providerStream = readBoundedUtf8Body(providerResponse.body, 64 * 1024);
  const prompt = validateRequestPayload({});
  const output = validateGeneratedDraft("draft");
  const timeout = AbortSignal.timeout(1000);
@@ -23,6 +25,11 @@ export const MAX_BODY_BYTES = 4096;
 export const MAX_TITLE_CHARS = 120;
 export const MAX_FACTS_CHARS = 1500;
 export const MAX_OUTPUT_CHARS = 4000;
+export async function readBoundedUtf8Body(stream: ReadableStream<Uint8Array> | null, maxBytes = MAX_BODY_BYTES) {
+ const reader = stream.getReader();
+ await reader.read();
+ await reader.cancel("Body too large");
+}
 const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const PORTUGAL_PHONE_PATTERN = /(?:\+351)?9[1236]\d{7}/;
 export function containsCustomerContactData(value: string) {
@@ -95,6 +102,27 @@ class RestaurantAIFunctionGuardTests(unittest.TestCase):
     def test_rejects_unbounded_provider_timeout(self):
         errors = self.validate(source=VALID_SOURCE.replace("AbortSignal.timeout(1000)", "null"))
         self.assertTrue(any("timeout" in error for error in errors))
+
+    def test_rejects_unbounded_incoming_request_stream(self):
+        source = VALID_SOURCE.replace(
+            "readBoundedUtf8Body(req.body, MAX_BODY_BYTES)",
+            "req.text()",
+        )
+        errors = self.validate(source=source)
+        self.assertTrue(any("incoming bodies while streaming" in error for error in errors))
+
+    def test_rejects_unbounded_provider_response_stream(self):
+        source = VALID_SOURCE.replace(
+            "readBoundedUtf8Body(providerResponse.body, 64 * 1024)",
+            "providerResponse.json()",
+        )
+        errors = self.validate(source=source)
+        self.assertTrue(any("provider response bodies while streaming" in error for error in errors))
+
+    def test_rejects_validation_helper_without_incremental_stream_reader(self):
+        validation = VALID_VALIDATION.replace("const reader = stream.getReader();", "const reader = stream;")
+        errors = self.validate(validation=validation)
+        self.assertTrue(any("consume a body stream incrementally" in error for error in errors))
 
     def test_rejects_missing_email_guard(self):
         errors = self.validate(validation=VALID_VALIDATION.replace("EMAIL_PATTERN", "EMAIL_CHECK"))
