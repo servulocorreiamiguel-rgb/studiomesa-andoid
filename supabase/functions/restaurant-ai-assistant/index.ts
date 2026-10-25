@@ -54,7 +54,7 @@ type OwnerContext =
   | { ok: true; restaurantId: string };
 
 async function getOwnerContext(ctx: {
-  userClaims?: { sub?: unknown } | null;
+  userClaims?: unknown;
   supabase: {
     rpc: (name: string, args?: Record<string, unknown>) => Promise<{
       data: unknown;
@@ -62,7 +62,8 @@ async function getOwnerContext(ctx: {
     }>;
   };
 }): Promise<OwnerContext> {
-  const userId = ctx.userClaims?.sub;
+  const claims = ctx.userClaims as { sub?: unknown } | null | undefined;
+  const userId = claims?.sub;
   if (typeof userId !== "string" || !userId) {
     return {
       ok: false,
