@@ -55,7 +55,7 @@ Deno.serve(
       return jsonResponse({ message: "Método não permitido." }, 405);
     }
 
-    const claims = ctx.userClaims as { sub?: unknown } | null;
+    const claims = ctx.userClaims as unknown as { sub?: unknown } | null;
     if (typeof claims?.sub !== "string" || !claims.sub) {
       return jsonResponse({ message: "A sessão não identifica uma conta válida." }, 401);
     }
