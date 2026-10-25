@@ -9,12 +9,27 @@ Deno.serve(withSupabase({ auth: "user" }, async (req, ctx) => {
  const restaurant = await ctx.supabase.rpc("get_my_restaurant_details");
  if (restaurant.user_role !== "owner") return Response.json({});
  const quota = await ctx.supabase.rpc("consume_restaurant_ai_quota");
- const limit = MAX_BODY_BYTES;
+ const bodySize = MAX_BODY_BYTES;
+ const bounded = isBodyWithinLimit("body");
+ const prompt = validateRequestPayload({});
+ const output = validateGeneratedDraft("draft");
  const timeout = AbortSignal.timeout(1000);
  // Nunca inventes ingredientes, alergénios, preços ou horários.
- const safe = containsCustomerContactData("input");
- return Response.json({ draft: "draft", max: MAX_OUTPUT_CHARS, review_required: true });
+ return Response.json({ draft: "draft", review_required: true });
 }));
+"""
+VALID_VALIDATION = r"""
+export const MAX_BODY_BYTES = 4096;
+export const MAX_TITLE_CHARS = 120;
+export const MAX_FACTS_CHARS = 1500;
+export const MAX_OUTPUT_CHARS = 4000;
+const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+const PORTUGAL_PHONE_PATTERN = /(?:\+351)?9[1236]\d{7}/;
+export function containsCustomerContactData(value: string) {
+ return EMAIL_PATTERN.test(value) || PORTUGAL_PHONE_PATTERN.test(value);
+}
+Object.keys(body).some((key) => !["content_type", "title", "facts"].includes(key));
+export function validateGeneratedDraft(value: unknown) { return value; }
 """
 VALID_MIGRATION = r"""
 CREATE TABLE IF NOT EXISTS private.restaurant_ai_usage ();
@@ -40,14 +55,12 @@ if (isPremium && !isCustomerApp) {
 SupabaseApi.restaurantAiStatus(backendToken())
 SupabaseApi.generateRestaurantContent(backendToken(), type, title, facts)
 """
-VALID_API = r"""
-"/functions/v1/restaurant-ai-assistant"
-"""
+VALID_API = r'"/functions/v1/restaurant-ai-assistant"'
 
 class RestaurantAIFunctionGuardTests(unittest.TestCase):
-    def validate(self, config=VALID_CONFIG, source=VALID_SOURCE, migration=VALID_MIGRATION,
-                 main=VALID_MAIN, api=VALID_API):
-        return validate_ai_function(config, source, migration, main, api)
+    def validate(self, config=VALID_CONFIG, source=VALID_SOURCE, validation=VALID_VALIDATION,
+                 migration=VALID_MIGRATION, main=VALID_MAIN, api=VALID_API):
+        return validate_ai_function(config, source, validation, migration, main, api)
 
     def test_accepts_server_gated_owner_only_quota_and_review_only_design(self):
         self.assertEqual(self.validate(), [])
@@ -61,28 +74,38 @@ class RestaurantAIFunctionGuardTests(unittest.TestCase):
         self.assertTrue(any("feature flag" in error for error in errors))
 
     def test_rejects_missing_owner_check(self):
-        errors = self.validate(source=VALID_SOURCE.replace('if (restaurant.user_role !== "owner") return Response.json({});', "return Response.json({});"))
+        source = VALID_SOURCE.replace('if (restaurant.user_role !== "owner") return Response.json({});', "return Response.json({});")
+        errors = self.validate(source=source)
         self.assertTrue(any("owner" in error for error in errors))
 
     def test_rejects_missing_quota_rpc(self):
-        errors = self.validate(source=VALID_SOURCE.replace('await ctx.supabase.rpc("consume_restaurant_ai_quota")', "Promise.resolve({})"))
+        source = VALID_SOURCE.replace('await ctx.supabase.rpc("consume_restaurant_ai_quota")', "Promise.resolve({})")
+        errors = self.validate(source=source)
         self.assertTrue(any("quota" in error for error in errors))
 
-    def test_rejects_unbounded_provider_timeout(self):
-        errors = self.validate(source=VALID_SOURCE.replace("AbortSignal.timeout(1000)", "null"))
-        self.assertTrue(any("timeout" in error for error in errors))
+    def test_rejects_provider_secret_in_android_api(self):
+        errors = self.validate(api='OPENAI_API_KEY = "sk-abcdefghijklmnop"')
+        self.assertTrue(any("provider API key" in error for error in errors))
 
     def test_rejects_quota_function_without_auth_identity(self):
         errors = self.validate(migration=VALID_MIGRATION.replace("auth.uid()", "null"))
         self.assertTrue(any("authenticated user" in error for error in errors))
 
-    def test_rejects_ai_page_in_non_premium_app(self):
+    def test_rejects_unbounded_provider_timeout(self):
+        errors = self.validate(source=VALID_SOURCE.replace("AbortSignal.timeout(1000)", "null"))
+        self.assertTrue(any("timeout" in error for error in errors))
+
+    def test_rejects_missing_email_guard(self):
+        errors = self.validate(validation=VALID_VALIDATION.replace("EMAIL_PATTERN", "EMAIL_CHECK"))
+        self.assertTrue(any("email addresses" in error for error in errors))
+
+    def test_rejects_missing_phone_guard(self):
+        errors = self.validate(validation=VALID_VALIDATION.replace("PORTUGAL_PHONE_PATTERN", "PHONE_CHECK"))
+        self.assertTrue(any("phone patterns" in error for error in errors))
+
+    def test_rejects_ai_page_outside_premium_management(self):
         errors = self.validate(main='pages.add("Conteúdo IA")')
         self.assertTrue(any("Premium" in error for error in errors))
-
-    def test_rejects_provider_secret_in_android_api(self):
-        errors = self.validate(api='OPENAI_API_KEY = "sk-abcdefghijklmnop"')
-        self.assertTrue(any("provider API key" in error for error in errors))
 
 if __name__ == "__main__":
     unittest.main()
