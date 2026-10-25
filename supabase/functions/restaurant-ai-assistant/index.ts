@@ -1,16 +1,12 @@
 import { withSupabase } from "npm:@supabase/server@1";
+import {
+  MAX_BODY_BYTES,
+  isBodyWithinLimit,
+  validateGeneratedDraft,
+  validateRequestPayload,
+} from "./validation.ts";
 
-const MAX_BODY_BYTES = 4096;
-const MAX_TITLE_CHARS = 120;
-const MAX_FACTS_CHARS = 1500;
-const MAX_OUTPUT_CHARS = 4000;
 const MODEL_TIMEOUT_MS = 18000;
-const ALLOWED_CONTENT_TYPES = new Set([
-  "menu_description",
-  "social_post",
-  "campaign",
-  "content_ideas",
-]);
 
 const SYSTEM_PROMPT = [
   "És o assistente de conteúdo do StudioMesa para um restaurante.",
@@ -35,18 +31,12 @@ function featureEnabled(): boolean {
     Boolean(Deno.env.get("OPENAI_API_KEY")?.trim());
 }
 
-function containsCustomerContactData(value: string): boolean {
-  const emailPattern = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
-  const portugalPhonePattern = /(?:\+351[\s().-]?)?(?:9[1236](?:[\s().-]?\d){7}|2(?:[\s().-]?\d){8})/;
-  return emailPattern.test(value) || portugalPhonePattern.test(value);
-}
-
 async function readBoundedBody(req: Request): Promise<Record<string, unknown> | null> {
   const statedLength = Number(req.headers.get("content-length") ?? "0");
   if (Number.isFinite(statedLength) && statedLength > MAX_BODY_BYTES) return null;
 
   const raw = await req.text();
-  if (new TextEncoder().encode(raw).byteLength > MAX_BODY_BYTES) return null;
+  if (!isBodyWithinLimit(raw)) return null;
 
   let parsed: unknown;
   try {
@@ -117,24 +107,11 @@ Deno.serve(
       return jsonResponse({ message: "O formato do pedido não é válido." }, 400);
     }
 
-    const contentType = body.content_type;
-    const title = typeof body.title === "string" ? body.title.trim() : "";
-    const facts = typeof body.facts === "string" ? body.facts.trim() : "";
-
-    if (typeof contentType !== "string" || !ALLOWED_CONTENT_TYPES.has(contentType)) {
-      return jsonResponse({ message: "Escolhe um tipo de conteúdo válido." }, 400);
+    const validation = validateRequestPayload(body);
+    if (!validation.valid) {
+      return jsonResponse({ message: validation.message }, 400);
     }
-    if (title.length < 2 || title.length > MAX_TITLE_CHARS) {
-      return jsonResponse({ message: "O assunto deve ter entre 2 e 120 caracteres." }, 400);
-    }
-    if (facts.length < 10 || facts.length > MAX_FACTS_CHARS) {
-      return jsonResponse({ message: "Descreve os factos confirmados em 10 a 1500 caracteres." }, 400);
-    }
-    if (containsCustomerContactData(title + "\n" + facts)) {
-      return jsonResponse({
-        message: "Remove emails e números de telefone do texto. Não são necessários dados pessoais de clientes para gerar conteúdo.",
-      }, 400);
-    }
+    const { contentType, title, facts } = validation.value;
 
     const { data: quotaData, error: quotaError } = await ctx.supabase.rpc("consume_restaurant_ai_quota");
     if (quotaError) {
@@ -209,14 +186,14 @@ Deno.serve(
     const choices = Array.isArray(providerData.choices) ? providerData.choices : [];
     const firstChoice = choices[0] as Record<string, unknown> | undefined;
     const message = firstChoice?.message as Record<string, unknown> | undefined;
-    const rawDraft = typeof message?.content === "string" ? message.content.trim() : "";
-    if (!rawDraft || rawDraft.length > MAX_OUTPUT_CHARS) {
+    const draft = validateGeneratedDraft(message?.content);
+    if (!draft) {
       return jsonResponse({ message: "O serviço de IA não devolveu um rascunho válido." }, 502);
     }
 
     // Deliberately return text only: this endpoint has no publish/schedule capability.
     return jsonResponse({
-      draft: rawDraft,
+      draft,
       requests_used: quota.requests_used,
       daily_limit: quota.daily_limit,
       review_required: true,
