@@ -102,6 +102,18 @@ COMMIT;
 SQL
 }
 
+join_staff_member() {
+  local user_id="$1" staff_code="$2"
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT restaurant_id::text || '|' || restaurant_name || '|' || user_role
+FROM public.join_restaurant_staff('$staff_code');
+COMMIT;
+SQL
+}
+
 adjust_loyalty_points() {
   local user_id="$1" member_id="$2" request_id="$3" delta="$4" note="$5"
   psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
@@ -134,6 +146,36 @@ RESTAURANT_B="$(create_restaurant "$USER_B" "CI Restaurant B" "SMOKEBB001")"
 test -n "$RESTAURANT_A"
 test -n "$RESTAURANT_B"
 test "$RESTAURANT_A" != "$RESTAURANT_B"
+
+# Exercise the corrected staff-join RPC in PostgreSQL, not just migration replay.
+# Repeating the same join must be safe; attempting a second restaurant must fail.
+STAFF_CODE_A="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT staff_code FROM private.restaurant_join_codes WHERE restaurant_id = '$RESTAURANT_A'::uuid;")"
+STAFF_CODE_B="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT staff_code FROM private.restaurant_join_codes WHERE restaurant_id = '$RESTAURANT_B'::uuid;")"
+test -n "$STAFF_CODE_A"
+test -n "$STAFF_CODE_B"
+
+STAFF_JOIN_FIRST="$(join_staff_member "$USER_C" "$STAFF_CODE_A")"
+STAFF_JOIN_RETRY="$(join_staff_member "$USER_C" "$STAFF_CODE_A")"
+EXPECTED_STAFF_JOIN="$RESTAURANT_A|CI Restaurant A|staff"
+if [ "$STAFF_JOIN_FIRST" != "$EXPECTED_STAFF_JOIN" ] || [ "$STAFF_JOIN_RETRY" != "$EXPECTED_STAFF_JOIN" ]; then
+  echo "ERROR: joining a restaurant as staff failed or a repeated join returned unexpected data." >&2
+  printf 'First: %s\nRetry: %s\n' "$STAFF_JOIN_FIRST" "$STAFF_JOIN_RETRY" >&2
+  exit 1
+fi
+
+if join_staff_member "$USER_C" "$STAFF_CODE_B" >/dev/null 2>&1; then
+  echo "ERROR: staff account unexpectedly joined a second restaurant." >&2
+  exit 1
+fi
+STAFF_C_RESTAURANT="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT restaurant_id::text FROM public.restaurant_staff WHERE user_id = '$USER_C'::uuid;")"
+if [ "$STAFF_C_RESTAURANT" != "$RESTAURANT_A" ]; then
+  echo "ERROR: rejected cross-restaurant join changed the existing staff membership." >&2
+  exit 1
+fi
+echo "PASS: staff join RPC works, repeated joins are idempotent, and a staff account cannot join a second restaurant."
 
 ITEM_A="$(create_inventory_item "$USER_A" "$RESTAURANT_A" "$REQUEST_A" "Flour A" "10")"
 ITEM_A_RETRY="$(create_inventory_item "$USER_A" "$RESTAURANT_A" "$REQUEST_A" "Flour A" "10")"
