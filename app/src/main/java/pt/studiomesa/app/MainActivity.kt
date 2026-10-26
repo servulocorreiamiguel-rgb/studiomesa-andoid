@@ -253,8 +253,6 @@ class MainActivity : Activity() {
      * accumulate padding as the system UI changes (for example, on rotation).
      */
     private fun applySystemBarInsets(root: View) {
-        // Traditional decor fitting already keeps content below the system bars on
-        // Android 14 and earlier, so manual padding is only needed from API 35 onward.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) return
 
         val baseLeft = root.paddingLeft
@@ -1250,192 +1248,87 @@ class MainActivity : Activity() {
     }
 
     private fun renderPriceCalculator(container: LinearLayout) {
-        pageIntro(container, "Preço Justo", "Estima o custo de uma dose e um preço de venda com base nos valores que introduzires.")
-        addGap(container, 5)
-        container.addView(label(
-            "Calculadora offline. Não consulta concorrentes, não altera os preços da carta e não guarda estes valores automaticamente.",
-            12.5f, false, muted
-        ))
-        addGap(container, 12)
-
+        pageIntro(container, "Preço Justo", "Calcula o custo e sugere um preço.")
         val form = makeCard(16)
-        form.addView(label("INGREDIENTES", 10f, true, forestSoft))
-        addGap(form, 4)
-        form.addView(label("Usa unidades consistentes: por exemplo, gramas usadas e custo por grama.", 11.5f, false, muted))
-        addGap(form, 8)
-
-        val ingredientRows = mutableListOf<IngredientFields>()
-        fun addIngredientRow() {
-            val rowCard = makeCard(11, paper)
-            rowCard.addView(label("Ingrediente ${ingredientRows.size + 1}", 11f, true, forest))
-            addGap(rowCard, 4)
-            val nameField = inputField(
-                "Nome do ingrediente",
-                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-            ).apply {
-                filters = arrayOf(InputFilter.LengthFilter(80))
-            }
-            rowCard.addView(nameField, fieldParams())
-            addGap(rowCard, 4)
-            val valuesRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            val quantityField = inputField(
-                "Quantidade usada",
-                InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
-            )
-            val unitCostField = inputField(
-                "Custo por unidade (€)",
-                InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
-            )
-            valuesRow.addView(quantityField, LinearLayout.LayoutParams(0, -2, 1f).apply {
-                setMargins(0, 0, dp(5), 0)
-            })
-            valuesRow.addView(unitCostField, LinearLayout.LayoutParams(0, -2, 1f).apply {
-                setMargins(dp(5), 0, 0, 0)
-            })
-            rowCard.addView(valuesRow)
-            form.addView(rowCard, cardParams())
-            ingredientRows.add(IngredientFields(rowCard, nameField, quantityField, unitCostField))
+        val rows = mutableListOf<IngredientFields>()
+        fun addRow() {
+            val card = makeCard(10, paper)
+            card.addView(label("Ingrediente ${rows.size + 1}", 10f, true, forest))
+            val name = inputField("Nome", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+            card.addView(name, fieldParams())
+            val pair = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            val qty = inputField("Quantidade", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+            val cost = inputField("Custo/unidade (€)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+            pair.addView(qty, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(4), 0) })
+            pair.addView(cost, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(4), 0, 0, 0) })
+            card.addView(pair)
+            form.addView(card, cardParams())
+            rows.add(IngredientFields(card, name, qty, cost))
         }
-        addIngredientRow()
-        addGap(form, 3)
-        form.addView(secondaryButton("+ Adicionar ingrediente") {
-            if (ingredientRows.size >= 30) {
-                AlertDialog.Builder(this)
-                    .setMessage("O limite é de 30 ingredientes por cálculo.")
-                    .setPositiveButton("OK", null)
-                    .show()
-            } else {
-                addIngredientRow()
-            }
-        }, LinearLayout.LayoutParams(-1, dp(42)))
-        addGap(form, 5)
-        form.addView(secondaryButton("Remover último ingrediente") {
-            if (ingredientRows.size > 1) {
-                val last = ingredientRows.removeAt(ingredientRows.lastIndex)
-                form.removeView(last.container)
-            }
+        fun numberField(title: String, hint: String, initial: String? = null): EditText {
+            form.addView(label(title, 10f, true, forestSoft))
+            val field = inputField(hint, InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+            if (initial != null) field.setText(initial)
+            form.addView(field, fieldParams())
+            return field
+        }
+        addRow()
+        form.addView(secondaryButton("+ Ingrediente") {
+            if (rows.size < 30) addRow() else AlertDialog.Builder(this).setMessage("Máx. 30").setPositiveButton("OK", null).show()
         }, LinearLayout.LayoutParams(-1, dp(40)))
-
-        addGap(form, 13)
-        form.addView(label("OUTROS CUSTOS POR DOSE", 10f, true, forestSoft))
-        addGap(form, 3)
-        val wasteField = inputField("Desperdício dos ingredientes (%) — ex.: 5", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
-        wasteField.setText("0")
-        form.addView(wasteField, fieldParams())
-        addGap(form, 5)
-        val packagingField = inputField("Custo da embalagem (€) — usa 0 se não existir", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
-        packagingField.setText("0")
-        form.addView(packagingField, fieldParams())
-        addGap(form, 5)
-        val otherCostField = inputField("Outros custos variáveis (€) — usa 0 se não existirem", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
-        otherCostField.setText("0")
-        form.addView(otherCostField, fieldParams())
-        addGap(form, 13)
-
-        form.addView(label("OBJETIVO DE PREÇO", 10f, true, forestSoft))
-        addGap(form, 3)
-        val marginField = inputField("Margem bruta pretendida (%)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
-        marginField.setText("60")
-        form.addView(marginField, fieldParams())
-        addGap(form, 5)
-        val vatField = inputField("IVA confirmado pelo restaurante (%)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
-        form.addView(vatField, fieldParams())
-        addGap(form, 4)
-        form.addView(label(
-            "Não assumimos uma taxa de IVA: confirma a aplicável ao artigo antes de calcular.",
-            11f, false, muted
-        ))
-
-        addGap(form, 10)
-        val result = label("Preenche os dados e calcula uma estimativa.", 13.5f, false, ink).apply {
-            setPadding(dp(12), dp(12), dp(12), dp(12))
-            background = rounded(paper, 12)
+        form.addView(secondaryButton("Remover ingrediente") {
+            if (rows.size > 1) form.removeView(rows.removeAt(rows.lastIndex).container)
+        }, LinearLayout.LayoutParams(-1, dp(40)))
+        val waste = numberField("Desperdício (%)", "Percentagem", "0")
+        val packaging = numberField("Embalagem (€)", "Custo por dose", "0")
+        val other = numberField("Outros custos variáveis (€)", "Custo por dose", "0")
+        val margin = numberField("Margem bruta pretendida (%)", "Percentagem", "60")
+        val vat = numberField("IVA confirmado pelo restaurante (%)", "Taxa confirmada")
+        val result = label("Preenche os campos e calcula.", 13f, false, ink).apply {
+            setPadding(dp(12), dp(12), dp(12), dp(12)); background = rounded(paper, 12)
         }
         form.addView(primaryButton("Calcular preço sugerido") {
-            fun parseField(field: EditText, description: String): java.math.BigDecimal? {
+            fun parse(field: EditText, description: String): java.math.BigDecimal? {
                 val raw = field.text.toString().trim().replace(',', '.')
-                val decimalPattern = Regex("^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)$")
-                if (raw.isEmpty() || raw.length > 32 || !decimalPattern.matches(raw)) {
-                    field.error = "Introduz $description válido."
-                    return null
+                if (raw.length > 32 || !Regex("^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)$").matches(raw)) {
+                    field.error = "Introduz $description válido."; return null
                 }
-                val value = raw.toBigDecimalOrNull()
-                if (value == null) field.error = "Introduz $description válido."
-                return value
+                return raw.toBigDecimalOrNull().also { if (it == null) field.error = "Introduz $description válido." }
             }
-
-            val parsedIngredients = mutableListOf<RestaurantPriceCalculator.Ingredient>()
-            for (row in ingredientRows) {
+            val ingredients = mutableListOf<RestaurantPriceCalculator.Ingredient>()
+            for (row in rows) {
                 val name = row.name.text.toString().trim()
-                if (name.isBlank()) {
-                    row.name.error = "Introduz o nome do ingrediente."
-                    return@primaryButton
-                }
-                val quantity = parseField(row.quantity, "uma quantidade")
-                    ?: return@primaryButton
-                val unitCost = parseField(row.unitCost, "um custo por unidade")
-                    ?: return@primaryButton
-                parsedIngredients.add(
-                    RestaurantPriceCalculator.Ingredient(
-                        name = name,
-                        quantityUsed = quantity,
-                        costPerUnit = unitCost
-                    )
-                )
+                if (name.isBlank()) { row.name.error = "Introduz o nome."; return@primaryButton }
+                val quantity = parse(row.quantity, "uma quantidade") ?: return@primaryButton
+                val unitCost = parse(row.unitCost, "um custo") ?: return@primaryButton
+                ingredients.add(RestaurantPriceCalculator.Ingredient(name, quantity, unitCost))
             }
-
-            val waste = parseField(wasteField, "uma percentagem de desperdício")
-                ?: return@primaryButton
-            val packaging = parseField(packagingField, "um custo de embalagem")
-                ?: return@primaryButton
-            val other = parseField(otherCostField, "outros custos variáveis")
-                ?: return@primaryButton
-            val margin = parseField(marginField, "uma margem pretendida")
-                ?: return@primaryButton
-            val vat = parseField(vatField, "o IVA confirmado pelo restaurante")
-                ?: return@primaryButton
-
-            val calculation = try {
-                RestaurantPriceCalculator.calculate(
-                    ingredients = parsedIngredients,
-                    wastePercent = waste,
-                    packagingCost = packaging,
-                    otherVariableCost = other,
-                    targetGrossMarginPercent = margin,
-                    vatPercent = vat
-                )
-            } catch (error: IllegalArgumentException) {
-                result.text = error.message ?: "Não foi possível calcular com estes valores."
-                result.setTextColor(red)
-                return@primaryButton
+            val wasteValue = parse(waste, "o desperdício") ?: return@primaryButton
+            val packagingValue = parse(packaging, "a embalagem") ?: return@primaryButton
+            val otherValue = parse(other, "outros custos") ?: return@primaryButton
+            val marginValue = parse(margin, "a margem") ?: return@primaryButton
+            val vatValue = parse(vat, "o IVA confirmado") ?: return@primaryButton
+            val calc = try {
+                RestaurantPriceCalculator.calculate(ingredients, wasteValue, packagingValue, otherValue, marginValue, vatValue)
+            } catch (e: IllegalArgumentException) {
+                result.text = e.message ?: "Valores inválidos."; result.setTextColor(red); return@primaryButton
             }
-
-            result.text = "PREÇO INDICATIVO COM IVA\n" +
-                money(calculation.suggestedPriceIncludingVat.toDouble()) +
-                "\n\nPreço sem IVA: " + money(calculation.suggestedPriceExcludingVat.toDouble()) +
-                "\nIVA calculado: " + money(calculation.vatAmount.toDouble()) +
-                "\n\nCusto dos ingredientes: " + money(calculation.ingredientCost.toDouble()) +
-                "\nDesperdício estimado: " + money(calculation.wasteCost.toDouble()) +
-                "\nEmbalagem: " + money(calculation.packagingCost.toDouble()) +
-                "\nOutros custos variáveis: " + money(calculation.otherVariableCost.toDouble()) +
-                "\nCusto total estimado: " + money(calculation.totalCost.toDouble()) +
-                "\nMargem bruta estimada: " + String.format(
-                    Locale("pt", "PT"), "%.2f%%", calculation.estimatedGrossMarginPercent.toDouble()
-                )
+            result.text = "PREÇO INDICATIVO COM IVA\n" + money(calc.suggestedPriceIncludingVat.toDouble()) +
+                "\nPreço sem IVA: " + money(calc.suggestedPriceExcludingVat.toDouble()) +
+                "\nIVA: " + money(calc.vatAmount.toDouble()) +
+                "\n\nIngredientes: " + money(calc.ingredientCost.toDouble()) +
+                "\nDesperdício: " + money(calc.wasteCost.toDouble()) +
+                "\nEmbalagem: " + money(calc.packagingCost.toDouble()) +
+                "\nOutros variáveis: " + money(calc.otherVariableCost.toDouble()) +
+                "\nCusto total: " + money(calc.totalCost.toDouble()) +
+                "\nMargem bruta estimada: " + String.format(Locale("pt", "PT"), "%.2f%%", calc.estimatedGrossMarginPercent.toDouble())
             result.setTextColor(forest)
-        }, LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(form, 8)
+        }, LinearLayout.LayoutParams(-1, dp(46)))
         form.addView(result)
         container.addView(form, cardParams())
-
-        addGap(container, 5)
         val note = makeCard(14, copperPale)
-        note.addView(label("Importante: margem bruta não é lucro líquido", 14f, true, forest))
-        addGap(note, 5)
-        note.addView(label(
-            "Inclui ingredientes, desperdício estimado, embalagem e outros custos variáveis que introduzires. Salários, renda, energia, comissões e outros encargos só entram se forem contabilizados nos custos fornecidos. A sugestão não substitui validação contabilística/fiscal nem análise de procura. O cálculo não altera a carta.",
-            12.5f, false, ink
-        ))
+        note.addView(label("Margem bruta não é lucro líquido", 13f, true, forest))
+        note.addView(label("Offline: não altera a carta nem guarda valores. Custos fixos só entram se contabilizados. Confirma custos e IVA antes de aplicar o preço.", 12f, false, ink))
         container.addView(note, cardParams())
     }
 
@@ -4199,3 +4092,101 @@ class MainActivity : Activity() {
         addGap(card, 6)
         card.addView(label(message, 13f, false, muted))
         return card
+    }
+
+    private fun makeCard(padding: Int, color: Int = white): LinearLayout =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(padding), dp(padding), dp(padding), dp(padding))
+            background = rounded(color, 19)
+            elevation = dp(1).toFloat()
+        }
+
+    private fun cardParams(): LinearLayout.LayoutParams =
+        LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 0, 0, dp(11)) }
+
+    private fun fieldParams(): LinearLayout.LayoutParams =
+        LinearLayout.LayoutParams(-1, dp(48)).apply { setMargins(0, dp(5), 0, dp(8)) }
+
+    private fun inputField(hintText: String, type: Int): EditText =
+        EditText(this).apply {
+            hint = hintText
+            inputType = type
+            textSize = 15f
+            setTextColor(ink)
+            setHintTextColor(muted)
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            background = rounded(white, 12)
+            isSingleLine = true
+        }
+
+    private fun multilineInputField(hintText: String): EditText =
+        EditText(this).apply {
+            hint = hintText
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            textSize = 14f
+            setTextColor(ink)
+            setHintTextColor(muted)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = rounded(white, 12)
+            minLines = 2
+            maxLines = 3
+            isSingleLine = false
+            gravity = Gravity.TOP or Gravity.START
+        }
+
+    private fun multilineFieldParams(): LinearLayout.LayoutParams =
+        LinearLayout.LayoutParams(-1, dp(76)).apply { setMargins(0, dp(5), 0, dp(8)) }
+
+    private fun primaryButton(title: String, action: () -> Unit): Button =
+        Button(this).apply {
+            text = title
+            textSize = 13f
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            isAllCaps = false
+            setTextColor(forestDeep)
+            background = rounded(copper, 15)
+            elevation = dp(1).toFloat()
+            setPadding(dp(12), dp(3), dp(12), dp(3))
+            setOnClickListener { action() }
+        }
+
+    private fun secondaryButton(title: String, action: () -> Unit): Button =
+        Button(this).apply {
+            text = title
+            textSize = 11.5f
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            isAllCaps = false
+            setTextColor(forest)
+            background = rounded(paleGreen, 14)
+            elevation = 0f
+            setPadding(dp(8), dp(2), dp(8), dp(2))
+            setOnClickListener { action() }
+        }
+
+    private fun label(value: String, size: Float, bold: Boolean, color: Int): TextView =
+        TextView(this).apply {
+            text = value
+            textSize = size
+            setTextColor(color)
+            if (bold) typeface = Typeface.create(if (size >= 23f) "serif" else "sans-serif", Typeface.BOLD)
+            setLineSpacing(dp(2).toFloat(), 1.0f)
+        }
+
+    private fun rounded(color: Int, radius: Int): GradientDrawable =
+        GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            setColor(color)
+            cornerRadius = dp(radius).toFloat()
+        }
+
+    private fun addGap(parent: LinearLayout, height: Int) {
+        parent.addView(View(this), LinearLayout.LayoutParams(1, dp(height)))
+    }
+
+    private fun money(value: Double): String =
+        NumberFormat.getCurrencyInstance(Locale("pt", "PT")).format(value)
+
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
+}
