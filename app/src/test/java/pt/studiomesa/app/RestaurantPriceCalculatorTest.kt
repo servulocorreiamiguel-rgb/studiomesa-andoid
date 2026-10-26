@@ -205,4 +205,41 @@ class RestaurantPriceCalculatorTest {
         assertEquals(bd("0.01"), result.totalCost)
         assertEquals(bd("0.01"), result.suggestedPriceExcludingVat)
     }
+
+    @Test
+    fun roundsPriceFromExactMarginInputWithoutPrematurePrecisionLoss() {
+        val result = RestaurantPriceCalculator.calculate(
+            ingredients = listOf(
+                RestaurantPriceCalculator.Ingredient("Custo pequeno", bd("1"), bd("0.01"))
+            ),
+            wastePercent = bd("0"),
+            packagingCost = bd("0"),
+            otherVariableCost = bd("0"),
+            targetGrossMarginPercent = bd("33.33333333"),
+            vatPercent = bd("0")
+        )
+
+        // The exact unrounded price is just below €0.015, so HALF_UP at currency precision gives €0.01.
+        assertEquals(bd("0.01"), result.suggestedPriceExcludingVat)
+        assertEquals(bd("0.01"), result.suggestedPriceIncludingVat)
+    }
+
+    @Test
+    fun roundsVatFromExactRateWithoutPrematurePrecisionLoss() {
+        val result = RestaurantPriceCalculator.calculate(
+            ingredients = listOf(
+                RestaurantPriceCalculator.Ingredient("Custo pequeno", bd("1"), bd("0.03"))
+            ),
+            wastePercent = bd("0"),
+            packagingCost = bd("0"),
+            otherVariableCost = bd("0"),
+            targetGrossMarginPercent = bd("0"),
+            vatPercent = bd("16.66666666")
+        )
+
+        // €0.03 × 16.66666666% is just below €0.005 and rounds to €0.00.
+        assertEquals(bd("0.03"), result.suggestedPriceExcludingVat)
+        assertEquals(bd("0.00"), result.vatAmount)
+        assertEquals(bd("0.03"), result.suggestedPriceIncludingVat)
+    }
 }
