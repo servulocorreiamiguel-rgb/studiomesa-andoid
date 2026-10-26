@@ -332,6 +332,11 @@ class MainActivitySmokeTest {
                 onView(withText("Consultor de preços"))
                     .perform(scrollTo())
                     .check(matches(isDisplayed()))
+                onView(withText("Aplicação de preços desativada na demonstração"))
+                    .perform(scrollTo())
+                    .check(matches(isDisplayed()))
+                onView(withText("Autorização do proprietário"))
+                    .check(doesNotExist())
                 onView(withHint("Ex.: 30"))
                     .perform(scrollTo(), replaceText("30"))
                 onView(withText("Analisar preços da carta"))
@@ -339,8 +344,10 @@ class MainActivitySmokeTest {
 
                 onView(withText("Análise de preços da carta"))
                     .check(matches(isDisplayed()))
-                onView(withText(containsString("Nada foi alterado automaticamente")))
+                onView(withText(containsString("dados locais de demonstração")))
                     .check(matches(isDisplayed()))
+                onView(withText(containsString("Rever e aplicar")))
+                    .check(doesNotExist())
                 onView(withText("Fechar"))
                     .perform(click())
             }
