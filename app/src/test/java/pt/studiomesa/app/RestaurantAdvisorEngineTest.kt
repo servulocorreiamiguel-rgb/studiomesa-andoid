@@ -117,6 +117,18 @@ class RestaurantAdvisorEngineTest {
     }
 
     @Test
+    fun keepsTheServerMenuItemIdWithItsPriceRecommendation() {
+        val itemId = "12345678-1234-4234-8234-123456789abc"
+        val advice = RestaurantAdvisorEngine.analyzeMenu(
+            listOf(MenuEntry("Prato", 10.00, 4.00, id = itemId)),
+            "30"
+        ).items.single()
+
+        assertEquals(itemId, advice.itemId)
+        assertEquals(MenuPriceAdviceStatus.REVIEW, advice.status)
+    }
+
+    @Test
     fun returnsAnEmptyReportForAnEmptyMenu() {
         val report = RestaurantAdvisorEngine.analyzeMenu(emptyList(), "30")
 

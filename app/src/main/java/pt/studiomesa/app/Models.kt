@@ -6,7 +6,8 @@ data class MenuEntry(
     val cost: Double,
     val category: String = "Prato principal",
     val description: String = "",
-    val allergens: String = ""
+    val allergens: String = "",
+    val id: String? = null
 )
 
 data class OrderEntry(

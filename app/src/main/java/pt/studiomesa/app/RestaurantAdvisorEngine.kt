@@ -17,7 +17,8 @@ internal data class MenuPriceAdvice(
     val unitCost: BigDecimal?,
     val directCostPercent: BigDecimal?,
     val indicativePriceAtTarget: BigDecimal?,
-    val explanation: String
+    val explanation: String,
+    val itemId: String? = null
 )
 
 internal data class RestaurantMenuAdviceReport(
@@ -79,21 +80,21 @@ internal object RestaurantAdvisorEngine {
             return MenuPriceAdvice(
                 name, MenuPriceAdviceStatus.INCOMPLETE_DATA, price, cost, null, indicativePrice,
                 "O preço ou custo registado é inválido. Confirma os valores antes de decidir."
-            )
+            ).copy(itemId = item.id)
         }
 
         if (price <= zero) {
             return MenuPriceAdvice(
                 name, MenuPriceAdviceStatus.INCOMPLETE_DATA, price, cost, null, indicativePrice,
                 "O preço de venda tem de ser superior a zero para avaliar a relação custo/preço."
-            )
+            ).copy(itemId = item.id)
         }
 
         if (cost <= zero) {
             return MenuPriceAdvice(
                 name, MenuPriceAdviceStatus.INCOMPLETE_DATA, price, cost, null, null,
                 "O custo unitário está registado como zero. Confirma se é real ou se falta preencher o custo."
-            )
+            ).copy(itemId = item.id)
         }
 
         // Compare exact money values, not a rounded display percentage. For example,
@@ -108,19 +109,19 @@ internal object RestaurantAdvisorEngine {
             price <= cost -> MenuPriceAdvice(
                 name, MenuPriceAdviceStatus.URGENT_REVIEW, price, cost, costPercentForDisplay, indicativePrice,
                 "O preço atual não cobre o custo unitário registado, antes de IVA e outros encargos."
-            )
+            ).copy(itemId = item.id)
 
             exceedsTarget -> MenuPriceAdvice(
                 name, MenuPriceAdviceStatus.REVIEW, price, cost, costPercentForDisplay, indicativePrice,
                 "O custo direto representa " + percentText(costPercentForDisplay) +
                     "% do preço, acima do objetivo configurado de " + percentText(target) +
                     "%. Revê o custo, a porção ou o preço; esta simulação não inclui outros encargos."
-            )
+            ).copy(itemId = item.id)
 
             else -> MenuPriceAdvice(
                 name, MenuPriceAdviceStatus.WITHIN_TARGET, price, cost, costPercentForDisplay, indicativePrice,
                 "A relação custo/preço está dentro do objetivo configurado. Isto, por si só, não garante rentabilidade."
-            )
+            ).copy(itemId = item.id)
         }
     }
 
