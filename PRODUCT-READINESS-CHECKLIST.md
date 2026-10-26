@@ -3,12 +3,12 @@
 **Estado de lançamento nesta revisão: não pronto para operação comercial real.**  
 **Auditoria de segurança e de versão — 26/10/2026**
 
-- [x] Consulta do projeto Supabase ligado: estado ativo, PostgreSQL 17.6 e RLS ativa nas 13 tabelas públicas/privadas listadas. O resultado não prova por si só que cada política garante isolamento; continuam necessários testes com contas separadas.
+- [x] Consulta do projeto Supabase ligado: estado ativo, PostgreSQL 17.6 e RLS ativa nas 13 tabelas públicas/privadas listadas. Um ensaio transacional com duas contas confirmou isolamento em restaurantes, equipa, carta, mesas e pedidos; duas RPCs também recusaram operações sobre o restaurante alheio. Faltam os restantes fluxos E2E, sessões reais e concorrência.
 - [x] Revisão das funções `SECURITY DEFINER` existentes no banco: `search_path` vazio em todas as funções inspecionadas e execução anónima não permitida. Os avisos para o papel `authenticated` são, em grande parte, RPCs de aplicação intencionais; não os remover sem testes de autorização.
 - [x] As tabelas privadas `private.restaurant_join_codes` e `private.account_deletion_queue` têm RLS ativa, sem políticas de acesso direto. O Security Advisor assinala isso como informativo; o acesso direto deve continuar bloqueado.
 - [ ] **Bloqueio de reprodutibilidade:** na branch de revisão, os 39 prefixos de versão registados no Supabase estão agora representados por 39 ficheiros locais, sem versões em falta, extras ou duplicadas. Foram recuperadas 19 migrações da branch histórica do repositório e corrigidos três timestamps locais; estes três ficheiros foram comparados byte a byte com os originais. **Isto corrige o inventário, mas não prova que cada SQL local seja idêntico ao SQL originalmente aplicado**, nem que as migrações consigam criar o esquema esperado num projeto vazio. O bloqueio só fica resolvido após comparar o esquema efetivo e testar a reconstrução num projeto descartável. Ver `supabase/MIGRATION-RECONCILIATION-2026-10-26.md`. Não executar `supabase/schema.sql` nem alterar o histórico de produção para fazer desaparecer a divergência.
 - [ ] **Bloqueio de autenticação:** o Security Advisor continua a indicar que a proteção de palavras-passe comprometidas está desativada. Rever a possibilidade de a ativar no plano/configuração do Supabase antes de aceitar contas reais.
-- [x] Foi identificado e preparada uma correção de concorrência para `join_restaurant_staff`: o banco tinha `ON CONFLICT` a apontar para a chave primária composta, apesar de também impor uma restrição única a `user_id`. A correção usa como alvo `user_id` e volta a confirmar a associação vencedora. O SQL foi ensaiado numa transação terminada com `ROLLBACK`; ainda não deve ser considerado implantado até a migração ser aplicada e verificada.
+- [x] Correção de concorrência de `join_restaurant_staff` aplicada ao Supabase pela migração `20261026173330_fix_staff_join_concurrent_conflict_target`. Verificações pós-aplicação: `anon` não pode executar a função, `authenticated` pode, `search_path` está vazio, a repetição no mesmo restaurante passa e a tentativa de aderir a um segundo restaurante é recusada. O ensaio reverteu todos os dados temporários; ainda falta concorrência real em duas sessões.
 - [x] A CI executa agora um verificador estático de segurança e testes unitários desse verificador. É uma salvaguarda de código, não um substituto de testes reais de autorização, concorrência e rede.
 - [ ] O Supabase Performance Advisor mostra índices sem utilização observada. Como as tabelas estão atualmente vazias, não remover índices com base nesse aviso isolado.
 
@@ -73,7 +73,8 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [ ] Permissões granulares por função; atualmente os funcionários têm permissões operacionais gerais.
 - [ ] Suspensão temporária, horários/turnos e trilho de auditoria administrativo completo.
 - [ ] Verificar em testes que a revogação é refletida em todos os dispositivos; ecrãs ativos podem continuar a mostrar dados já carregados até atualizar/reabrir.
-- [ ] Testar que uma conta nunca consegue aceder a outro restaurante.
+- [x] Ensaio transacional de isolamento no Supabase: duas contas só viram os próprios dados em `restaurants`, `restaurant_staff`, `menu_items`, `restaurant_tables` e `restaurant_orders`; chamadas de criação de stock e reservas para o restaurante alheio foram recusadas. Todos os registos temporários foram revertidos e a ausência de resíduos foi confirmada.
+- [ ] Alargar os testes de isolamento a fidelização, restantes RPCs, cliente Android com sessões reais e pedidos concorrentes.
 
 ## Segurança e continuidade
 
