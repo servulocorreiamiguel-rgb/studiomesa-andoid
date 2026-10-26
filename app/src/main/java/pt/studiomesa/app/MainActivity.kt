@@ -1224,12 +1224,12 @@ class MainActivity : Activity() {
                 return@primaryButton
             }
 
-            result.text = "PREÇO INDICATIVO\n" + money(calculation.suggestedPrice.toDouble()) +
-                "\n\nCusto por unidade: " + money(calculation.cost.toDouble()) +
+            result.text = "PREÇO INDICATIVO\n" + money(calculation.suggestedPrice) +
+                "\n\nCusto por unidade: " + money(calculation.cost) +
                 "\nCusto sobre o preço final: " + String.format(
                     Locale("pt", "PT"), "%.1f%%", calculation.actualCostPercent.toDouble()
                 ) +
-                "\nMargem bruta estimada: " + money(calculation.grossProfit.toDouble()) +
+                "\nMargem bruta estimada: " + money(calculation.grossProfit) +
                 "\nMargem bruta: " + String.format(
                     Locale("pt", "PT"), "%.1f%%", calculation.grossMarginPercent.toDouble()
                 )
@@ -3769,6 +3769,9 @@ class MainActivity : Activity() {
     private fun addGap(parent: LinearLayout, height: Int) {
         parent.addView(View(this), LinearLayout.LayoutParams(1, dp(height)))
     }
+
+    private fun money(value: BigDecimal): String =
+        NumberFormat.getCurrencyInstance(Locale("pt", "PT")).format(value)
 
     private fun money(value: Double): String =
         NumberFormat.getCurrencyInstance(Locale("pt", "PT")).format(value)
