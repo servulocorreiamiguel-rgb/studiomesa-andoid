@@ -76,9 +76,9 @@ object RestaurantContentEngine {
         val opening = when {
             listOf("sobremesa", "bolo", "tarte", "gelado").any { normalized.contains(it) } ->
                 choose(title, listOf("Para terminar, conheça $title.", "Um destaque para a sua próxima pausa: $title."))
-            listOf("hamburguer", "bife", "carne", "grelhado").any(normalized::contains) ->
+            listOf("hamburguer", "bife", "carne", "grelhado").any { normalized.contains(it) } ->
                 choose(title, listOf("Em destaque: $title.", "Conheça melhor a proposta: $title."))
-            listOf("peixe", "bacalhau", "salmao", "polvo", "marisco").any(normalized::contains) ->
+            listOf("peixe", "bacalhau", "salmao", "polvo", "marisco").any { normalized.contains(it) } ->
                 choose(title, listOf("Descubra os detalhes de $title.", "O destaque desta publicação é $title."))
             else -> choose(title, listOf("Conheça $title.", "Uma proposta a apresentar: $title.", "Em destaque na comunicação: $title."))
         }
