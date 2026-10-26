@@ -91,6 +91,43 @@ class MainActivitySmokeTest {
     }
 
     @Test
+    fun calculatorDoesNotKeepShowingAnOldPriceAfterInputChanges() {
+        assumeFalse("Customer variant has no management calculator.", isCustomerVariant())
+        assumeTrue("The Essential plan does not include the price calculator.", isCalculatorAvailable())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withText("ABRIR CALCULADORA"))
+                .perform(scrollTo(), click())
+
+            onView(withHint("Ex.: 3,20"))
+                .perform(replaceText("3,20"))
+
+            onView(withText("Calcular preço sugerido"))
+                .perform(scrollTo(), click())
+
+            onView(withText(containsString("10,67")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+
+            onView(withHint("Ex.: 3,20"))
+                .perform(replaceText("0"))
+
+            onView(withText(containsString("10,67")))
+                .check(doesNotExist())
+
+            onView(withText("Calcular preço sugerido"))
+                .perform(scrollTo(), click())
+
+            onView(withText(containsString("Corrige os valores assinalados")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+
+            onView(withText(containsString("10,67")))
+                .check(doesNotExist())
+        }
+    }
+
+    @Test
     fun planSpecificManagementFeaturesMatchSelectedVariant() {
         assumeFalse("Customer variants do not expose restaurant management screens.", isCustomerVariant())
         val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
