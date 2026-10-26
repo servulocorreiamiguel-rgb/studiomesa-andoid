@@ -1264,6 +1264,20 @@ class MainActivity : Activity() {
             setPadding(dp(12), dp(12), dp(12), dp(12))
             background = rounded(paper, 12)
         }
+        // Never leave an old recommendation visible after the user changes either input.
+        val inputChangeWatcher = object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                result.text = "Valores alterados. Calcula novamente para atualizar o preço indicativo."
+                result.setTextColor(ink)
+            }
+
+            override fun afterTextChanged(s: android.text.Editable?) = Unit
+        }
+        costField.addTextChangedListener(inputChangeWatcher)
+        percentageField.addTextChangedListener(inputChangeWatcher)
+
         form.addView(primaryButton("Calcular preço sugerido") {
             val calculation = try {
                 PriceCalculator.calculate(
@@ -1271,6 +1285,8 @@ class MainActivity : Activity() {
                     percentageField.text.toString()
                 )
             } catch (error: PriceCalculationException) {
+                result.text = "Corrige os valores assinalados para atualizar o preço indicativo."
+                result.setTextColor(red)
                 when (error.field) {
                     PriceInputField.COST -> costField.error = error.message
                     PriceInputField.TARGET_COST_PERCENT -> percentageField.error = error.message
