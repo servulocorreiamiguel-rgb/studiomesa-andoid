@@ -3468,8 +3468,135 @@ class MainActivity : Activity() {
         container.addView(infoCard, cardParams())
         addGap(container, 8)
 
+        renderRestaurantPriceAdvisor(container)
         renderAiAssistantForm(container)
     }
+
+    private fun renderRestaurantPriceAdvisor(container: LinearLayout) {
+        val card = makeCard(17)
+        card.addView(label("Consultor de preços", 17f, true, forest))
+        addGap(card, 5)
+        card.addView(label(
+            "Compara os custos unitários e os preços registados. O objetivo é configurável; 30% é apenas um ponto de partida, não uma regra universal. A análise é local e não altera a carta.",
+            12.5f, false, muted
+        ))
+        addGap(card, 9)
+
+        val targetField = inputField(
+            "Ex.: 30",
+            InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+        ).apply {
+            setText("30")
+            filters = arrayOf(InputFilter.LengthFilter(6))
+        }
+        card.addView(label("Objetivo de custo direto sobre o preço (%)", 10f, true, forestSoft))
+        card.addView(targetField, fieldParams())
+        addGap(card, 7)
+
+        card.addView(primaryButton("Analisar preços da carta") {
+            val usesRemoteMenu = hasRemoteRestaurant()
+            val items = if (usesRemoteMenu) remoteMenuEntries() else store.getMenu()
+            if (items.isEmpty()) {
+                AlertDialog.Builder(this)
+                    .setTitle("Sem artigos para analisar")
+                    .setMessage(
+                        if (usesRemoteMenu) {
+                            "A carta carregada do servidor está vazia. Abre «Carta» e atualiza os dados antes de analisar."
+                        } else {
+                            "A carta de demonstração está vazia. Adiciona artigos com custos e preços para os analisar."
+                        }
+                    )
+                    .setPositiveButton("OK", null)
+                    .show()
+                return@primaryButton
+            }
+
+            val report = try {
+                RestaurantAdvisorEngine.analyzeMenu(items, targetField.text.toString())
+            } catch (error: IllegalArgumentException) {
+                targetField.error = error.message ?: "Verifica a percentagem."
+                return@primaryButton
+            }
+            showRestaurantMenuAdviceDialog(report, usesRemoteMenu)
+        }, LinearLayout.LayoutParams(-1, dp(46)))
+
+        container.addView(card, cardParams())
+        addGap(container, 9)
+    }
+
+    private fun showRestaurantMenuAdviceDialog(
+        report: RestaurantMenuAdviceReport,
+        usesRemoteMenu: Boolean
+    ) {
+        val details = StringBuilder()
+        details.append("Objetivo definido: ")
+            .append(formatAdvicePercent(report.targetCostPercent))
+            .append("% do preço final.\n\n")
+        details.append(
+            if (usesRemoteMenu) {
+                "Fonte: carta do servidor atualmente carregada em cache. Atualiza a secção «Carta» antes de tomar decisões.\n\n"
+            } else {
+                "Fonte: dados locais de demonstração; não representam necessariamente um restaurante real.\n\n"
+            }
+        )
+        details.append(
+            "O preço teórico compara apenas o custo unitário introduzido com o objetivo definido. Não inclui IVA, salários, renda, energia, comissões, desperdício ou outros encargos.\n\n"
+        )
+        details.append("Nada foi alterado automaticamente.")
+
+        report.items.forEachIndexed { index, advice ->
+            details.append("\n\n")
+                .append(index + 1)
+                .append(". ")
+                .append(advice.itemName)
+                .append("\nEstado: ")
+                .append(
+                    when (advice.status) {
+                        MenuPriceAdviceStatus.INCOMPLETE_DATA -> "Dados incompletos"
+                        MenuPriceAdviceStatus.URGENT_REVIEW -> "Revisão urgente"
+                        MenuPriceAdviceStatus.REVIEW -> "Rever custo ou preço"
+                        MenuPriceAdviceStatus.WITHIN_TARGET -> "Dentro do objetivo configurado"
+                    }
+                )
+                .append("\n")
+
+            advice.currentPrice?.let {
+                details.append("Preço atual: ").append(money(it.toDouble())).append("\n")
+            }
+            advice.unitCost?.let {
+                details.append("Custo unitário: ").append(money(it.toDouble())).append("\n")
+            }
+            advice.directCostPercent?.let {
+                details.append("Custo direto / preço: ")
+                    .append(formatAdvicePercent(it))
+                    .append("%\n")
+            }
+            advice.indicativePriceAtTarget?.let {
+                details.append("Preço teórico para este objetivo: ")
+                    .append(money(it.toDouble()))
+                    .append("\n")
+            }
+            details.append(advice.explanation)
+        }
+
+        val message = TextView(this).apply {
+            text = details.toString()
+            textSize = 14f
+            setTextColor(ink)
+            setPadding(dp(18), dp(8), dp(18), dp(8))
+        }
+        val scroll = ScrollView(this).apply {
+            addView(message)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Análise de preços da carta")
+            .setView(scroll)
+            .setPositiveButton("Fechar", null)
+            .show()
+    }
+
+    private fun formatAdvicePercent(value: java.math.BigDecimal): String =
+        value.stripTrailingZeros().toPlainString().replace('.', ',')
 
     private fun renderAiAssistantForm(container: LinearLayout) {
         val card = makeCard(17)
