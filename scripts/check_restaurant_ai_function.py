@@ -11,6 +11,7 @@ FUNCTION_PATH = ROOT / "supabase" / "functions" / "restaurant-ai-assistant" / "i
 VALIDATION_PATH = ROOT / "supabase" / "functions" / "restaurant-ai-assistant" / "validation.ts"
 MIGRATION_PATH = ROOT / "supabase" / "migrations" / "20261025230000_restaurant_ai_quota.sql"
 MAIN_ACTIVITY_PATH = ROOT / "app" / "src" / "main" / "java" / "pt" / "studiomesa" / "app" / "MainActivity.kt"
+LOCAL_ENGINE_PATH = ROOT / "app" / "src" / "main" / "java" / "pt" / "studiomesa" / "app" / "RestaurantContentEngine.kt"
 SUPABASE_API_PATH = ROOT / "app" / "src" / "main" / "java" / "pt" / "studiomesa" / "app" / "SupabaseApi.kt"
 
 def validate_ai_function(
@@ -20,6 +21,7 @@ def validate_ai_function(
     migration: str,
     main_activity: str,
     api_source: str,
+    local_engine_source: str = "",
 ) -> list[str]:
     errors: list[str] = []
     functions = config.get("functions")
@@ -88,10 +90,27 @@ def validate_ai_function(
 
     if not re.search(r'if\s*\(isPremium\s*&&\s*!isCustomerApp\)\s*\{[^}]*pages\.add\(["\']Conteúdo IA["\']\)', main_activity, re.DOTALL):
         errors.append("The AI content page must be limited to the Premium management variant.")
-    if "SupabaseApi.restaurantAiStatus" not in main_activity or "SupabaseApi.generateRestaurantContent" not in main_activity:
-        errors.append("The Android page must use the authenticated AI status and generation methods.")
-    if "fornecedor externo de IA configurado no servidor" not in main_activity:
-        errors.append("The Android UI must disclose that prompt text is sent to the configured external AI provider.")
+    if "RestaurantContentEngine.generate" not in main_activity:
+        errors.append("The Android page must use the local StudioMesa content engine.")
+    if "SupabaseApi.restaurantAiStatus" in main_activity or "SupabaseApi.generateRestaurantContent" in main_activity:
+        errors.append("The local StudioMesa assistant must not call the remote provider endpoint.")
+    if "O texto é processado no telemóvel e não é enviado para um fornecedor externo de IA." not in main_activity:
+        errors.append("The Android UI must disclose that the first version processes text locally.")
+
+    required_engine_patterns = [
+        (r'object\\s+RestaurantContentEngine', "must declare the local content engine"),
+        (r'fun\\s+generate\\s*\\(', "must implement a generation entry point"),
+        (r'containsCustomerContactData', "must detect common customer contact details"),
+        (r'cleanTitle\\.length\\s+in\\s+2\\.\\.120', "must bound title length"),
+        (r'cleanFacts\\.length\\s+in\\s+10\\.\\.1500', "must bound facts length"),
+        (r'toByteArray\\(Charsets\\.UTF_8\\)', "must bound local UTF-8 input size"),
+        (r'content_ideas', "must support the content-ideas mode"),
+    ]
+    for pattern, description in required_engine_patterns:
+        if not re.search(pattern, local_engine_source, re.IGNORECASE):
+            errors.append("The local StudioMesa content engine " + description + ".")
+    if re.search(r'HttpURLConnection|OkHttpClient|java\\.net\\.URL|ktor\\.client|https?://', local_engine_source, re.IGNORECASE):
+        errors.append("The local StudioMesa content engine must not make network requests.")
     if "/functions/v1/restaurant-ai-assistant" not in api_source:
         errors.append("The Android API must call the server function endpoint.")
     if re.search(r"OPENAI_API_KEY|sk-[A-Za-z0-9]{12,}", api_source, re.IGNORECASE):
@@ -107,12 +126,13 @@ def main() -> int:
         validation_source = VALIDATION_PATH.read_text(encoding="utf-8")
         migration = MIGRATION_PATH.read_text(encoding="utf-8")
         main_activity = MAIN_ACTIVITY_PATH.read_text(encoding="utf-8")
+        local_engine_source = LOCAL_ENGINE_PATH.read_text(encoding="utf-8")
         api_source = SUPABASE_API_PATH.read_text(encoding="utf-8")
     except (OSError, tomllib.TOMLDecodeError) as exc:
         print("Cannot read AI function configuration/source: " + str(exc), file=sys.stderr)
         return 1
 
-    errors = validate_ai_function(config, source, validation_source, migration, main_activity, api_source)
+    errors = validate_ai_function(config, source, validation_source, migration, main_activity, api_source, local_engine_source)
     if errors:
         print("Restaurant AI security guard FAILED:")
         for error in errors:
