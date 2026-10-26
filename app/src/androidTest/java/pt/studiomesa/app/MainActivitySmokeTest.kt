@@ -285,6 +285,77 @@ class MainActivitySmokeTest {
     }
 
     @Test
+    fun aiAssistantNavigationIsRestrictedToPremiumRestaurantManagement() {
+        val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
+        val expected = packageName.contains(".premium.") && !isCustomerVariant()
+
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                val method = MainActivity::class.java.getDeclaredMethod("availablePages")
+                method.isAccessible = true
+                @Suppress("UNCHECKED_CAST")
+                val pages = method.invoke(activity) as List<String>
+                org.junit.Assert.assertEquals(
+                    "AI assistant navigation must only exist for Premium restaurant management builds.",
+                    expected,
+                    pages.contains("Conteúdo IA")
+                )
+            }
+        }
+    }
+
+    @Test
+    fun premiumRestaurantCanGenerateAnOfflineAiDraftWithoutExternalServices() {
+        val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
+        assumeTrue(
+            "The local content assistant is only available in Premium restaurant management.",
+            packageName.contains(".premium.") && !isCustomerVariant()
+        )
+
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val prefs = context.getSharedPreferences("studiomesa_backend", Context.MODE_PRIVATE)
+        val secureSession = SecureSessionStore(context)
+        secureSession.clear()
+        prefs.edit().clear().commit()
+
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    // Open the real UI route while keeping the test independent of login,
+                    // restaurant data and all network services.
+                    val page = MainActivity::class.java.getDeclaredField("activePage")
+                    page.isAccessible = true
+                    page.set(activity, "Conteúdo IA")
+                    val render = MainActivity::class.java.getDeclaredMethod("renderApp")
+                    render.isAccessible = true
+                    render.invoke(activity)
+                }
+
+                onView(withText("Assistente StudioMesa"))
+                    .check(matches(isDisplayed()))
+                onView(withText(containsString("não é um modelo de linguagem treinado")))
+                    .check(matches(isDisplayed()))
+
+                onView(withHint("Ex.: Hambúrguer da casa"))
+                    .perform(scrollTo(), replaceText("Hambúrguer da casa"))
+                onView(withHint("Ingredientes, características e outros factos confirmados…"))
+                    .perform(scrollTo(), replaceText("Pão brioche, carne de vaca e alface."))
+
+                onView(withText("Gerar rascunho"))
+                    .perform(scrollTo(), click())
+
+                onView(withText("Rascunho StudioMesa"))
+                    .check(matches(isDisplayed()))
+                onView(withText("Copiar texto"))
+                    .check(matches(isDisplayed()))
+            }
+        } finally {
+            secureSession.clear()
+            prefs.edit().clear().commit()
+        }
+    }
+
+    @Test
     fun customerCanOpenAccountChooserWithoutNetworkCredentials() {
         assumeTrue("Restaurant variant uses the management account flow.", isCustomerVariant())
 

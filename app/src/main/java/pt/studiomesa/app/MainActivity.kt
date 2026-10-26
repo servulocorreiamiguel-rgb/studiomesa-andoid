@@ -7,6 +7,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
+import android.text.InputFilter
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
@@ -228,9 +229,10 @@ class MainActivity : Activity() {
             pages.add("Reservas")
             pages.add("Preço Justo")
         }
-        if (isPremium) {
+        if (isPremium && !isCustomerApp) {
             pages.add("Stock")
             pages.add("Análise")
+            pages.add("Conteúdo IA")
         }
         return pages
     }
@@ -374,6 +376,7 @@ class MainActivity : Activity() {
                     "Reservas" -> "Reservas"
                     "Stock" -> "Stock"
                     "Análise" -> "Análise"
+                    "Conteúdo IA" -> "Conteúdo IA"
                     else -> page
                 }
                 textSize = 10.5f
@@ -411,6 +414,7 @@ class MainActivity : Activity() {
             "Reservas" -> renderReservations(container)
             "Stock" -> renderStock(container)
             "Análise" -> renderAnalysis(container)
+            "Conteúdo IA" -> renderAiAssistant(container)
             else -> renderHome(container)
         }
     }
@@ -3444,6 +3448,137 @@ class MainActivity : Activity() {
                 .setPositiveButton("Fechar", null)
                 .show()
         }
+    }
+
+    private fun renderAiAssistant(container: LinearLayout) {
+        pageIntro(
+            container,
+            "Assistente StudioMesa",
+            "Motor local especializado para criar rascunhos de carta, publicações e campanhas."
+        )
+        addGap(container, 8)
+
+        val infoCard = makeCard(17, forestSoft)
+        infoCard.addView(label("Motor local ativo · sem chave de API", 15f, true, forest))
+        addGap(infoCard, 6)
+        infoCard.addView(label(
+            "O texto é processado no telemóvel e não é enviado para um fornecedor externo de IA. Esta primeira versão usa regras e modelos de texto especializados; não é um modelo de linguagem treinado. Confirma sempre os factos antes de publicar.",
+            12.5f, false, ink
+        ))
+        container.addView(infoCard, cardParams())
+        addGap(container, 8)
+
+        renderAiAssistantForm(container)
+    }
+
+    private fun renderAiAssistantForm(container: LinearLayout) {
+        val card = makeCard(17)
+        card.addView(label("Criar rascunho", 17f, true, forest))
+        addGap(card, 5)
+        card.addView(label(
+            "Escolhe o objetivo e introduz apenas informação confirmada pelo restaurante. Não introduzas dados pessoais de clientes.",
+            12.5f, false, muted
+        ))
+        addGap(card, 9)
+
+        val displayTypes = arrayOf(
+            "Descrição de prato",
+            "Publicação para redes sociais",
+            "Campanha de divulgação",
+            "Ideias de conteúdo"
+        )
+        val requestTypes = listOf("menu_description", "social_post", "campaign", "content_ideas")
+        val typePicker = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_item,
+                displayTypes
+            ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        }
+        card.addView(label("Tipo de conteúdo", 10f, true, forestSoft))
+        card.addView(typePicker, fieldParams())
+
+        val titleField = inputField(
+            "Ex.: Hambúrguer da casa",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        ).apply {
+            filters = arrayOf(InputFilter.LengthFilter(120))
+            isSingleLine = true
+        }
+        card.addView(label("Assunto", 10f, true, forestSoft))
+        card.addView(titleField, fieldParams())
+
+        val factsField = multilineInputField(
+            "Ingredientes, características e outros factos confirmados…"
+        ).apply {
+            filters = arrayOf(InputFilter.LengthFilter(1500))
+            minLines = 3
+            maxLines = 6
+        }
+        card.addView(label("Factos confirmados", 10f, true, forestSoft))
+        card.addView(factsField, multilineFieldParams())
+        addGap(card, 4)
+
+        card.addView(primaryButton("Gerar rascunho") {
+            val title = titleField.text.toString().trim()
+            val facts = factsField.text.toString().trim()
+            when {
+                title.length !in 2..120 -> titleField.error = "Usa entre 2 e 120 caracteres."
+                facts.length !in 10..1500 -> factsField.error = "Escreve entre 10 e 1500 caracteres."
+                else -> {
+                    try {
+                        val selectedType = requestTypes[
+                            typePicker.selectedItemPosition.coerceIn(0, requestTypes.lastIndex)
+                        ]
+                        val draft = RestaurantContentEngine.generate(selectedType, title, facts)
+                        showAiDraftDialog(draft)
+                    } catch (error: IllegalArgumentException) {
+                        AlertDialog.Builder(this)
+                            .setTitle("Revê o texto introduzido")
+                            .setMessage(error.message ?: "Não foi possível gerar o rascunho.")
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
+                }
+            }
+        }, LinearLayout.LayoutParams(-1, dp(46)))
+        container.addView(card, cardParams())
+    }
+
+    private fun showAiDraftDialog(draft: String) {
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(4))
+        }
+        form.addView(label(
+            "O rascunho foi criado localmente com regras e estruturas de texto. Revê-o e confirma todos os factos antes de o usar; nada é publicado automaticamente.",
+            12f, false, muted
+        ))
+        addGap(form, 8)
+        val editor = multilineInputField("Rascunho para rever").apply {
+            setText(draft)
+            minLines = 7
+            maxLines = 12
+            filters = arrayOf(InputFilter.LengthFilter(4000))
+        }
+        form.addView(editor, LinearLayout.LayoutParams(-1, dp(220)))
+
+        AlertDialog.Builder(this)
+            .setTitle("Rascunho StudioMesa")
+            .setView(form)
+            .setNegativeButton("Fechar", null)
+            .setNeutralButton("Copiar texto") { _, _ ->
+                val clipboard = getSystemService(android.content.ClipboardManager::class.java)
+                clipboard?.setPrimaryClip(
+                    android.content.ClipData.newPlainText("Rascunho StudioMesa", editor.text.toString())
+                )
+                android.widget.Toast.makeText(
+                    this,
+                    "Texto copiado. Revê-o antes de o usar.",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+            .show()
     }
 
     private fun renderAnalysis(container: LinearLayout) {

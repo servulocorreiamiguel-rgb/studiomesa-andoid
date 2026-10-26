@@ -1,33 +1,48 @@
 # StudioMesa — estado de testes e prontidão para lançamento
 
-**Revisão:** 25-10-2026  
+**Revisão:** 26-10-2026  
 **Repositório:** https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid  
-**PR de trabalho:** https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/19  
+**PR de base:** https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/19  
+**Ramo IA:** `feature/restaurant-ai-assistant-2026-10-25` (implementação ainda em validação)  
 **CI atual:** https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions
 
-O estado do PR e os resultados da execução mais recente no commit atual devem ser confirmados na página de CI. Uma execução bem-sucedida de uma versão anterior não valida automaticamente um commit posterior.
+**Execuções CI verificadas em 26-10-2026 (por commit, não transferíveis para commits posteriores):** PR #19 passou na run [40244814063](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40244814063), commit `1b766f8b8037fbc40baca626d7eae38878312b92`. Uma execução anterior do PR #21 passou na run [40245851885](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40245851885), commit `f45a63f5a58963d04594b771293fc828e6447a65`; isso não valida as alterações seguintes.
+
+**Falha mais recente analisada:** a run [40297681132](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40297681132), no commit `3ec5ec9d1851071a6ce3448069e929a487334f8f`, concluiu com compilação, testes unitários/Lint e replay SQL aprovados, mas falhou nos smoke tests de interface Android 8 e Android 16. Em ambos falhou `premiumRestaurantCanGenerateAnOfflineAiDraftWithoutExternalServices`: o campo de entrada estava fora da área global visível para o Espresso. O `TESTING-STATUS` foi atualizado depois dessa execução; o head atual `aaeba6145f51cb51e762674dd3fce6c754bee7df` acrescenta `scrollTo()` antes de escrever nos dois campos. Esta alteração ainda precisa de uma execução CI bem-sucedida no commit exato; não a contar como validada até os quatro jobs concluírem com sucesso.
 
 ## Validações automatizadas configuradas
 
 - Compilação das cinco variantes APK de demonstração, testes unitários de cada variante e Android Lint.
 - Construção das cinco combinações comerciais AAB com uma chave descartável de CI e verificação da assinatura de cada bundle. Estes ficheiros de teste não são uma assinatura comercial nem devem ser publicados.
 - Testes de interface nos cinco sabores, em emuladores Android 8 (API 26) e Android 16 (API 36), com relatórios XML publicados como artefactos.
-- Reconstrução das migrações SQL numa instância PostgreSQL descartável e testes de estrutura, RLS, RPCs, autorização entre restaurantes, idempotência de criação e ajuste de stock e fluxo de eliminação de conta.
+- Reconstrução das migrações SQL numa instância PostgreSQL descartável e testes de estrutura, RLS, RPCs, autorização entre restaurantes, idempotência de criação e ajuste de stock, fluxo de eliminação de conta e quota diária de IA por restaurante.
 - Verificação estática das funções SECURITY DEFINER e da configuração das Edge Functions; os testes do catálogo SQL confirmam, depois da reconstrução, que as funções privilegiadas em public/private fixam um search_path vazio e não podem ser executadas por anon.
 - Verificações unitárias do guardião de configuração para manter a validação da sessão autenticada no endpoint destrutivo e exigir PKCE e deteção do callback na página web de eliminação de conta.
+- Guardião estático do assistente de IA: exige JWT, função de servidor, chave fora do APK, autorização de proprietário, quota, limites de entrada/saída e revisão humana.
 
 Estes testes não substituem testes ponta a ponta contra Supabase Auth hospedado, um telemóvel Android real ou uma revisão independente de segurança.
 
 ## Estado da base de dados e migrações
 
-- A base de dados Supabase ativa e a branch de trabalho registam agora 38 migrações. A correção está versionada no repositório como 20261025225458_fix_join_restaurant_staff_conflict_target.sql, usando a mesma versão que ficou registada no projeto hospedado.
+- A base de dados Supabase hospedada regista 38 migrações já aplicadas. O ramo de IA inclui essas versões e acrescenta `20261025230000_restaurant_ai_quota.sql`, para um total de 39 ficheiros de migração no ramo. A migração da quota de IA **não foi aplicada ao projeto hospedado**.
 - A migração corretiva usa o nome da restrição restaurant_staff_pkey no ON CONFLICT, evitando a ambiguidade com o parâmetro de saída restaurant_id da função join_restaurant_staff. Foi aplicada ao projeto Supabase hospedado e verificada depois da aplicação: a definição instalada contém ON CONFLICT ON CONSTRAINT restaurant_staff_pkey DO NOTHING.
 - A consulta de verificação confirmou que a versão hospedada já não contém a forma antiga ON CONFLICT (restaurant_id, user_id). Os privilégios continuam limitados a authenticated, postgres e service_role; PUBLIC e anon não têm EXECUTE.
 - As 11 tabelas do esquema public têm RLS ativo. As tabelas privadas private.account_deletion_queue e private.restaurant_join_codes também têm RLS ativo, sem políticas diretas; as consultas de catálogo não encontraram privilégios diretos de SELECT/INSERT/UPDATE/DELETE de anon ou authenticated nessas tabelas. São usadas através de funções autorizadas.
 - O catálogo PostgreSQL mostra 23 funções SECURITY DEFINER no esquema public; todas as analisadas têm search_path vazio e nenhuma é executável por anon. O Security Advisor assinala 19 que podem ser executadas por authenticated. Isso é um aviso para rever privilégios e testar autorização por operação, não prova isolada de exploração. As verificações já analisadas incluem autenticação e, nas operações relevantes, pertença ao restaurante ou papel de proprietário; os testes com identidades distintas continuam incompletos.
 - O Security Advisor assinala também a proteção contra palavras-passe comprometidas desativada. A documentação oficial do Supabase indica que esta opção está disponível no plano Pro e superiores: https://supabase.com/docs/guides/auth/password-security. Confirmar o plano e ativar a proteção nas definições Auth, se disponível, antes de tratar o backend como pronto para clientes.
 - O Performance Advisor assinala 21 índices não utilizados. Não foram removidos: a decisão exige carga representativa e verificação de possíveis regressões.
-- Foi aplicada apenas a migração corretiva acima; não foram realizadas alterações a dados das tabelas de negócio. A correção foi confirmada pela definição da função e pelo catálogo de privilégios, mas o teste ponta a ponta com identidades reais separadas continua pendente.
+- Foi aplicada apenas a migração corretiva `20261025225458_fix_join_restaurant_staff_conflict_target.sql` anteriormente descrita; não foram realizadas alterações a dados das tabelas de negócio. A migração de quota IA é apenas código versionado e precisa de CI verde antes de qualquer aplicação ao ambiente hospedado.
+
+## Assistente StudioMesa local — implementação em validação
+
+- A interface está limitada ao plano Premium de gestão de restaurante; as versões cliente não expõem a navegação de gestão.
+- **Motor próprio offline:** `app/src/main/java/pt/studiomesa/app/RestaurantContentEngine.kt` gera rascunhos para descrição de artigo, publicação social, campanha de divulgação e ideias de conteúdo. Funciona no Android sem chamadas de rede, chave de API ou custo por pedido.
+- **Limite técnico importante:** esta primeira versão é um motor especializado de regras, seleção de frases e modelos de texto, não um modelo de linguagem treinado. Não aprende sozinho nem tem a flexibilidade de uma IA generativa; a qualidade depende das regras e dos modelos de texto que forem desenvolvidos e testados.
+- A interface chama diretamente o motor local e informa o utilizador de que o texto é processado no telemóvel. Os rascunhos são editáveis e têm de ser revistos antes de publicação; não existe publicação automática.
+- Foram acrescentados testes unitários para os quatro modos, limites de texto, rejeição de emails e padrões de telefone portugueses, separação de três ideias de conteúdo e ausência de preços/descontos inventados. A nova versão só deve ser considerada validada depois de a CI do commit final passar.
+- **Limitação de privacidade:** os filtros reconhecem padrões comuns de email e telefone português, mas não detetam todos os dados pessoais possíveis (por exemplo, nomes ou moradas escritos livremente). Mesmo no motor local, não é necessário introduzir dados pessoais de clientes.
+- O código de uma integração remota de IA continua separado e desativado no ecrã Android; a função Edge e a migração de quota não estão implantadas no Supabase hospedado. Esta integração remota não é necessária para o motor local. Se for retomada no futuro, precisa de revisão, testes e configuração independente.
+- Na run #397, no commit `f45a63f5a58963d04594b771293fc828e6447a65`, passaram o replay das migrações PostgreSQL, a compilação debug APK (incluindo verificações automatizadas do projeto), o smoke test Android 8 (API 26) e o smoke test Android 16. Esse resultado não valida o motor local nem os commits posteriores.
 
 ## Estado da aplicação
 
@@ -46,4 +61,4 @@ A workflow de release comercial exige o identificador definitivo do pacote e os 
 7. Preparar uma política de privacidade pública, preencher a declaração Data safety da Google Play e definir backup/restauro e resposta a incidentes.
 8. Concluir testes operacionais com um restaurante-piloto e uma revisão independente dos fluxos críticos antes de aceitar pagamentos ou depender da aplicação durante o serviço.
 
-**Estado de lançamento: não aprovado para produção.** O PR permanece em rascunho e separado de main; a migração corretiva não foi aplicada à base de dados hospedada e não foi feita publicação comercial.
+**Estado de lançamento: não aprovado para produção.** A implementação de IA permanece num ramo separado e em validação; a migração de quota ainda não foi aplicada ao Supabase hospedado e não foi feita publicação comercial.
