@@ -22,6 +22,7 @@ import android.widget.Spinner
 import android.widget.TextView
 import org.json.JSONArray
 import org.json.JSONObject
+import java.math.BigDecimal
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -1328,14 +1329,14 @@ class MainActivity : Activity() {
             } catch (e: IllegalArgumentException) {
                 result.text = e.message ?: "Valores inválidos."; result.setTextColor(red); return@primaryButton
             }
-            result.text = "PREÇO INDICATIVO COM IVA\n" + money(calc.suggestedPriceIncludingVat.toDouble()) +
-                "\nPreço sem IVA: " + money(calc.suggestedPriceExcludingVat.toDouble()) +
-                "\nIVA: " + money(calc.vatAmount.toDouble()) +
-                "\n\nIngredientes: " + money(calc.ingredientCost.toDouble()) +
-                "\nDesperdício: " + money(calc.wasteCost.toDouble()) +
-                "\nEmbalagem: " + money(calc.packagingCost.toDouble()) +
-                "\nOutros variáveis: " + money(calc.otherVariableCost.toDouble()) +
-                "\nCusto total: " + money(calc.totalCost.toDouble()) +
+            result.text = "PREÇO INDICATIVO COM IVA\n" + money(calc.suggestedPriceIncludingVat) +
+                "\nPreço sem IVA: " + money(calc.suggestedPriceExcludingVat) +
+                "\nIVA: " + money(calc.vatAmount) +
+                "\n\nIngredientes: " + money(calc.ingredientCost) +
+                "\nDesperdício: " + money(calc.wasteCost) +
+                "\nEmbalagem: " + money(calc.packagingCost) +
+                "\nOutros variáveis: " + money(calc.otherVariableCost) +
+                "\nCusto total: " + money(calc.totalCost) +
                 "\nMargem bruta estimada: " + String.format(Locale("pt", "PT"), "%.2f%%", calc.estimatedGrossMarginPercent.toDouble())
             result.setTextColor(forest)
         }, LinearLayout.LayoutParams(-1, dp(46)))
@@ -4198,6 +4199,9 @@ class MainActivity : Activity() {
     private fun addGap(parent: LinearLayout, height: Int) {
         parent.addView(View(this), LinearLayout.LayoutParams(1, dp(height)))
     }
+
+    private fun money(value: BigDecimal): String =
+        NumberFormat.getCurrencyInstance(Locale("pt", "PT")).format(value)
 
     private fun money(value: Double): String =
         NumberFormat.getCurrencyInstance(Locale("pt", "PT")).format(value)
