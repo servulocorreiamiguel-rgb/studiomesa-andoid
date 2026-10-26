@@ -89,4 +89,38 @@ class RestaurantContentEngineTest {
         val draft = RestaurantContentEngine.generate("menu_description", title, "Ingredientes confirmados: arroz, peixe")
         assertTrue(draft.contains("Ingredientes confirmados: arroz, peixe."))
     }
+
+    @Test
+    fun rejectsInputsThatExceedUtf8ByteLimitEvenWhenCharacterLimitsPass() {
+        // CJK characters use three UTF-8 bytes each; character limits alone do
+        // not guarantee that the combined request fits the engine's byte limit.
+        val multibyteTitle = "界".repeat(120)
+        val multibyteFacts = "界".repeat(1500)
+        assertThrows(IllegalArgumentException::class.java) {
+            RestaurantContentEngine.generate("social_post", multibyteTitle, multibyteFacts)
+        }
+    }
+
+    @Test
+    fun trimsOuterWhitespaceBeforeGeneratingAndValidating() {
+        val draft = RestaurantContentEngine.generate(
+            "menu_description",
+            "  Hambúrguer da casa  ",
+            "  Pão brioche, carne de vaca e alface.  "
+        )
+        assertTrue(draft.contains("Hambúrguer da casa"))
+        assertTrue(draft.contains("Pão brioche, carne de vaca e alface."))
+        assertFalse(draft.contains("  Pão brioche"))
+    }
+
+    @Test
+    fun rejectsContactPatternsInTheTitleAsWellAsFacts() {
+        assertThrows(IllegalArgumentException::class.java) {
+            RestaurantContentEngine.generate(
+                "social_post",
+                "Ligar para 912 345 678",
+                "Prato preparado com ingredientes confirmados."
+            )
+        }
+    }
 }
