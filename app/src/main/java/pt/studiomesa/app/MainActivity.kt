@@ -1255,11 +1255,17 @@ class MainActivity : Activity() {
         fun addRow() {
             val card = makeCard(10, paper)
             card.addView(label("Ingrediente ${rows.size + 1}", 10f, true, forest))
-            val name = inputField("Nome", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+            val name = inputField("Nome", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES).apply {
+                contentDescription = "Nome ingrediente ${rows.size + 1}"
+            }
             card.addView(name, fieldParams())
             val pair = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            val qty = inputField("Quantidade", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
-            val cost = inputField("Custo/unidade (€)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+            val qty = inputField("Quantidade", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL).apply {
+                contentDescription = "Quantidade ingrediente ${rows.size + 1}"
+            }
+            val cost = inputField("Custo/unidade (€)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL).apply {
+                contentDescription = "Custo unitário ingrediente ${rows.size + 1}"
+            }
             pair.addView(qty, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(4), 0) })
             pair.addView(cost, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(4), 0, 0, 0) })
             card.addView(pair)
@@ -1268,7 +1274,9 @@ class MainActivity : Activity() {
         }
         fun numberField(title: String, hint: String, initial: String? = null): EditText {
             form.addView(label(title, 10f, true, forestSoft))
-            val field = inputField(hint, InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+            val field = inputField(hint, InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL).apply {
+                contentDescription = title
+            }
             if (initial != null) field.setText(initial)
             form.addView(field, fieldParams())
             return field
