@@ -59,16 +59,31 @@ if (isPremium && !isCustomerApp) {
  pages.add("Análise")
  pages.add("Conteúdo IA")
 }
-SupabaseApi.restaurantAiStatus(backendToken())
-SupabaseApi.generateRestaurantContent(backendToken(), type, title, facts)
-O assunto e os factos introduzidos são enviados para o fornecedor externo de IA configurado no servidor para gerar o rascunho.
+RestaurantContentEngine.generate(type, title, facts)
+O texto é processado no telemóvel e não é enviado para um fornecedor externo de IA.
+"""
+VALID_ENGINE = r"""
+object RestaurantContentEngine {
+ val allowedTypes = setOf("menu_description", "social_post", "campaign", "content_ideas")
+ private val emailPattern = Regex("email")
+ private val portuguesePhonePattern = Regex("phone")
+ fun generate(contentType: String, title: String, facts: String): String {
+  require(contentType in allowedTypes)
+  require(title.trim().length in 2..120)
+  require(facts.trim().length in 10..1500)
+  require((title + facts).toByteArray(Charsets.UTF_8).size <= 4096)
+  require(!containsCustomerContactData(facts))
+  return "draft"
+ }
+ fun containsCustomerContactData(value: String): Boolean = emailPattern.containsMatchIn(value) || portuguesePhonePattern.containsMatchIn(value)
+}
 """
 VALID_API = r'"/functions/v1/restaurant-ai-assistant"'
 
 class RestaurantAIFunctionGuardTests(unittest.TestCase):
     def validate(self, config=VALID_CONFIG, source=VALID_SOURCE, validation=VALID_VALIDATION,
-                 migration=VALID_MIGRATION, main=VALID_MAIN, api=VALID_API):
-        return validate_ai_function(config, source, validation, migration, main, api)
+                 migration=VALID_MIGRATION, main=VALID_MAIN, api=VALID_API, engine=VALID_ENGINE):
+        return validate_ai_function(config, source, validation, migration, main, api, engine)
 
     def test_accepts_server_gated_owner_only_quota_and_review_only_design(self):
         self.assertEqual(self.validate(), [])
@@ -135,6 +150,21 @@ class RestaurantAIFunctionGuardTests(unittest.TestCase):
     def test_rejects_ai_page_outside_premium_management(self):
         errors = self.validate(main='pages.add("Conteúdo IA")')
         self.assertTrue(any("Premium" in error for error in errors))
+
+
+    def test_rejects_android_ui_that_calls_external_provider(self):
+        main = VALID_MAIN + ' SupabaseApi.generateRestaurantContent(token, type, title, facts)'
+        errors = self.validate(main=main)
+        self.assertTrue(any("must not call the remote provider endpoint" in error for error in errors))
+
+    def test_rejects_local_engine_with_network_dependency(self):
+        errors = self.validate(engine=VALID_ENGINE + ' val endpoint = "https://example.invalid"')
+        self.assertTrue(any("must not make network requests" in error for error in errors))
+
+    def test_rejects_local_engine_without_contact_data_guard(self):
+        engine = VALID_ENGINE.replace("containsCustomerContactData", "contactCheck")
+        errors = self.validate(engine=engine)
+        self.assertTrue(any("detect common customer contact details" in error for error in errors))
 
 if __name__ == "__main__":
     unittest.main()
