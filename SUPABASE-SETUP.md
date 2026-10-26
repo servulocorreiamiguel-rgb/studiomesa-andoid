@@ -47,6 +47,12 @@ Verificações efetuadas depois das migrações: fila sem pedidos pendentes, col
 
 A página externa `https://svwvkfsyevuyabelrtjk.supabase.co/functions/v1/account-deletion-web` está ativa e foi verificada por carregamento público. O fluxo de email ainda exige que o URL exato seja adicionado a Authentication → URL Configuration → Redirect URLs. Antes de produção, configura SMTP próprio e confirma magic link/OTP com contas descartáveis; não considerar o recurso operacional até esses testes passarem.
 
+## Correção de concorrência na adesão à equipa (26/10/2026)
+
+A migração `20261026173330_fix_staff_join_concurrent_conflict_target` foi aplicada ao projeto Supabase e verificada no catálogo de migrações. Corrige `public.join_restaurant_staff(text)`: o código anterior usava o alvo de conflito da chave primária composta, embora a tabela também imponha uma restrição única por `user_id`. A função agora usa `ON CONFLICT (user_id) DO NOTHING` e volta a ler a associação vencedora antes de confirmar o resultado. O SQL foi validado numa transação revertida e a função foi testada com dados temporários também revertidos: adesão inicial, repetição no mesmo restaurante e rejeição de uma segunda associação a outro restaurante. Uma consulta posterior confirmou zero utilizadores/restaurantes/associações de teste persistentes. O teste não substitui uma prova de concorrência real com dois pedidos simultâneos.
+
+**Importante — reconciliação de migrações ainda pendente:** o catálogo do projeto apresenta 39 migrações aplicadas após esta correção, enquanto o ramo auditado contém 20 ficheiros em `supabase/migrations`. Existem migrações históricas aplicadas que não têm um ficheiro equivalente no repositório. Antes de recriar o ambiente ou de entregar o projeto a outra equipa, é necessário recuperar/reconstruir a história exata e validá-la; não usar `supabase/schema.sql` como substituto, porque é apenas um protótipo antigo.
+
 ## Estado verificado do backend (21/10/2026)
 
 - `private.restaurant_join_codes` tem RLS ativa, sem políticas para acesso direto; as contas `anon` e `authenticated` não têm permissões diretas de leitura/escrita. As funções proprietárias de `postgres` foram mantidas e o utilizador `postgres` tem `BYPASSRLS`, para permitir os fluxos `SECURITY DEFINER` que fazem verificações explícitas.
