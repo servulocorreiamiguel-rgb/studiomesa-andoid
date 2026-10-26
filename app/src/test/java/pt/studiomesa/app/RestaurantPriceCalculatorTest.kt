@@ -242,4 +242,24 @@ class RestaurantPriceCalculatorTest {
         assertEquals(bd("0.00"), result.vatAmount)
         assertEquals(bd("0.03"), result.suggestedPriceIncludingVat)
     }
+
+    @Test
+    fun calculatesWasteFromUnroundedIngredientSubtotal() {
+        val result = RestaurantPriceCalculator.calculate(
+            ingredients = listOf(
+                RestaurantPriceCalculator.Ingredient("Ingrediente fracionado", bd("1"), bd("0.014"))
+            ),
+            wastePercent = bd("40"),
+            packagingCost = bd("0"),
+            otherVariableCost = bd("0"),
+            targetGrossMarginPercent = bd("50"),
+            vatPercent = bd("0")
+        )
+
+        // €0.014 × 40% = €0.0056, which rounds to €0.01.
+        assertEquals(bd("0.01"), result.ingredientCost)
+        assertEquals(bd("0.01"), result.wasteCost)
+        assertEquals(bd("0.02"), result.totalCost)
+        assertEquals(bd("0.02"), result.ingredientCost.add(result.wasteCost))
+    }
 }
