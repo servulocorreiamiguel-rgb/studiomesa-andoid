@@ -84,28 +84,61 @@ class MainActivity : Activity() {
         }
         window.statusBarColor = forestDeep
         window.navigationBarColor = forestDeep
-        renderApp()
-        handleAuthCallback(intent)
-
-        // Refresh shared data when an already-authenticated user opens the app,
-        // but do not start a second request while processing an OAuth callback.
-        if (intent?.data == null && backendToken().isNotBlank()) {
-            if (isCustomerApp && backendMemberId().isNotBlank()) {
-                refreshCustomerMembership()
-            } else if (!isCustomerApp && hasRemoteRestaurant()) {
-                refreshRemoteOperations()
-            }
+        // Do not render restaurant/customer data from disk before the server verifies
+        // the saved session and the current membership/role.
+        if (isAuthCallbackIntent(intent)) {
+            clearCachedTenantState()
+            renderSessionVerificationScreen(isVerifying = true)
+            handleAuthCallback(intent)
+        } else if (hasStoredSession()) {
+            verifyExistingSessionAndRender()
+        } else {
+            clearCachedTenantState()
+            backendPrefs.edit()
+                .remove("user_id")
+                .remove("user_email")
+                .remove("access_token")
+                .remove("refresh_token")
+                .apply()
+            renderApp()
         }
     }
 
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleAuthCallback(intent)
+        if (isAuthCallbackIntent(intent)) {
+            clearCachedTenantState()
+            renderSessionVerificationScreen(isVerifying = true)
+            handleAuthCallback(intent)
+        } else if (hasStoredSession()) {
+            verifyExistingSessionAndRender()
+        } else {
+            clearCachedTenantState()
+            renderApp()
+        }
     }
 
     private fun parseAuthParams(raw: String?): Map<String, String> =
         AuthCallbackParser.parse(raw)
+
+    private fun isAuthCallbackIntent(callbackIntent: android.content.Intent?): Boolean {
+        val uri = callbackIntent?.data ?: return false
+        return uri.scheme == "studiomesa" && uri.host == "auth-callback"
+    }
+
+    private fun hasStoredSession(): Boolean =
+        backendToken().isNotBlank() || secureSession.refreshToken().isNotBlank()
+
+    private fun recoverAfterAuthCallbackFailure() {
+        if (hasStoredSession()) {
+            verifyExistingSessionAndRender()
+        } else {
+            clearCachedTenantState()
+            backendPrefs.edit().remove("user_id").remove("user_email").apply()
+            renderApp()
+        }
+    }
 
     private fun handleAuthCallback(callbackIntent: android.content.Intent?) {
         val uri = callbackIntent?.data ?: return
@@ -123,7 +156,7 @@ class MainActivity : Activity() {
             AlertDialog.Builder(this)
                 .setTitle("Autenticação não concluída")
                 .setMessage(errorText.replace('+', ' ').take(500))
-                .setPositiveButton("OK", null)
+                .setPositiveButton("OK") { _, _ -> recoverAfterAuthCallbackFailure() }
                 .show()
             return
         }
@@ -138,7 +171,7 @@ class MainActivity : Activity() {
             AlertDialog.Builder(this)
                 .setTitle("Ligação de autenticação inválida")
                 .setMessage("Não foi recebida uma ligação protegida válida. Pede uma nova ligação e abre-a neste telemóvel, com a aplicação instalada.")
-                .setPositiveButton("OK", null)
+                .setPositiveButton("OK") { _, _ -> recoverAfterAuthCallbackFailure() }
                 .show()
             return
         }
@@ -156,10 +189,22 @@ class MainActivity : Activity() {
                 .putString("user_id", id)
                 .putString("user_email", user.optString("email", session.email))
                 .apply()
-            if (isCustomerApp) restoreCustomerMembership(session.accessToken)
-            else restoreOwnedRestaurant(session.accessToken)
+            val restored = if (isCustomerApp) {
+                restoreCustomerMembership(session.accessToken)
+            } else {
+                restoreOwnedRestaurant(session.accessToken)
+            }
+            if (!restored) {
+                throw IllegalStateException("Não foi possível confirmar o acesso aos dados da conta. Verifica a ligação e tenta novamente.")
+            }
             "SIGNED_IN"
-        }, refreshSession = false) {
+        }, refreshSession = false, onError = { error ->
+            AlertDialog.Builder(this)
+                .setTitle("Não foi possível concluir a autenticação")
+                .setMessage(friendlyBackendError(error.message))
+                .setPositiveButton("OK") { _, _ -> recoverAfterAuthCallbackFailure() }
+                .show()
+        }) {
             if (isPasswordRecovery) {
                 showSetNewPasswordDialog()
             } else {
@@ -168,7 +213,7 @@ class MainActivity : Activity() {
                     .setTitle("Sessão iniciada")
                     .setMessage("A conta foi ligada ao StudioMesa. " +
                         if (isCustomerApp) "Agora associa-te ao restaurante com o respetivo código." else "Agora configura o restaurante para gerar um código de adesão.")
-                    .setPositiveButton("OK", null)
+                    .setPositiveButton("OK") { _, _ -> recoverAfterAuthCallbackFailure() }
                     .show()
             }
         }
@@ -1275,9 +1320,9 @@ class MainActivity : Activity() {
     private fun refreshSessionIfNeeded() {
         val accessToken = backendToken()
         val refreshToken = secureSession.refreshToken()
-        if (accessToken.isBlank() || refreshToken.isBlank()) return
+        if (refreshToken.isBlank()) return
 
-        val expiresAt = SupabaseApi.tokenExpiresAtMillis(accessToken)
+        val expiresAt = if (accessToken.isBlank()) 0L else SupabaseApi.tokenExpiresAtMillis(accessToken)
         if (expiresAt > System.currentTimeMillis() + 120_000L) return
 
         val session = SupabaseApi.refreshSession(refreshToken)
@@ -1287,53 +1332,197 @@ class MainActivity : Activity() {
             .putString("user_email", session.email)
             .apply()
 
-        if (isCustomerApp) restoreCustomerMembership(session.accessToken) else restoreOwnedRestaurant(session.accessToken)
-    }
-
-    private fun restoreOwnedRestaurant(token: String) {
-        if (isCustomerApp || token.isBlank()) return
-
-        try {
-            val restaurant = SupabaseApi.getMyRestaurant(token)
-            val editor = backendPrefs.edit()
-                .remove("restaurant_id")
-                .remove("restaurant_name")
-                .remove("join_code")
-                .remove("staff_join_code")
-                .remove("restaurant_role")
-            if (restaurant != null) {
-                val restaurantId = restaurant.optString("restaurant_id")
-                editor.putString("restaurant_id", restaurantId)
-                    .putString("restaurant_name", restaurant.optString("restaurant_name"))
-                    .putString("join_code", restaurant.optString("join_code"))
-                    .putString("staff_join_code", restaurant.optString("staff_code"))
-                    .putString("restaurant_role", restaurant.optString("user_role", "staff"))
-            }
-            editor.apply()
-            if (restaurant != null) {
-                cacheRemoteOperations(token, restaurant.optString("restaurant_id"))
-            } else {
-                // The server confirmed this account no longer belongs to a restaurant.
-                // Remove data that would otherwise remain on this device after revocation.
-                backendPrefs.edit()
-                    .remove("remote_members_json")
-                    .remove("remote_tables_json")
-                    .remove("remote_menu_json")
-                    .remove("remote_orders_json")
-                    .remove("remote_inventory_json")
-                    .remove("inventory_loaded")
-                    .remove("remote_reservations_json")
-                    .remove("reservations_loaded")
-                    .apply()
-                reservationCache = JSONArray()
-                reservationsLoaded = false
-            }
-        } catch (_: Exception) {
-            // Keep authentication successful if restoring cloud data temporarily fails.
+        val restored = if (isCustomerApp) {
+            restoreCustomerMembership(session.accessToken)
+        } else {
+            restoreOwnedRestaurant(session.accessToken)
+        }
+        if (!restored) {
+            throw IllegalStateException("Não foi possível confirmar as permissões da conta. Verifica a ligação e tenta novamente.")
         }
     }
 
+    private fun restoreOwnedRestaurant(token: String): Boolean {
+        if (isCustomerApp || token.isBlank()) return false
+        return try {
+            val restaurant = SupabaseApi.getMyRestaurant(token)
+            if (restaurant == null) {
+                clearCachedTenantState()
+                true
+            } else {
+                val restaurantId = restaurant.optString("restaurant_id").trim()
+                if (restaurantId.isBlank()) {
+                    throw IllegalStateException("O servidor não devolveu um restaurante válido.")
+                }
+                val role = restaurant.optString("user_role", "staff").ifBlank { "staff" }
+                val previousRestaurantId = backendRestaurantId()
+                val previousRole = backendPrefs.getString("restaurant_role", "").orEmpty()
+                if (previousRestaurantId != restaurantId || previousRole != role) {
+                    clearRemoteOperationalCache()
+                }
+                backendPrefs.edit()
+                    .putString("restaurant_id", restaurantId)
+                    .putString("restaurant_name", restaurant.optString("restaurant_name"))
+                    .putString("join_code", restaurant.optString("join_code"))
+                    .putString("staff_join_code", restaurant.optString("staff_code"))
+                    .putString("restaurant_role", role)
+                    .apply()
+                cacheRemoteOperations(token, restaurantId)
+                true
+            }
+        } catch (_: Exception) {
+            clearCachedTenantState()
+            false
+        }
+    }
 
+    private fun clearRemoteOperationalCache() {
+        backendPrefs.edit()
+            .remove("remote_members_json")
+            .remove("remote_tables_json")
+            .remove("remote_menu_json")
+            .remove("remote_orders_json")
+            .remove("customer_menu_json")
+            .remove("remote_inventory_json")
+            .remove("inventory_loaded")
+            .remove("remote_reservations_json")
+            .remove("reservations_loaded")
+            .apply()
+        reservationCache = JSONArray()
+        reservationsLoaded = false
+    }
+
+    private fun clearCachedTenantState() {
+        backendPrefs.edit()
+            .remove("restaurant_id")
+            .remove("restaurant_name")
+            .remove("join_code")
+            .remove("staff_join_code")
+            .remove("restaurant_role")
+            .remove("member_id")
+            .remove("member_code")
+            .remove("member_points")
+            .remove("member_restaurant_name")
+            .apply()
+        clearRemoteOperationalCache()
+    }
+
+    private fun verifyExistingSessionAndRender() {
+        renderSessionVerificationScreen(isVerifying = true)
+        Thread {
+            var verified = false
+            try {
+                refreshSessionIfNeeded()
+                val token = backendToken()
+                if (token.isBlank()) {
+                    throw IllegalStateException("Não existe uma sessão autenticada válida.")
+                }
+                val user = SupabaseApi.getUser(token)
+                val verifiedUserId = user.optString("id").trim()
+                if (verifiedUserId.isBlank()) {
+                    throw IllegalStateException("O servidor não devolveu uma conta válida.")
+                }
+
+                val savedUserId = backendPrefs.getString("user_id", "").orEmpty()
+                if (savedUserId.isNotBlank() && savedUserId != verifiedUserId) {
+                    store.clearLocalDemoData()
+                    clearCachedTenantState()
+                }
+                backendPrefs.edit()
+                    .putString("user_id", verifiedUserId)
+                    .putString("user_email", user.optString("email"))
+                    .apply()
+
+                verified = if (isCustomerApp) {
+                    restoreCustomerMembership(token)
+                } else {
+                    restoreOwnedRestaurant(token)
+                }
+            } catch (_: Exception) {
+                verified = false
+            }
+            if (!verified) clearCachedTenantState()
+            runOnUiThread {
+                if (!isFinishing && !isDestroyed) {
+                    if (verified) {
+                        if (isCustomerApp) renderCustomerApp() else renderApp()
+                    } else {
+                        renderSessionVerificationScreen(isVerifying = false)
+                    }
+                }
+            }
+        }.start()
+    }
+
+    private fun renderSessionVerificationScreen(isVerifying: Boolean) {
+        appRoot = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(24), dp(24), dp(24), dp(24))
+            setBackgroundColor(paper)
+        }
+        applySystemBarInsets(appRoot)
+        appRoot.addView(label(
+            if (isVerifying) "A verificar autorização da conta" else "Não foi possível confirmar o acesso",
+            23f, true, forestDeep
+        ))
+        addGap(appRoot, 12)
+        appRoot.addView(label(
+            if (isVerifying) {
+                "Os dados do restaurante só aparecem depois de confirmar no servidor a tua associação e as permissões."
+            } else {
+                "Por segurança, os dados guardados neste dispositivo estão ocultos. Verifica a ligação e tenta novamente. Se a sessão expirou, podes terminar a sessão neste dispositivo e voltar a entrar; a conta e os dados no servidor não serão eliminados."
+            },
+            14f, false, muted
+        ))
+        if (!isVerifying) {
+            addGap(appRoot, 18)
+            appRoot.addView(primaryButton("Tentar novamente") {
+                verifyExistingSessionAndRender()
+            }, LinearLayout.LayoutParams(-1, dp(48)))
+            addGap(appRoot, 8)
+            appRoot.addView(secondaryButton("Terminar sessão e voltar a entrar") {
+                returnToAuthenticationAfterSessionFailure()
+            }, LinearLayout.LayoutParams(-1, dp(48)))
+        }
+        setContentView(appRoot)
+    }
+
+    /**
+     * Provides a recovery path when the stored session is expired or revoked.
+     * This clears credentials and local cached data only; it never deletes the server account.
+     */
+    private fun returnToAuthenticationAfterSessionFailure() {
+        val sessionCleared = secureSession.clear()
+        if (isCustomerApp) {
+            store.clearCustomerLocalIdentity()
+        } else {
+            store.clearLocalDemoData()
+            backendPrefs.edit().putBoolean("local_demo_data_isolated_v1", true).apply()
+        }
+        clearCachedTenantState()
+        backendPrefs.edit()
+            .remove("access_token")
+            .remove("refresh_token")
+            .remove("user_id")
+            .remove("user_email")
+            .apply()
+
+        if (isCustomerApp) {
+            renderCustomerApp()
+        } else {
+            activePage = "Conta"
+            renderApp()
+        }
+
+        if (!sessionCleared) {
+            AlertDialog.Builder(this)
+                .setTitle("Aviso de segurança")
+                .setMessage("Não foi possível confirmar a limpeza completa das credenciais locais. A conta e os dados no servidor não foram eliminados. Reinicia a aplicação antes de voltares a utilizá-la.")
+                .setPositiveButton("OK", null)
+                .show()
+        }
+    }
 
     private fun hasRemoteRestaurant(): Boolean =
         backendToken().isNotBlank() && backendRestaurantId().isNotBlank()
@@ -1399,9 +1588,9 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun restoreCustomerMembership(token: String) {
-        if (!isCustomerApp || token.isBlank()) return
-        try {
+    private fun restoreCustomerMembership(token: String): Boolean {
+        if (!isCustomerApp || token.isBlank()) return false
+        return try {
             val member = SupabaseApi.getMyLoyaltyMembership(token)
             if (member == null) {
                 backendPrefs.edit()
@@ -1411,22 +1600,27 @@ class MainActivity : Activity() {
                     .remove("member_restaurant_name")
                     .putString("customer_menu_json", "[]")
                     .apply()
-                return
+                true
+            } else {
+                val memberId = member.optString("member_id").trim()
+                if (memberId.isBlank()) {
+                    throw IllegalStateException("O servidor não devolveu um cartão de cliente válido.")
+                }
+                val menu = SupabaseApi.listCustomerMenu(token, memberId)
+                backendPrefs.edit()
+                    .putString("member_id", memberId)
+                    .putString("member_code", member.optString("member_code"))
+                    .putInt("member_points", member.optInt("points", 0))
+                    .putString("member_restaurant_name", member.optString("restaurant_name"))
+                    .putString("customer_menu_json", menu.toString())
+                    .apply()
+                val displayName = member.optString("display_name").trim()
+                if (displayName.isNotBlank()) store.saveCustomerProfileName(displayName)
+                true
             }
-
-            val memberId = member.optString("member_id")
-            val menu = if (memberId.isNotBlank()) SupabaseApi.listCustomerMenu(token, memberId) else org.json.JSONArray()
-            backendPrefs.edit()
-                .putString("member_id", memberId)
-                .putString("member_code", member.optString("member_code"))
-                .putInt("member_points", member.optInt("points", 0))
-                .putString("member_restaurant_name", member.optString("restaurant_name"))
-                .putString("customer_menu_json", menu.toString())
-                .apply()
-            val displayName = member.optString("display_name").trim()
-            if (displayName.isNotBlank()) store.saveCustomerProfileName(displayName)
         } catch (_: Exception) {
-            // Do not discard a valid login if the membership is temporarily unavailable.
+            clearCachedTenantState()
+            false
         }
     }
 
@@ -1486,9 +1680,13 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun requiresSessionReverification(error: Exception): Boolean =
+        SessionAuthorizationErrorClassifier.requiresReverification(error)
+
     private fun runBackend(
         task: () -> String,
         refreshSession: Boolean = true,
+        onError: ((Exception) -> Unit)? = null,
         onSuccess: (String) -> Unit
     ) {
         val progress = AlertDialog.Builder(this)
@@ -1511,11 +1709,21 @@ class MainActivity : Activity() {
                 runOnUiThread {
                     if (!isFinishing) {
                         progress.dismiss()
-                        AlertDialog.Builder(this)
-                            .setTitle("Não foi possível concluir")
-                            .setMessage(friendlyBackendError(error.message))
-                            .setPositiveButton("OK", null)
-                            .show()
+                        if (requiresSessionReverification(error)) {
+                            // Authorization failures take precedence over screen-specific
+                            // handlers: never leave cached tenant data visible after access
+                            // could not be confirmed.
+                            clearCachedTenantState()
+                            renderSessionVerificationScreen(isVerifying = false)
+                        } else if (onError != null) {
+                            onError(error)
+                        } else {
+                            AlertDialog.Builder(this)
+                                .setTitle("Não foi possível concluir")
+                                .setMessage(friendlyBackendError(error.message))
+                                .setPositiveButton("OK", null)
+                                .show()
+                        }
                     }
                 }
             }
@@ -1757,7 +1965,14 @@ class MainActivity : Activity() {
                                             .putString("user_id", user.optString("id"))
                                             .putString("user_email", email)
                                             .apply()
-                                        if (isCustomerApp) restoreCustomerMembership(token) else restoreOwnedRestaurant(token)
+                                        val restored = if (isCustomerApp) {
+                                            restoreCustomerMembership(token)
+                                        } else {
+                                            restoreOwnedRestaurant(token)
+                                        }
+                                        if (!restored) {
+                                            throw IllegalStateException("Não foi possível confirmar as permissões da conta. Verifica a ligação e tenta novamente.")
+                                        }
                                         "SIGNED_IN"
                                     }
                                     user != null -> {
@@ -1779,7 +1994,14 @@ class MainActivity : Activity() {
                                     .putString("user_id", session.userId)
                                     .putString("user_email", session.email)
                                     .apply()
-                                if (isCustomerApp) restoreCustomerMembership(session.accessToken) else restoreOwnedRestaurant(session.accessToken)
+                                val restored = if (isCustomerApp) {
+                                    restoreCustomerMembership(session.accessToken)
+                                } else {
+                                    restoreOwnedRestaurant(session.accessToken)
+                                }
+                                if (!restored) {
+                                    throw IllegalStateException("Não foi possível confirmar as permissões da conta. Verifica a ligação e tenta novamente.")
+                                }
                                 "SIGNED_IN"
                             }
                         }, refreshSession = false) { result ->
@@ -1837,7 +2059,9 @@ class MainActivity : Activity() {
                     runBackend({
                         val token = backendToken()
                         val restaurantId = SupabaseApi.createRestaurant(token, name, code)
-                        restoreOwnedRestaurant(token)
+                        if (!restoreOwnedRestaurant(token)) {
+                            throw IllegalStateException("Não foi possível confirmar as permissões da conta. Verifica a ligação e tenta novamente.")
+                        }
                         restaurantId
                     }) { restaurantId ->
                         dialog.dismiss()
@@ -2044,7 +2268,9 @@ class MainActivity : Activity() {
                     runBackend({
                         val token = backendToken()
                         SupabaseApi.joinRestaurantStaff(token, code)
-                        restoreOwnedRestaurant(token)
+                        if (!restoreOwnedRestaurant(token)) {
+                            throw IllegalStateException("Não foi possível confirmar as permissões da conta. Verifica a ligação e tenta novamente.")
+                        }
                         "OK"
                     }) {
                         dialog.dismiss()
