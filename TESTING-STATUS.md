@@ -1,12 +1,12 @@
 # StudioMesa — estado de testes e prontidão para lançamento
 
-**Revisão:** 25-10-2026  
+**Revisão:** 26-10-2026  
 **Repositório:** https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid  
 **PR de base:** https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/19  
 **Ramo IA:** `feature/restaurant-ai-assistant-2026-10-25` (implementação ainda em validação)  
 **CI atual:** https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions
 
-O estado do PR e os resultados da execução mais recente no commit atual devem ser confirmados na página de CI. Uma execução bem-sucedida de uma versão anterior não valida automaticamente um commit posterior.
+**Execuções CI verificadas em 26-10-2026:** PR #19 passou na run [40244814063](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40244814063), commit `1b766f8b8037fbc40baca626d7eae38878312b92`. PR #21 passou na run [40245851885](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40245851885), commit `f45a63f5a58963d04594b771293fc828e6447a65`. Em ambos passaram os quatro jobs visíveis: replay das migrações PostgreSQL, compilação/testes Android, smoke tests em Android 8 e smoke tests em Android 16. Estes resultados só validam os commits indicados; cada commit posterior precisa da sua própria CI verde.
 
 ## Validações automatizadas configuradas
 
@@ -36,7 +36,8 @@ Estes testes não substituem testes ponta a ponta contra Supabase Auth hospedado
 - A interface está limitada ao plano Premium de gestão de restaurante; as versões cliente não expõem a navegação de gestão.
 - O APK não contém a chave do fornecedor. A função `restaurant-ai-assistant` exige sessão JWT, confirma o papel de proprietário, recusa o uso sem `STUDIOMESA_AI_ENABLED=true` e `OPENAI_API_KEY` no servidor, e aplica limite diário de 10 pedidos por restaurante.
 - A função aceita apenas tipo de conteúdo, assunto e factos fornecidos pelo restaurante; limita os tamanhos, rejeita emails e padrões de telefone portugueses, não consulta registos de clientes e só devolve rascunhos sujeitos a revisão. Não existe publicação automática.
-- A função Edge e a migração de quota ainda não foram implantadas no Supabase hospedado; a funcionalidade permanece desativada. A validação atual ainda tem de confirmar compilação, testes unitários, Android Lint, os emuladores e o replay da 39.ª migração.
+- **Limitação de privacidade a manter visível:** os filtros detetam padrões comuns de email e telefone português, mas não conseguem garantir a deteção de todos os dados pessoais (por exemplo, nomes ou moradas escritos livremente). A interface avisa para não introduzir dados pessoais/confidenciais, mas isto não substitui testes de privacidade nem justifica enviar dados de clientes. A IA permanece desativada até à revisão final.
+- Na run #397, no commit `f45a63f5a58963d04594b771293fc828e6447a65`, passaram o replay das migrações PostgreSQL, a compilação debug APK (incluindo verificações automatizadas do projeto), o smoke test Android 8 (API 26) e o smoke test Android 16. A funcionalidade continua desativada no Supabase hospedado: a Edge Function e a migração de quota não foram implantadas, e ainda faltam testes E2E com Auth hospedado e dispositivos reais.
 
 ## Estado da aplicação
 
