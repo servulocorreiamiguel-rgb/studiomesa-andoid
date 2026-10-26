@@ -23,8 +23,8 @@ jobs:
         self.assertEqual(
             extract_action_refs(workflow),
             [
-                (6, "actions/checkout@0123456789abcdef0123456789abcdef01234567"),
-                (7, "./.github/actions/local-check"),
+                (5, "actions/checkout@0123456789abcdef0123456789abcdef01234567"),
+                (6, "./.github/actions/local-check"),
             ],
         )
 
