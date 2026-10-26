@@ -8,6 +8,7 @@ import androidx.test.espresso.action.ViewActions.scrollTo
 import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
+import androidx.test.espresso.matcher.ViewMatchers.hasErrorText
 import androidx.test.espresso.matcher.ViewMatchers.withHint
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.platform.app.InstrumentationRegistry
@@ -170,4 +171,29 @@ class MainActivitySmokeTest {
                 .check(matches(isDisplayed()))
         }
     }
+
+    @Test
+    fun customerLoginFormShowsFieldsAndRejectsInvalidEmailBeforeNetworkCall() {
+        assumeTrue("Restaurant variant uses the management account flow.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withText("Criar conta / iniciar sessão"))
+                .perform(scrollTo(), click())
+            onView(withText("Iniciar sessão"))
+                .perform(click())
+
+            onView(withHint("Email")).check(matches(isDisplayed()))
+            onView(withHint("Palavra-passe (mínimo 8 caracteres)"))
+                .check(matches(isDisplayed()))
+
+            onView(withHint("Email")).perform(replaceText("isto-nao-e-email"))
+            onView(withHint("Palavra-passe (mínimo 8 caracteres)"))
+                .perform(replaceText("password123"))
+            onView(withText("Entrar")).perform(click())
+
+            onView(withHint("Email"))
+                .check(matches(hasErrorText("Introduz um email válido")))
+        }
+    }
+
 }
