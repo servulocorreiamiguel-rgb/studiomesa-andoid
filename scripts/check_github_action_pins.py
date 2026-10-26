@@ -13,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
-USES_PATTERN = re.compile(r"^\s*uses:\s*([^\s#]+)", re.MULTILINE)
+USES_PATTERN = re.compile(r"^\s*(?:-\s*)?uses:\s*([^\s#]+)", re.MULTILINE)
 IMMUTABLE_ACTION_PATTERN = re.compile(
     r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$"
 )
@@ -24,7 +24,7 @@ def extract_action_refs(workflow_text: str) -> list[tuple[int, str]]:
     return [
         (line_number, match.group(1))
         for line_number, line in enumerate(workflow_text.splitlines(), start=1)
-        if (match := re.match(r"^\s*uses:\s*([^\s#]+)", line))
+        if (match := re.match(r"^\s*(?:-\s*)?uses:\s*([^\s#]+)", line))
     ]
 
 
