@@ -113,8 +113,8 @@ def validate_ai_function(
             errors.append("The local StudioMesa content engine " + description + ".")
     if re.search(r'HttpURLConnection|OkHttpClient|java\.net\.URL|ktor\.client|https?://', local_engine_source, re.IGNORECASE):
         errors.append("The local StudioMesa content engine must not make network requests.")
-    if "/functions/v1/restaurant-ai-assistant" not in api_source:
-        errors.append("The Android API must call the server function endpoint.")
+    if "/functions/v1/restaurant-ai-assistant" in api_source:
+        errors.append("The Android client must not call the optional remote AI endpoint.")
     if re.search(r"OPENAI_API_KEY|sk-[A-Za-z0-9]{12,}", api_source, re.IGNORECASE):
         errors.append("The Android client must never contain the provider API key.")
 
