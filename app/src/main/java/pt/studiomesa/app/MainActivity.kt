@@ -1279,7 +1279,7 @@ class MainActivity : Activity() {
             if (rows.size < 30) addRow() else AlertDialog.Builder(this).setMessage("Máx. 30").setPositiveButton("OK", null).show()
         }, LinearLayout.LayoutParams(-1, dp(40)))
         form.addView(secondaryButton("Remover ingrediente") {
-            if (rows.size > 1) form.removeView(rows.removeAt(rows.lastIndex).container)
+            if (rows.size > 1) ingredientRowsContainer.removeView(rows.removeAt(rows.lastIndex).container)
         }, LinearLayout.LayoutParams(-1, dp(40)))
         val waste = numberField("Desperdício (%)", "Percentagem", "0")
         val packaging = numberField("Embalagem (€)", "Custo por dose", "0")
