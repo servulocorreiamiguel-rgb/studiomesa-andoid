@@ -56,18 +56,20 @@ object RestaurantPriceCalculator {
         val ingredientCostRaw = ingredients.fold(BigDecimal.ZERO) { sum, item ->
             sum.add(item.quantityUsed.multiply(item.costPerUnit))
         }
-        // Calculate from the displayed, cent-rounded components so the breakdown
-        // always adds up to the displayed total, including for fractional unit costs.
+        // Round each displayed component before adding, so the breakdown matches the total.
         val ingredientCost = money(ingredientCostRaw)
-        val wasteCost = money(ingredientCost.multiply(wastePercent).divide(HUNDRED, 8, RoundingMode.HALF_UP))
+        // Division by 100 is exact for BigDecimal; round only once to cents.
+        val wasteCost = ingredientCost.multiply(wastePercent).divide(HUNDRED, 2, RoundingMode.HALF_UP)
         val packaging = money(packagingCost)
         val other = money(otherVariableCost)
         val total = money(ingredientCost.add(wasteCost).add(packaging).add(other))
         require(total > BigDecimal.ZERO) { "O custo total tem de ser superior a zero para sugerir um preço." }
 
-        val marginFraction = targetGrossMarginPercent.divide(HUNDRED, 8, RoundingMode.HALF_UP)
-        val exVat = money(total.divide(BigDecimal.ONE.subtract(marginFraction), 8, RoundingMode.HALF_UP))
-        val vat = money(exVat.multiply(vatPercent).divide(HUNDRED, 8, RoundingMode.HALF_UP))
+        val marginFraction = targetGrossMarginPercent.divide(HUNDRED)
+        // Round directly to currency precision. An intermediate fixed 8-decimal scale
+        // can turn a value just below half a cent into an apparent exact tie.
+        val exVat = total.divide(BigDecimal.ONE.subtract(marginFraction), 2, RoundingMode.HALF_UP)
+        val vat = exVat.multiply(vatPercent).divide(HUNDRED, 2, RoundingMode.HALF_UP)
         val includingVat = money(exVat.add(vat))
         val estimatedMargin = money(
             exVat.subtract(total).multiply(HUNDRED).divide(exVat, 8, RoundingMode.HALF_UP)
