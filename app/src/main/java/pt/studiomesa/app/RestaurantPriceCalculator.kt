@@ -56,11 +56,13 @@ object RestaurantPriceCalculator {
         val ingredientCostRaw = ingredients.fold(BigDecimal.ZERO) { sum, item ->
             sum.add(item.quantityUsed.multiply(item.costPerUnit))
         }
+        // Calculate from the displayed, cent-rounded components so the breakdown
+        // always adds up to the displayed total, including for fractional unit costs.
         val ingredientCost = money(ingredientCostRaw)
-        val wasteCost = money(ingredientCostRaw.multiply(wastePercent).divide(HUNDRED, 8, RoundingMode.HALF_UP))
+        val wasteCost = money(ingredientCost.multiply(wastePercent).divide(HUNDRED, 8, RoundingMode.HALF_UP))
         val packaging = money(packagingCost)
         val other = money(otherVariableCost)
-        val total = money(ingredientCostRaw.add(wasteCost).add(packagingCost).add(otherVariableCost))
+        val total = money(ingredientCost.add(wasteCost).add(packaging).add(other))
         require(total > BigDecimal.ZERO) { "O custo total tem de ser superior a zero para sugerir um preço." }
 
         val marginFraction = targetGrossMarginPercent.divide(HUNDRED, 8, RoundingMode.HALF_UP)
