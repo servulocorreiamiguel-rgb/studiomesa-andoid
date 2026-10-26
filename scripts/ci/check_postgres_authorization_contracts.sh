@@ -225,6 +225,7 @@ PRICE_MENU_ITEM_A="99999999-1111-4111-8111-111111111111"
 PRICE_MENU_ITEM_B="99999999-2222-4222-8222-222222222222"
 PRICE_ACTION_ID="99999999-3333-4333-8333-333333333333"
 PRICE_OFF_ACTION_ID="99999999-4444-4444-8444-444444444444"
+PRICE_LOW_ACTION_ID="99999999-5555-4555-8555-555555555555"
 
 psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL
 INSERT INTO public.menu_items (
@@ -319,6 +320,22 @@ if apply_advised_menu_price "$USER_A" "$PRICE_ACTION_ID" "$PRICE_MENU_ITEM_A" "1
   echo "ERROR: a client-supplied price that differs from the server calculation was accepted." >&2
   exit 1
 fi
+
+# The UI exposes only price increases. Enforce the same rule in the database RPC,
+# even when a caller supplies a mathematically valid recommendation below the live price.
+if apply_advised_menu_price "$USER_A" "$PRICE_LOW_ACTION_ID" "$PRICE_MENU_ITEM_A" "10.00" "8.00" "50.00" >/dev/null 2>&1; then
+  echo "ERROR: the server unexpectedly accepted a price recommendation below the current price." >&2
+  exit 1
+fi
+price_after_rejected_decrease="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT price::text FROM public.menu_items WHERE id = '$PRICE_MENU_ITEM_A'::uuid;")"
+low_price_audit_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*)::text FROM private.restaurant_price_adviser_audit WHERE action_id = '$PRICE_LOW_ACTION_ID'::uuid;")"
+if [ "$price_after_rejected_decrease" != "10.00" ] || [ "$low_price_audit_count" != "0" ]; then
+  echo "ERROR: a rejected price decrease changed the menu or wrote an audit row." >&2
+  exit 1
+fi
+echo "PASS: server rejects price decreases without changing the menu or writing an audit row."
 
 PRICE_APPLY_RESULT="$(apply_advised_menu_price "$USER_A" "$PRICE_ACTION_ID" "$PRICE_MENU_ITEM_A" "10.00" "13.33" "30.00")"
 EXPECTED_PRICE_APPLY="$PRICE_ACTION_ID|$PRICE_MENU_ITEM_A|10.00|13.33|4.00|30.00|false"
