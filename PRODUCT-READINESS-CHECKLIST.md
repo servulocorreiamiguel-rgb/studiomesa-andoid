@@ -70,10 +70,11 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 
 - [x] Separação de contas, papéis owner/staff e código de adesão de equipa.
 - [x] Proprietário pode consultar membros, remover o acesso de um funcionário e renovar automaticamente o código de adesão após a remoção.
-- [ ] Permissões granulares por função; atualmente os funcionários têm permissões operacionais gerais.
+- [x] Verificado em teste transacional que operações administrativas de proprietário (consultar equipa, renovar códigos e remover membros) são recusadas a uma conta `staff`.
+- [ ] Definir e implementar permissões granulares para as restantes operações; atualmente os funcionários têm permissões operacionais gerais.
 - [ ] Suspensão temporária, horários/turnos e trilho de auditoria administrativo completo.
 - [ ] Verificar em testes que a revogação é refletida em todos os dispositivos; ecrãs ativos podem continuar a mostrar dados já carregados até atualizar/reabrir.
-- [x] Ensaio transacional de isolamento no Supabase: duas contas só viram os próprios dados em `restaurants`, `restaurant_staff`, `menu_items`, `restaurant_tables` e `restaurant_orders`; chamadas de criação de stock e reservas para o restaurante alheio foram recusadas. Todos os registos temporários foram revertidos e a ausência de resíduos foi confirmada.
+- [x] Ensaios transacionais live: duas contas só viram os próprios dados em `restaurants`, `restaurant_staff`, `menu_items`, `restaurant_tables` e `restaurant_orders`; RPCs de criação de stock/reserva para o restaurante alheio foram recusadas. Uma conta `staff` não conseguiu listar a equipa, renovar códigos de equipa/clientes ou remover outro membro. Os testes foram revertidos e verificou-se que não ficaram registos temporários.
 - [ ] Alargar os testes de isolamento a fidelização, restantes RPCs, cliente Android com sessões reais e pedidos concorrentes.
 
 ## Segurança e continuidade
