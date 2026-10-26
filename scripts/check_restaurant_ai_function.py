@@ -98,18 +98,18 @@ def validate_ai_function(
         errors.append("The Android UI must disclose that the first version processes text locally.")
 
     required_engine_patterns = [
-        (r'object\\s+RestaurantContentEngine', "must declare the local content engine"),
-        (r'fun\\s+generate\\s*\\(', "must implement a generation entry point"),
+        (r'object\s+RestaurantContentEngine', "must declare the local content engine"),
+        (r'fun\s+generate\s*\(', "must implement a generation entry point"),
         (r'containsCustomerContactData', "must detect common customer contact details"),
-        (r'cleanTitle\\.length\\s+in\\s+2\\.\\.120', "must bound title length"),
-        (r'cleanFacts\\.length\\s+in\\s+10\\.\\.1500', "must bound facts length"),
-        (r'toByteArray\\(Charsets\\.UTF_8\\)', "must bound local UTF-8 input size"),
+        (r'cleanTitle\.length\s+in\s+2\.\.120', "must bound title length"),
+        (r'cleanFacts\.length\s+in\s+10\.\.1500', "must bound facts length"),
+        (r'toByteArray\(Charsets\.UTF_8\)', "must bound local UTF-8 input size"),
         (r'content_ideas', "must support the content-ideas mode"),
     ]
     for pattern, description in required_engine_patterns:
         if not re.search(pattern, local_engine_source, re.IGNORECASE):
             errors.append("The local StudioMesa content engine " + description + ".")
-    if re.search(r'HttpURLConnection|OkHttpClient|java\\.net\\.URL|ktor\\.client|https?://', local_engine_source, re.IGNORECASE):
+    if re.search(r'HttpURLConnection|OkHttpClient|java\.net\.URL|ktor\.client|https?://', local_engine_source, re.IGNORECASE):
         errors.append("The local StudioMesa content engine must not make network requests.")
     if "/functions/v1/restaurant-ai-assistant" not in api_source:
         errors.append("The Android API must call the server function endpoint.")
@@ -138,7 +138,7 @@ def main() -> int:
         for error in errors:
             print(" - " + error, file=sys.stderr)
         return 1
-    print("Restaurant AI guard passed: authenticated owner, server secret gate, quota, bounds, privacy guard, and review-only output.")
+    print("StudioMesa guards passed: optional server AI is gated; local engine is bounded, privacy-aware, and network-free.")
     return 0
 
 if __name__ == "__main__":
