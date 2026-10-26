@@ -28,6 +28,7 @@ internal data class PriceCalculationResult(
  */
 internal object PriceCalculator {
     private val decimalInput = Regex("^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)$")
+    private const val MAX_INPUT_LENGTH = 64
     private val zero = BigDecimal.ZERO
     private val oneHundred = BigDecimal("100")
 
@@ -58,7 +59,7 @@ internal object PriceCalculator {
             2,
             RoundingMode.HALF_UP
         )
-        if (suggestedPrice <= zero || !suggestedPrice.toDouble().isFinite()) {
+        if (suggestedPrice <= zero) {
             throw PriceCalculationException(
                 PriceInputField.TARGET_COST_PERCENT,
                 "Os valores são demasiado elevados para calcular um preço."
@@ -90,6 +91,9 @@ internal object PriceCalculator {
         errorMessage: String
     ): BigDecimal {
         val normalized = rawText.trim().replace(',', '.')
+        if (normalized.length > MAX_INPUT_LENGTH) {
+            throw PriceCalculationException(field, "O valor introduzido é demasiado longo.")
+        }
         if (normalized.isEmpty() || !decimalInput.matches(normalized)) {
             throw PriceCalculationException(field, errorMessage)
         }
