@@ -305,6 +305,52 @@ class MainActivitySmokeTest {
     }
 
     @Test
+    fun premiumRestaurantCanAnalyzeMenuPricesWithoutChangingTheMenu() {
+        val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
+        assumeTrue(
+            "The local price adviser is only available in Premium restaurant management.",
+            packageName.contains(".premium.") && !isCustomerVariant()
+        )
+
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val prefs = context.getSharedPreferences("studiomesa_backend", Context.MODE_PRIVATE)
+        val secureSession = SecureSessionStore(context)
+        secureSession.clear()
+        prefs.edit().clear().commit()
+
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    val page = MainActivity::class.java.getDeclaredField("activePage")
+                    page.isAccessible = true
+                    page.set(activity, "Conteúdo IA")
+                    val render = MainActivity::class.java.getDeclaredMethod("renderApp")
+                    render.isAccessible = true
+                    render.invoke(activity)
+                }
+
+                onView(withText("Consultor de preços"))
+                    .perform(scrollTo())
+                    .check(matches(isDisplayed()))
+                onView(withHint("Ex.: 30"))
+                    .perform(scrollTo(), replaceText("30"))
+                onView(withText("Analisar preços da carta"))
+                    .perform(scrollTo(), click())
+
+                onView(withText("Análise de preços da carta"))
+                    .check(matches(isDisplayed()))
+                onView(withText(containsString("Nada foi alterado automaticamente")))
+                    .check(matches(isDisplayed()))
+                onView(withText("Fechar"))
+                    .perform(click())
+            }
+        } finally {
+            secureSession.clear()
+            prefs.edit().clear().commit()
+        }
+    }
+
+    @Test
     fun premiumRestaurantCanGenerateAnOfflineAiDraftWithoutExternalServices() {
         val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
         assumeTrue(
