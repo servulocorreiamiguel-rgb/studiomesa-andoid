@@ -67,6 +67,23 @@ class PriceCalculatorTest {
     }
 
     @Test
+    fun rejectsOverlongCostInput() {
+        val error = assertThrows(PriceCalculationException::class.java) {
+            PriceCalculator.calculate("1".repeat(65), "30")
+        }
+        assertEquals(PriceInputField.COST, error.field)
+    }
+
+    @Test
+    fun rejectsOverlongTargetPercentageInput() {
+        val percentage = "0." + "0".repeat(62) + "1"
+        val error = assertThrows(PriceCalculationException::class.java) {
+            PriceCalculator.calculate("1.00", percentage)
+        }
+        assertEquals(PriceInputField.TARGET_COST_PERCENT, error.field)
+    }
+
+    @Test
     fun rejectsInvalidAndNonFiniteNumericText() {
         listOf("", "1.2.3", "NaN", "Infinity", "1e3").forEach { value ->
             assertThrows(PriceCalculationException::class.java) {
