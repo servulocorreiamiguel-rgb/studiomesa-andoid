@@ -29,6 +29,11 @@ REVOKE_FUNCTION_RE = re.compile(
     r"([\s\S]*?);",
     re.IGNORECASE,
 )
+GRANT_FUNCTION_RE = re.compile(
+    r"\bgrant\s+(?:all(?:\s+privileges)?|execute)\s+on\s+function\b"
+    r"([\s\S]*?);",
+    re.IGNORECASE,
+)
 SECRET_PATTERNS = (
     re.compile(r"\bsb_secret_[A-Za-z0-9_-]{12,}\b"),
     re.compile(r"\bSUPABASE_SERVICE_ROLE_KEY\s*[:=]\s*['\"][^'\"]+['\"]", re.IGNORECASE),
@@ -72,6 +77,56 @@ def revoked_roles(sql: str, function_name: str) -> set[str]:
     return roles
 
 
+def granted_roles(sql: str, function_name: str) -> set[str]:
+    """Return roles explicitly granted EXECUTE on a named function."""
+    roles: set[str] = set()
+    qualified_name = re.escape(function_name)
+    for match in GRANT_FUNCTION_RE.finditer(sql):
+        statement = match.group(1)
+        if not re.search(rf"\b{qualified_name}\s*\(", statement, re.IGNORECASE):
+            continue
+        to_clause = re.split(r"\bto\b", statement, flags=re.IGNORECASE)[-1].lower()
+        if re.search(r"\bpublic\b", to_clause):
+            roles.add("PUBLIC")
+        if re.search(r"\banon\b", to_clause):
+            roles.add("anon")
+        if re.search(r"\bauthenticated\b", to_clause):
+            roles.add("authenticated")
+    return roles
+
+
+def has_auth_uid_guard(sql: str, function_name: str) -> bool:
+    """Require auth.uid() in the actual body of the named function."""
+    for match in FUNCTION_RE.finditer(sql):
+        if match.group(1).lower() != function_name.lower():
+            continue
+        tail = sql[match.start():]
+        body_start = re.search(r"\bas\s+\$function\$", tail, re.IGNORECASE)
+        if body_start is None:
+            continue
+        body_tail = tail[body_start.end():]
+        body_end = re.search(r"\$function\$\s*;", body_tail)
+        if body_end is None:
+            continue
+        if re.search(r"\bauth\.uid\s*\(", body_tail[:body_end.start()], re.IGNORECASE):
+            return True
+    return False
+
+
+def referenced_by_policy(sql: str, function_name: str) -> bool:
+    """Require an actual CREATE/ALTER POLICY statement to call the helper."""
+    qualified_name = re.escape(function_name)
+    policy_statements = re.findall(
+        r"\b(?:create|alter)\s+policy\b([\s\S]*?);",
+        sql,
+        re.IGNORECASE,
+    )
+    return any(
+        re.search(rf"\b{qualified_name}\s*\(", statement, re.IGNORECASE)
+        for statement in policy_statements
+    )
+
+
 def audit_migration_sql(sql: str) -> tuple[list[str], int, int]:
     errors: list[str] = []
     definitions = security_definer_headers(sql)
@@ -81,8 +136,20 @@ def audit_migration_sql(sql: str) -> tuple[list[str], int, int]:
         if not re.search(r"\bset\s+search_path\s*(?:=|to)\s*''", header, re.IGNORECASE):
             errors.append(f"{name}: SECURITY DEFINER sem SET search_path = ''.")
 
-        required = {"PUBLIC", "anon"} if name.startswith("public.") else {"PUBLIC", "anon", "authenticated"}
-        missing = required - revoked_roles(sql, name)
+        revoked = revoked_roles(sql, name)
+        # This one private membership helper must be executable by authenticated
+        # because the app's RLS policies invoke it. Permit this narrow exception
+        # only when its body checks auth.uid(), policies call it, authenticated
+        # is explicitly granted EXECUTE, and PUBLIC/anon are explicitly revoked.
+        safe_rls_helper = (
+            name == "private.is_restaurant_staff"
+            and has_auth_uid_guard(sql, name)
+            and referenced_by_policy(sql, name)
+            and "authenticated" in granted_roles(sql, name)
+            and {"PUBLIC", "anon"}.issubset(revoked)
+        )
+        required = {"PUBLIC", "anon"} if name.startswith("public.") or safe_rls_helper else {"PUBLIC", "anon", "authenticated"}
+        missing = required - revoked
         if missing:
             errors.append(
                 f"{name}: falta revogar EXECUTE a {', '.join(sorted(missing))} "
