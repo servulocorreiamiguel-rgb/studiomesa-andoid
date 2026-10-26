@@ -41,6 +41,13 @@ jobs:
             is_immutable_action_ref("actions/checkout@0123456789abcdef")
         )
 
+    def test_nested_repository_action_path_is_accepted(self):
+        self.assertTrue(
+            is_immutable_action_ref(
+                "gradle/actions/setup-gradle@0123456789abcdef0123456789abcdef01234567"
+            )
+        )
+
     def test_local_action_is_accepted(self):
         self.assertTrue(is_immutable_action_ref("./.github/actions/local-check"))
 
