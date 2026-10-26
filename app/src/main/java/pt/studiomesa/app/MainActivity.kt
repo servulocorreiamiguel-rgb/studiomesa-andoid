@@ -22,6 +22,7 @@ import android.widget.Spinner
 import android.widget.TextView
 import org.json.JSONArray
 import org.json.JSONObject
+import java.math.BigDecimal
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -1277,12 +1278,12 @@ class MainActivity : Activity() {
                 return@primaryButton
             }
 
-            result.text = "PREÇO INDICATIVO\n" + money(calculation.suggestedPrice.toDouble()) +
-                "\n\nCusto por unidade: " + money(calculation.cost.toDouble()) +
+            result.text = "PREÇO INDICATIVO\n" + money(calculation.suggestedPrice) +
+                "\n\nCusto por unidade: " + money(calculation.cost) +
                 "\nCusto sobre o preço final: " + String.format(
                     Locale("pt", "PT"), "%.1f%%", calculation.actualCostPercent.toDouble()
                 ) +
-                "\nMargem bruta estimada: " + money(calculation.grossProfit.toDouble()) +
+                "\nMargem bruta estimada: " + money(calculation.grossProfit) +
                 "\nMargem bruta: " + String.format(
                     Locale("pt", "PT"), "%.1f%%", calculation.grossMarginPercent.toDouble()
                 )
@@ -3749,16 +3750,16 @@ class MainActivity : Activity() {
             val itemDetails = StringBuilder()
             itemDetails.append("Estado: ").append(statusText).append('\n')
             advice.currentPrice?.let {
-                itemDetails.append("Preço atual: ").append(money(it.toDouble())).append('\n')
+                itemDetails.append("Preço atual: ").append(money(it)).append('\n')
             }
             advice.unitCost?.let {
-                itemDetails.append("Custo unitário: ").append(money(it.toDouble())).append('\n')
+                itemDetails.append("Custo unitário: ").append(money(it)).append('\n')
             }
             advice.directCostPercent?.let {
                 itemDetails.append("Custo direto / preço: ").append(formatAdvicePercent(it)).append("%\n")
             }
             advice.indicativePriceAtTarget?.let {
-                itemDetails.append("Preço teórico para este objetivo: ").append(money(it.toDouble())).append('\n')
+                itemDetails.append("Preço teórico para este objetivo: ").append(money(it)).append('\n')
             }
             itemDetails.append(advice.explanation)
             itemCard.addView(label(itemDetails.toString(), 12f, false, ink))
@@ -3776,7 +3777,7 @@ class MainActivity : Activity() {
             if (canApply) {
                 addGap(itemCard, 6)
                 itemCard.addView(primaryButton(
-                    "Rever e aplicar ${money(suggestedPrice!!.toDouble())}"
+                    "Rever e aplicar ${money(suggestedPrice!!)}"
                 ) {
                     confirmApplyRecommendedPrice(advice, report.targetCostPercent) {
                         reportDialog?.dismiss()
@@ -3837,9 +3838,9 @@ class MainActivity : Activity() {
             .setTitle("Confirmar alteração de preço?")
             .setMessage(
                 "Artigo: ${advice.itemName}\n" +
-                    "Preço atual: ${money(previousPrice.toDouble())}\n" +
-                    "Custo unitário registado: ${money(advice.unitCost.toDouble())}\n" +
-                    "Novo preço: ${money(newPrice.toDouble())}\n" +
+                    "Preço atual: ${money(previousPrice)}\n" +
+                    "Custo unitário registado: ${money(advice.unitCost)}\n" +
+                    "Novo preço: ${money(newPrice)}\n" +
                     "Objetivo de custo direto: ${formatAdvicePercent(targetCostPercent)}%\n\n" +
                     "Ao confirmar, este preço será alterado na carta do restaurante e a operação ficará registada no histórico. O servidor volta a calcular a recomendação usando o custo e o preço atuais. IVA e custos indiretos não estão incluídos."
             )
@@ -3900,8 +3901,8 @@ class MainActivity : Activity() {
                             .setTitle("Preço registado")
                             .setMessage(
                                 "${advice.itemName}\n" +
-                                    "Preço anterior: ${money(previousPrice.toDouble())}\n" +
-                                    "Novo preço: ${money(newPrice.toDouble())}\n\n" +
+                                    "Preço anterior: ${money(previousPrice)}\n" +
+                                    "Novo preço: ${money(newPrice)}\n\n" +
                                     "$statusLine\n$cacheLine\nConsulta o histórico para rever a operação."
                             )
                             .setPositiveButton("OK", null)
@@ -4630,6 +4631,9 @@ class MainActivity : Activity() {
     private fun addGap(parent: LinearLayout, height: Int) {
         parent.addView(View(this), LinearLayout.LayoutParams(1, dp(height)))
     }
+
+    private fun money(value: BigDecimal): String =
+        NumberFormat.getCurrencyInstance(Locale("pt", "PT")).format(value)
 
     private fun money(value: Double): String =
         NumberFormat.getCurrencyInstance(Locale("pt", "PT")).format(value)
