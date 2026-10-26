@@ -1354,7 +1354,8 @@ class MainActivity : Activity() {
         form.addView(primaryButton("Calcular preço sugerido") {
             fun parseField(field: EditText, description: String): java.math.BigDecimal? {
                 val raw = field.text.toString().trim().replace(',', '.')
-                if (raw.isEmpty() || raw.length > 32) {
+                val decimalPattern = Regex("^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)$")
+                if (raw.isEmpty() || raw.length > 32 || !decimalPattern.matches(raw)) {
                     field.error = "Introduz $description válido."
                     return null
                 }
@@ -4198,101 +4199,3 @@ class MainActivity : Activity() {
         addGap(card, 6)
         card.addView(label(message, 13f, false, muted))
         return card
-    }
-
-    private fun makeCard(padding: Int, color: Int = white): LinearLayout =
-        LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(padding), dp(padding), dp(padding), dp(padding))
-            background = rounded(color, 19)
-            elevation = dp(1).toFloat()
-        }
-
-    private fun cardParams(): LinearLayout.LayoutParams =
-        LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 0, 0, dp(11)) }
-
-    private fun fieldParams(): LinearLayout.LayoutParams =
-        LinearLayout.LayoutParams(-1, dp(48)).apply { setMargins(0, dp(5), 0, dp(8)) }
-
-    private fun inputField(hintText: String, type: Int): EditText =
-        EditText(this).apply {
-            hint = hintText
-            inputType = type
-            textSize = 15f
-            setTextColor(ink)
-            setHintTextColor(muted)
-            setPadding(dp(12), dp(8), dp(12), dp(8))
-            background = rounded(white, 12)
-            isSingleLine = true
-        }
-
-    private fun multilineInputField(hintText: String): EditText =
-        EditText(this).apply {
-            hint = hintText
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-            textSize = 14f
-            setTextColor(ink)
-            setHintTextColor(muted)
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-            background = rounded(white, 12)
-            minLines = 2
-            maxLines = 3
-            isSingleLine = false
-            gravity = Gravity.TOP or Gravity.START
-        }
-
-    private fun multilineFieldParams(): LinearLayout.LayoutParams =
-        LinearLayout.LayoutParams(-1, dp(76)).apply { setMargins(0, dp(5), 0, dp(8)) }
-
-    private fun primaryButton(title: String, action: () -> Unit): Button =
-        Button(this).apply {
-            text = title
-            textSize = 13f
-            typeface = Typeface.create("sans-serif", Typeface.BOLD)
-            isAllCaps = false
-            setTextColor(forestDeep)
-            background = rounded(copper, 15)
-            elevation = dp(1).toFloat()
-            setPadding(dp(12), dp(3), dp(12), dp(3))
-            setOnClickListener { action() }
-        }
-
-    private fun secondaryButton(title: String, action: () -> Unit): Button =
-        Button(this).apply {
-            text = title
-            textSize = 11.5f
-            typeface = Typeface.create("sans-serif", Typeface.BOLD)
-            isAllCaps = false
-            setTextColor(forest)
-            background = rounded(paleGreen, 14)
-            elevation = 0f
-            setPadding(dp(8), dp(2), dp(8), dp(2))
-            setOnClickListener { action() }
-        }
-
-    private fun label(value: String, size: Float, bold: Boolean, color: Int): TextView =
-        TextView(this).apply {
-            text = value
-            textSize = size
-            setTextColor(color)
-            if (bold) typeface = Typeface.create(if (size >= 23f) "serif" else "sans-serif", Typeface.BOLD)
-            setLineSpacing(dp(2).toFloat(), 1.0f)
-        }
-
-    private fun rounded(color: Int, radius: Int): GradientDrawable =
-        GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            setColor(color)
-            cornerRadius = dp(radius).toFloat()
-        }
-
-    private fun addGap(parent: LinearLayout, height: Int) {
-        parent.addView(View(this), LinearLayout.LayoutParams(1, dp(height)))
-    }
-
-    private fun money(value: Double): String =
-        NumberFormat.getCurrencyInstance(Locale("pt", "PT")).format(value)
-
-    private fun dp(value: Int): Int =
-        (value * resources.displayMetrics.density).toInt()
-}
