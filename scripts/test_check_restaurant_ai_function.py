@@ -163,6 +163,15 @@ class RestaurantAIFunctionGuardTests(unittest.TestCase):
         errors = self.validate(engine=VALID_ENGINE + ' val endpoint = "https://example.invalid"')
         self.assertTrue(any("must not make network requests" in error for error in errors))
 
+
+    def test_rejects_local_engine_without_email_pattern(self):
+        errors = self.validate(engine=VALID_ENGINE.replace("emailPattern", "emailCheck"))
+        self.assertTrue(any("common email patterns" in error for error in errors))
+
+    def test_rejects_local_engine_without_portuguese_phone_pattern(self):
+        errors = self.validate(engine=VALID_ENGINE.replace("portuguesePhonePattern", "phoneCheck"))
+        self.assertTrue(any("common Portuguese phone patterns" in error for error in errors))
+
     def test_rejects_local_engine_without_contact_data_guard(self):
         engine = VALID_ENGINE.replace("containsCustomerContactData", "contactCheck")
         errors = self.validate(engine=engine)
