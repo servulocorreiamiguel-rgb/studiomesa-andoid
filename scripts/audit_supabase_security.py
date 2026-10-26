@@ -95,8 +95,8 @@ def granted_roles(sql: str, function_name: str) -> set[str]:
     return roles
 
 
-def has_auth_uid_guard(sql: str, function_name: str) -> bool:
-    """Require auth.uid() in the actual body of the named function."""
+def has_restaurant_membership_scope_guard(sql: str, function_name: str) -> bool:
+    """Require an explicit user-and-restaurant membership check in the helper body."""
     for match in FUNCTION_RE.finditer(sql):
         if match.group(1).lower() != function_name.lower():
             continue
@@ -108,7 +108,23 @@ def has_auth_uid_guard(sql: str, function_name: str) -> bool:
         body_end = re.search(r"\$function\$\s*;", body_tail)
         if body_end is None:
             continue
-        if re.search(r"\bauth\.uid\s*\(", body_tail[:body_end.start()], re.IGNORECASE):
+        body = body_tail[:body_end.start()]
+        checks_restaurant = re.search(
+            r"\brs\.restaurant_id\s*=\s*p_restaurant_id\b",
+            body,
+            re.IGNORECASE,
+        )
+        checks_user = re.search(
+            r"\brs\.user_id\s*=\s*\(\s*select\s+auth\.uid\s*\(\s*\)\s*\)",
+            body,
+            re.IGNORECASE,
+        )
+        reads_membership_table = re.search(
+            r"\bfrom\s+public\.restaurant_staff\s+(?:as\s+)?rs\b",
+            body,
+            re.IGNORECASE,
+        )
+        if reads_membership_table and checks_restaurant and checks_user:
             return True
     return False
 
@@ -143,7 +159,7 @@ def audit_migration_sql(sql: str) -> tuple[list[str], int, int]:
         # is explicitly granted EXECUTE, and PUBLIC/anon are explicitly revoked.
         safe_rls_helper = (
             name == "private.is_restaurant_staff"
-            and has_auth_uid_guard(sql, name)
+            and has_restaurant_membership_scope_guard(sql, name)
             and referenced_by_policy(sql, name)
             and "authenticated" in granted_roles(sql, name)
             and {"PUBLIC", "anon"}.issubset(revoked)
