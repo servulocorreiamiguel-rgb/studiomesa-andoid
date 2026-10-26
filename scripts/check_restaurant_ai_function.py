@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static release guard for the optional restaurant AI Edge Function."""
+"""Static release guard for the local StudioMesa engine and optional remote AI endpoint."""
 from pathlib import Path
 import re
 import sys
@@ -101,6 +101,8 @@ def validate_ai_function(
         (r'object\s+RestaurantContentEngine', "must declare the local content engine"),
         (r'fun\s+generate\s*\(', "must implement a generation entry point"),
         (r'containsCustomerContactData', "must detect common customer contact details"),
+        (r'emailPattern', "must detect common email patterns"),
+        (r'portuguesePhonePattern', "must detect common Portuguese phone patterns"),
         (r'cleanTitle\.length\s+in\s+2\.\.120', "must bound title length"),
         (r'cleanFacts\.length\s+in\s+10\.\.1500', "must bound facts length"),
         (r'toByteArray\(Charsets\.UTF_8\)', "must bound local UTF-8 input size"),
@@ -134,7 +136,7 @@ def main() -> int:
 
     errors = validate_ai_function(config, source, validation_source, migration, main_activity, api_source, local_engine_source)
     if errors:
-        print("Restaurant AI security guard FAILED:")
+        print("StudioMesa AI security guard FAILED:")
         for error in errors:
             print(" - " + error, file=sys.stderr)
         return 1
