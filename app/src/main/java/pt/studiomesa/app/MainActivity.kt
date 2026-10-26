@@ -30,6 +30,13 @@ import java.util.Locale
 import java.util.TimeZone
 
 class MainActivity : Activity() {
+    private data class IngredientFields(
+        val container: LinearLayout,
+        val name: EditText,
+        val quantity: EditText,
+        val unitCost: EditText
+    )
+
     private lateinit var store: RestaurantStore
     private lateinit var appRoot: LinearLayout
     private var activePage = "Início"
@@ -1243,60 +1250,191 @@ class MainActivity : Activity() {
     }
 
     private fun renderPriceCalculator(container: LinearLayout) {
-        pageIntro(container, "Preço Justo", "Uma estimativa matemática baseada no custo.")
+        pageIntro(container, "Preço Justo", "Estima o custo de uma dose e um preço de venda com base nos valores que introduzires.")
         addGap(container, 5)
-        container.addView(label("Não consulta preços concorrentes em tempo real e não substitui uma análise completa de custos.", 12.5f, false, muted))
-        addGap(container, 15)
+        container.addView(label(
+            "Calculadora offline. Não consulta concorrentes, não altera os preços da carta e não guarda estes valores automaticamente.",
+            12.5f, false, muted
+        ))
+        addGap(container, 12)
 
-        val form = makeCard(17)
-        form.addView(label("Custo por unidade (€)", 10f, true, forestSoft))
-        val costField = inputField("Ex.: 3,20", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
-        form.addView(costField, fieldParams())
-        addGap(form, 7)
-        form.addView(label("Custo pretendido (% do preço)", 10f, true, forestSoft))
-        val percentageField = inputField("Ex.: 30", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
-        percentageField.setText("30")
-        form.addView(percentageField, fieldParams())
+        val form = makeCard(16)
+        form.addView(label("INGREDIENTES", 10f, true, forestSoft))
+        addGap(form, 4)
+        form.addView(label("Usa unidades consistentes: por exemplo, gramas usadas e custo por grama.", 11.5f, false, muted))
+        addGap(form, 8)
+
+        val ingredientRows = mutableListOf<IngredientFields>()
+        fun addIngredientRow() {
+            val rowCard = makeCard(11, paper)
+            rowCard.addView(label("Ingrediente ${ingredientRows.size + 1}", 11f, true, forest))
+            addGap(rowCard, 4)
+            val nameField = inputField(
+                "Nome do ingrediente",
+                InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            ).apply {
+                filters = arrayOf(InputFilter.LengthFilter(80))
+            }
+            rowCard.addView(nameField, fieldParams())
+            addGap(rowCard, 4)
+            val valuesRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            val quantityField = inputField(
+                "Quantidade usada",
+                InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+            )
+            val unitCostField = inputField(
+                "Custo por unidade (€)",
+                InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+            )
+            valuesRow.addView(quantityField, LinearLayout.LayoutParams(0, -2, 1f).apply {
+                setMargins(0, 0, dp(5), 0)
+            })
+            valuesRow.addView(unitCostField, LinearLayout.LayoutParams(0, -2, 1f).apply {
+                setMargins(dp(5), 0, 0, 0)
+            })
+            rowCard.addView(valuesRow)
+            form.addView(rowCard, cardParams())
+            ingredientRows.add(IngredientFields(rowCard, nameField, quantityField, unitCostField))
+        }
+        addIngredientRow()
+        addGap(form, 3)
+        form.addView(secondaryButton("+ Adicionar ingrediente") {
+            if (ingredientRows.size >= 30) {
+                AlertDialog.Builder(this)
+                    .setMessage("O limite é de 30 ingredientes por cálculo.")
+                    .setPositiveButton("OK", null)
+                    .show()
+            } else {
+                addIngredientRow()
+            }
+        }, LinearLayout.LayoutParams(-1, dp(42)))
+        addGap(form, 5)
+        form.addView(secondaryButton("Remover último ingrediente") {
+            if (ingredientRows.size > 1) {
+                val last = ingredientRows.removeAt(ingredientRows.lastIndex)
+                form.removeView(last.container)
+            }
+        }, LinearLayout.LayoutParams(-1, dp(40)))
+
+        addGap(form, 13)
+        form.addView(label("OUTROS CUSTOS POR DOSE", 10f, true, forestSoft))
+        addGap(form, 3)
+        val wasteField = inputField("Desperdício dos ingredientes (%) — ex.: 5", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+        wasteField.setText("0")
+        form.addView(wasteField, fieldParams())
+        addGap(form, 5)
+        val packagingField = inputField("Custo da embalagem (€) — usa 0 se não existir", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+        packagingField.setText("0")
+        form.addView(packagingField, fieldParams())
+        addGap(form, 5)
+        val otherCostField = inputField("Outros custos variáveis (€) — usa 0 se não existirem", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+        otherCostField.setText("0")
+        form.addView(otherCostField, fieldParams())
+        addGap(form, 13)
+
+        form.addView(label("OBJETIVO DE PREÇO", 10f, true, forestSoft))
+        addGap(form, 3)
+        val marginField = inputField("Margem bruta pretendida (%)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+        marginField.setText("60")
+        form.addView(marginField, fieldParams())
+        addGap(form, 5)
+        val vatField = inputField("IVA confirmado pelo restaurante (%)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+        form.addView(vatField, fieldParams())
+        addGap(form, 4)
+        form.addView(label(
+            "Não assumimos uma taxa de IVA: confirma a aplicável ao artigo antes de calcular.",
+            11f, false, muted
+        ))
+
         addGap(form, 10)
-
-        val result = label("Introduz os valores e calcula um preço indicativo.", 14f, false, ink).apply {
+        val result = label("Preenche os dados e calcula uma estimativa.", 13.5f, false, ink).apply {
             setPadding(dp(12), dp(12), dp(12), dp(12))
             background = rounded(paper, 12)
         }
         form.addView(primaryButton("Calcular preço sugerido") {
-            val calculation = try {
-                PriceCalculator.calculate(
-                    costField.text.toString(),
-                    percentageField.text.toString()
-                )
-            } catch (error: PriceCalculationException) {
-                when (error.field) {
-                    PriceInputField.COST -> costField.error = error.message
-                    PriceInputField.TARGET_COST_PERCENT -> percentageField.error = error.message
+            fun parseField(field: EditText, description: String): java.math.BigDecimal? {
+                val raw = field.text.toString().trim().replace(',', '.')
+                if (raw.isEmpty() || raw.length > 32) {
+                    field.error = "Introduz $description válido."
+                    return null
                 }
+                val value = raw.toBigDecimalOrNull()
+                if (value == null) field.error = "Introduz $description válido."
+                return value
+            }
+
+            val parsedIngredients = mutableListOf<RestaurantPriceCalculator.Ingredient>()
+            for (row in ingredientRows) {
+                val name = row.name.text.toString().trim()
+                if (name.isBlank()) {
+                    row.name.error = "Introduz o nome do ingrediente."
+                    return@primaryButton
+                }
+                val quantity = parseField(row.quantity, "uma quantidade")
+                    ?: return@primaryButton
+                val unitCost = parseField(row.unitCost, "um custo por unidade")
+                    ?: return@primaryButton
+                parsedIngredients.add(
+                    RestaurantPriceCalculator.Ingredient(
+                        name = name,
+                        quantityUsed = quantity,
+                        costPerUnit = unitCost
+                    )
+                )
+            }
+
+            val waste = parseField(wasteField, "uma percentagem de desperdício")
+                ?: return@primaryButton
+            val packaging = parseField(packagingField, "um custo de embalagem")
+                ?: return@primaryButton
+            val other = parseField(otherCostField, "outros custos variáveis")
+                ?: return@primaryButton
+            val margin = parseField(marginField, "uma margem pretendida")
+                ?: return@primaryButton
+            val vat = parseField(vatField, "o IVA confirmado pelo restaurante")
+                ?: return@primaryButton
+
+            val calculation = try {
+                RestaurantPriceCalculator.calculate(
+                    ingredients = parsedIngredients,
+                    wastePercent = waste,
+                    packagingCost = packaging,
+                    otherVariableCost = other,
+                    targetGrossMarginPercent = margin,
+                    vatPercent = vat
+                )
+            } catch (error: IllegalArgumentException) {
+                result.text = error.message ?: "Não foi possível calcular com estes valores."
+                result.setTextColor(red)
                 return@primaryButton
             }
 
-            result.text = "PREÇO INDICATIVO\n" + money(calculation.suggestedPrice.toDouble()) +
-                "\n\nCusto por unidade: " + money(calculation.cost.toDouble()) +
-                "\nCusto sobre o preço final: " + String.format(
-                    Locale("pt", "PT"), "%.1f%%", calculation.actualCostPercent.toDouble()
-                ) +
-                "\nMargem bruta estimada: " + money(calculation.grossProfit.toDouble()) +
-                "\nMargem bruta: " + String.format(
-                    Locale("pt", "PT"), "%.1f%%", calculation.grossMarginPercent.toDouble()
+            result.text = "PREÇO INDICATIVO COM IVA\n" +
+                money(calculation.suggestedPriceIncludingVat.toDouble()) +
+                "\n\nPreço sem IVA: " + money(calculation.suggestedPriceExcludingVat.toDouble()) +
+                "\nIVA calculado: " + money(calculation.vatAmount.toDouble()) +
+                "\n\nCusto dos ingredientes: " + money(calculation.ingredientCost.toDouble()) +
+                "\nDesperdício estimado: " + money(calculation.wasteCost.toDouble()) +
+                "\nEmbalagem: " + money(calculation.packagingCost.toDouble()) +
+                "\nOutros custos variáveis: " + money(calculation.otherVariableCost.toDouble()) +
+                "\nCusto total estimado: " + money(calculation.totalCost.toDouble()) +
+                "\nMargem bruta estimada: " + String.format(
+                    Locale("pt", "PT"), "%.2f%%", calculation.estimatedGrossMarginPercent.toDouble()
                 )
             result.setTextColor(forest)
         }, LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(form, 10)
+        addGap(form, 8)
         form.addView(result)
         container.addView(form, cardParams())
 
         addGap(container, 5)
         val note = makeCard(14, copperPale)
-        note.addView(label("Atenção aos custos indiretos", 14f, true, forest))
+        note.addView(label("Importante: margem bruta não é lucro líquido", 14f, true, forest))
         addGap(note, 5)
-        note.addView(label("IVA, salários, renda, energia, comissões, desperdício e outros encargos não são incluídos automaticamente. Confirma esses valores antes de definir preços reais.", 12.5f, false, ink))
+        note.addView(label(
+            "Inclui ingredientes, desperdício estimado, embalagem e outros custos variáveis que introduzires. Salários, renda, energia, comissões e outros encargos só entram se forem contabilizados nos custos fornecidos. A sugestão não substitui validação contabilística/fiscal nem análise de procura. O cálculo não altera a carta.",
+            12.5f, false, ink
+        ))
         container.addView(note, cardParams())
     }
 
