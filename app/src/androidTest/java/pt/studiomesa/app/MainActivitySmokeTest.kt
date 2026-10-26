@@ -337,9 +337,9 @@ class MainActivitySmokeTest {
                     .check(matches(isDisplayed()))
 
                 onView(withHint("Ex.: Hambúrguer da casa"))
-                    .perform(replaceText("Hambúrguer da casa"))
+                    .perform(scrollTo(), replaceText("Hambúrguer da casa"))
                 onView(withHint("Ingredientes, características e outros factos confirmados…"))
-                    .perform(replaceText("Pão brioche, carne de vaca e alface."))
+                    .perform(scrollTo(), replaceText("Pão brioche, carne de vaca e alface."))
 
                 onView(withText("Gerar rascunho"))
                     .perform(scrollTo(), click())
