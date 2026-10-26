@@ -96,26 +96,29 @@ internal object RestaurantAdvisorEngine {
             )
         }
 
-        val costPercent = cost
-            .divide(price, 4, RoundingMode.HALF_UP)
+        // Compare exact money values, not a rounded display percentage. For example,
+        // 30.04% must exceed a 30% target even if shown with fewer decimal places.
+        val costPercentForDisplay = cost
+            .divide(price, 8, RoundingMode.HALF_UP)
             .multiply(oneHundred)
-            .setScale(1, RoundingMode.HALF_UP)
+            .setScale(2, RoundingMode.HALF_UP)
+        val exceedsTarget = cost.multiply(oneHundred) > price.multiply(target)
 
         return when {
             price <= cost -> MenuPriceAdvice(
-                name, MenuPriceAdviceStatus.URGENT_REVIEW, price, cost, costPercent, indicativePrice,
+                name, MenuPriceAdviceStatus.URGENT_REVIEW, price, cost, costPercentForDisplay, indicativePrice,
                 "O preço atual não cobre o custo unitário registado, antes de IVA e outros encargos."
             )
 
-            costPercent > target -> MenuPriceAdvice(
-                name, MenuPriceAdviceStatus.REVIEW, price, cost, costPercent, indicativePrice,
-                "O custo direto representa " + percentText(costPercent) +
+            exceedsTarget -> MenuPriceAdvice(
+                name, MenuPriceAdviceStatus.REVIEW, price, cost, costPercentForDisplay, indicativePrice,
+                "O custo direto representa " + percentText(costPercentForDisplay) +
                     "% do preço, acima do objetivo configurado de " + percentText(target) +
                     "%. Revê o custo, a porção ou o preço; esta simulação não inclui outros encargos."
             )
 
             else -> MenuPriceAdvice(
-                name, MenuPriceAdviceStatus.WITHIN_TARGET, price, cost, costPercent, indicativePrice,
+                name, MenuPriceAdviceStatus.WITHIN_TARGET, price, cost, costPercentForDisplay, indicativePrice,
                 "A relação custo/preço está dentro do objetivo configurado. Isto, por si só, não garante rentabilidade."
             )
         }

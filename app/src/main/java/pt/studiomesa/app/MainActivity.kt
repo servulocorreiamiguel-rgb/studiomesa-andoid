@@ -3542,7 +3542,22 @@ class MainActivity : Activity() {
         details.append(
             "O preço teórico compara apenas o custo unitário introduzido com o objetivo definido. Não inclui IVA, salários, renda, energia, comissões, desperdício ou outros encargos.\n\n"
         )
-        details.append("Nada foi alterado automaticamente.")
+        details.append("Nada foi alterado automaticamente.\n\n")
+        details.append(
+            if (report.itemsNeedingReview == 1) {
+                "Resumo: 1 artigo precisa de revisão"
+            } else {
+                "Resumo: ${report.itemsNeedingReview} artigos precisam de revisão"
+            }
+        )
+        details.append("; ")
+        details.append(
+            if (report.itemsWithIncompleteData == 1) {
+                "1 artigo com dados incompletos."
+            } else {
+                "${report.itemsWithIncompleteData} artigos com dados incompletos."
+            }
+        )
 
         report.items.forEachIndexed { index, advice ->
             details.append("\n\n")

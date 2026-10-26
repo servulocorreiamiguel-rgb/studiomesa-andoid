@@ -19,7 +19,7 @@ class RestaurantAdvisorEngineTest {
 
         assertEquals(BigDecimal("30.00"), report.targetCostPercent)
         assertEquals(MenuPriceAdviceStatus.REVIEW, advice.status)
-        assertEquals(BigDecimal("40.0"), advice.directCostPercent)
+        assertEquals(BigDecimal("40.00"), advice.directCostPercent)
         assertEquals(BigDecimal("13.33"), advice.indicativePriceAtTarget)
         assertEquals(1, report.itemsNeedingReview)
         assertTrue(advice.explanation.contains("acima do objetivo"))
@@ -33,7 +33,7 @@ class RestaurantAdvisorEngineTest {
         ).items.single()
 
         assertEquals(MenuPriceAdviceStatus.URGENT_REVIEW, advice.status)
-        assertEquals(BigDecimal("100.0"), advice.directCostPercent)
+        assertEquals(BigDecimal("100.00"), advice.directCostPercent)
         assertTrue(advice.explanation.contains("não cobre o custo unitário"))
     }
 
@@ -45,7 +45,7 @@ class RestaurantAdvisorEngineTest {
         ).items.single()
 
         assertEquals(MenuPriceAdviceStatus.WITHIN_TARGET, advice.status)
-        assertEquals(BigDecimal("20.0"), advice.directCostPercent)
+        assertEquals(BigDecimal("20.00"), advice.directCostPercent)
         assertTrue(advice.explanation.contains("não garante rentabilidade"))
     }
 
@@ -90,6 +90,30 @@ class RestaurantAdvisorEngineTest {
                 )
             }
         }
+    }
+
+    @Test
+    fun comparesAgainstTheExactRatioInsteadOfRoundedDisplayPercent() {
+        val aboveTarget = RestaurantAdvisorEngine.analyzeMenu(
+            listOf(MenuEntry("Ligeiramente acima", 100.00, 30.04)),
+            "30"
+        ).items.single()
+        assertEquals(MenuPriceAdviceStatus.REVIEW, aboveTarget.status)
+        assertEquals(BigDecimal("30.04"), aboveTarget.directCostPercent)
+
+        val exactlyOnTarget = RestaurantAdvisorEngine.analyzeMenu(
+            listOf(MenuEntry("No objetivo", 100.00, 30.00)),
+            "30"
+        ).items.single()
+        assertEquals(MenuPriceAdviceStatus.WITHIN_TARGET, exactlyOnTarget.status)
+        assertEquals(BigDecimal("30.00"), exactlyOnTarget.directCostPercent)
+
+        val belowTarget = RestaurantAdvisorEngine.analyzeMenu(
+            listOf(MenuEntry("Ligeiramente abaixo", 100.00, 29.96)),
+            "30"
+        ).items.single()
+        assertEquals(MenuPriceAdviceStatus.WITHIN_TARGET, belowTarget.status)
+        assertEquals(BigDecimal("29.96"), belowTarget.directCostPercent)
     }
 
     @Test
