@@ -56,10 +56,10 @@ object RestaurantPriceCalculator {
         val ingredientCostRaw = ingredients.fold(BigDecimal.ZERO) { sum, item ->
             sum.add(item.quantityUsed.multiply(item.costPerUnit))
         }
-        // Round each displayed component before adding, so the breakdown matches the total.
+        // Round displayed components independently, then sum those displayed amounts.
         val ingredientCost = money(ingredientCostRaw)
-        // Division by 100 is exact for BigDecimal; round only once to cents.
-        val wasteCost = ingredientCost.multiply(wastePercent).divide(HUNDRED, 2, RoundingMode.HALF_UP)
+        // Apply waste to the unrounded ingredient subtotal, preserving calculation accuracy.
+        val wasteCost = ingredientCostRaw.multiply(wastePercent).divide(HUNDRED, 2, RoundingMode.HALF_UP)
         val packaging = money(packagingCost)
         val other = money(otherVariableCost)
         val total = money(ingredientCost.add(wasteCost).add(packaging).add(other))
