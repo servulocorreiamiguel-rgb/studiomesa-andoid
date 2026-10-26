@@ -4,9 +4,18 @@
 **Repositório:** https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid  
 **PR de base:** https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/19  
 **Ramo IA:** `feature/restaurant-ai-assistant-2026-10-25` (implementação ainda em validação)  
-**CI atual:** https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions
+**CI atual:** https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40356629289 (execução #466 aprovada para o commit de código indicado abaixo)
 
 **Execuções CI verificadas em 26-10-2026:** PR #19 passou na run [40244814063](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40244814063), commit `1b766f8b8037fbc40baca626d7eae38878312b92`. PR #21 passou na run [40245851885](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40245851885), commit `f45a63f5a58963d04594b771293fc828e6447a65`. Em ambos passaram os quatro jobs visíveis: replay das migrações PostgreSQL, compilação/testes Android, smoke tests em Android 8 e smoke tests em Android 16. Estes resultados só validam os commits indicados; cada commit posterior precisa da sua própria CI verde.
+
+## Última validação confirmada — PR #25
+
+- **Commit de código testado:** `62b561a5e7443c7a853b53a9ea2e412e92802655` na branch `feature/owner-approved-price-changes-2026-10-26`.
+- **CI completo:** [execução #466](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40356629289) passou nos quatro jobs: compilação APK/testes unitários/Lint/bundles comerciais de teste; replay de todas as migrações SQL e testes de autorização/idempotência; smoke tests Android 8; smoke tests Android 16.
+- **Resultados de interface:** Android 8 e Android 16 correram 65 casos cada, com 0 falhas, 0 erros e 21 casos ignorados por pressupostos específicos de cada variante. Os relatórios XML foram publicados como artefactos.
+- **Regressão de preços:** o PostgreSQL descartável confirmou que uma recomendação válida matematicamente, mas inferior ao preço atual, é rejeitada pelo servidor sem alterar a carta nem criar registo de auditoria. As verificações de preço desatualizado, acesso entre restaurantes, opt-in do proprietário, histórico privado e repetição idempotente também passaram.
+- **Artefacto:** a execução publicou os cinco APKs de demonstração/debug `StudioMesa-1.5.0-Demo-APKs`; não são versões comerciais assinadas.
+- **Estado:** PR [#25](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/25) permanece em rascunho. A migração da aprovação de preços ainda não foi aplicada ao Supabase hospedado. Continuam obrigatórios os testes ponta a ponta com contas descartáveis no ambiente hospedado, teste num telemóvel físico, identificador de pacote definitivo, assinatura comercial e preparação legal/operacional.
 
 ## Validações automatizadas configuradas
 
