@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Regression tests for the StudioMesa static Supabase security audit."""
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from audit_supabase_security import audit_migration_sql
+from audit_supabase_security import ROOT, audit_android_sources, audit_migration_sql
 
 
 class SupabaseSecurityAuditTests(unittest.TestCase):
@@ -51,6 +53,26 @@ class SupabaseSecurityAuditTests(unittest.TestCase):
         """
         errors, _, _ = audit_migration_sql(sql)
         self.assertTrue(any("authenticated" in error for error in errors))
+
+
+    def test_detects_hardcoded_supabase_secret_in_android_source(self):
+        with TemporaryDirectory(dir=ROOT) as tmp:
+            source = Path(tmp) / "MainActivity.kt"
+            source.write_text(
+                'const val SERVICE_ROLE = "sb_secret_abcdefghijklmnopqrstuvwxyz"\\n',
+                encoding="utf-8",
+            )
+            errors = audit_android_sources(Path(tmp))
+            self.assertTrue(any("possível segredo Supabase" in error for error in errors))
+
+    def test_allows_public_publishable_key_in_android_source(self):
+        with TemporaryDirectory(dir=ROOT) as tmp:
+            source = Path(tmp) / "SupabaseApi.kt"
+            source.write_text(
+                'const val API_KEY = "sb_publishable_abcdefghijklmnopqrstuvwxyz"\\n',
+                encoding="utf-8",
+            )
+            self.assertEqual([], audit_android_sources(Path(tmp)))
 
 
 if __name__ == "__main__":
