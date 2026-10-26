@@ -3587,8 +3587,8 @@ class MainActivity : Activity() {
 
         var settingLoaded = false
         var enabled = false
-        lateinit var settingButton: Button
-        settingButton = secondaryButton("Consultar autorização no servidor") {
+        var settingButton: Button? = null
+        val permissionButton = secondaryButton("Consultar autorização no servidor") {
             if (!settingLoaded) {
                 runBackend(
                     task = { SupabaseApi.getRestaurantPriceAdviserEnabled(backendToken()).toString() },
@@ -3608,7 +3608,7 @@ class MainActivity : Activity() {
                         } else {
                             "Desligada no servidor. Nenhum preço pode ser aplicado."
                         }
-                        settingButton.text = if (enabled) {
+                        settingButton?.text = if (enabled) {
                             "Desativar aplicação após confirmação"
                         } else {
                             "Ativar aplicação após confirmação"
@@ -3653,7 +3653,7 @@ class MainActivity : Activity() {
                                 } else {
                                     "Desligada no servidor. Nenhum preço pode ser aplicado."
                                 }
-                                settingButton.text = if (enabled) {
+                                settingButton?.text = if (enabled) {
                                     "Desativar aplicação após confirmação"
                                 } else {
                                     "Ativar aplicação após confirmação"
@@ -3664,7 +3664,8 @@ class MainActivity : Activity() {
                     .show()
             }
         }
-        card.addView(settingButton, LinearLayout.LayoutParams(-1, dp(44)))
+        settingButton = permissionButton
+        card.addView(permissionButton, LinearLayout.LayoutParams(-1, dp(44)))
         addGap(card, 5)
 
         card.addView(secondaryButton("Ver histórico de alterações") {
@@ -3734,7 +3735,7 @@ class MainActivity : Activity() {
         content.addView(label(permissionNote, 12f, true, forest))
         addGap(content, 5)
 
-        lateinit var reportDialog: AlertDialog
+        var reportDialog: AlertDialog? = null
         report.items.forEachIndexed { index, advice ->
             val itemCard = makeCard(12)
             itemCard.addView(label("${index + 1}. ${advice.itemName}", 14f, true, forest))
@@ -3778,7 +3779,7 @@ class MainActivity : Activity() {
                     "Rever e aplicar ${money(suggestedPrice!!.toDouble())}"
                 ) {
                     confirmApplyRecommendedPrice(advice, report.targetCostPercent) {
-                        reportDialog.dismiss()
+                        reportDialog?.dismiss()
                     }
                 }, LinearLayout.LayoutParams(-1, dp(44)))
             } else if (ownerOfRemote && allowApplying &&
@@ -3799,12 +3800,13 @@ class MainActivity : Activity() {
             isFillViewport = false
             addView(content)
         }
-        reportDialog = AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle("Análise de preços da carta")
             .setView(scroll)
             .setPositiveButton("Fechar", null)
             .create()
-        reportDialog.show()
+        reportDialog = dialog
+        dialog.show()
     }
 
     private fun confirmApplyRecommendedPrice(
