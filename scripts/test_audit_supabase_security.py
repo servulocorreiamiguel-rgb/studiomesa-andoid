@@ -54,6 +54,39 @@ class SupabaseSecurityAuditTests(unittest.TestCase):
         errors, _, _ = audit_migration_sql(sql)
         self.assertTrue(any("authenticated" in error for error in errors))
 
+    def test_allows_authenticated_only_for_uid_guarded_rls_membership_helper(self):
+        sql = """
+        CREATE FUNCTION private.is_restaurant_staff(p_restaurant_id uuid)
+        RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = ''
+        AS $function$
+          SELECT EXISTS (
+            SELECT 1 FROM public.restaurant_staff AS rs
+            WHERE rs.restaurant_id = p_restaurant_id
+              AND rs.user_id = (SELECT auth.uid())
+          );
+        $function$;
+        REVOKE ALL ON FUNCTION private.is_restaurant_staff(uuid) FROM PUBLIC, anon;
+        GRANT EXECUTE ON FUNCTION private.is_restaurant_staff(uuid) TO authenticated;
+        ALTER POLICY restaurant_staff_read_self_or_same_restaurant
+          ON public.restaurant_staff
+          USING (user_id = (SELECT auth.uid()) OR private.is_restaurant_staff(restaurant_id));
+        """
+        errors, _, _ = audit_migration_sql(sql)
+        self.assertEqual([], errors)
+
+    def test_rls_helper_exception_requires_auth_uid_guard(self):
+        sql = """
+        CREATE FUNCTION private.is_restaurant_staff(p_restaurant_id uuid)
+        RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = ''
+        AS $function$ SELECT true; $function$;
+        REVOKE ALL ON FUNCTION private.is_restaurant_staff(uuid) FROM PUBLIC, anon;
+        GRANT EXECUTE ON FUNCTION private.is_restaurant_staff(uuid) TO authenticated;
+        ALTER POLICY restaurant_staff_read_self_or_same_restaurant
+          ON public.restaurant_staff USING (private.is_restaurant_staff(restaurant_id));
+        """
+        errors, _, _ = audit_migration_sql(sql)
+        self.assertTrue(any("authenticated" in error for error in errors))
+
 
     def test_detects_hardcoded_supabase_secret_in_android_source(self):
         with TemporaryDirectory(dir=ROOT) as tmp:
