@@ -1328,7 +1328,7 @@ class MainActivity : Activity() {
         container.addView(form, cardParams())
         val note = makeCard(14, copperPale)
         note.addView(label("Margem bruta não é lucro líquido", 13f, true, forest))
-        note.addView(label("Offline: não altera a carta nem guarda valores. Custos fixos só entram se contabilizados. Confirma custos e IVA antes de aplicar o preço.", 12f, false, ink))
+        note.addView(label("Offline; não altera nem guarda preços. Usa unidades consistentes. Custos fixos só entram se contabilizados; confirma custos e IVA.", 12f, false, ink))
         container.addView(note, cardParams())
     }
 
