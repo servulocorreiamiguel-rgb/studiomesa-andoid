@@ -74,7 +74,7 @@ object RestaurantContentEngine {
     private fun socialPost(title: String, facts: String): String {
         val normalized = normalize(title + " " + facts)
         val opening = when {
-            listOf("sobremesa", "bolo", "tarte", "gelado").any(normalized::contains) ->
+            listOf("sobremesa", "bolo", "tarte", "gelado").any { normalized.contains(it) } ->
                 choose(title, listOf("Para terminar, conheça $title.", "Um destaque para a sua próxima pausa: $title."))
             listOf("hamburguer", "bife", "carne", "grelhado").any(normalized::contains) ->
                 choose(title, listOf("Em destaque: $title.", "Conheça melhor a proposta: $title."))
@@ -117,7 +117,7 @@ object RestaurantContentEngine {
 
     private fun endSentence(value: String): String {
         val clean = value.trim()
-        return if (clean.lastOrNull() in listOf('.', '!', '?', '…')) clean else "$clean."
+        return if (clean.lastOrNull()?.let { it in listOf('.', '!', '?', '…') } == true) clean else "$clean."
     }
 
     private fun normalize(value: String): String =
