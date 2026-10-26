@@ -1543,7 +1543,8 @@ class MainActivity : Activity() {
                     item.optDouble("cost", 0.0).coerceAtLeast(0.0),
                     item.optString("category", "Prato principal"),
                     item.optString("description", ""),
-                    item.optString("allergens", "")
+                    item.optString("allergens", ""),
+                    item.optString("id").trim().takeIf { it.isNotBlank() }
                 ))
             }
         }
@@ -3473,11 +3474,14 @@ class MainActivity : Activity() {
     }
 
     private fun renderRestaurantPriceAdvisor(container: LinearLayout) {
+        val usesRemoteMenu = hasRemoteRestaurant()
+        val isOwner = backendPrefs.getString("restaurant_role", "").orEmpty() == "owner"
+
         val card = makeCard(17)
         card.addView(label("Consultor de preços", 17f, true, forest))
         addGap(card, 5)
         card.addView(label(
-            "Compara os custos unitários e os preços registados. O objetivo é configurável; 30% é apenas um ponto de partida, não uma regra universal. A análise é local e não altera a carta.",
+            "Compara os custos unitários e os preços registados. O objetivo é configurável; 30% é apenas um ponto de partida, não uma regra universal.",
             12.5f, false, muted
         ))
         addGap(card, 9)
@@ -3494,7 +3498,6 @@ class MainActivity : Activity() {
         addGap(card, 7)
 
         card.addView(primaryButton("Analisar preços da carta") {
-            val usesRemoteMenu = hasRemoteRestaurant()
             val items = if (usesRemoteMenu) remoteMenuEntries() else store.getMenu()
             if (items.isEmpty()) {
                 AlertDialog.Builder(this)
@@ -3517,8 +3520,168 @@ class MainActivity : Activity() {
                 targetField.error = error.message ?: "Verifica a percentagem."
                 return@primaryButton
             }
-            showRestaurantMenuAdviceDialog(report, usesRemoteMenu)
+
+            if (usesRemoteMenu && isOwner) {
+                // Read the permission from the server at analysis time. The apply RPC
+                // checks it again and never trusts this client-side result.
+                runBackend(
+                    task = { SupabaseApi.getRestaurantPriceAdviserEnabled(backendToken()).toString() },
+                    onError = {
+                        showRestaurantMenuAdviceDialog(
+                            report, usesRemoteMenu, allowApplying = false, permissionCheckFailed = true
+                        )
+                    },
+                    onSuccess = { response ->
+                        showRestaurantMenuAdviceDialog(
+                            report, usesRemoteMenu,
+                            allowApplying = response.trim().equals("true", ignoreCase = true)
+                        )
+                    }
+                )
+            } else {
+                showRestaurantMenuAdviceDialog(report, usesRemoteMenu, allowApplying = false)
+            }
         }, LinearLayout.LayoutParams(-1, dp(46)))
+
+        container.addView(card, cardParams())
+        addGap(container, 9)
+
+        when {
+            !usesRemoteMenu -> {
+                val info = makeCard(13, copperPale)
+                info.addView(label("Aplicação de preços desativada na demonstração", 13.5f, true, forest))
+                addGap(info, 4)
+                info.addView(label(
+                    "Os dados locais são exemplos. A aplicação de preços só pode ser ativada num restaurante ligado ao servidor; esta análise nunca altera os dados de demonstração.",
+                    12f, false, ink
+                ))
+                container.addView(info, cardParams())
+            }
+            !isOwner -> {
+                val info = makeCard(13, copperPale)
+                info.addView(label("Apenas o proprietário pode autorizar alterações", 13.5f, true, forest))
+                addGap(info, 4)
+                info.addView(label(
+                    "Podes consultar as recomendações em modo de leitura. A ativação, a aplicação dos preços e a consulta do histórico ficam reservadas ao proprietário.",
+                    12f, false, ink
+                ))
+                container.addView(info, cardParams())
+            }
+            else -> renderPriceAdviserOwnerControls(container)
+        }
+    }
+
+    private fun renderPriceAdviserOwnerControls(container: LinearLayout) {
+        val card = makeCard(15, paleGreen)
+        card.addView(label("Autorização do proprietário", 15f, true, forest))
+        addGap(card, 5)
+        card.addView(label(
+            "A autorização vem desligada por defeito. Quando a ativares, cada preço continua a exigir confirmação individual. O servidor volta a verificar o proprietário, o preço atual, o custo atual e a recomendação antes de alterar a carta.",
+            12.5f, false, ink
+        ))
+        addGap(card, 7)
+
+        val status = label("Estado ainda não consultado no servidor.", 12f, true, muted)
+        card.addView(status)
+        addGap(card, 5)
+
+        var settingLoaded = false
+        var enabled = false
+        lateinit var settingButton: Button
+        settingButton = secondaryButton("Consultar autorização no servidor") {
+            if (!settingLoaded) {
+                runBackend(
+                    task = { SupabaseApi.getRestaurantPriceAdviserEnabled(backendToken()).toString() },
+                    onError = { error ->
+                        status.text = "Não foi possível confirmar a autorização no servidor."
+                        AlertDialog.Builder(this)
+                            .setTitle("Autorização não confirmada")
+                            .setMessage(friendlyBackendError(error.message))
+                            .setPositiveButton("OK", null)
+                            .show()
+                    },
+                    onSuccess = { response ->
+                        enabled = response.trim().equals("true", ignoreCase = true)
+                        settingLoaded = true
+                        status.text = if (enabled) {
+                            "Ativa no servidor. Cada alteração ainda exige confirmação."
+                        } else {
+                            "Desligada no servidor. Nenhum preço pode ser aplicado."
+                        }
+                        settingButton.text = if (enabled) {
+                            "Desativar aplicação após confirmação"
+                        } else {
+                            "Ativar aplicação após confirmação"
+                        }
+                    }
+                )
+            } else {
+                val nextValue = !enabled
+                AlertDialog.Builder(this)
+                    .setTitle(if (nextValue) "Ativar autorização de preços?" else "Desativar autorização de preços?")
+                    .setMessage(
+                        if (nextValue) {
+                            "Permite ao proprietário aplicar individualmente os preços sugeridos pelo consultor. Cada artigo exige uma segunda confirmação, e o servidor regista o preço anterior, o novo preço e os dados usados no cálculo. Não existe aplicação em lote."
+                        } else {
+                            "Impede novas aplicações de preços pelo consultor. O histórico das alterações anteriores mantém-se disponível."
+                        }
+                    )
+                    .setNegativeButton("Cancelar", null)
+                    .setPositiveButton(if (nextValue) "Ativar" else "Desativar") { _, _ ->
+                        runBackend(
+                            task = {
+                                val changed = SupabaseApi.setRestaurantPriceAdviserEnabled(
+                                    backendToken(), nextValue
+                                )
+                                if (changed != nextValue) {
+                                    throw IllegalStateException("O servidor não confirmou a alteração da autorização.")
+                                }
+                                SupabaseApi.getRestaurantPriceAdviserEnabled(backendToken()).toString()
+                            },
+                            onError = { error ->
+                                AlertDialog.Builder(this)
+                                    .setTitle("Autorização não alterada")
+                                    .setMessage(friendlyBackendError(error.message))
+                                    .setPositiveButton("OK", null)
+                                    .show()
+                            },
+                            onSuccess = { response ->
+                                enabled = response.trim().equals("true", ignoreCase = true)
+                                settingLoaded = true
+                                status.text = if (enabled) {
+                                    "Ativa no servidor. Cada alteração ainda exige confirmação."
+                                } else {
+                                    "Desligada no servidor. Nenhum preço pode ser aplicado."
+                                }
+                                settingButton.text = if (enabled) {
+                                    "Desativar aplicação após confirmação"
+                                } else {
+                                    "Ativar aplicação após confirmação"
+                                }
+                            }
+                        )
+                    }
+                    .show()
+            }
+        }
+        card.addView(settingButton, LinearLayout.LayoutParams(-1, dp(44)))
+        addGap(card, 5)
+
+        card.addView(secondaryButton("Ver histórico de alterações") {
+            runBackend(
+                task = { SupabaseApi.listRestaurantPriceAdviserAudit(backendToken(), 20).toString() },
+                onError = { error ->
+                    AlertDialog.Builder(this)
+                        .setTitle("Histórico indisponível")
+                        .setMessage(friendlyBackendError(error.message))
+                        .setPositiveButton("OK", null)
+                        .show()
+                },
+                onSuccess = { response ->
+                    showPriceAdviserAuditDialog(JSONArray(response))
+                }
+            )
+        }, LinearLayout.LayoutParams(-1, dp(44)))
 
         container.addView(card, cardParams())
         addGap(container, 9)
@@ -3526,85 +3689,257 @@ class MainActivity : Activity() {
 
     private fun showRestaurantMenuAdviceDialog(
         report: RestaurantMenuAdviceReport,
-        usesRemoteMenu: Boolean
+        usesRemoteMenu: Boolean,
+        allowApplying: Boolean,
+        permissionCheckFailed: Boolean = false
     ) {
-        val details = StringBuilder()
-        details.append("Objetivo definido: ")
-            .append(formatAdvicePercent(report.targetCostPercent))
-            .append("% do preço final.\n\n")
-        details.append(
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+        }
+        content.addView(label(
+            "Objetivo definido: ${formatAdvicePercent(report.targetCostPercent)}% do preço final.",
+            14f, true, forest
+        ))
+        addGap(content, 5)
+        content.addView(label(
             if (usesRemoteMenu) {
-                "Fonte: carta do servidor atualmente carregada em cache. Atualiza a secção «Carta» antes de tomar decisões.\n\n"
+                "Fonte: carta do servidor atualmente carregada em cache. O servidor rejeitará qualquer alteração se o preço ou custo atual já tiver mudado."
             } else {
-                "Fonte: dados locais de demonstração; não representam necessariamente um restaurante real.\n\n"
-            }
-        )
-        details.append(
-            "O preço teórico compara apenas o custo unitário introduzido com o objetivo definido. Não inclui IVA, salários, renda, energia, comissões, desperdício ou outros encargos.\n\n"
-        )
-        details.append("Nada foi alterado automaticamente.\n\n")
-        details.append(
-            if (report.itemsNeedingReview == 1) {
-                "Resumo: 1 artigo precisa de revisão"
-            } else {
-                "Resumo: ${report.itemsNeedingReview} artigos precisam de revisão"
-            }
-        )
-        details.append("; ")
-        details.append(
-            if (report.itemsWithIncompleteData == 1) {
-                "1 artigo com dados incompletos."
-            } else {
-                "${report.itemsWithIncompleteData} artigos com dados incompletos."
-            }
-        )
+                "Fonte: dados locais de demonstração; não representam necessariamente um restaurante real e não podem ser alterados por esta função."
+            },
+            12f, false, muted
+        ))
+        addGap(content, 5)
+        content.addView(label(
+            "A percentagem é calculada sobre o custo unitário registado. O cálculo não inclui IVA, salários, renda, energia, comissões, desperdício ou outros encargos, e não garante rentabilidade.",
+            12f, false, muted
+        ))
+        addGap(content, 5)
+        content.addView(label(
+            "Resumo: ${report.itemsNeedingReview} artigos precisam de revisão; ${report.itemsWithIncompleteData} têm dados incompletos.",
+            12.5f, true, forest
+        ))
+        addGap(content, 5)
 
+        val ownerOfRemote = usesRemoteMenu &&
+            backendPrefs.getString("restaurant_role", "").orEmpty() == "owner"
+        val permissionNote = when {
+            !usesRemoteMenu -> "Modo de demonstração: não existe ligação a um restaurante real."
+            !ownerOfRemote -> "Só o proprietário pode autorizar ou aplicar preços."
+            permissionCheckFailed -> "Não foi possível confirmar a autorização no servidor; os botões de alteração estão indisponíveis."
+            allowApplying -> "Autorização ativa no servidor. Cada preço é aplicado individualmente, só após nova confirmação."
+            else -> "A autorização está desligada no servidor. Ativa-a na secção do proprietário para poderes aplicar recomendações."
+        }
+        content.addView(label(permissionNote, 12f, true, forest))
+        addGap(content, 5)
+
+        lateinit var reportDialog: AlertDialog
         report.items.forEachIndexed { index, advice ->
-            details.append("\n\n")
-                .append(index + 1)
-                .append(". ")
-                .append(advice.itemName)
-                .append("\nEstado: ")
-                .append(
-                    when (advice.status) {
-                        MenuPriceAdviceStatus.INCOMPLETE_DATA -> "Dados incompletos"
-                        MenuPriceAdviceStatus.URGENT_REVIEW -> "Revisão urgente"
-                        MenuPriceAdviceStatus.REVIEW -> "Rever custo ou preço"
-                        MenuPriceAdviceStatus.WITHIN_TARGET -> "Dentro do objetivo configurado"
-                    }
-                )
-                .append("\n")
-
+            val itemCard = makeCard(12)
+            itemCard.addView(label("${index + 1}. ${advice.itemName}", 14f, true, forest))
+            addGap(itemCard, 4)
+            val statusText = when (advice.status) {
+                MenuPriceAdviceStatus.INCOMPLETE_DATA -> "Dados incompletos"
+                MenuPriceAdviceStatus.URGENT_REVIEW -> "Revisão urgente"
+                MenuPriceAdviceStatus.REVIEW -> "Rever custo ou preço"
+                MenuPriceAdviceStatus.WITHIN_TARGET -> "Dentro do objetivo configurado"
+            }
+            val itemDetails = StringBuilder()
+            itemDetails.append("Estado: ").append(statusText).append('\n')
             advice.currentPrice?.let {
-                details.append("Preço atual: ").append(money(it.toDouble())).append("\n")
+                itemDetails.append("Preço atual: ").append(money(it.toDouble())).append('\n')
             }
             advice.unitCost?.let {
-                details.append("Custo unitário: ").append(money(it.toDouble())).append("\n")
+                itemDetails.append("Custo unitário: ").append(money(it.toDouble())).append('\n')
             }
             advice.directCostPercent?.let {
-                details.append("Custo direto / preço: ")
-                    .append(formatAdvicePercent(it))
-                    .append("%\n")
+                itemDetails.append("Custo direto / preço: ").append(formatAdvicePercent(it)).append("%\n")
             }
             advice.indicativePriceAtTarget?.let {
-                details.append("Preço teórico para este objetivo: ")
-                    .append(money(it.toDouble()))
-                    .append("\n")
+                itemDetails.append("Preço teórico para este objetivo: ").append(money(it.toDouble())).append('\n')
             }
-            details.append(advice.explanation)
+            itemDetails.append(advice.explanation)
+            itemCard.addView(label(itemDetails.toString(), 12f, false, ink))
+
+            val oldPrice = advice.currentPrice
+            val suggestedPrice = advice.indicativePriceAtTarget
+            val canApply = ownerOfRemote &&
+                allowApplying &&
+                advice.itemId?.isNotBlank() == true &&
+                advice.status in setOf(MenuPriceAdviceStatus.REVIEW, MenuPriceAdviceStatus.URGENT_REVIEW) &&
+                oldPrice != null &&
+                suggestedPrice != null &&
+                suggestedPrice > oldPrice
+
+            if (canApply) {
+                addGap(itemCard, 6)
+                itemCard.addView(primaryButton(
+                    "Rever e aplicar ${money(suggestedPrice!!.toDouble())}"
+                ) {
+                    confirmApplyRecommendedPrice(advice, report.targetCostPercent) {
+                        reportDialog.dismiss()
+                    }
+                }, LinearLayout.LayoutParams(-1, dp(44)))
+            } else if (ownerOfRemote && allowApplying &&
+                advice.status in setOf(MenuPriceAdviceStatus.REVIEW, MenuPriceAdviceStatus.URGENT_REVIEW) &&
+                advice.itemId.isNullOrBlank()
+            ) {
+                addGap(itemCard, 5)
+                itemCard.addView(label(
+                    "Atualiza a carta no servidor para carregar o identificador deste artigo antes de aplicar uma alteração.",
+                    11.5f, false, muted
+                ))
+            }
+            content.addView(itemCard, cardParams())
+            addGap(content, 4)
         }
 
-        val message = TextView(this).apply {
-            text = details.toString()
-            textSize = 14f
-            setTextColor(ink)
-            setPadding(dp(18), dp(8), dp(18), dp(8))
-        }
         val scroll = ScrollView(this).apply {
-            addView(message)
+            isFillViewport = false
+            addView(content)
         }
-        AlertDialog.Builder(this)
+        reportDialog = AlertDialog.Builder(this)
             .setTitle("Análise de preços da carta")
+            .setView(scroll)
+            .setPositiveButton("Fechar", null)
+            .create()
+        reportDialog.show()
+    }
+
+    private fun confirmApplyRecommendedPrice(
+        advice: MenuPriceAdvice,
+        targetCostPercent: java.math.BigDecimal,
+        onStartApplying: () -> Unit
+    ) {
+        val itemId = advice.itemId?.takeIf { it.isNotBlank() }
+        val previousPrice = advice.currentPrice
+        val newPrice = advice.indicativePriceAtTarget
+        if (!hasRemoteRestaurant() ||
+            backendPrefs.getString("restaurant_role", "").orEmpty() != "owner" ||
+            itemId == null ||
+            previousPrice == null ||
+            newPrice == null ||
+            advice.unitCost == null ||
+            newPrice <= previousPrice
+        ) {
+            AlertDialog.Builder(this)
+                .setTitle("Alteração indisponível")
+                .setMessage("Atualiza a carta e confirma a autorização do proprietário antes de aplicar um preço.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Confirmar alteração de preço?")
+            .setMessage(
+                "Artigo: ${advice.itemName}\n" +
+                    "Preço atual: ${money(previousPrice.toDouble())}\n" +
+                    "Custo unitário registado: ${money(advice.unitCost.toDouble())}\n" +
+                    "Novo preço: ${money(newPrice.toDouble())}\n" +
+                    "Objetivo de custo direto: ${formatAdvicePercent(targetCostPercent)}%\n\n" +
+                    "Ao confirmar, este preço será alterado na carta do restaurante e a operação ficará registada no histórico. O servidor volta a calcular a recomendação usando o custo e o preço atuais. IVA e custos indiretos não estão incluídos."
+            )
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Confirmar e aplicar") { _, _ ->
+                onStartApplying()
+                val actionId = java.util.UUID.randomUUID().toString()
+                runBackend(
+                    task = {
+                        val token = backendToken()
+                        val restaurantId = backendRestaurantId()
+                        val applied = SupabaseApi.applyRestaurantAdvisedMenuPrice(
+                            token, actionId, itemId, previousPrice, newPrice, targetCostPercent
+                        )
+                        // The server price and audit row have committed. Cache refresh is
+                        // best-effort and must not relabel a successful mutation as failure.
+                        val refreshedMenu = runCatching {
+                            SupabaseApi.listMenuItems(token, restaurantId)
+                        }.getOrNull()
+                        val cacheUpdated = refreshedMenu?.let { menu ->
+                            runCatching {
+                                backendPrefs.edit()
+                                    .putString("remote_menu_json", menu.toString())
+                                    .commit()
+                            }.getOrDefault(false)
+                        } ?: false
+                        JSONObject()
+                            .put("result", applied)
+                            .put("cache_updated", cacheUpdated)
+                            .toString()
+                    },
+                    onError = {
+                        AlertDialog.Builder(this)
+                            .setTitle("Resultado não confirmado")
+                            .setMessage(
+                                "O servidor não confirmou a resposta. Antes de repetir, consulta o histórico e atualiza a carta: uma resposta de rede perdida pode ter ocorrido depois de a alteração ficar registada."
+                            )
+                            .setPositiveButton("OK", null)
+                            .show()
+                    },
+                    onSuccess = { raw ->
+                        val outcome = JSONObject(raw)
+                        val result = outcome.getJSONObject("result")
+                        val cacheUpdated = outcome.optBoolean("cache_updated", false)
+                        if (cacheUpdated) renderApp()
+                        val replay = result.optBoolean("was_replay", false)
+                        val statusLine = if (replay) {
+                            "A operação já constava no histórico; não foi aplicado um segundo ajuste."
+                        } else {
+                            "O servidor aplicou e registou a alteração."
+                        }
+                        val cacheLine = if (cacheUpdated) {
+                            "A cópia local da carta foi atualizada."
+                        } else {
+                            "Não foi possível atualizar a cópia local da carta. Abre «Carta» e atualiza os dados antes de voltar a analisar."
+                        }
+                        AlertDialog.Builder(this)
+                            .setTitle("Preço registado")
+                            .setMessage(
+                                "${advice.itemName}\n" +
+                                    "Preço anterior: ${money(previousPrice.toDouble())}\n" +
+                                    "Novo preço: ${money(newPrice.toDouble())}\n\n" +
+                                    "$statusLine\n$cacheLine\nConsulta o histórico para rever a operação."
+                            )
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
+                )
+            }
+            .show()
+    }
+
+    private fun showPriceAdviserAuditDialog(rows: JSONArray) {
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+        }
+        if (rows.length() == 0) {
+            content.addView(label(
+                "Ainda não existem alterações de preço registadas para este restaurante.",
+                13f, false, muted
+            ))
+        } else {
+            for (i in 0 until rows.length()) {
+                val row = rows.optJSONObject(i) ?: continue
+                val card = makeCard(12)
+                card.addView(label(row.optString("item_name", "Artigo"), 14f, true, forest))
+                addGap(card, 3)
+                val details = StringBuilder()
+                    .append("Preço anterior: ").append(money(row.optDouble("previous_price", 0.0))).append('\n')
+                    .append("Novo preço: ").append(money(row.optDouble("applied_price", 0.0))).append('\n')
+                    .append("Custo unitário registado: ").append(money(row.optDouble("unit_cost", 0.0))).append('\n')
+                    .append("Objetivo de custo direto: ").append(row.optString("target_cost_percent")).append("%\n")
+                    .append("Data: ").append(row.optString("acted_at", "Data indisponível"))
+                card.addView(label(details.toString(), 12f, false, ink))
+                content.addView(card, cardParams())
+                addGap(content, 4)
+            }
+        }
+        val scroll = ScrollView(this).apply { addView(content) }
+        AlertDialog.Builder(this)
+            .setTitle("Histórico de alterações de preço")
             .setView(scroll)
             .setPositiveButton("Fechar", null)
             .show()
