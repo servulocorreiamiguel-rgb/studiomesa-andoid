@@ -81,10 +81,10 @@ gradle --no-daemon assembleEssencialRestauranteDebug assembleProfissionalRestaur
 | Revisão das restrições SQL de quantidade/fase/nota | Inspecionada na estrutura da base de dados; não equivale a teste funcional |
 | Testes manuais em Android | Não executados nesta sessão |
 | Testes unitários de autenticação e precisão de stock | `AuthCallbackParserTest` e `StockDecimalValidatorTest`; o resultado final é registado pelo CI. Cobertura limitada a estes componentes puros. |
-| Testes instrumentados/funcionais em Android | Não identificados; continuam pendentes em dispositivo real. |
+| Testes instrumentados/funcionais em Android | CI aprovada no emulador Android 16; inclui smoke tests de interface e validação local do formulário de login. Não testa credenciais reais, OAuth, email nem operações completas ponta a ponta. |
 | Compilação CI, testes unitários do parser e Android Lint | Verificar sempre a execução GitHub Actions do commit candidato a distribuição; uma execução aprovada não substitui testes de negócio em Android. |
 | Testes de rede e concorrência | Não executados |
-| Teste de isolamento entre restaurantes com contas reais | Não executado |
+| Teste de isolamento entre restaurantes | Teste transacional live com duas contas temporárias passou para restaurantes/equipa/carta/mesas/pedidos; duas RPCs de criação stock/reserva para o restaurante alheio foram recusadas. Todos os dados de teste foram revertidos. Continua pendente o E2E em Android com sessões reais e os restantes RPCs. |
 
 Não marcar um caso como aprovado sem guardar a evidência do teste. Uma compilação aprovada não permite concluir que a app está segura ou pronta para operar um restaurante.
 
