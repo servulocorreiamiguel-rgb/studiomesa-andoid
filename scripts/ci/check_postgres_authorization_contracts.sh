@@ -221,6 +221,183 @@ if [ "$quota_rows" != "2" ]; then
 fi
 echo "PASS: AI quota is owner-only, independently scoped per restaurant, and blocks requests above the daily cap."
 
+PRICE_MENU_ITEM_A="99999999-1111-4111-8111-111111111111"
+PRICE_MENU_ITEM_B="99999999-2222-4222-8222-222222222222"
+PRICE_ACTION_ID="99999999-3333-4333-8333-333333333333"
+PRICE_OFF_ACTION_ID="99999999-4444-4444-8444-444444444444"
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL
+INSERT INTO public.menu_items (
+  id, restaurant_id, name, category, description, price, cost, allergens, is_active
+) VALUES
+  ('$PRICE_MENU_ITEM_A'::uuid, '$RESTAURANT_A'::uuid, 'CI Price Dish A',
+   'Prato principal', '', 10.00, 4.00, '', true),
+  ('$PRICE_MENU_ITEM_B'::uuid, '$RESTAURANT_B'::uuid, 'CI Price Dish B',
+   'Prato principal', '', 10.00, 2.00, '', true);
+SQL
+
+get_price_adviser_enabled() {
+  local user_id="$1"
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT public.get_restaurant_price_adviser_enabled()::text;
+COMMIT;
+SQL
+}
+
+set_price_adviser_enabled() {
+  local user_id="$1" enabled="$2"
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_price_adviser_enabled('$enabled'::boolean)::text;
+COMMIT;
+SQL
+}
+
+apply_advised_menu_price() {
+  local user_id="$1" action_id="$2" item_id="$3" expected_price="$4" new_price="$5" target_percent="$6"
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT action_id::text || '|' || menu_item_id::text || '|' || previous_price::text ||
+       '|' || applied_price::text || '|' || unit_cost::text ||
+       '|' || target_cost_percent::text || '|' || was_replay::text
+FROM public.apply_restaurant_advised_menu_price(
+  '$action_id'::uuid, '$item_id'::uuid, '$expected_price'::numeric,
+  '$new_price'::numeric, '$target_percent'::numeric
+);
+COMMIT;
+SQL
+}
+
+# The absent settings row must behave as OFF, not as an implicit permission.
+price_setting_default="$(get_price_adviser_enabled "$USER_A")"
+if [ "$price_setting_default" != "false" ]; then
+  echo "ERROR: price adviser permission was not disabled by default." >&2
+  exit 1
+fi
+
+# Staff cannot toggle the feature on or apply a recommendation, even when they
+# belong to the restaurant and the owner is allowed to enable the feature.
+if set_price_adviser_enabled "$USER_C" "true" >/dev/null 2>&1; then
+  echo "ERROR: staff unexpectedly enabled owner-approved price changes." >&2
+  exit 1
+fi
+if apply_advised_menu_price "$USER_C" "$PRICE_ACTION_ID" "$PRICE_MENU_ITEM_A" "10.00" "13.33" "30.00" >/dev/null 2>&1; then
+  echo "ERROR: staff unexpectedly applied an advised price." >&2
+  exit 1
+fi
+if apply_advised_menu_price "$USER_A" "$PRICE_ACTION_ID" "$PRICE_MENU_ITEM_A" "10.00" "13.33" "30.00" >/dev/null 2>&1; then
+  echo "ERROR: owner applied a price while the default-off permission was disabled." >&2
+  exit 1
+fi
+echo "PASS: price application is disabled by default; staff cannot enable or apply it."
+
+owner_enabled="$(set_price_adviser_enabled "$USER_A" "true")"
+owner_enabled_readback="$(get_price_adviser_enabled "$USER_A")"
+if [ "$owner_enabled" != "true" ] || [ "$owner_enabled_readback" != "true" ]; then
+  echo "ERROR: owner opt-in could not be persisted and read back." >&2
+  exit 1
+fi
+
+# Even with opt-in, the owner cannot apply against another restaurant or a stale
+# price, and the client cannot choose a new price that disagrees with live cost.
+if apply_advised_menu_price "$USER_A" "$PRICE_ACTION_ID" "$PRICE_MENU_ITEM_B" "10.00" "6.67" "30.00" >/dev/null 2>&1; then
+  echo "ERROR: owner A unexpectedly applied a price to restaurant B's menu item." >&2
+  exit 1
+fi
+if apply_advised_menu_price "$USER_A" "$PRICE_ACTION_ID" "$PRICE_MENU_ITEM_A" "9.99" "13.33" "30.00" >/dev/null 2>&1; then
+  echo "ERROR: a stale expected price was accepted." >&2
+  exit 1
+fi
+if apply_advised_menu_price "$USER_A" "$PRICE_ACTION_ID" "$PRICE_MENU_ITEM_A" "10.00" "13.32" "30.00" >/dev/null 2>&1; then
+  echo "ERROR: a client-supplied price that differs from the server calculation was accepted." >&2
+  exit 1
+fi
+
+PRICE_APPLY_RESULT="$(apply_advised_menu_price "$USER_A" "$PRICE_ACTION_ID" "$PRICE_MENU_ITEM_A" "10.00" "13.33" "30.00")"
+EXPECTED_PRICE_APPLY="$PRICE_ACTION_ID|$PRICE_MENU_ITEM_A|10.00|13.33|4.00|30.00|false"
+if [ "$PRICE_APPLY_RESULT" != "$EXPECTED_PRICE_APPLY" ]; then
+  echo "ERROR: server-approved price result '$PRICE_APPLY_RESULT'; expected '$EXPECTED_PRICE_APPLY'." >&2
+  exit 1
+fi
+
+PRICE_REPLAY_RESULT="$(apply_advised_menu_price "$USER_A" "$PRICE_ACTION_ID" "$PRICE_MENU_ITEM_A" "10.00" "13.33" "30.00")"
+EXPECTED_PRICE_REPLAY="$PRICE_ACTION_ID|$PRICE_MENU_ITEM_A|10.00|13.33|4.00|30.00|true"
+if [ "$PRICE_REPLAY_RESULT" != "$EXPECTED_PRICE_REPLAY" ]; then
+  echo "ERROR: retrying a committed price action was not idempotent: '$PRICE_REPLAY_RESULT'." >&2
+  exit 1
+fi
+
+if apply_advised_menu_price "$USER_A" "$PRICE_ACTION_ID" "$PRICE_MENU_ITEM_A" "10.00" "13.32" "30.00" >/dev/null 2>&1; then
+  echo "ERROR: an idempotency key was accepted with a different recommended price." >&2
+  exit 1
+fi
+
+price_after_apply="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT price::text FROM public.menu_items WHERE id = '$PRICE_MENU_ITEM_A'::uuid;")"
+price_other_restaurant="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT price::text FROM public.menu_items WHERE id = '$PRICE_MENU_ITEM_B'::uuid;")"
+price_audit_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*)::text FROM private.restaurant_price_adviser_audit WHERE action_id = '$PRICE_ACTION_ID'::uuid;")"
+if [ "$price_after_apply" != "13.33" ] || [ "$price_other_restaurant" != "10.00" ] || [ "$price_audit_count" != "1" ]; then
+  echo "ERROR: price apply/replay changed an unexpected row or did not write exactly one audit row." >&2
+  exit 1
+fi
+
+price_history_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text FROM public.get_restaurant_price_adviser_audit(20);
+ROLLBACK;
+SQL
+)"
+if [ "$price_history_count" != "1" ]; then
+  echo "ERROR: owner price history returned '$price_history_count' rows; expected 1." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*) FROM public.get_restaurant_price_adviser_audit(20);
+COMMIT;
+SQL
+then
+  echo "ERROR: staff unexpectedly accessed owner-only price history." >&2
+  exit 1
+fi
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*) FROM private.restaurant_price_adviser_audit;
+COMMIT;
+SQL
+then
+  echo "ERROR: authenticated client unexpectedly queried the private price audit table directly." >&2
+  exit 1
+fi
+
+owner_disabled="$(set_price_adviser_enabled "$USER_A" "false")"
+disabled_readback="$(get_price_adviser_enabled "$USER_A")"
+if [ "$owner_disabled" != "false" ] || [ "$disabled_readback" != "false" ]; then
+  echo "ERROR: disabling price application did not take effect." >&2
+  exit 1
+fi
+if apply_advised_menu_price "$USER_A" "$PRICE_OFF_ACTION_ID" "$PRICE_MENU_ITEM_A" "13.33" "13.33" "30.00" >/dev/null 2>&1; then
+  echo "ERROR: a new price action was accepted after the owner disabled the feature." >&2
+  exit 1
+fi
+echo "PASS: owner opt-in, per-action server recalculation, stale/cross-restaurant rejection, idempotency, private audit and off switch."
+
 ITEM_A="$(create_inventory_item "$USER_A" "$RESTAURANT_A" "$REQUEST_A" "Flour A" "10")"
 ITEM_A_RETRY="$(create_inventory_item "$USER_A" "$RESTAURANT_A" "$REQUEST_A" "Flour A" "10")"
 ITEM_B="$(create_inventory_item "$USER_B" "$RESTAURANT_B" "$REQUEST_B" "Flour B" "20")"
