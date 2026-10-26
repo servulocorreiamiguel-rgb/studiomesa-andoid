@@ -1,8 +1,8 @@
 # Reconciliação do histórico de migrações Supabase — 26/10/2026
 
-## Resultado da comparação
+## Estado inicial da comparação (antes da recuperação)
 
-Consulta de leitura ao projeto ligado em 26/10/2026:
+Consulta de leitura ao projeto ligado em 26/10/2026, antes de restaurar os ficheiros:
 
 - Migrações registadas pelo Supabase: **39**.
 - Ficheiros `*.sql` em `supabase/migrations` na branch `main`: **20**.
@@ -12,7 +12,7 @@ Consulta de leitura ao projeto ligado em 26/10/2026:
 
 A igualdade do prefixo não prova que o conteúdo do ficheiro seja idêntico ao SQL originalmente aplicado. Da mesma forma, os três nomes abaixo são semelhantes, mas não se deve assumir que são equivalentes sem comparar o SQL e o esquema efetivo.
 
-## Registos no servidor sem ficheiro com versão exata
+## Registos ausentes no inventário inicial (antes da recuperação)
 
 | Versão registada | Nome registado |
 |---|---|
@@ -41,7 +41,7 @@ A igualdade do prefixo não prova que o conteúdo do ficheiro seja idêntico ao 
 
 O registo `20261026173330_fix_staff_join_concurrent_conflict_target` tem ficheiro local correspondente na versão atual da branch principal.
 
-## Ficheiros locais com prefixos que não aparecem no histórico remoto
+## Ficheiros mal versionados no inventário inicial (antes da recuperação)
 
 | Ficheiro local | Registo remoto com nome semelhante |
 |---|---|
@@ -72,6 +72,17 @@ Depois de recuperar os ficheiros históricos e corrigir três timestamps na bran
 - Os três ficheiros locais com timestamps incorretos foram substituídos por ficheiros com os timestamps registados; os conteúdos dos três pares foram comparados byte a byte e eram idênticos.
 - A migração `20261025230000_restaurant_ai_quota.sql` dessa branch histórica foi deliberadamente excluída porque não aparece no histórico aplicado do projeto ligado.
 - A migração final `20261026173330_fix_staff_join_concurrent_conflict_target.sql` permanece incluída.
+
+## Testes de isolamento live — 26/10/2026
+
+Dois ensaios executados numa transação e terminados com \`ROLLBACK\`:
+
+1. Com duas contas e dois restaurantes temporários, cada conta viu exatamente a sua linha de restaurante, adesão de equipa, artigo de carta, mesa e pedido; a outra conta não conseguiu ler esses registos.
+2. Como a conta A, as RPCs \`create_inventory_item_idempotent\` e \`create_restaurant_reservation_idempotent\` foram chamadas com o identificador do restaurante B. Ambas devolveram a mensagem de autorização esperada e não criaram dados.
+
+Uma consulta posterior confirmou zero utilizadores, restaurantes, artigos de carta, mesas, pedidos, artigos de stock ou reservas de teste persistentes. Um ensaio inicial foi rejeitado pela restrição de números de mesa antes de chegar aos testes RLS; confirmou-se igualmente que a transação falhada não deixou resíduos.
+
+Estes resultados são evidência útil do isolamento das tabelas principais e destas duas RPCs, não um teste integral de todas as políticas/rotas, nem substituem cenários de OAuth/cliente Android ou concorrência real.
 
 ## Estado atual e limites
 
