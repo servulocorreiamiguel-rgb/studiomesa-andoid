@@ -68,11 +68,13 @@ object RestaurantContentEngine {
  private val emailPattern = Regex("email")
  private val portuguesePhonePattern = Regex("phone")
  fun generate(contentType: String, title: String, facts: String): String {
+  val cleanTitle = title.trim()
+  val cleanFacts = facts.trim()
   require(contentType in allowedTypes)
-  require(title.trim().length in 2..120)
-  require(facts.trim().length in 10..1500)
-  require((title + facts).toByteArray(Charsets.UTF_8).size <= 4096)
-  require(!containsCustomerContactData(facts))
+  require(cleanTitle.length in 2..120)
+  require(cleanFacts.length in 10..1500)
+  require((cleanTitle + cleanFacts).toByteArray(Charsets.UTF_8).size <= 4096)
+  require(!containsCustomerContactData(cleanFacts))
   return "draft"
  }
  fun containsCustomerContactData(value: String): Boolean = emailPattern.containsMatchIn(value) || portuguesePhonePattern.containsMatchIn(value)
