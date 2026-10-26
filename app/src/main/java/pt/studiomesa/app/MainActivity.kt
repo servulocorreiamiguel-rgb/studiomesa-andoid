@@ -22,6 +22,7 @@ import android.widget.Spinner
 import android.widget.TextView
 import org.json.JSONArray
 import org.json.JSONObject
+import java.math.BigDecimal
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -30,6 +31,13 @@ import java.util.Locale
 import java.util.TimeZone
 
 class MainActivity : Activity() {
+    private data class IngredientFields(
+        val container: LinearLayout,
+        val name: EditText,
+        val quantity: EditText,
+        val unitCost: EditText
+    )
+
     private lateinit var store: RestaurantStore
     private lateinit var appRoot: LinearLayout
     private var activePage = "Início"
@@ -246,8 +254,6 @@ class MainActivity : Activity() {
      * accumulate padding as the system UI changes (for example, on rotation).
      */
     private fun applySystemBarInsets(root: View) {
-        // Traditional decor fitting already keeps content below the system bars on
-        // Android 14 and earlier, so manual padding is only needed from API 35 onward.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) return
 
         val baseLeft = root.paddingLeft
@@ -1243,60 +1249,102 @@ class MainActivity : Activity() {
     }
 
     private fun renderPriceCalculator(container: LinearLayout) {
-        pageIntro(container, "Preço Justo", "Uma estimativa matemática baseada no custo.")
-        addGap(container, 5)
-        container.addView(label("Não consulta preços concorrentes em tempo real e não substitui uma análise completa de custos.", 12.5f, false, muted))
-        addGap(container, 15)
-
-        val form = makeCard(17)
-        form.addView(label("Custo por unidade (€)", 10f, true, forestSoft))
-        val costField = inputField("Ex.: 3,20", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
-        form.addView(costField, fieldParams())
-        addGap(form, 7)
-        form.addView(label("Custo pretendido (% do preço)", 10f, true, forestSoft))
-        val percentageField = inputField("Ex.: 30", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
-        percentageField.setText("30")
-        form.addView(percentageField, fieldParams())
-        addGap(form, 10)
-
-        val result = label("Introduz os valores e calcula um preço indicativo.", 14f, false, ink).apply {
-            setPadding(dp(12), dp(12), dp(12), dp(12))
-            background = rounded(paper, 12)
+        pageIntro(container, "Preço Justo", "Calcula o custo e sugere um preço.")
+        val form = makeCard(16)
+        val ingredientRowsContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val rows = mutableListOf<IngredientFields>()
+        fun addRow() {
+            val card = makeCard(10, paper)
+            card.addView(label("Ingrediente ${rows.size + 1}", 10f, true, forest))
+            val name = inputField("Nome", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES).apply {
+                contentDescription = "Nome ingrediente ${rows.size + 1}"
+            }
+            card.addView(name, fieldParams())
+            val pair = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            val qty = inputField("Quantidade", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL).apply {
+                contentDescription = "Quantidade ingrediente ${rows.size + 1}"
+            }
+            val cost = inputField("Custo/unidade (€)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL).apply {
+                contentDescription = "Custo unitário ingrediente ${rows.size + 1}"
+            }
+            pair.addView(qty, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(4), 0) })
+            pair.addView(cost, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(4), 0, 0, 0) })
+            card.addView(pair)
+            ingredientRowsContainer.addView(card, cardParams())
+            rows.add(IngredientFields(card, name, qty, cost))
+        }
+        fun numberField(title: String, hint: String, initial: String? = null): EditText {
+            form.addView(label(title, 10f, true, forestSoft))
+            val field = inputField(hint, InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL).apply {
+                contentDescription = title
+            }
+            if (initial != null) field.setText(initial)
+            form.addView(field, fieldParams())
+            return field
+        }
+        addRow()
+        form.addView(ingredientRowsContainer, cardParams())
+        form.addView(secondaryButton("+ Ingrediente") {
+            if (rows.size < 30) addRow() else AlertDialog.Builder(this).setMessage("Máx. 30").setPositiveButton("OK", null).show()
+        }, LinearLayout.LayoutParams(-1, dp(40)))
+        form.addView(secondaryButton("Remover ingrediente") {
+            if (rows.size > 1) ingredientRowsContainer.removeView(rows.removeAt(rows.lastIndex).container)
+        }, LinearLayout.LayoutParams(-1, dp(40)))
+        val waste = numberField("Desperdício (%)", "Percentagem", "0")
+        val packaging = numberField("Embalagem (€)", "Custo por dose", "0")
+        val other = numberField("Outros custos variáveis (€)", "Custo por dose", "0")
+        val margin = numberField("Margem bruta pretendida (%)", "Percentagem", "60")
+        val vat = numberField("IVA confirmado pelo restaurante (%)", "Taxa confirmada")
+        val result = label("Preenche os campos e calcula.", 13f, false, ink).apply {
+            setPadding(dp(12), dp(12), dp(12), dp(12)); background = rounded(paper, 12)
         }
         form.addView(primaryButton("Calcular preço sugerido") {
-            val calculation = try {
-                PriceCalculator.calculate(
-                    costField.text.toString(),
-                    percentageField.text.toString()
-                )
-            } catch (error: PriceCalculationException) {
-                when (error.field) {
-                    PriceInputField.COST -> costField.error = error.message
-                    PriceInputField.TARGET_COST_PERCENT -> percentageField.error = error.message
+            fun parse(field: EditText, description: String): java.math.BigDecimal? {
+                val raw = field.text.toString().trim().replace(',', '.')
+                field.error = null
+                if (raw.length > 32 || !Regex("^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)$").matches(raw)) {
+                    field.error = "Introduz $description válido."
+                    return null
                 }
-                return@primaryButton
+                val parsed = raw.toBigDecimalOrNull()
+                if (parsed == null) field.error = "Introduz $description válido."
+                return parsed
             }
-
-            result.text = "PREÇO INDICATIVO\n" + money(calculation.suggestedPrice.toDouble()) +
-                "\n\nCusto por unidade: " + money(calculation.cost.toDouble()) +
-                "\nCusto sobre o preço final: " + String.format(
-                    Locale("pt", "PT"), "%.1f%%", calculation.actualCostPercent.toDouble()
-                ) +
-                "\nMargem bruta estimada: " + money(calculation.grossProfit.toDouble()) +
-                "\nMargem bruta: " + String.format(
-                    Locale("pt", "PT"), "%.1f%%", calculation.grossMarginPercent.toDouble()
-                )
+            val ingredients = mutableListOf<RestaurantPriceCalculator.Ingredient>()
+            for (row in rows) {
+                val name = row.name.text.toString().trim()
+                if (name.isBlank()) { row.name.error = "Introduz o nome."; return@primaryButton }
+                row.name.error = null
+                val quantity = parse(row.quantity, "uma quantidade") ?: return@primaryButton
+                val unitCost = parse(row.unitCost, "um custo") ?: return@primaryButton
+                ingredients.add(RestaurantPriceCalculator.Ingredient(name, quantity, unitCost))
+            }
+            val wasteValue = parse(waste, "o desperdício") ?: return@primaryButton
+            val packagingValue = parse(packaging, "a embalagem") ?: return@primaryButton
+            val otherValue = parse(other, "outros custos") ?: return@primaryButton
+            val marginValue = parse(margin, "a margem") ?: return@primaryButton
+            val vatValue = parse(vat, "o IVA confirmado") ?: return@primaryButton
+            val calc = try {
+                RestaurantPriceCalculator.calculate(ingredients, wasteValue, packagingValue, otherValue, marginValue, vatValue)
+            } catch (e: IllegalArgumentException) {
+                result.text = e.message ?: "Valores inválidos."; result.setTextColor(red); return@primaryButton
+            }
+            result.text = "PREÇO INDICATIVO COM IVA\n" + money(calc.suggestedPriceIncludingVat) +
+                "\nPreço sem IVA: " + money(calc.suggestedPriceExcludingVat) +
+                "\nIVA: " + money(calc.vatAmount) +
+                "\n\nIngredientes: " + money(calc.ingredientCost) +
+                "\nDesperdício: " + money(calc.wasteCost) +
+                "\nEmbalagem: " + money(calc.packagingCost) +
+                "\nOutros variáveis: " + money(calc.otherVariableCost) +
+                "\nCusto total: " + money(calc.totalCost) +
+                "\nMargem bruta estimada: " + String.format(Locale("pt", "PT"), "%.2f%%", calc.estimatedGrossMarginPercent.toDouble())
             result.setTextColor(forest)
-        }, LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(form, 10)
+        }, LinearLayout.LayoutParams(-1, dp(46)))
         form.addView(result)
         container.addView(form, cardParams())
-
-        addGap(container, 5)
         val note = makeCard(14, copperPale)
-        note.addView(label("Atenção aos custos indiretos", 14f, true, forest))
-        addGap(note, 5)
-        note.addView(label("IVA, salários, renda, energia, comissões, desperdício e outros encargos não são incluídos automaticamente. Confirma esses valores antes de definir preços reais.", 12.5f, false, ink))
+        note.addView(label("Margem bruta não é lucro líquido", 13f, true, forest))
+        note.addView(label("Offline; não altera nem guarda preços. Usa unidades consistentes. Custos fixos só entram se contabilizados; confirma custos e IVA.", 12f, false, ink))
         container.addView(note, cardParams())
     }
 
@@ -4151,6 +4199,9 @@ class MainActivity : Activity() {
     private fun addGap(parent: LinearLayout, height: Int) {
         parent.addView(View(this), LinearLayout.LayoutParams(1, dp(height)))
     }
+
+    private fun money(value: BigDecimal): String =
+        NumberFormat.getCurrencyInstance(Locale("pt", "PT")).format(value)
 
     private fun money(value: Double): String =
         NumberFormat.getCurrencyInstance(Locale("pt", "PT")).format(value)

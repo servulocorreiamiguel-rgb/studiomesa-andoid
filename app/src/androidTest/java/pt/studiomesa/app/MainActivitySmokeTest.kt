@@ -13,6 +13,7 @@ import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.hasErrorText
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
+import androidx.test.espresso.matcher.ViewMatchers.withContentDescription
 import androidx.test.espresso.matcher.ViewMatchers.withHint
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.platform.app.InstrumentationRegistry
@@ -217,13 +218,21 @@ class MainActivitySmokeTest {
             onView(withText("ABRIR CALCULADORA"))
                 .perform(scrollTo(), click())
 
-            onView(withHint("Ex.: 3,20"))
-                .perform(replaceText("3,20"))
+            onView(withContentDescription("Nome ingrediente 1"))
+                .perform(scrollTo(), replaceText("Prato de teste"))
+            onView(withContentDescription("Quantidade ingrediente 1"))
+                .perform(scrollTo(), replaceText("1"))
+            onView(withContentDescription("Custo unitário ingrediente 1"))
+                .perform(scrollTo(), replaceText("3,20"))
+            onView(withContentDescription("Margem bruta pretendida (%)"))
+                .perform(scrollTo(), replaceText("70"))
+            onView(withContentDescription("IVA confirmado pelo restaurante (%)"))
+                .perform(scrollTo(), replaceText("0"))
 
             onView(withText("Calcular preço sugerido"))
                 .perform(scrollTo(), click())
 
-            onView(withText(containsString("PREÇO INDICATIVO")))
+            onView(withText(containsString("PREÇO INDICATIVO COM IVA")))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
             onView(withText(containsString("10,67")))
@@ -243,14 +252,22 @@ class MainActivitySmokeTest {
             onView(withText("ABRIR CALCULADORA"))
                 .perform(scrollTo(), click())
 
-            onView(withHint("Ex.: 3,20"))
-                .perform(replaceText("9".repeat(65)))
+            onView(withContentDescription("Nome ingrediente 1"))
+                .perform(scrollTo(), replaceText("Prato de teste"))
+            onView(withContentDescription("Quantidade ingrediente 1"))
+                .perform(scrollTo(), replaceText("1"))
+            onView(withContentDescription("Custo unitário ingrediente 1"))
+                .perform(scrollTo(), replaceText("9".repeat(65)))
+            onView(withContentDescription("Margem bruta pretendida (%)"))
+                .perform(scrollTo(), replaceText("50"))
+            onView(withContentDescription("IVA confirmado pelo restaurante (%)"))
+                .perform(scrollTo(), replaceText("0"))
 
             onView(withText("Calcular preço sugerido"))
                 .perform(scrollTo(), click())
 
-            onView(withHint("Ex.: 3,20"))
-                .check(matches(hasErrorText("Introduz um custo numérico válido.")))
+            onView(withContentDescription("Custo unitário ingrediente 1"))
+                .check(matches(hasErrorText("Introduz um custo válido.")))
         }
     }
 
