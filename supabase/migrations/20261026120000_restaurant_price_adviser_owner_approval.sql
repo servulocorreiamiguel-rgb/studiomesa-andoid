@@ -276,8 +276,9 @@ BEGIN
   IF p_new_price IS DISTINCT FROM v_recommended_price THEN
     RAISE EXCEPTION 'A recomendação já não corresponde aos dados atuais. Atualiza a carta e calcula novamente.';
   END IF;
-  IF v_recommended_price = v_current_price THEN
-    RAISE EXCEPTION 'O preço recomendado é igual ao atual; não há alteração a aplicar.';
+  IF v_recommended_price <= v_current_price THEN
+    RAISE EXCEPTION
+      'O preço recomendado não é superior ao atual; esta ação só aplica aumentos de preço. Revê manualmente qualquer redução.';
   END IF;
 
   UPDATE public.menu_items AS mi
