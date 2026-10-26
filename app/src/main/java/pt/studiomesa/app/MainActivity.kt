@@ -1250,6 +1250,7 @@ class MainActivity : Activity() {
     private fun renderPriceCalculator(container: LinearLayout) {
         pageIntro(container, "Preço Justo", "Calcula o custo e sugere um preço.")
         val form = makeCard(16)
+        val ingredientRowsContainer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val rows = mutableListOf<IngredientFields>()
         fun addRow() {
             val card = makeCard(10, paper)
@@ -1262,7 +1263,7 @@ class MainActivity : Activity() {
             pair.addView(qty, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(4), 0) })
             pair.addView(cost, LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(4), 0, 0, 0) })
             card.addView(pair)
-            form.addView(card, cardParams())
+            ingredientRowsContainer.addView(card, cardParams())
             rows.add(IngredientFields(card, name, qty, cost))
         }
         fun numberField(title: String, hint: String, initial: String? = null): EditText {
@@ -1273,6 +1274,7 @@ class MainActivity : Activity() {
             return field
         }
         addRow()
+        form.addView(ingredientRowsContainer, cardParams())
         form.addView(secondaryButton("+ Ingrediente") {
             if (rows.size < 30) addRow() else AlertDialog.Builder(this).setMessage("Máx. 30").setPositiveButton("OK", null).show()
         }, LinearLayout.LayoutParams(-1, dp(40)))
@@ -1290,15 +1292,20 @@ class MainActivity : Activity() {
         form.addView(primaryButton("Calcular preço sugerido") {
             fun parse(field: EditText, description: String): java.math.BigDecimal? {
                 val raw = field.text.toString().trim().replace(',', '.')
+                field.error = null
                 if (raw.length > 32 || !Regex("^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)$").matches(raw)) {
-                    field.error = "Introduz $description válido."; return null
+                    field.error = "Introduz $description válido."
+                    return null
                 }
-                return raw.toBigDecimalOrNull().also { if (it == null) field.error = "Introduz $description válido." }
+                val parsed = raw.toBigDecimalOrNull()
+                if (parsed == null) field.error = "Introduz $description válido."
+                return parsed
             }
             val ingredients = mutableListOf<RestaurantPriceCalculator.Ingredient>()
             for (row in rows) {
                 val name = row.name.text.toString().trim()
                 if (name.isBlank()) { row.name.error = "Introduz o nome."; return@primaryButton }
+                row.name.error = null
                 val quantity = parse(row.quantity, "uma quantidade") ?: return@primaryButton
                 val unitCost = parse(row.unitCost, "um custo") ?: return@primaryButton
                 ingredients.add(RestaurantPriceCalculator.Ingredient(name, quantity, unitCost))
