@@ -59,6 +59,22 @@ O registo `20261026173330_fix_staff_join_concurrent_conflict_target` tem ficheir
 6. **Só então escolher a estratégia de baseline/reconciliação** e documentar claramente o que se torna histórico e o que é SQL ainda por aplicar. Qualquer operação que altere o histórico remoto requer revisão específica e confirmação antes de execução.
 7. **Verificar novamente** o estado final, comparar o esquema e executar os testes de regressão antes de declarar o bloqueio resolvido.
 
-## Estado atual
+## Progresso da recuperação — branch de revisão, 26/10/2026
 
-**Bloqueio aberto.** Este documento regista a divergência observada; não reconcilia nem modifica o histórico de produção. Não foi executada qualquer alteração de esquema durante esta comparação.
+Depois de recuperar os ficheiros históricos e corrigir três timestamps na branch de revisão:
+
+- Ficheiros SQL locais: **39**.
+- Versões registadas no Supabase: **39**.
+- Versões registadas sem ficheiro local correspondente: **0**.
+- Ficheiros locais com versão não registada no servidor: **0**.
+- Prefixos de versão duplicados localmente: **0**.
+- Foram recuperados **19 ficheiros** a partir da branch histórica `feature/restaurant-ai-assistant-2026-10-25`.
+- Os três ficheiros locais com timestamps incorretos foram substituídos por ficheiros com os timestamps registados; os conteúdos dos três pares foram comparados byte a byte e eram idênticos.
+- A migração `20261025230000_restaurant_ai_quota.sql` dessa branch histórica foi deliberadamente excluída porque não aparece no histórico aplicado do projeto ligado.
+- A migração final `20261026173330_fix_staff_join_concurrent_conflict_target.sql` permanece incluída.
+
+## Estado atual e limites
+
+**O inventário de versões está alinhado na branch de revisão; a reprodutibilidade completa continua por provar.** A presença do mesmo prefixo de versão não prova que o SQL seja idêntico ao que foi originalmente aplicado. Ainda é necessário comparar as definições efetivas do esquema e testar a execução ordenada de todas as migrações num projeto Supabase isolado e descartável.
+
+Não foi executada qualquer alteração de esquema nem alteração do histórico de migrações no projeto de produção.
