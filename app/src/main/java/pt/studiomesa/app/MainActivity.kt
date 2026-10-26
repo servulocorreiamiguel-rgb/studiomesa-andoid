@@ -2349,7 +2349,7 @@ class MainActivity : Activity() {
             if (tokenToRevoke.isNotBlank()) {
                 Thread { runCatching { SupabaseApi.signOut(tokenToRevoke) } }.start()
             }
-            secureSession.clear()
+            val sessionCleared = secureSession.clear()
             store.clearLocalDemoData()
             backendPrefs.edit().putBoolean("local_demo_data_isolated_v1", true)
                 .remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
@@ -2364,6 +2364,13 @@ class MainActivity : Activity() {
             reservationCache = JSONArray()
             reservationsLoaded = false
             renderApp()
+            if (!sessionCleared) {
+                AlertDialog.Builder(this)
+                    .setTitle("Aviso de segurança")
+                    .setMessage("Não foi possível confirmar a remoção completa das credenciais locais. A aplicação tentou terminar a sessão, mas evita partilhar este dispositivo até verificares que já não está autenticado.")
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
         }, LinearLayout.LayoutParams(-1, dp(44)))
         addGap(container, 10)
         container.addView(label("As funções de gestão e os dados de cada restaurante são controlados por permissões no servidor.", 12f, false, muted))
@@ -2424,7 +2431,7 @@ class MainActivity : Activity() {
             val restaurantDeleted = SupabaseApi.deleteAccount(backendToken(), deleteRestaurantData)
             if (restaurantDeleted) "DELETED_RESTAURANT" else "DELETED_ACCOUNT"
         }) { result ->
-            secureSession.clear()
+            val sessionCleared = secureSession.clear()
             runCatching { pendingRequestIds.clearAll() }
             store.clearLocalDemoData()
             backendPrefs.edit()
@@ -2436,10 +2443,13 @@ class MainActivity : Activity() {
 
             if (isCustomerApp) renderCustomerApp() else renderApp()
 
-            val message = if (result == "DELETED_RESTAURANT") {
+            val baseMessage = if (result == "DELETED_RESTAURANT") {
                 "A conta e os dados do restaurante foram eliminados permanentemente."
             } else {
                 "A conta foi eliminada. A associação de fidelização foi removida e a autoria dos registos operacionais preservados foi anonimizada."
+            }
+            val message = if (sessionCleared) baseMessage else {
+                "$baseMessage\n\nAviso: não foi possível confirmar a limpeza completa da sessão local. Reinicia a aplicação antes de a reutilizares."
             }
             AlertDialog.Builder(this)
                 .setTitle("Conta eliminada")
@@ -2877,7 +2887,7 @@ class MainActivity : Activity() {
             if (tokenToRevoke.isNotBlank()) {
                 Thread { runCatching { SupabaseApi.signOut(tokenToRevoke) } }.start()
             }
-            secureSession.clear()
+            val sessionCleared = secureSession.clear()
             store.clearCustomerLocalIdentity()
             backendPrefs.edit()
                 .remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
@@ -2885,6 +2895,13 @@ class MainActivity : Activity() {
                 .remove("customer_menu_json")
                 .apply()
             renderCustomerApp()
+            if (!sessionCleared) {
+                AlertDialog.Builder(this)
+                    .setTitle("Aviso de segurança")
+                    .setMessage("Não foi possível confirmar a remoção completa das credenciais locais. A aplicação tentou terminar a sessão, mas evita partilhar este dispositivo até verificares que já não está autenticado.")
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
         }, LinearLayout.LayoutParams(-1, dp(44)))
 
         setContentView(appRoot)
