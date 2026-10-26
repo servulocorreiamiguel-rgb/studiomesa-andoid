@@ -3453,71 +3453,22 @@ class MainActivity : Activity() {
     private fun renderAiAssistant(container: LinearLayout) {
         pageIntro(
             container,
-            "Conteúdo IA",
-            "Rascunhos de descrições, publicações e campanhas baseados apenas em factos confirmados pelo restaurante."
+            "Assistente StudioMesa",
+            "Motor local especializado para criar rascunhos de carta, publicações e campanhas."
         )
         addGap(container, 8)
 
-        val statusCard = makeCard(17)
-        statusCard.addView(label("A verificar a configuração segura do assistente…", 14f, true, forest))
-        container.addView(statusCard, cardParams())
+        val infoCard = makeCard(17, forestSoft)
+        infoCard.addView(label("Motor local ativo · sem chave de API", 15f, true, forest))
+        addGap(infoCard, 6)
+        infoCard.addView(label(
+            "O texto é processado no telemóvel e não é enviado para um fornecedor externo de IA. Esta primeira versão usa regras e modelos de texto especializados; não é um modelo de linguagem treinado. Confirma sempre os factos antes de publicar.",
+            12.5f, false, ink
+        ))
+        container.addView(infoCard, cardParams())
+        addGap(container, 8)
 
-        if (!hasRemoteRestaurant()) {
-            statusCard.removeAllViews()
-            statusCard.addView(label("Assistente indisponível nesta demonstração", 15f, true, forest))
-            addGap(statusCard, 6)
-            statusCard.addView(label(
-                "A IA só pode ser ativada numa conta de proprietário ligada ao restaurante. A chave do fornecedor fica no servidor, nunca no APK, e a publicação automática não está disponível.",
-                12.5f, false, muted
-            ))
-            return
-        }
-
-        runBackend(
-            { SupabaseApi.restaurantAiStatus(backendToken()).toString() },
-            onError = {
-                statusCard.removeAllViews()
-                statusCard.addView(label("Assistente ainda não configurado", 15f, true, forest))
-                addGap(statusCard, 6)
-                statusCard.addView(label(
-                    "O servidor ainda não confirmou que a função de IA está instalada e pronta. Mantém-se desativada até a chave do fornecedor estar configurada no servidor e todos os testes de segurança passarem.",
-                    12.5f, false, muted
-                ))
-                addGap(statusCard, 8)
-                statusCard.addView(secondaryButton("Verificar novamente") {
-                    activePage = "Conteúdo IA"
-                    renderApp()
-                }, LinearLayout.LayoutParams(-1, dp(42)))
-            }
-        ) { raw ->
-            val status = JSONObject(raw)
-            statusCard.removeAllViews()
-            if (!status.optBoolean("enabled", false)) {
-                statusCard.addView(label("Assistente desativado", 15f, true, forest))
-                addGap(statusCard, 6)
-                statusCard.addView(label(
-                    status.optString(
-                        "message",
-                        "A função só será ativada depois de a configuração do servidor e os testes estarem concluídos."
-                    ),
-                    12.5f, false, muted
-                ))
-                addGap(statusCard, 8)
-                statusCard.addView(secondaryButton("Verificar novamente") {
-                    activePage = "Conteúdo IA"
-                    renderApp()
-                }, LinearLayout.LayoutParams(-1, dp(42)))
-                return@runBackend
-            }
-
-            statusCard.addView(label("Assistente disponível · rascunhos sujeitos a revisão", 14f, true, forest))
-            addGap(statusCard, 5)
-            statusCard.addView(label(
-                "O assunto e os factos introduzidos são enviados para o fornecedor externo de IA configurado no servidor para gerar o rascunho. Não incluas dados pessoais de clientes nem informação confidencial. Revê o texto antes de o usar; nada é publicado automaticamente.",
-                12.5f, false, muted
-            ))
-            renderAiAssistantForm(container)
-        }
+        renderAiAssistantForm(container)
     }
 
     private fun renderAiAssistantForm(container: LinearLayout) {
@@ -3525,7 +3476,7 @@ class MainActivity : Activity() {
         card.addView(label("Criar rascunho", 17f, true, forest))
         addGap(card, 5)
         card.addView(label(
-            "Indica o objetivo e os factos que o restaurante confirmou. Não incluas dados pessoais de clientes.",
+            "Escolhe o objetivo e introduz apenas informação confirmada pelo restaurante. Não introduzas dados pessoais de clientes.",
             12.5f, false, muted
         ))
         addGap(card, 9)
@@ -3533,7 +3484,7 @@ class MainActivity : Activity() {
         val displayTypes = arrayOf(
             "Descrição de prato",
             "Publicação para redes sociais",
-            "Campanha promocional",
+            "Campanha de divulgação",
             "Ideias de conteúdo"
         )
         val requestTypes = listOf("menu_description", "social_post", "campaign", "content_ideas")
@@ -3558,7 +3509,7 @@ class MainActivity : Activity() {
         card.addView(titleField, fieldParams())
 
         val factsField = multilineInputField(
-            "Ingredientes, estilo do restaurante, tom pretendido e outros factos confirmados…"
+            "Ingredientes, características e outros factos confirmados…"
         ).apply {
             filters = arrayOf(InputFilter.LengthFilter(1500))
             minLines = 3
@@ -3567,44 +3518,26 @@ class MainActivity : Activity() {
         card.addView(label("Factos confirmados", 10f, true, forestSoft))
         card.addView(factsField, multilineFieldParams())
         addGap(card, 4)
+
         card.addView(primaryButton("Gerar rascunho") {
             val title = titleField.text.toString().trim()
             val facts = factsField.text.toString().trim()
             when {
                 title.length !in 2..120 -> titleField.error = "Usa entre 2 e 120 caracteres."
                 facts.length !in 10..1500 -> factsField.error = "Escreve entre 10 e 1500 caracteres."
-                else -> runBackend(
-                    {
-                        SupabaseApi.generateRestaurantContent(
-                            backendToken(),
-                            requestTypes[typePicker.selectedItemPosition.coerceIn(0, requestTypes.lastIndex)],
-                            title,
-                            facts
-                        ).toString()
-                    },
-                    onError = { error ->
+                else -> {
+                    try {
+                        val selectedType = requestTypes[
+                            typePicker.selectedItemPosition.coerceIn(0, requestTypes.lastIndex)
+                        ]
+                        val draft = RestaurantContentEngine.generate(selectedType, title, facts)
+                        showAiDraftDialog(draft)
+                    } catch (error: IllegalArgumentException) {
                         AlertDialog.Builder(this)
-                            .setTitle("Não foi possível gerar o rascunho")
-                            .setMessage(friendlyBackendError(error.message) +
-                                "\n\nNão foi publicado nem enviado conteúdo para os clientes.")
+                            .setTitle("Revê o texto introduzido")
+                            .setMessage(error.message ?: "Não foi possível gerar o rascunho.")
                             .setPositiveButton("OK", null)
                             .show()
-                    }
-                ) { raw ->
-                    val result = JSONObject(raw)
-                    val draft = result.optString("draft").trim()
-                    if (draft.isBlank()) {
-                        AlertDialog.Builder(this)
-                            .setTitle("Resposta inválida")
-                            .setMessage("O servidor não devolveu um rascunho utilizável. Não foi publicado qualquer conteúdo.")
-                            .setPositiveButton("OK", null)
-                            .show()
-                    } else {
-                        showAiDraftDialog(
-                            draft,
-                            result.optInt("requests_used", 0),
-                            result.optInt("daily_limit", 10)
-                        )
                     }
                 }
             }
@@ -3612,13 +3545,13 @@ class MainActivity : Activity() {
         container.addView(card, cardParams())
     }
 
-    private fun showAiDraftDialog(draft: String, requestsUsed: Int, dailyLimit: Int) {
+    private fun showAiDraftDialog(draft: String) {
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(8), dp(18), dp(4))
         }
         form.addView(label(
-            "Revê e edita este rascunho antes de o usar. A StudioMesa não o publica automaticamente.",
+            "O rascunho foi criado localmente com regras e estruturas de texto. Revê-o e confirma todos os factos antes de o usar; nada é publicado automaticamente.",
             12f, false, muted
         ))
         addGap(form, 8)
@@ -3629,14 +3562,9 @@ class MainActivity : Activity() {
             filters = arrayOf(InputFilter.LengthFilter(4000))
         }
         form.addView(editor, LinearLayout.LayoutParams(-1, dp(220)))
-        addGap(form, 6)
-        form.addView(label(
-            "Utilizações deste restaurante hoje: $requestsUsed/$dailyLimit.",
-            10.5f, false, muted
-        ))
 
         AlertDialog.Builder(this)
-            .setTitle("Rascunho gerado")
+            .setTitle("Rascunho StudioMesa")
             .setView(form)
             .setNegativeButton("Fechar", null)
             .setNeutralButton("Copiar texto") { _, _ ->
