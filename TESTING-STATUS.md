@@ -31,13 +31,16 @@ Estes testes não substituem testes ponta a ponta contra Supabase Auth hospedado
 - O Performance Advisor assinala 21 índices não utilizados. Não foram removidos: a decisão exige carga representativa e verificação de possíveis regressões.
 - Foi aplicada apenas a migração corretiva `20261025225458_fix_join_restaurant_staff_conflict_target.sql` anteriormente descrita; não foram realizadas alterações a dados das tabelas de negócio. A migração de quota IA é apenas código versionado e precisa de CI verde antes de qualquer aplicação ao ambiente hospedado.
 
-## Assistente de conteúdo com IA — implementação em validação
+## Assistente StudioMesa local — implementação em validação
 
 - A interface está limitada ao plano Premium de gestão de restaurante; as versões cliente não expõem a navegação de gestão.
-- O APK não contém a chave do fornecedor. A função `restaurant-ai-assistant` exige sessão JWT, confirma o papel de proprietário, recusa o uso sem `STUDIOMESA_AI_ENABLED=true` e `OPENAI_API_KEY` no servidor, e aplica limite diário de 10 pedidos por restaurante.
-- A função aceita apenas tipo de conteúdo, assunto e factos fornecidos pelo restaurante; limita os tamanhos, rejeita emails e padrões de telefone portugueses, não consulta registos de clientes e só devolve rascunhos sujeitos a revisão. Não existe publicação automática.
-- **Limitação de privacidade a manter visível:** os filtros detetam padrões comuns de email e telefone português, mas não conseguem garantir a deteção de todos os dados pessoais (por exemplo, nomes ou moradas escritos livremente). A interface avisa para não introduzir dados pessoais/confidenciais, mas isto não substitui testes de privacidade nem justifica enviar dados de clientes. A IA permanece desativada até à revisão final.
-- Na run #397, no commit `f45a63f5a58963d04594b771293fc828e6447a65`, passaram o replay das migrações PostgreSQL, a compilação debug APK (incluindo verificações automatizadas do projeto), o smoke test Android 8 (API 26) e o smoke test Android 16. A funcionalidade continua desativada no Supabase hospedado: a Edge Function e a migração de quota não foram implantadas, e ainda faltam testes E2E com Auth hospedado e dispositivos reais.
+- **Motor próprio offline:** `app/src/main/java/pt/studiomesa/app/RestaurantContentEngine.kt` gera rascunhos para descrição de artigo, publicação social, campanha de divulgação e ideias de conteúdo. Funciona no Android sem chamadas de rede, chave de API ou custo por pedido.
+- **Limite técnico importante:** esta primeira versão é um motor especializado de regras, seleção de frases e modelos de texto, não um modelo de linguagem treinado. Não aprende sozinho nem tem a flexibilidade de uma IA generativa; a qualidade depende das regras e dos modelos de texto que forem desenvolvidos e testados.
+- A interface chama diretamente o motor local e informa o utilizador de que o texto é processado no telemóvel. Os rascunhos são editáveis e têm de ser revistos antes de publicação; não existe publicação automática.
+- Foram acrescentados testes unitários para os quatro modos, limites de texto, rejeição de emails e padrões de telefone portugueses, separação de três ideias de conteúdo e ausência de preços/descontos inventados. A nova versão só deve ser considerada validada depois de a CI do commit final passar.
+- **Limitação de privacidade:** os filtros reconhecem padrões comuns de email e telefone português, mas não detetam todos os dados pessoais possíveis (por exemplo, nomes ou moradas escritos livremente). Mesmo no motor local, não é necessário introduzir dados pessoais de clientes.
+- O código de uma integração remota de IA continua separado e desativado no ecrã Android; a função Edge e a migração de quota não estão implantadas no Supabase hospedado. Esta integração remota não é necessária para o motor local. Se for retomada no futuro, precisa de revisão, testes e configuração independente.
+- Na run #397, no commit `f45a63f5a58963d04594b771293fc828e6447a65`, passaram o replay das migrações PostgreSQL, a compilação debug APK (incluindo verificações automatizadas do projeto), o smoke test Android 8 (API 26) e o smoke test Android 16. Esse resultado não valida o motor local nem os commits posteriores.
 
 ## Estado da aplicação
 
