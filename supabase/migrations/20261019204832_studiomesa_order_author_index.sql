@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS restaurant_orders_created_by_idx ON public.restaurant_orders (created_by);
