@@ -209,7 +209,7 @@ BEGIN
      OR p_target_cost_percent < 0.01
      OR p_target_cost_percent > 100
      OR p_target_cost_percent <> pg_catalog.round(p_target_cost_percent, 2) THEN
-    RAISE EXCEPTION 'O objetivo de custo deve estar entre 0,01% e 100%, com no máximo duas casas decimais.';
+    RAISE EXCEPTION 'O objetivo de custo deve estar entre 0,01%% e 100%%, com no máximo duas casas decimais.';
   END IF;
 
   -- Lock the current setting. Disabling waits for an in-flight application to
