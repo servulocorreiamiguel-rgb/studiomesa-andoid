@@ -110,6 +110,57 @@ class RestaurantPriceCalculatorTest {
     }
 
     @Test
+    fun displayedRoundedComponentsAddUpToDisplayedTotal() {
+        val result = RestaurantPriceCalculator.calculate(
+            listOf(
+                RestaurantPriceCalculator.Ingredient("Ingrediente A", bd("1"), bd("0.004")),
+                RestaurantPriceCalculator.Ingredient("Ingrediente B", bd("1"), bd("0.006"))
+            ),
+            wastePercent = bd("50"),
+            packagingCost = bd("0.104"),
+            otherVariableCost = bd("0.104"),
+            targetGrossMarginPercent = bd("50"),
+            vatPercent = bd("0")
+        )
+
+        assertEquals(bd("0.01"), result.ingredientCost)
+        assertEquals(bd("0.01"), result.wasteCost)
+        assertEquals(bd("0.10"), result.packagingCost)
+        assertEquals(bd("0.10"), result.otherVariableCost)
+        assertEquals(
+            result.ingredientCost.add(result.wasteCost)
+                .add(result.packagingCost).add(result.otherVariableCost),
+            result.totalCost
+        )
+    }
+
+    @Test
+    fun rejectsBlankIngredientNameAndWasteOutsideRange() {
+        assertThrows(IllegalArgumentException::class.java) {
+            RestaurantPriceCalculator.calculate(
+                listOf(RestaurantPriceCalculator.Ingredient("  ", bd("1"), bd("1"))),
+                bd("0"), bd("0"), bd("0"), bd("50"), bd("0")
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            RestaurantPriceCalculator.calculate(ingredients, bd("-0.01"), bd("0"), bd("0"), bd("50"), bd("0"))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            RestaurantPriceCalculator.calculate(ingredients, bd("100.01"), bd("0"), bd("0"), bd("50"), bd("0"))
+        }
+    }
+
+    @Test
+    fun highValidMarginProducesFinitePriceAndZeroVatIsHandled() {
+        val result = RestaurantPriceCalculator.calculate(
+            ingredients, bd("0"), bd("0"), bd("0"), bd("99.99"), bd("0")
+        )
+        assertEquals(bd("20000.00"), result.suggestedPriceExcludingVat)
+        assertEquals(bd("0.00"), result.vatAmount)
+        assertEquals(result.suggestedPriceExcludingVat, result.suggestedPriceIncludingVat)
+    }
+
+    @Test
     fun zeroTargetMarginReturnsCostPriceBeforeVat() {
         val result = RestaurantPriceCalculator.calculate(
             ingredients, bd("0"), bd("0"), bd("1"), bd("0"), bd("0")
