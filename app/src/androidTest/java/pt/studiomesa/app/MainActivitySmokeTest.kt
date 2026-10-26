@@ -118,11 +118,13 @@ class MainActivitySmokeTest {
 
     private fun isCustomerVariant(): Boolean =
         InstrumentationRegistry.getInstrumentation()
-            .targetContext.packageName.endsWith(".cliente")
+            .targetContext.packageName.contains(".cliente")
 
     private fun isCalculatorAvailable(): Boolean {
         val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
-        return packageName.contains(".profissional.") || packageName.contains(".premium.")
+        // Gradle combines flavor suffixes in dimension order; the plan suffix may be
+        // the final segment, so do not require a trailing dot after the plan name.
+        return packageName.contains(".profissional") || packageName.contains(".premium")
     }
 
     @Test
