@@ -300,7 +300,7 @@ BEGIN
     p_action_id, v_restaurant_id, p_item_id, v_item_name, v_user_id,
     v_current_price, v_applied_price, v_unit_cost, p_target_cost_percent
   )
-  ON CONFLICT (action_id) DO NOTHING
+  ON CONFLICT ON CONSTRAINT restaurant_price_adviser_audit_pkey DO NOTHING
   RETURNING created_at INTO v_applied_at;
 
   IF NOT FOUND THEN
