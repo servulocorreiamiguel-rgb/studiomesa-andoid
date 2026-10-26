@@ -80,7 +80,7 @@ object RestaurantContentEngine {
  fun containsCustomerContactData(value: String): Boolean = emailPattern.containsMatchIn(value) || portuguesePhonePattern.containsMatchIn(value)
 }
 """
-VALID_API = r'"/functions/v1/restaurant-ai-assistant"'
+VALID_API = r'"/rest/v1/rpc/example"'
 
 class RestaurantAIFunctionGuardTests(unittest.TestCase):
     def validate(self, config=VALID_CONFIG, source=VALID_SOURCE, validation=VALID_VALIDATION,
@@ -107,6 +107,11 @@ class RestaurantAIFunctionGuardTests(unittest.TestCase):
         source = VALID_SOURCE.replace('await ctx.supabase.rpc("consume_restaurant_ai_quota")', "Promise.resolve({})")
         errors = self.validate(source=source)
         self.assertTrue(any("quota" in error for error in errors))
+
+
+    def test_rejects_remote_ai_endpoint_in_android_client(self):
+        errors = self.validate(api='"/functions/v1/restaurant-ai-assistant"')
+        self.assertTrue(any("must not call the optional remote AI endpoint" in error for error in errors))
 
     def test_rejects_provider_secret_in_android_api(self):
         errors = self.validate(api='OPENAI_API_KEY = "sk-abcdefghijklmnop"')
