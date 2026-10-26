@@ -1,6 +1,17 @@
 # StudioMesa — lista de preparação para uso profissional
 
 **Estado de lançamento nesta revisão: não pronto para operação comercial real.**  
+**Auditoria de segurança e de versão — 26/10/2026**
+
+- [x] Consulta do projeto Supabase ligado: estado ativo, PostgreSQL 17.6 e RLS ativa nas 13 tabelas públicas/privadas listadas. O resultado não prova por si só que cada política garante isolamento; continuam necessários testes com contas separadas.
+- [x] Revisão das funções `SECURITY DEFINER` existentes no banco: `search_path` vazio em todas as funções inspecionadas e execução anónima não permitida. Os avisos para o papel `authenticated` são, em grande parte, RPCs de aplicação intencionais; não os remover sem testes de autorização.
+- [x] As tabelas privadas `private.restaurant_join_codes` e `private.account_deletion_queue` têm RLS ativa, sem políticas de acesso direto. O Security Advisor assinala isso como informativo; o acesso direto deve continuar bloqueado.
+- [ ] **Bloqueio de reprodutibilidade:** a base de dados reporta 38 migrações aplicadas, mas a pasta `supabase/migrations` do repositório auditado contém 19 ficheiros. A versão `20261025225458_fix_join_restaurant_staff_conflict_target` consta do banco e não está representada por um ficheiro de migração equivalente no ramo principal revisto. Antes de recriar o ambiente ou lançar produção, reconciliar o histórico e preparar um baseline reproduzível; não executar o antigo `supabase/schema.sql` como substituto.
+- [ ] **Bloqueio de autenticação:** o Security Advisor continua a indicar que a proteção de palavras-passe comprometidas está desativada. Rever a possibilidade de a ativar no plano/configuração do Supabase antes de aceitar contas reais.
+- [x] Foi identificado e preparada uma correção de concorrência para `join_restaurant_staff`: o banco tinha `ON CONFLICT` a apontar para a chave primária composta, apesar de também impor uma restrição única a `user_id`. A correção usa como alvo `user_id` e volta a confirmar a associação vencedora. O SQL foi ensaiado numa transação terminada com `ROLLBACK`; ainda não deve ser considerado implantado até a migração ser aplicada e verificada.
+- [x] A CI executa agora um verificador estático de segurança e testes unitários desse verificador. É uma salvaguarda de código, não um substituto de testes reais de autorização, concorrência e rede.
+- [ ] O Supabase Performance Advisor mostra índices sem utilização observada. Como as tabelas estão atualmente vazias, não remover índices com base nesse aviso isolado.
+
 Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige desenvolvimento/testes. Um botão presente na interface não prova que uma funcionalidade esteja completa.
 
 ## Carta e menu
