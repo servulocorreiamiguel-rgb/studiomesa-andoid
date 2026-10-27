@@ -26,14 +26,16 @@ Referências públicas:
 - [Lightspeed L-Series — navegação do POS](https://resto-support.lightspeedhq.com/hc/en-us/articles/360005777873-About-navigation-in-Restaurant-POS)
 - [Square for Restaurants — configuração e utilização do POS](https://squareup.com/help/au/en/article/6407-get-started-with-square-for-restaurants)
 - [Toast POS — produto e interface](https://pos.toasttab.com/products/point-of-sale)
+- [Android Developers — acessibilidade em interfaces Views](https://developer.android.com/guide/topics/ui/accessibility/views/apps-views)
+- [Android Developers — RippleDrawable](https://developer.android.com/reference/android/graphics/drawable/RippleDrawable)
 
 ## O que falta melhorar, por prioridade
 
 ### Prioridade 1 — antes de uma utilização comercial real
 
-1. **Estado de sincronização compreensível.** Distinguir “conta configurada” de “ligação ativa”, “a atualizar”, “sem ligação” e “última atualização”. Um rótulo estático de sistema ligado não deve ser usado como prova de que a rede está operacional naquele instante.
+1. **Estado de sincronização compreensível.** O cabeçalho agora diz “restaurante configurado” em vez de afirmar que a ligação está ativa só por existir uma conta. Continua a faltar mostrar o estado real em tempo útil: “a atualizar”, “sem ligação” e “última atualização”.
 2. **Feedback uniforme para ações.** Rever carregamento, sucesso, falha, repetição e recuperação de rede em criar/editar pedidos, reservas, artigos, pontos e stock. O utilizador deve perceber se uma operação foi guardada no servidor ou ficou apenas local.
-3. **Acessibilidade e diferentes tamanhos de ecrã.** Validar escala de texto do Android, contraste, foco por teclado/leitor de ecrã e alvos táteis; verificar telemóveis estreitos, orientação horizontal e tablets. O novo menu usa descrições acessíveis nos destinos de navegação, mas isto não significa que toda a aplicação já tenha sido auditada para acessibilidade.
+3. **Acessibilidade e diferentes tamanhos de ecrã.** As ações de largura total passam a ter alvos de 48 dp, as superfícies interativas mostram feedback visual ao toque e os números decorativos dos cartões usam uma cor com melhor contraste. A navegação inclui descrições acessíveis. Continua por testar manualmente a escala de texto, leitor de ecrã, contraste de toda a aplicação, orientação horizontal e tablets.
 4. **Dados reais no painel.** O painel deve mostrar só indicadores que o sistema possa calcular de forma fiável. Vendas do dia, receita, comparações semanais e custo laboral não devem ser simulados: só devem aparecer quando existirem dados e integrações reais para os suportar.
 5. **Pesquisa e filtros nas listas longas.** Confirmar a necessidade de pesquisa por número/estado/data nas reservas e pedidos, e de pesquisa/filtro na carta e no stock. Isto torna-se importante quando o restaurante tem dezenas ou centenas de registos.
 
@@ -65,3 +67,5 @@ A navegação não torna automaticamente a aplicação pronta para venda. Contin
 - Início, Mesas e Pedidos estão sempre visíveis no fundo do ecrã de gestão.
 - O painel respeita as funcionalidades dos planos Essencial, Profissional e Premium.
 - Testes de interface cobrem a visibilidade dos destinos, o conteúdo do painel por plano e a abertura de uma secção secundária.
+- A aplicação de cliente mantém Cartão, Carta e Conta acessíveis na barra inferior, com testes de navegação.
+- Os botões de ação têm altura mínima de 48 dp e feedback visual ao toque; a verificação manual de acessibilidade continua pendente.

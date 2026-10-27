@@ -2,10 +2,13 @@ package pt.studiomesa.app
 
 import android.app.Activity
 import android.app.Dialog
+import android.content.res.ColorStateList
 import android.app.AlertDialog
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
 import android.os.Build
 import android.os.Bundle
 import android.text.InputType
@@ -218,11 +221,11 @@ class MainActivity : Activity() {
         drawerHeader.addView(label("×", 27f, false, white).apply {
             gravity = Gravity.CENTER
             contentDescription = "Fechar menu"
-            background = rounded(Color.argb(40, 255, 255, 255), 12)
+            background = rippleBackground(Color.argb(40, 255, 255, 255), 12, Color.argb(70, 255, 255, 255))
             isClickable = true
             isFocusable = true
             setOnClickListener { dialog.dismiss() }
-        }, LinearLayout.LayoutParams(dp(40), dp(40)))
+        }, LinearLayout.LayoutParams(dp(48), dp(48)))
         drawerRoot.addView(drawerHeader, LinearLayout.LayoutParams(-1, -2).apply {
             setMargins(dp(8), dp(8), dp(8), dp(6))
         })
@@ -254,7 +257,7 @@ class MainActivity : Activity() {
                         orientation = LinearLayout.HORIZONTAL
                         gravity = Gravity.CENTER_VERTICAL
                         setPadding(dp(9), dp(3), dp(12), dp(3))
-                        background = rounded(if (selected) paleGreen else white, 12)
+                        background = rippleBackground(if (selected) paleGreen else white, 12)
                         contentDescription = "Abrir secção " + page
                         isClickable = true
                         isFocusable = true
@@ -378,12 +381,12 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             setTextColor(white)
             contentDescription = "Abrir menu de navegação"
-            background = rounded(Color.argb(42, 255, 255, 255), 12)
+            background = rippleBackground(Color.argb(42, 255, 255, 255), 12, Color.argb(70, 255, 255, 255))
             isClickable = true
             isFocusable = true
             setOnClickListener { showNavigationDrawer() }
         }
-        brandRow.addView(menuButton, LinearLayout.LayoutParams(dp(42), dp(44)).apply {
+        brandRow.addView(menuButton, LinearLayout.LayoutParams(dp(48), dp(48)).apply {
             setMargins(0, 0, dp(8), 0)
         })
 
@@ -584,10 +587,10 @@ class MainActivity : Activity() {
 
         if (hasRemoteRestaurant()) {
             container.addView(primaryButton("+  Adicionar mesa") { showAddTableDialog() },
-                LinearLayout.LayoutParams(-1, dp(46)))
+                LinearLayout.LayoutParams(-1, dp(48)))
             addGap(container, 6)
             container.addView(secondaryButton("Atualizar do servidor") { refreshRemoteOperations() },
-                LinearLayout.LayoutParams(-1, dp(40)))
+                LinearLayout.LayoutParams(-1, dp(48)))
             addGap(container, 10)
 
             val tableData = remoteTables()
@@ -896,7 +899,7 @@ class MainActivity : Activity() {
         addGap(container, 10)
         if (hasRemoteRestaurant()) {
             container.addView(secondaryButton("Atualizar do servidor") { refreshRemoteOperations() },
-                LinearLayout.LayoutParams(-1, dp(42)))
+                LinearLayout.LayoutParams(-1, dp(48)))
             addGap(container, 7)
         }
         container.addView(primaryButton("+  Novo pedido") { showCreateOrderDialog() }, LinearLayout.LayoutParams(-1, dp(50)))
@@ -958,7 +961,7 @@ class MainActivity : Activity() {
                         cacheRemoteOperations(token, backendRestaurantId())
                         "OK"
                     }) { renderApp() }
-                }, LinearLayout.LayoutParams(-1, dp(44)))
+                }, LinearLayout.LayoutParams(-1, dp(48)))
                 addGap(card, 5)
                 if (!closed) {
                     card.addView(secondaryButton("Cancelar pedido") {
@@ -967,12 +970,12 @@ class MainActivity : Activity() {
                             order.optInt("table_number", 1),
                             order.optString("item_name", "Artigo")
                         )
-                    }, LinearLayout.LayoutParams(-1, dp(40)))
+                    }, LinearLayout.LayoutParams(-1, dp(48)))
                     addGap(card, 5)
                 }
                 card.addView(secondaryButton("Ver histórico") {
                     showOrderHistory(order.optString("id"))
-                }, LinearLayout.LayoutParams(-1, dp(40)))
+                }, LinearLayout.LayoutParams(-1, dp(48)))
                 container.addView(card, cardParams())
             }
             return
@@ -1011,7 +1014,7 @@ class MainActivity : Activity() {
             card.addView(secondaryButton(if (done) "Reabrir pedido" else "Marcar como concluído") {
                 store.updateOrder(order.id, if (done) "Aberto" else "Concluído")
                 renderApp()
-            }, LinearLayout.LayoutParams(-1, dp(42)))
+            }, LinearLayout.LayoutParams(-1, dp(48)))
             container.addView(card, cardParams())
         }
     }
@@ -1041,7 +1044,7 @@ class MainActivity : Activity() {
         addGap(container, 8)
         if (hasRemoteRestaurant()) {
             container.addView(secondaryButton("Atualizar fila do servidor") { refreshRemoteOperations() },
-                LinearLayout.LayoutParams(-1, dp(42)))
+                LinearLayout.LayoutParams(-1, dp(48)))
         } else {
             container.addView(label("Modo de demonstração · os pedidos não são partilhados com outros dispositivos.", 11f, false, muted))
         }
@@ -1179,7 +1182,7 @@ class MainActivity : Activity() {
             "Em preparação" -> "Marcar como pronto"
             "Pronto" -> "Concluir pedido"
             else -> "Atualizar pedido"
-        }, onAdvance), LinearLayout.LayoutParams(-1, dp(46)))
+        }, onAdvance), LinearLayout.LayoutParams(-1, dp(48)))
         container.addView(card, cardParams())
     }
 
@@ -1195,7 +1198,7 @@ class MainActivity : Activity() {
                 addView(label("A carta é partilhada pela equipa. Os custos e margens só são apresentados na aplicação de gestão, não no cartão de cliente.", 12.5f, false, ink))
             }, cardParams())
             container.addView(secondaryButton("Atualizar do servidor") { refreshRemoteOperations() },
-                LinearLayout.LayoutParams(-1, dp(42)))
+                LinearLayout.LayoutParams(-1, dp(48)))
             addGap(container, 6)
             container.addView(primaryButton("+  Adicionar artigo") { showAddMenuItemDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
             addGap(container, 15)
@@ -1245,7 +1248,7 @@ class MainActivity : Activity() {
                             item.optString("allergens", "")
                         )
                     )
-                }, LinearLayout.LayoutParams(-1, dp(40)))
+                }, LinearLayout.LayoutParams(-1, dp(48)))
                 addGap(card, 5)
                 card.addView(secondaryButton("Arquivar artigo") {
                     AlertDialog.Builder(this)
@@ -1261,7 +1264,7 @@ class MainActivity : Activity() {
                             }) { renderApp() }
                         }
                         .show()
-                }, LinearLayout.LayoutParams(-1, dp(40)))
+                }, LinearLayout.LayoutParams(-1, dp(48)))
                 container.addView(card, cardParams())
             }
             return
@@ -1305,7 +1308,7 @@ class MainActivity : Activity() {
             addGap(card, 9)
             card.addView(secondaryButton("Editar artigo") {
                 showEditMenuItemDialog(null, item)
-            }, LinearLayout.LayoutParams(-1, dp(40)))
+            }, LinearLayout.LayoutParams(-1, dp(48)))
             addGap(card, 5)
             card.addView(secondaryButton("Remover artigo") {
                 AlertDialog.Builder(this)
@@ -1320,7 +1323,7 @@ class MainActivity : Activity() {
                         renderApp()
                     }
                     .show()
-            }, LinearLayout.LayoutParams(-1, dp(40)))
+            }, LinearLayout.LayoutParams(-1, dp(48)))
             container.addView(card, cardParams())
         }
     }
@@ -1764,12 +1767,12 @@ class MainActivity : Activity() {
         form.addView(secondaryButton("Continuar com Google") {
             dialog.dismiss()
             startOAuth("google")
-        }, LinearLayout.LayoutParams(-1, dp(46)))
+        }, LinearLayout.LayoutParams(-1, dp(48)))
         addGap(form, 6)
         form.addView(secondaryButton("Continuar com Microsoft (Outlook)") {
             dialog.dismiss()
             startOAuth("azure")
-        }, LinearLayout.LayoutParams(-1, dp(46)))
+        }, LinearLayout.LayoutParams(-1, dp(48)))
         addGap(form, 7)
         form.addView(label(
             "Google e Outlook só podem ser usados depois de os fornecedores estarem ativados no servidor.",
@@ -1876,7 +1879,7 @@ class MainActivity : Activity() {
                             .show()
                     }
                 }
-            }, LinearLayout.LayoutParams(-1, dp(42)))
+            }, LinearLayout.LayoutParams(-1, dp(48)))
         }
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
@@ -2082,7 +2085,7 @@ class MainActivity : Activity() {
                                 }
                             }
                             .show()
-                    }, LinearLayout.LayoutParams(-1, dp(40)))
+                    }, LinearLayout.LayoutParams(-1, dp(48)))
                 }
                 content.addView(card, cardParams())
             }
@@ -2226,7 +2229,7 @@ class MainActivity : Activity() {
                 LinearLayout.LayoutParams(-1, dp(48)))
             addGap(card, 7)
             card.addView(secondaryButton("Aderir à equipa de um restaurante") { showJoinStaffDialog() },
-                LinearLayout.LayoutParams(-1, dp(44)))
+                LinearLayout.LayoutParams(-1, dp(48)))
         } else {
             val restaurantName = backendPrefs.getString("restaurant_name", "Restaurante") ?: "Restaurante"
             val role = backendPrefs.getString("restaurant_role", "staff") ?: "staff"
@@ -2241,29 +2244,29 @@ class MainActivity : Activity() {
                 card.addView(label("Partilha este código apenas com clientes que devem aderir ao programa de fidelização.", 12f, false, ink))
                 addGap(card, 8)
                 card.addView(secondaryButton("Renovar código de adesão dos clientes") { confirmCodeRotation(false) },
-                    LinearLayout.LayoutParams(-1, dp(44)))
+                    LinearLayout.LayoutParams(-1, dp(48)))
                 addGap(card, 5)
                 card.addView(secondaryButton("Ver código de acesso à equipa") { showStaffJoinCode() },
-                    LinearLayout.LayoutParams(-1, dp(44)))
+                    LinearLayout.LayoutParams(-1, dp(48)))
                 addGap(card, 5)
                 card.addView(secondaryButton("Gerir membros e acessos da equipa") { showRestaurantTeam() },
-                    LinearLayout.LayoutParams(-1, dp(44)))
+                    LinearLayout.LayoutParams(-1, dp(48)))
                 addGap(card, 5)
                 card.addView(secondaryButton("Renovar código da equipa") { confirmCodeRotation(true) },
-                    LinearLayout.LayoutParams(-1, dp(44)))
+                    LinearLayout.LayoutParams(-1, dp(48)))
             } else {
                 card.addView(label("Esta conta está associada à equipa deste restaurante. As alterações operacionais são guardadas no servidor.", 12f, false, ink))
             }
             addGap(card, 12)
             card.addView(primaryButton("Atualizar lista de clientes") { refreshRemoteCustomers() },
-                LinearLayout.LayoutParams(-1, dp(46)))
+                LinearLayout.LayoutParams(-1, dp(48)))
         }
         container.addView(card, cardParams())
         addGap(container, 3)
         if (token.isNotBlank()) {
             container.addView(secondaryButton("Eliminar conta permanentemente") {
                 showDeleteAccountConfirmation()
-            }, LinearLayout.LayoutParams(-1, dp(44)))
+            }, LinearLayout.LayoutParams(-1, dp(48)))
             addGap(container, 7)
         }
         container.addView(secondaryButton("Terminar sessão neste dispositivo") {
@@ -2286,7 +2289,7 @@ class MainActivity : Activity() {
             reservationCache = JSONArray()
             reservationsLoaded = false
             renderApp()
-        }, LinearLayout.LayoutParams(-1, dp(44)))
+        }, LinearLayout.LayoutParams(-1, dp(48)))
         addGap(container, 10)
         container.addView(label("As funções de gestão e os dados de cada restaurante são controlados por permissões no servidor.", 12f, false, muted))
     }
@@ -2430,7 +2433,7 @@ class MainActivity : Activity() {
         if (remoteMode) {
             container.addView(primaryButton("Atualizar clientes do servidor") { refreshRemoteCustomers() }, LinearLayout.LayoutParams(-1, dp(48)))
             addGap(container, 6)
-            container.addView(secondaryButton("Ver código de adesão") { showRestaurantJoinCode() }, LinearLayout.LayoutParams(-1, dp(42)))
+            container.addView(secondaryButton("Ver código de adesão") { showRestaurantJoinCode() }, LinearLayout.LayoutParams(-1, dp(48)))
         } else {
             container.addView(primaryButton("+  Adicionar cliente (local)") { showAddCustomerDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
         }
@@ -2462,10 +2465,10 @@ class MainActivity : Activity() {
             val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             actions.addView(secondaryButton("+ Atribuir") {
                 showCustomerPointsDialog(customer, false)
-            }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(0, 0, dp(5), 0) })
+            }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { setMargins(0, 0, dp(5), 0) })
             actions.addView(secondaryButton("− Descontar") {
                 showCustomerPointsDialog(customer, true)
-            }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(5), 0, 0, 0) })
+            }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { setMargins(dp(5), 0, 0, 0) })
             card.addView(actions)
             container.addView(card, cardParams())
         }
@@ -2698,7 +2701,7 @@ class MainActivity : Activity() {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
                 setPadding(dp(3), dp(3), dp(3), dp(3))
-                background = rounded(if (selected) paleGreen else white, 12)
+                background = rippleBackground(if (selected) paleGreen else white, 12)
                 contentDescription = "Abrir secção " + page
                 isClickable = true
                 isFocusable = true
@@ -2732,9 +2735,9 @@ class MainActivity : Activity() {
         container.addView(label("Cartão de fidelização do restaurante.", 13.5f, false, muted))
         addGap(container, 12)
         when {
-            backendToken().isBlank() -> container.addView(primaryButton("Criar conta / iniciar sessão") { showAuthChooser { renderCustomerApp() } }, LinearLayout.LayoutParams(-1, dp(46)))
-            backendMemberId().isBlank() -> container.addView(primaryButton("Associar ao restaurante") { showCustomerJoinDialog() }, LinearLayout.LayoutParams(-1, dp(46)))
-            else -> container.addView(primaryButton("Atualizar saldo no servidor") { refreshCustomerMembership() }, LinearLayout.LayoutParams(-1, dp(46)))
+            backendToken().isBlank() -> container.addView(primaryButton("Criar conta / iniciar sessão") { showAuthChooser { renderCustomerApp() } }, LinearLayout.LayoutParams(-1, dp(48)))
+            backendMemberId().isBlank() -> container.addView(primaryButton("Associar ao restaurante") { showCustomerJoinDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
+            else -> container.addView(primaryButton("Atualizar saldo no servidor") { refreshCustomerMembership() }, LinearLayout.LayoutParams(-1, dp(48)))
         }
         addGap(container, 15)
 
@@ -2965,7 +2968,7 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(-1, dp(48)))
         addGap(container, 6)
         container.addView(secondaryButton("Atualizar reservas") { refreshReservations() },
-            LinearLayout.LayoutParams(-1, dp(40)))
+            LinearLayout.LayoutParams(-1, dp(48)))
         addGap(container, 12)
 
         if (!reservationsLoaded) {
@@ -3013,15 +3016,15 @@ class MainActivity : Activity() {
             when (status) {
                 "Pendente" -> card.addView(primaryButton("Confirmar reserva") {
                     setReservationStatus(id, "Confirmada")
-                }, LinearLayout.LayoutParams(-1, dp(42)))
+                }, LinearLayout.LayoutParams(-1, dp(48)))
                 "Confirmada" -> {
                     card.addView(primaryButton("Marcar como concluída") {
                         setReservationStatus(id, "Concluída")
-                    }, LinearLayout.LayoutParams(-1, dp(42)))
+                    }, LinearLayout.LayoutParams(-1, dp(48)))
                     addGap(card, 5)
                     card.addView(secondaryButton("Não compareceu") {
                         setReservationStatus(id, "Não compareceu")
-                    }, LinearLayout.LayoutParams(-1, dp(40)))
+                    }, LinearLayout.LayoutParams(-1, dp(48)))
                 }
             }
             if (status == "Pendente" || status == "Confirmada") {
@@ -3033,7 +3036,7 @@ class MainActivity : Activity() {
                         .setNegativeButton("Manter", null)
                         .setPositiveButton("Cancelar reserva") { _, _ -> setReservationStatus(id, "Cancelada") }
                         .show()
-                }, LinearLayout.LayoutParams(-1, dp(40)))
+                }, LinearLayout.LayoutParams(-1, dp(48)))
             }
             container.addView(card, cardParams())
         }
@@ -3168,7 +3171,7 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(-1, dp(48)))
         addGap(container, 6)
         container.addView(secondaryButton("Atualizar stock") { refreshInventoryItems() },
-            LinearLayout.LayoutParams(-1, dp(40)))
+            LinearLayout.LayoutParams(-1, dp(48)))
         addGap(container, 12)
 
         if (!backendPrefs.getBoolean("inventory_loaded", false)) {
@@ -3209,17 +3212,17 @@ class MainActivity : Activity() {
             card.addView(label("Alerta a ${formatQuantity(threshold)} $unit", 11.5f, false, muted))
             addGap(card, 10)
             card.addView(secondaryButton("Editar artigo e limite") { showInventoryItemDialog(item) },
-                LinearLayout.LayoutParams(-1, dp(40)))
+                LinearLayout.LayoutParams(-1, dp(48)))
             addGap(card, 5)
             val buttons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
             buttons.addView(secondaryButton("+ Entrada") { showStockAdjustmentDialog(id, name, unit, true) },
-                LinearLayout.LayoutParams(0, dp(40), 1f).apply { setMargins(0, 0, dp(4), 0) })
+                LinearLayout.LayoutParams(0, dp(48), 1f).apply { setMargins(0, 0, dp(4), 0) })
             buttons.addView(secondaryButton("− Saída") { showStockAdjustmentDialog(id, name, unit, false) },
-                LinearLayout.LayoutParams(0, dp(40), 1f).apply { setMargins(dp(4), 0, 0, 0) })
+                LinearLayout.LayoutParams(0, dp(48), 1f).apply { setMargins(dp(4), 0, 0, 0) })
             card.addView(buttons)
             addGap(card, 5)
             card.addView(secondaryButton("Ver histórico de movimentos") { showInventoryMovements(id, name) },
-                LinearLayout.LayoutParams(-1, dp(40)))
+                LinearLayout.LayoutParams(-1, dp(48)))
             container.addView(card, cardParams())
         }
         val summary = makeCard(13, if (lowCount > 0) paleRed else paleGreen)
@@ -3872,7 +3875,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        row.addView(label(number, 11f, true, copper), LinearLayout.LayoutParams(dp(28), -2))
+        row.addView(label(number, 11f, true, forestSoft), LinearLayout.LayoutParams(dp(28), -2))
         val text = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         text.addView(label(title, 16f, true, ink))
         addGap(text, 3)
@@ -3880,7 +3883,7 @@ class MainActivity : Activity() {
         row.addView(text, LinearLayout.LayoutParams(0, -2, 1f))
         card.addView(row)
         addGap(card, 12)
-        card.addView(secondaryButton(actionText, action), LinearLayout.LayoutParams(-1, dp(40)))
+        card.addView(secondaryButton(actionText, action), LinearLayout.LayoutParams(-1, dp(48)))
         parent.addView(card, cardParams())
     }
 
@@ -3976,7 +3979,7 @@ class MainActivity : Activity() {
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
             isAllCaps = false
             setTextColor(forestDeep)
-            background = rounded(copper, 15)
+            background = rippleBackground(copper, 15)
             elevation = dp(1).toFloat()
             setPadding(dp(12), dp(3), dp(12), dp(3))
             setOnClickListener { action() }
@@ -3989,7 +3992,7 @@ class MainActivity : Activity() {
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
             isAllCaps = false
             setTextColor(forest)
-            background = rounded(paleGreen, 14)
+            background = rippleBackground(paleGreen, 14)
             elevation = 0f
             setPadding(dp(8), dp(2), dp(8), dp(2))
             setOnClickListener { action() }
@@ -4003,6 +4006,23 @@ class MainActivity : Activity() {
             if (bold) typeface = Typeface.create(if (size >= 23f) "serif" else "sans-serif", Typeface.BOLD)
             setLineSpacing(dp(2).toFloat(), 1.0f)
         }
+
+    private fun rippleBackground(
+        color: Int,
+        radius: Int,
+        rippleColor: Int = Color.argb(42, 43, 59, 50)
+    ): Drawable {
+        val base = rounded(color, radius)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            RippleDrawable(
+                ColorStateList.valueOf(rippleColor),
+                base,
+                rounded(Color.WHITE, radius)
+            )
+        } else {
+            base
+        }
+    }
 
     private fun rounded(color: Int, radius: Int): GradientDrawable =
         GradientDrawable().apply {
