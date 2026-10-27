@@ -70,13 +70,15 @@ internal object PriceCalculator {
         }
 
         val grossProfit = suggestedPrice.subtract(cost).setScale(2, RoundingMode.HALF_UP)
+        // Multiply before dividing, and keep guard digits until the final percentage rounding.
+        // Rounding the ratio first can move values across a HALF_UP boundary (e.g. 50.01 / 100.01).
         val actualCostPercent = cost
-            .divide(suggestedPrice, 8, RoundingMode.HALF_UP)
             .multiply(oneHundred)
+            .divide(suggestedPrice, 10, RoundingMode.HALF_UP)
             .setScale(2, RoundingMode.HALF_UP)
         val grossMarginPercent = grossProfit
-            .divide(suggestedPrice, 8, RoundingMode.HALF_UP)
             .multiply(oneHundred)
+            .divide(suggestedPrice, 10, RoundingMode.HALF_UP)
             .setScale(2, RoundingMode.HALF_UP)
 
         return PriceCalculationResult(
