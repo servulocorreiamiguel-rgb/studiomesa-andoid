@@ -263,22 +263,22 @@ class MainActivitySmokeTest {
 
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
-            onView(withContentDescription("Abrir secção Cozinha")).check(matches(isDisplayed()))
-            onView(withContentDescription("Abrir secção Carta")).check(matches(isDisplayed()))
-            onView(withContentDescription("Abrir secção Pontos")).check(matches(isDisplayed()))
-            onView(withContentDescription("Abrir secção Conta")).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Cozinha")).perform(scrollTo()).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Carta")).perform(scrollTo()).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Pontos")).perform(scrollTo()).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Conta")).perform(scrollTo()).check(matches(isDisplayed()))
 
             if (isCalculatorAvailable()) {
-                onView(withContentDescription("Abrir secção Reservas")).check(matches(isDisplayed()))
-                onView(withContentDescription("Abrir secção Preço Justo")).check(matches(isDisplayed()))
+                onView(withContentDescription("Abrir secção Reservas")).perform(scrollTo()).check(matches(isDisplayed()))
+                onView(withContentDescription("Abrir secção Preço Justo")).perform(scrollTo()).check(matches(isDisplayed()))
             } else {
                 onView(withContentDescription("Abrir secção Reservas")).check(doesNotExist())
                 onView(withContentDescription("Abrir secção Preço Justo")).check(doesNotExist())
             }
 
             if (packageName.contains(".premium.")) {
-                onView(withContentDescription("Abrir secção Stock")).check(matches(isDisplayed()))
-                onView(withContentDescription("Abrir secção Análise")).check(matches(isDisplayed()))
+                onView(withContentDescription("Abrir secção Stock")).perform(scrollTo()).check(matches(isDisplayed()))
+                onView(withContentDescription("Abrir secção Análise")).perform(scrollTo()).check(matches(isDisplayed()))
             } else {
                 onView(withContentDescription("Abrir secção Stock")).check(doesNotExist())
                 onView(withContentDescription("Abrir secção Análise")).check(doesNotExist())
