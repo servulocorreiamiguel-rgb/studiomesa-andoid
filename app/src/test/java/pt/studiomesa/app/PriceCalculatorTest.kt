@@ -13,8 +13,8 @@ class PriceCalculatorTest {
         assertEquals(BigDecimal("3.20"), result.cost)
         assertEquals(BigDecimal("10.67"), result.suggestedPrice)
         assertEquals(BigDecimal("7.47"), result.grossProfit)
-        assertEquals(BigDecimal("30.0"), result.actualCostPercent)
-        assertEquals(BigDecimal("70.0"), result.grossMarginPercent)
+        assertEquals(BigDecimal("30.00"), result.actualCostPercent)
+        assertEquals(BigDecimal("70.00"), result.grossMarginPercent)
     }
 
     @Test
@@ -29,7 +29,7 @@ class PriceCalculatorTest {
         val result = PriceCalculator.calculate("12.99", "100")
         assertEquals(BigDecimal("12.99"), result.suggestedPrice)
         assertEquals(BigDecimal("0.00"), result.grossProfit)
-        assertEquals(BigDecimal("0.0"), result.grossMarginPercent)
+        assertEquals(BigDecimal("0.00"), result.grossMarginPercent)
     }
 
     @Test
@@ -90,5 +90,24 @@ class PriceCalculatorTest {
                 PriceCalculator.calculate(value, "30")
             }
         }
+    }
+
+    @Test
+    fun roundsHalfCentPriceUpBeforeComputingProfitAndMargins() {
+        val result = PriceCalculator.calculate("1,00", "29,985")
+
+        assertEquals(BigDecimal("3.34"), result.suggestedPrice)
+        assertEquals(BigDecimal("2.34"), result.grossProfit)
+        assertEquals(BigDecimal("29.94"), result.actualCostPercent)
+        assertEquals(BigDecimal("70.06"), result.grossMarginPercent)
+    }
+
+    @Test
+    fun preservesSmallValidPercentagesInsteadOfRoundingCostShareToZero() {
+        val result = PriceCalculator.calculate("3,20", "0,01")
+
+        assertEquals(BigDecimal("32000.00"), result.suggestedPrice)
+        assertEquals(BigDecimal("0.01"), result.actualCostPercent)
+        assertEquals(BigDecimal("99.99"), result.grossMarginPercent)
     }
 }
