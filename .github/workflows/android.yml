@@ -30,6 +30,11 @@ jobs:
       - name: Audit immutable GitHub Actions pins
         run: python3 scripts/check_github_action_pins.py
 
+      - name: Test commercial release workflow safeguards
+        run: |
+          python3 scripts/test_check_commercial_release_workflow.py
+          python3 scripts/check_commercial_release_workflow.py
+
       - name: Validate SQL migration function delimiters
         run: python3 scripts/check_sql_function_delimiters.py
 
