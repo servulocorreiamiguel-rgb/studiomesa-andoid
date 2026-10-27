@@ -214,6 +214,40 @@ class MainActivitySmokeTest {
     }
 
     @Test
+    fun calculatorRejectsMoneyValuesAboveMenuLimit() {
+        assumeFalse("Customer variant has no management calculator.", isCustomerVariant())
+        assumeTrue("The Essential plan does not include the price calculator.", isCalculatorAvailable())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withText("ABRIR CALCULADORA"))
+                .perform(scrollTo(), click())
+
+            onView(withHint("Ex.: 3,20"))
+                .perform(replaceText("100000000,00"))
+
+            onView(withText("Calcular preço sugerido"))
+                .perform(scrollTo(), click())
+
+            onView(withHint("Ex.: 3,20"))
+                .check(matches(hasErrorText("O custo excede o limite suportado pela carta (99 999 999,99 €).")))
+
+            onView(withHint("Ex.: 3,20"))
+                .perform(replaceText("99999999,99"))
+
+            onView(withHint("Ex.: 30"))
+                .perform(replaceText("0,01"))
+
+            onView(withText("Calcular preço sugerido"))
+                .perform(scrollTo(), click())
+
+            onView(withHint("Ex.: 30"))
+                .check(matches(hasErrorText(
+                    "O preço sugerido excede o limite suportado pela carta (99 999 999,99 €). Aumenta a percentagem pretendida ou revê os valores."
+                )))
+        }
+    }
+
+    @Test
     fun planSpecificManagementFeaturesMatchSelectedVariant() {
         assumeFalse("Customer variants do not expose restaurant management screens.", isCustomerVariant())
         val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
