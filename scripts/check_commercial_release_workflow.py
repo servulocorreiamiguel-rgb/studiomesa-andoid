@@ -63,17 +63,33 @@ def audit_workflow(text: str) -> list[str]:
             errors.append("Do not print signing secrets to workflow logs.")
             break
 
+    if 'verification_output="$(jarsigner -verify "$bundle" 2>&1)"' not in text:
+        errors.append("The commercial workflow must capture jarsigner verification output.")
+    if 'grep -Fq "jar verified."' not in text:
+        errors.append("The commercial workflow must explicitly reject AABs without the 'jar verified.' result.")
+
+    return errors
+
+
+def audit_ci_test_bundle(text: str) -> list[str]:
+    """Require CI to prove the temporary commercial test AAB is actually signed."""
+    errors: list[str] = []
+    if 'verification_output="$(jarsigner -verify "$AAB_PATH" 2>&1)"' not in text:
+        errors.append("Android CI must run jarsigner verification against its temporary release AAB.")
+    if 'grep -Fq "jar verified."' not in text:
+        errors.append("Android CI must require the explicit 'jar verified.' result for its test AAB.")
     return errors
 
 
 def main() -> int:
     try:
         text = WORKFLOW.read_text(encoding="utf-8")
+        android_text = (ROOT / ".github" / "workflows" / "android.yml").read_text(encoding="utf-8")
     except OSError as exc:
-        print(f"Could not read {WORKFLOW}: {exc}", file=sys.stderr)
+        print(f"Could not read workflow file: {exc}", file=sys.stderr)
         return 2
 
-    errors = audit_workflow(text)
+    errors = audit_workflow(text) + audit_ci_test_bundle(android_text)
     if errors:
         print("Commercial release workflow audit failed:")
         for error in errors:
