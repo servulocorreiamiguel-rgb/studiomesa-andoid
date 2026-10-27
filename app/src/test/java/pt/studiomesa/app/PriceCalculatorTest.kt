@@ -68,6 +68,41 @@ class PriceCalculatorTest {
     }
 
     @Test
+    fun acceptsMaximumMoneyValueSupportedByRestaurantMenu() {
+        val result = PriceCalculator.calculate("99999999,99", "100")
+
+        assertEquals(BigDecimal("99999999.99"), result.cost)
+        assertEquals(BigDecimal("99999999.99"), result.suggestedPrice)
+        assertEquals(BigDecimal("0.00"), result.grossProfit)
+    }
+
+    @Test
+    fun rejectsCostAboveMaximumMoneyValueSupportedByRestaurantMenu() {
+        val error = assertThrows(PriceCalculationException::class.java) {
+            PriceCalculator.calculate("100000000,00", "30")
+        }
+
+        assertEquals(PriceInputField.COST, error.field)
+        assertEquals(
+            "O custo excede o limite suportado pela carta (99 999 999,99 €).",
+            error.message
+        )
+    }
+
+    @Test
+    fun rejectsSuggestedPriceAboveMaximumMoneyValueSupportedByRestaurantMenu() {
+        val error = assertThrows(PriceCalculationException::class.java) {
+            PriceCalculator.calculate("99999999,99", "0,01")
+        }
+
+        assertEquals(PriceInputField.TARGET_COST_PERCENT, error.field)
+        assertEquals(
+            "O preço sugerido excede o limite suportado pela carta (99 999 999,99 €). Aumenta a percentagem pretendida ou revê os valores.",
+            error.message
+        )
+    }
+
+    @Test
     fun rejectsTargetPercentageAboveOneHundred() {
         val error = assertThrows(PriceCalculationException::class.java) {
             PriceCalculator.calculate("3.20", "100.01")
