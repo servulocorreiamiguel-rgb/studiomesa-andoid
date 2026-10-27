@@ -1599,9 +1599,9 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun restoreCustomerMembership(token: String) {
-        if (!isCustomerApp || token.isBlank()) return
-        try {
+    private fun restoreCustomerMembership(token: String): Boolean {
+        if (!isCustomerApp || token.isBlank()) return false
+        return try {
             val member = SupabaseApi.getMyLoyaltyMembership(token)
             if (member == null) {
                 backendPrefs.edit()
@@ -1611,22 +1611,27 @@ class MainActivity : Activity() {
                     .remove("member_restaurant_name")
                     .putString("customer_menu_json", "[]")
                     .apply()
-                return
+                true
+            } else {
+                val memberId = member.optString("member_id").trim()
+                if (memberId.isBlank()) {
+                    throw IllegalStateException("O servidor não devolveu um cartão de cliente válido.")
+                }
+                val menu = SupabaseApi.listCustomerMenu(token, memberId)
+                backendPrefs.edit()
+                    .putString("member_id", memberId)
+                    .putString("member_code", member.optString("member_code"))
+                    .putInt("member_points", member.optInt("points", 0))
+                    .putString("member_restaurant_name", member.optString("restaurant_name"))
+                    .putString("customer_menu_json", menu.toString())
+                    .apply()
+                val displayName = member.optString("display_name").trim()
+                if (displayName.isNotBlank()) store.saveCustomerProfileName(displayName)
+                true
             }
-
-            val memberId = member.optString("member_id")
-            val menu = if (memberId.isNotBlank()) SupabaseApi.listCustomerMenu(token, memberId) else org.json.JSONArray()
-            backendPrefs.edit()
-                .putString("member_id", memberId)
-                .putString("member_code", member.optString("member_code"))
-                .putInt("member_points", member.optInt("points", 0))
-                .putString("member_restaurant_name", member.optString("restaurant_name"))
-                .putString("customer_menu_json", menu.toString())
-                .apply()
-            val displayName = member.optString("display_name").trim()
-            if (displayName.isNotBlank()) store.saveCustomerProfileName(displayName)
         } catch (_: Exception) {
-            // Do not discard a valid login if the membership is temporarily unavailable.
+            clearCachedTenantState()
+            false
         }
     }
 
