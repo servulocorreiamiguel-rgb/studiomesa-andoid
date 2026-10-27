@@ -166,6 +166,7 @@ jobs:
 
       - name: Run smoke tests on Android 16
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        timeout-minutes: 50
         with:
           api-level: 36
           target: google_apis
@@ -173,7 +174,19 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot
-          script: gradle --no-daemon --max-workers=1 connectedEssencialRestauranteDebugAndroidTest connectedProfissionalRestauranteDebugAndroidTest connectedProfissionalClienteDebugAndroidTest connectedPremiumRestauranteDebugAndroidTest connectedPremiumClienteDebugAndroidTest
+          script: |
+            set -euo pipefail
+            for test_task in \
+              connectedEssencialRestauranteDebugAndroidTest \
+              connectedProfissionalRestauranteDebugAndroidTest \
+              connectedProfissionalClienteDebugAndroidTest \
+              connectedPremiumRestauranteDebugAndroidTest \
+              connectedPremiumClienteDebugAndroidTest
+            do
+              echo "STARTING_ANDROID_SMOKE_TASK=$test_task"
+              timeout --signal=TERM --kill-after=30s 8m gradle --no-daemon --max-workers=1 "$test_task"
+              echo "PASSED_ANDROID_SMOKE_TASK=$test_task"
+            done
 
       - name: Upload emulator test results
         if: always()
@@ -212,6 +225,7 @@ jobs:
 
       - name: Run smoke tests on Android 8
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        timeout-minutes: 50
         with:
           api-level: 26
           target: google_apis
@@ -219,7 +233,19 @@ jobs:
           profile: Nexus 5X
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot
-          script: gradle --no-daemon --max-workers=1 connectedEssencialRestauranteDebugAndroidTest connectedProfissionalRestauranteDebugAndroidTest connectedProfissionalClienteDebugAndroidTest connectedPremiumRestauranteDebugAndroidTest connectedPremiumClienteDebugAndroidTest
+          script: |
+            set -euo pipefail
+            for test_task in \
+              connectedEssencialRestauranteDebugAndroidTest \
+              connectedProfissionalRestauranteDebugAndroidTest \
+              connectedProfissionalClienteDebugAndroidTest \
+              connectedPremiumRestauranteDebugAndroidTest \
+              connectedPremiumClienteDebugAndroidTest
+            do
+              echo "STARTING_ANDROID_SMOKE_TASK=$test_task"
+              timeout --signal=TERM --kill-after=30s 8m gradle --no-daemon --max-workers=1 "$test_task"
+              echo "PASSED_ANDROID_SMOKE_TASK=$test_task"
+            done
 
       - name: Upload Android 8 test results
         if: always()
