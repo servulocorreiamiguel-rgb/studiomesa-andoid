@@ -10,6 +10,7 @@ import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.hasErrorText
 import androidx.test.espresso.matcher.ViewMatchers.withHint
+import androidx.test.espresso.matcher.ViewMatchers.withContentDescription
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.platform.app.InstrumentationRegistry
 import org.hamcrest.Matchers.containsString
@@ -240,6 +241,60 @@ class MainActivitySmokeTest {
                 }
                 else -> throw AssertionError("Unexpected restaurant application package: $packageName")
             }
+        }
+    }
+
+    @Test
+    fun restaurantBottomNavigationKeepsThreePrimarySectionsVisible() {
+        assumeFalse("Customer variant has its own navigation.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withContentDescription("Abrir menu de navegação")).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Início")).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Mesas")).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Pedidos")).check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
+    fun restaurantNavigationDrawerShowsPagesAvailableForItsPlan() {
+        assumeFalse("Customer variant has its own navigation.", isCustomerVariant())
+        val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withContentDescription("Abrir menu de navegação")).perform(click())
+            onView(withContentDescription("Abrir secção Cozinha")).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Carta")).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Pontos")).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Conta")).check(matches(isDisplayed()))
+
+            if (isCalculatorAvailable()) {
+                onView(withContentDescription("Abrir secção Reservas")).check(matches(isDisplayed()))
+                onView(withContentDescription("Abrir secção Preço Justo")).check(matches(isDisplayed()))
+            } else {
+                onView(withContentDescription("Abrir secção Reservas")).check(doesNotExist())
+                onView(withContentDescription("Abrir secção Preço Justo")).check(doesNotExist())
+            }
+
+            if (packageName.contains(".premium.")) {
+                onView(withContentDescription("Abrir secção Stock")).check(matches(isDisplayed()))
+                onView(withContentDescription("Abrir secção Análise")).check(matches(isDisplayed()))
+            } else {
+                onView(withContentDescription("Abrir secção Stock")).check(doesNotExist())
+                onView(withContentDescription("Abrir secção Análise")).check(doesNotExist())
+            }
+        }
+    }
+
+    @Test
+    fun restaurantDrawerCanOpenASecondarySection() {
+        assumeFalse("Customer variant has its own navigation.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withContentDescription("Abrir menu de navegação")).perform(click())
+            onView(withContentDescription("Abrir secção Cozinha")).perform(click())
+            onView(withText("Fila de preparação por estado e tempo de espera."))
+                .check(matches(isDisplayed()))
         }
     }
 

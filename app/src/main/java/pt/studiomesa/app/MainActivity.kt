@@ -1,6 +1,7 @@
 package pt.studiomesa.app
 
 import android.app.Activity
+import android.app.Dialog
 import android.app.AlertDialog
 import android.graphics.Color
 import android.graphics.Typeface
@@ -189,6 +190,127 @@ class MainActivity : Activity() {
         return pages
     }
 
+    private fun showNavigationDrawer() {
+        val dialog = Dialog(this)
+        val drawerRoot = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(white)
+        }
+
+        val drawerHeader = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(20), dp(24), dp(14), dp(22))
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(forestDeep, forest, forestSoft)
+            ).apply { cornerRadius = dp(18).toFloat() }
+        }
+        val titleStack = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        titleStack.addView(label("StudioMesa", 24f, true, white))
+        titleStack.addView(label(displayRestaurantName(), 14f, true, copperPale).apply {
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        })
+        titleStack.addView(label(planTitle + " · " + if (hasRemoteRestaurant()) "Sistema ligado" else "Demonstração", 10.5f, false, copperPale))
+        drawerHeader.addView(titleStack, LinearLayout.LayoutParams(0, -2, 1f))
+        drawerHeader.addView(label("×", 27f, false, white).apply {
+            gravity = Gravity.CENTER
+            contentDescription = "Fechar menu"
+            background = rounded(Color.argb(40, 255, 255, 255), 12)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { dialog.dismiss() }
+        }, LinearLayout.LayoutParams(dp(40), dp(40)))
+        drawerRoot.addView(drawerHeader, LinearLayout.LayoutParams(-1, -2).apply {
+            setMargins(dp(8), dp(8), dp(8), dp(6))
+        })
+
+        val listScroll = ScrollView(this).apply {
+            isFillViewport = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            isVerticalScrollBarEnabled = false
+        }
+        val list = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(4), 0, dp(8))
+        }
+        val pageGroups = listOf(
+            "OPERAÇÃO" to listOf("Início", "Mesas", "Pedidos", "Cozinha"),
+            "GESTÃO DO RESTAURANTE" to listOf("Carta", "Pontos", "Reservas", "Preço Justo", "Stock", "Análise"),
+            "CONTA" to listOf("Conta")
+        )
+        pageGroups.forEach { (groupTitle, groupPages) ->
+            val visiblePages = groupPages.filter { it in availablePages() }
+            if (visiblePages.isNotEmpty()) {
+                list.addView(label(groupTitle, 10f, true, forestSoft).apply {
+                    setPadding(dp(20), dp(13), dp(14), dp(7))
+                    letterSpacing = 0.08f
+                }, LinearLayout.LayoutParams(-1, -2))
+                visiblePages.forEach { page ->
+                    val selected = activePage == page
+                    val item = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        setPadding(dp(9), dp(3), dp(12), dp(3))
+                        background = rounded(if (selected) paleGreen else white, 12)
+                        contentDescription = "Abrir secção " + page
+                        isClickable = true
+                        isFocusable = true
+                        setOnClickListener {
+                            dialog.dismiss()
+                            activePage = page
+                            renderApp()
+                        }
+                    }
+                    item.addView(TextView(this).apply {
+                        text = pageGlyph(page)
+                        textSize = 19f
+                        gravity = Gravity.CENTER
+                        setTextColor(if (selected) forestDeep else forestSoft)
+                    }, LinearLayout.LayoutParams(dp(36), -1))
+                    item.addView(label(page, 14.5f, selected, if (selected) forestDeep else ink),
+                        LinearLayout.LayoutParams(0, -2, 1f))
+                    list.addView(item, LinearLayout.LayoutParams(-1, dp(48)).apply {
+                        setMargins(dp(10), dp(2), dp(10), dp(2))
+                    })
+                }
+            }
+        }
+        listScroll.addView(list)
+        drawerRoot.addView(listScroll, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        drawerRoot.addView(View(this).apply { setBackgroundColor(line) },
+            LinearLayout.LayoutParams(-1, dp(1)))
+        drawerRoot.addView(label("StudioMesa · Gestão de sala", 10.5f, false, muted).apply {
+            setPadding(dp(20), dp(12), dp(20), dp(16))
+        }, LinearLayout.LayoutParams(-1, -2))
+
+        dialog.setContentView(drawerRoot)
+        dialog.show()
+        val drawerWidth = minOf(resources.displayMetrics.widthPixels - dp(48), dp(340))
+        dialog.window?.apply {
+            setBackgroundDrawableResource(android.R.color.transparent)
+            setDimAmount(0.42f)
+            setGravity(Gravity.START)
+            setLayout(drawerWidth, -1)
+        }
+    }
+
+    private fun pageGlyph(page: String): String = when (page) {
+        "Início" -> "⌂"
+        "Mesas" -> "▦"
+        "Pedidos" -> "≡"
+        "Cozinha" -> "◉"
+        "Carta" -> "▤"
+        "Pontos" -> "◎"
+        "Conta" -> "⚙"
+        "Reservas" -> "◷"
+        "Preço Justo" -> "€"
+        "Stock" -> "▣"
+        "Análise" -> "↗"
+        else -> "•"
+    }
     /**
      * Android 15+ enforces edge-to-edge for apps targeting API 35+, and Android 16
      * removes the opt-out for apps targeting API 36. Keep interactive content out
@@ -247,6 +369,22 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
+        val menuButton = TextView(this).apply {
+            text = "☰"
+            textSize = 23f
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setTextColor(white)
+            contentDescription = "Abrir menu de navegação"
+            background = rounded(Color.argb(42, 255, 255, 255), 12)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { showNavigationDrawer() }
+        }
+        brandRow.addView(menuButton, LinearLayout.LayoutParams(dp(42), dp(44)).apply {
+            setMargins(0, 0, dp(8), 0)
+        })
+
         val mark = TextView(this).apply {
             text = "SM"
             textSize = 15f
@@ -303,39 +441,23 @@ class MainActivity : Activity() {
         appRoot.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         renderPage(content)
 
-        val navScroll = HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
-            overScrollMode = View.OVER_SCROLL_NEVER
-            setBackgroundColor(white)
-        }
+        // Keep the three high-frequency destinations visible on phones.
+        // Secondary destinations remain available from the hamburger drawer above.
         val nav = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(7), dp(7), dp(7), dp(7))
+            setPadding(dp(6), dp(4), dp(6), dp(4))
+            setBackgroundColor(white)
+            elevation = dp(6).toFloat()
         }
-        availablePages().forEach { page ->
+        listOf("Início", "Mesas", "Pedidos").forEach { page ->
             val selected = activePage == page
-            val item = TextView(this).apply {
-                text = when (page) {
-                    "Início" -> "Início"
-                    "Mesas" -> "Mesas"
-                    "Pedidos" -> "Pedidos"
-                    "Cozinha" -> "Cozinha"
-                    "Carta" -> "Carta"
-                    "Pontos" -> "Pontos"
-                    "Conta" -> "Conta"
-                    "Preço Justo" -> "Preço justo"
-                    "Reservas" -> "Reservas"
-                    "Stock" -> "Stock"
-                    "Análise" -> "Análise"
-                    else -> page
-                }
-                textSize = 10.5f
-                typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            val item = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setTextColor(if (selected) forestDeep else muted)
-                setPadding(dp(13), dp(12), dp(13), dp(12))
-                background = rounded(if (selected) copper else paper, 18)
+                setPadding(dp(3), dp(3), dp(3), dp(3))
+                background = rounded(if (selected) copperPale else white, 12)
+                contentDescription = "Abrir secção " + page
                 isClickable = true
                 isFocusable = true
                 setOnClickListener {
@@ -343,12 +465,21 @@ class MainActivity : Activity() {
                     renderApp()
                 }
             }
-            nav.addView(item, LinearLayout.LayoutParams(-2, -2).apply {
+            item.addView(TextView(this).apply {
+                text = pageGlyph(page)
+                textSize = 17f
+                gravity = Gravity.CENTER
+                setTextColor(if (selected) forestDeep else muted)
+            }, LinearLayout.LayoutParams(-2, dp(21)))
+            item.addView(label(page, 10.5f, true, if (selected) forestDeep else muted).apply {
+                gravity = Gravity.CENTER
+                maxLines = 1
+            })
+            nav.addView(item, LinearLayout.LayoutParams(0, dp(52), 1f).apply {
                 setMargins(dp(3), 0, dp(3), 0)
             })
         }
-        navScroll.addView(nav)
-        appRoot.addView(navScroll, LinearLayout.LayoutParams(-1, -2))
+        appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(60)))
         setContentView(appRoot)
     }
 
