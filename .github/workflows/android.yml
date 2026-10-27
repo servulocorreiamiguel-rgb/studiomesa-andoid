@@ -132,7 +132,18 @@ jobs:
             -PstudiomesaCommercialRelease=true \
             -PstudiomesaReleaseApplicationId=pt.studiomesa.ci \
             bundleEssencialRestauranteRelease
-          find app/build/outputs/bundle -type f -name '*.aab' -print -quit | grep -q .
+          AAB_PATH="$(find app/build/outputs/bundle -type f -name '*.aab' -print -quit)"
+          test -n "$AAB_PATH"
+          verification_output="$(jarsigner -verify "$AAB_PATH" 2>&1)" || {
+            printf '%s\n' "$verification_output"
+            echo "CI AAB signature verification command failed."
+            exit 1
+          }
+          printf '%s\n' "$verification_output"
+          if ! grep -Fq "jar verified." <<< "$verification_output"; then
+            echo "CI AAB is not confirmed as correctly signed."
+            exit 1
+          fi
           rm -f "$KEYSTORE_PATH"
 
       - name: Upload debug APK
