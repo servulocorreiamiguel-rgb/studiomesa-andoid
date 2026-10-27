@@ -115,8 +115,8 @@ class CommercialReleaseWorkflowAuditTests(unittest.TestCase):
 
     def test_rejects_jarsigner_check_without_explicit_success_marker(self) -> None:
         changed = SAFE_WORKFLOW.replace(
-            '          if ! grep -Fq "jar verified." <<< "$verification_output"; then\\n            exit 1\\n          fi\\n',
-            '',
+            'grep -Fq "jar verified."',
+            'echo "jar check removed"',
         )
         self.assertTrue(
             any("explicitly reject AABs" in error for error in audit_workflow(changed))
@@ -125,8 +125,8 @@ class CommercialReleaseWorkflowAuditTests(unittest.TestCase):
     def test_android_ci_must_verify_its_temporary_aab_signature(self) -> None:
         self.assertEqual([], audit_ci_test_bundle(SAFE_ANDROID_WORKFLOW))
         changed = SAFE_ANDROID_WORKFLOW.replace(
-            '          if ! grep -Fq "jar verified." <<< "$verification_output"; then\\n            exit 1\\n          fi\\n',
-            '',
+            'grep -Fq "jar verified."',
+            'echo "jar check removed"',
         )
         self.assertTrue(
             any("explicit" in error for error in audit_ci_test_bundle(changed))
