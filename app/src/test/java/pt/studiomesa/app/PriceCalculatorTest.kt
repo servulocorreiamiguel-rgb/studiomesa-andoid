@@ -119,6 +119,16 @@ class PriceCalculatorTest {
     }
 
     @Test
+    fun rejectsOverlongWhitespaceAroundCostBeforeNormalization() {
+        val error = assertThrows(PriceCalculationException::class.java) {
+            PriceCalculator.calculate(" ".repeat(65) + "1", "30")
+        }
+
+        assertEquals(PriceInputField.COST, error.field)
+        assertEquals("O valor introduzido é demasiado longo.", error.message)
+    }
+
+    @Test
     fun rejectsOverlongTargetPercentageInput() {
         val percentage = "0." + "0".repeat(62) + "1"
         val error = assertThrows(PriceCalculationException::class.java) {
