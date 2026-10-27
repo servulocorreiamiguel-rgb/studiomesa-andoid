@@ -79,8 +79,10 @@ class MainActivity : Activity() {
         store = RestaurantStore(this)
         // Remove pre-release local demo records from accounts that were already signed in
         // when this privacy isolation was introduced.
-        if (backendPrefs.getString("user_id", "").orEmpty().isNotBlank() &&
+        if (hasStoredSession() &&
             !backendPrefs.getBoolean("local_demo_data_isolated_v1", false)) {
+            // Legacy authenticated builds may have a session even if a crash left user_id blank.
+            // Do not let their pre-release local demo rows appear after session verification.
             store.clearLocalDemoData()
             backendPrefs.edit().putBoolean("local_demo_data_isolated_v1", true).apply()
         }
@@ -133,6 +135,7 @@ class MainActivity : Activity() {
         backendToken().isNotBlank() || secureSession.refreshToken().isNotBlank()
 
     private fun recoverAfterAuthCallbackFailure() {
+        runCatching { secureSession.clearPendingCodeVerifier() }
         if (hasStoredSession()) {
             verifyExistingSessionAndRender()
         } else {
