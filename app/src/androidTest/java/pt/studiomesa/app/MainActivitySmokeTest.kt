@@ -1,5 +1,6 @@
 package pt.studiomesa.app
 
+import android.content.Context
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.click
@@ -12,6 +13,7 @@ import androidx.test.espresso.matcher.ViewMatchers.hasErrorText
 import androidx.test.espresso.matcher.ViewMatchers.withHint
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.platform.app.InstrumentationRegistry
+import org.hamcrest.Matchers.anyOf
 import org.hamcrest.Matchers.containsString
 import org.hamcrest.Matchers.not
 import org.junit.Assume.assumeFalse
@@ -210,6 +212,57 @@ class MainActivitySmokeTest {
             onView(withText(containsString("Corrige os valores assinalados")))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
+    fun cachedTenantDataIsHiddenUntilStoredSessionIsVerified() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val backendPrefs = context.getSharedPreferences("studiomesa_backend", Context.MODE_PRIVATE)
+        val secureSession = SecureSessionStore(context)
+        val staleRestaurantName = "STUDIO_MESA_STALE_PRIVATE_SENTINEL"
+
+        // Seed old account-specific cache and a deliberately invalid token.
+        // The UI must show only the verification screen while the server is checked.
+        secureSession.clear()
+        backendPrefs.edit().clear().commit()
+        secureSession.save("invalid-session-token-for-smoke-test", "")
+        val staleMenu = org.json.JSONArray().put(
+            org.json.JSONObject()
+                .put("id", "99999999-1111-4111-8111-111111111111")
+                .put("name", staleRestaurantName)
+                .put("category", "Teste")
+                .put("description", "")
+                .put("price", 99.99)
+                .put("cost", 1.00)
+                .put("allergens", "")
+                .put("is_active", true)
+        )
+        backendPrefs.edit()
+            .putBoolean("local_demo_data_isolated_v1", true)
+            .putString("user_id", "88888888-1111-4111-8111-111111111111")
+            .putString("user_email", "stale-account@example.invalid")
+            .putString("restaurant_id", "77777777-1111-4111-8111-111111111111")
+            .putString("restaurant_name", staleRestaurantName)
+            .putString("restaurant_role", "owner")
+            .putString("remote_menu_json", staleMenu.toString())
+            .putString("remote_tables_json", "[]")
+            .putString("remote_orders_json", "[]")
+            .commit()
+
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use {
+                onView(anyOf(
+                    withText(containsString("A verificar autorização da conta")),
+                    withText(containsString("Não foi possível confirmar o acesso"))
+                )).check(matches(isDisplayed()))
+
+                onView(withText(containsString(staleRestaurantName)))
+                    .check(doesNotExist())
+            }
+        } finally {
+            secureSession.clear()
+            backendPrefs.edit().clear().commit()
         }
     }
 
