@@ -47,11 +47,11 @@ Referências públicas:
 
 ## Aplicação de cliente: o que falta clarificar
 
-A aplicação de cliente tem uma base visual coerente — cartão de fidelização, saldo de pontos e carta publicada —, mas o fluxo atual é essencialmente uma **experiência de fidelização e consulta da carta**, não uma aplicação completa de encomendas ou reservas.
+A aplicação de cliente tem uma base visual coerente — cartão de fidelização, saldo de pontos e carta — e agora separa as tarefas em três destinos fixos: **Cartão, Carta e Conta**. Esta é uma aplicação de fidelização e consulta da carta; não deve ser descrita como sistema de encomendas ou reservas de clientes.
 
-1. **Prémios e regras de pontos:** o cartão mostra “Próximos prémios”, mas o próprio ecrã indica que as regras ainda serão definidas com o restaurante. Antes de mostrar esta área a clientes reais, definir e implementar regras, ou ocultar o bloco até existir conteúdo real.
-2. **Carta mais visual:** os artigos aparecem como texto, descrição, preço e indicação de alergénios; não encontrei um fluxo de fotografias de artigos. Fotografias aprovadas, categorias e pesquisa ajudariam numa carta longa. Os alergénios devem continuar a ser declarados pelo restaurante e apresentados com a indicação para confirmar com a equipa.
-3. **Separar tarefas quando o produto crescer:** o ecrã é atualmente uma página longa, com cartão, carta e perfil. Para um produto com mais tarefas, considerar três áreas claras — Cartão, Carta e Conta — em vez de acrescentar cada vez mais conteúdo à mesma página.
+1. **Prémios e regras de pontos:** o bloco de prémios de demonstração foi removido até existirem regras e prémios reais configuráveis. Não apresentar uma área vazia como funcionalidade pronta.
+2. **Carta mais visual:** os artigos continuam a aparecer como texto, descrição, preço e indicação de alergénios; não existe ainda um fluxo de fotografias de artigos. Fotografias aprovadas, categorias e pesquisa ajudariam numa carta longa. Os alergénios devem continuar a ser declarados pelo restaurante e apresentados com a indicação para confirmar com a equipa.
+3. **Navegação móvel:** os destinos Cartão, Carta e Conta ficam sempre visíveis, sem obrigar o cliente a percorrer a carta inteira para regressar ao cartão ou às definições.
 4. **Não prometer fluxos ainda não presentes:** não encontrei no ecrã de cliente um fluxo de encomenda ou de reserva. Se esses serviços fizerem parte da oferta comercial, terão de ser concebidos e testados como funcionalidades próprias; caso contrário, descrever o produto como cartão de fidelização e consulta da carta.
 5. **Estados da conta fáceis de entender:** manter claras as diferenças entre cartão demonstrativo, conta ainda não associada, sessão iniciada e saldo atualizado. Não apresentar pontos de demonstração como saldo real.
 

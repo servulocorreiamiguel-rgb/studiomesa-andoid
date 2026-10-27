@@ -36,6 +36,7 @@ class MainActivity : Activity() {
     private lateinit var store: RestaurantStore
     private lateinit var appRoot: LinearLayout
     private var activePage = "Início"
+    private var activeCustomerPage = "Cartão"
     private val backendPrefs by lazy { getSharedPreferences("studiomesa_backend", MODE_PRIVATE) }
     private val secureSession by lazy { SecureSessionStore(this) }
     private val pendingRequestIds by lazy { PendingRequestIds(this) }
@@ -212,7 +213,7 @@ class MainActivity : Activity() {
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
         })
-        titleStack.addView(label(planTitle + " · " + if (hasRemoteRestaurant()) "Sistema ligado" else "Demonstração", 10.5f, false, copperPale))
+        titleStack.addView(label(planTitle + " · " + if (hasRemoteRestaurant()) "Restaurante configurado" else "Demonstração", 10.5f, false, copperPale))
         drawerHeader.addView(titleStack, LinearLayout.LayoutParams(0, -2, 1f))
         drawerHeader.addView(label("×", 27f, false, white).apply {
             gravity = Gravity.CENTER
@@ -298,6 +299,7 @@ class MainActivity : Activity() {
     }
 
     private fun pageGlyph(page: String): String = when (page) {
+        "Cartão" -> "▣"
         "Início" -> "⌂"
         "Mesas" -> "▦"
         "Pedidos" -> "≡"
@@ -420,7 +422,7 @@ class MainActivity : Activity() {
         val separator = View(this).apply { setBackgroundColor(Color.argb(65, 255, 255, 255)) }
         header.addView(separator, LinearLayout.LayoutParams(-1, dp(1)))
         addGap(header, 12)
-        header.addView(label(if (hasRemoteRestaurant()) "Sistema ligado · Gestão de restaurante" else "Demonstração · Dados de exemplo", 10.5f, true, copperPale))
+        header.addView(label(if (hasRemoteRestaurant()) "Restaurante configurado · dados do servidor" else "Demonstração · Dados de exemplo", 10.5f, true, copperPale))
         header.addView(label("Uma experiência de gestão pensada para o ritmo da sala.", 13f, false, Color.rgb(229, 235, 228)))
 
         val headerParams = LinearLayout.LayoutParams(-1, -2).apply {
@@ -533,7 +535,7 @@ class MainActivity : Activity() {
 
         addGap(container, 21)
         sectionHeading(container, "Acesso rápido", "Escolhe uma área para continuar.")
-        actionCard(container, "01", "Mesas", "Atualiza o estado das 12 mesas.", "ABRIR MESAS") {
+        actionCard(container, "01", "Mesas", "Consulta as " + tableTotal + " mesas do restaurante.", "ABRIR MESAS") {
             activePage = "Mesas"; renderApp()
         }
         actionCard(container, "02", "Pedidos", "Regista pedidos e acompanha a conclusão.", "ABRIR PEDIDOS") {
@@ -2634,6 +2636,7 @@ class MainActivity : Activity() {
     }
 
     private fun renderCustomerApp() {
+        if (activeCustomerPage !in setOf("Cartão", "Carta", "Conta")) activeCustomerPage = "Cartão"
         appRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(paper)
@@ -2642,44 +2645,98 @@ class MainActivity : Activity() {
 
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(20), dp(20), dp(20))
+            setPadding(dp(18), dp(15), dp(18), dp(15))
             background = GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
                 intArrayOf(forestDeep, forest, forestSoft)
             ).apply { cornerRadius = dp(22).toFloat() }
         }
-        header.addView(label(displayCustomerRestaurantName(), 25f, true, white))
+        header.addView(label(displayCustomerRestaurantName(), 23f, true, white).apply {
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        })
         addGap(header, 4)
         header.addView(label("Cartão digital de cliente · " + planTitle, 10.5f, true, copper))
-        addGap(header, 13)
-        header.addView(label("A tua experiência, num só lugar.", 17f, true, white))
-        header.addView(label(if (backendMemberId().isBlank()) "Cartão demonstrativo — associa a tua conta ao restaurante." else "Cartão digital de fidelização", 12f, false, copperPale))
+        addGap(header, 9)
+        header.addView(label("A tua experiência, num só lugar.", 16f, true, white))
+        header.addView(label(
+            if (backendMemberId().isBlank()) "Consulta a carta e acompanha os teus pontos."
+            else "O teu cartão de fidelização.",
+            12f, false, copperPale
+        ))
         appRoot.addView(header, LinearLayout.LayoutParams(-1, -2).apply {
-            setMargins(dp(12), dp(10), dp(12), dp(4))
+            setMargins(dp(12), dp(8), dp(12), dp(4))
         })
 
         val scroll = ScrollView(this).apply {
             isFillViewport = true
             overScrollMode = View.OVER_SCROLL_NEVER
+            isVerticalScrollBarEnabled = false
         }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(14), dp(16), dp(24))
+            setPadding(dp(16), dp(14), dp(16), dp(18))
+        }
+        when (activeCustomerPage) {
+            "Cartão" -> renderCustomerLoyaltyPage(content)
+            "Carta" -> renderCustomerMenuPage(content)
+            "Conta" -> renderCustomerAccountPage(content)
         }
         scroll.addView(content)
         appRoot.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        val savedName = store.getCustomerProfileName()
-        content.addView(label(if (savedName.isBlank()) "Olá!" else "Olá, " + savedName + "!", 25f, true, forestDeep))
-        addGap(content, 5)
-        content.addView(label("Cartão de fidelização do restaurante.", 13.5f, false, muted))
-        addGap(content, 12)
-        when {
-            backendToken().isBlank() -> content.addView(primaryButton("Criar conta / iniciar sessão") { showAuthChooser { renderCustomerApp() } }, LinearLayout.LayoutParams(-1, dp(46)))
-            backendMemberId().isBlank() -> content.addView(primaryButton("Associar ao restaurante") { showCustomerJoinDialog() }, LinearLayout.LayoutParams(-1, dp(46)))
-            else -> content.addView(primaryButton("Atualizar saldo no servidor") { refreshCustomerMembership() }, LinearLayout.LayoutParams(-1, dp(46)))
+        val nav = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(6), dp(4), dp(6), dp(4))
+            setBackgroundColor(white)
+            elevation = dp(6).toFloat()
         }
-        addGap(content, 15)
+        listOf("Cartão", "Carta", "Conta").forEach { page ->
+            val selected = activeCustomerPage == page
+            val item = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                setPadding(dp(3), dp(3), dp(3), dp(3))
+                background = rounded(if (selected) paleGreen else white, 12)
+                contentDescription = "Abrir secção " + page
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    activeCustomerPage = page
+                    renderCustomerApp()
+                }
+            }
+            item.addView(TextView(this).apply {
+                text = pageGlyph(page)
+                textSize = 17f
+                gravity = Gravity.CENTER
+                setTextColor(if (selected) forestDeep else muted)
+            }, LinearLayout.LayoutParams(-2, dp(21)))
+            item.addView(label(page, 10.5f, true, if (selected) forestDeep else muted).apply {
+                gravity = Gravity.CENTER
+                maxLines = 1
+            })
+            nav.addView(item, LinearLayout.LayoutParams(0, dp(52), 1f).apply {
+                setMargins(dp(3), 0, dp(3), 0)
+            })
+        }
+        appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(60)))
+        setContentView(appRoot)
+    }
+
+    private fun renderCustomerLoyaltyPage(container: LinearLayout) {
+        val savedName = store.getCustomerProfileName()
+        container.addView(label(if (savedName.isBlank()) "Olá!" else "Olá, " + savedName + "!", 25f, true, forestDeep))
+        addGap(container, 5)
+        container.addView(label("Cartão de fidelização do restaurante.", 13.5f, false, muted))
+        addGap(container, 12)
+        when {
+            backendToken().isBlank() -> container.addView(primaryButton("Criar conta / iniciar sessão") { showAuthChooser { renderCustomerApp() } }, LinearLayout.LayoutParams(-1, dp(46)))
+            backendMemberId().isBlank() -> container.addView(primaryButton("Associar ao restaurante") { showCustomerJoinDialog() }, LinearLayout.LayoutParams(-1, dp(46)))
+            else -> container.addView(primaryButton("Atualizar saldo no servidor") { refreshCustomerMembership() }, LinearLayout.LayoutParams(-1, dp(46)))
+        }
+        addGap(container, 15)
 
         val loyalty = makeCard(18, forest)
         loyalty.addView(label("O meu cartão", 10.5f, true, copper))
@@ -2693,11 +2750,21 @@ class MainActivity : Activity() {
         loyalty.addView(label(code, 20f, true, white))
         addGap(loyalty, 9)
         loyalty.addView(label(if (backendMemberId().isBlank()) "Este é um cartão demonstrativo. Cria sessão e associa-o ao código do restaurante para consultar os pontos reais." else "Saldo obtido do sistema de fidelização partilhado. A atribuição de pontos é controlada pelo restaurante.", 12f, false, Color.rgb(229, 235, 228)))
-        content.addView(loyalty, cardParams())
+        container.addView(loyalty, cardParams())
+        addGap(container, 5)
+        container.addView(secondaryButton("Consultar a carta") {
+            activeCustomerPage = "Carta"
+            renderCustomerApp()
+        }, LinearLayout.LayoutParams(-1, dp(48)))
+    }
 
-        content.addView(secondaryButton("Definir o meu nome") { showCustomerProfileDialog() }, LinearLayout.LayoutParams(-1, dp(44)))
-        addGap(content, 15)
-
+    private fun renderCustomerMenuPage(container: LinearLayout) {
+        container.addView(label("CARTA DO RESTAURANTE", 10.5f, true, forestSoft))
+        addGap(container, 4)
+        container.addView(label("Descobre o menu.", 25f, true, forestDeep))
+        addGap(container, 4)
+        container.addView(label("Consulta os artigos, descrições e preços disponíveis.", 13.5f, false, muted))
+        addGap(container, 12)
         val menuCard = makeCard(16)
         val isLinkedToRestaurant = backendMemberId().isNotBlank()
         menuCard.addView(label(if (isLinkedToRestaurant) "Carta do restaurante" else "Carta de demonstração", 10f, true, forestSoft))
@@ -2771,43 +2838,58 @@ class MainActivity : Activity() {
                 menuCard.addView(itemCard, cardParams())
             }
         }
-        content.addView(menuCard, cardParams())
+        container.addView(menuCard, cardParams())
+    }
 
-        val rewards = makeCard(16, copperPale)
-        rewards.addView(label("Próximos prémios", 10f, true, forest))
-        addGap(rewards, 6)
-        rewards.addView(label("Os prémios e as regras de acumulação serão definidos com o restaurante antes do lançamento.", 13f, false, ink))
-        content.addView(rewards, cardParams())
-
+    private fun renderCustomerAccountPage(container: LinearLayout) {
+        container.addView(label("A tua conta", 25f, true, forestDeep))
+        addGap(container, 4)
+        container.addView(label("Perfil, associação ao restaurante e segurança.", 13.5f, false, muted))
+        addGap(container, 13)
+        when {
+            backendToken().isBlank() -> container.addView(
+                primaryButton("Criar conta / iniciar sessão") { showAuthChooser { renderCustomerApp() } },
+                LinearLayout.LayoutParams(-1, dp(48))
+            )
+            backendMemberId().isBlank() -> container.addView(
+                primaryButton("Associar ao restaurante") { showCustomerJoinDialog() },
+                LinearLayout.LayoutParams(-1, dp(48))
+            )
+            else -> container.addView(
+                primaryButton("Atualizar saldo no servidor") { refreshCustomerMembership() },
+                LinearLayout.LayoutParams(-1, dp(48))
+            )
+        }
+        addGap(container, 8)
+        container.addView(secondaryButton("Definir o meu nome") { showCustomerProfileDialog() },
+            LinearLayout.LayoutParams(-1, dp(48)))
+        addGap(container, 12)
         val syncNote = makeCard(13)
         syncNote.addView(label(if (backendMemberId().isBlank()) "CARTÃO AINDA NÃO ASSOCIADO" else "CONTA LIGADA", 10f, true, if (backendMemberId().isBlank()) red else green))
         addGap(syncNote, 5)
         syncNote.addView(label(if (backendMemberId().isBlank()) "Para ver o saldo real, inicia sessão e associa a conta com o código fornecido pelo restaurante." else "Restaurante associado: " + (backendPrefs.getString("member_restaurant_name", "Restaurante") ?: "Restaurante") + ". Atualiza o saldo quando quiseres consultar as alterações mais recentes.", 12f, false, muted))
-        content.addView(syncNote, cardParams())
-
+        container.addView(syncNote, cardParams())
         if (backendToken().isNotBlank()) {
-            content.addView(secondaryButton("Eliminar conta permanentemente") {
+            container.addView(secondaryButton("Eliminar conta permanentemente") {
                 showDeleteAccountConfirmation()
-            }, LinearLayout.LayoutParams(-1, dp(44)))
-            addGap(content, 7)
+            }, LinearLayout.LayoutParams(-1, dp(48)))
+            addGap(container, 7)
+            container.addView(secondaryButton("Terminar sessão neste dispositivo") {
+                val tokenToRevoke = backendToken()
+                if (tokenToRevoke.isNotBlank()) {
+                    Thread { runCatching { SupabaseApi.signOut(tokenToRevoke) } }.start()
+                }
+                secureSession.clear()
+                store.clearCustomerLocalIdentity()
+                backendPrefs.edit()
+                    .remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
+                    .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
+                    .remove("customer_menu_json")
+                    .apply()
+                activeCustomerPage = "Cartão"
+                renderCustomerApp()
+            }, LinearLayout.LayoutParams(-1, dp(48)))
         }
-
-        content.addView(secondaryButton("Terminar sessão neste dispositivo") {
-            val tokenToRevoke = backendToken()
-            if (tokenToRevoke.isNotBlank()) {
-                Thread { runCatching { SupabaseApi.signOut(tokenToRevoke) } }.start()
-            }
-            secureSession.clear()
-            store.clearCustomerLocalIdentity()
-            backendPrefs.edit()
-                .remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
-                .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
-                .remove("customer_menu_json")
-                .apply()
-            renderCustomerApp()
-        }, LinearLayout.LayoutParams(-1, dp(44)))
-
-        setContentView(appRoot)
     }
 
     private fun showCustomerProfileDialog() {

@@ -299,6 +299,25 @@ class MainActivitySmokeTest {
     }
 
     @Test
+    fun customerNavigationSeparatesCardMenuAndAccount() {
+        assumeTrue("Restaurant variant has no customer navigation.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withContentDescription("Abrir secção Cartão")).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Carta")).perform(click())
+            onView(withText("Exemplos de artigos")).check(matches(isDisplayed()))
+
+            onView(withContentDescription("Abrir secção Conta")).perform(click())
+            onView(withText("A tua conta")).check(matches(isDisplayed()))
+            onView(withText("Definir o meu nome")).check(matches(isDisplayed()))
+            onView(withText("Criar conta / iniciar sessão")).check(matches(isDisplayed()))
+
+            onView(withContentDescription("Abrir secção Cartão")).perform(click())
+            onView(withText("Cartão de fidelização do restaurante.")).check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
     fun customerCanOpenAccountChooserWithoutNetworkCredentials() {
         assumeTrue("Restaurant variant uses the management account flow.", isCustomerVariant())
 
