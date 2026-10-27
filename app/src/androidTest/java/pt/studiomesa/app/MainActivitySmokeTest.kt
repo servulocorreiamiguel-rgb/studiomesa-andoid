@@ -110,10 +110,23 @@ class MainActivitySmokeTest {
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
 
+            onView(withHint("Ex.: 30"))
+                .perform(replaceText("40"))
+
+            onView(withText(containsString("10,67")))
+                .check(doesNotExist())
+
+            onView(withText("Calcular preço sugerido"))
+                .perform(scrollTo(), click())
+
+            onView(withText(containsString("8,00")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+
             onView(withHint("Ex.: 3,20"))
                 .perform(replaceText("0"))
 
-            onView(withText(containsString("10,67")))
+            onView(withText(containsString("8,00")))
                 .check(doesNotExist())
 
             onView(withText("Calcular preço sugerido"))
@@ -123,8 +136,36 @@ class MainActivitySmokeTest {
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
 
-            onView(withText(containsString("10,67")))
+            onView(withText(containsString("8,00")))
                 .check(doesNotExist())
+        }
+    }
+
+    @Test
+    fun calculatorDisplaysSmallPercentagesWithoutRoundingThemToZero() {
+        assumeFalse("Customer variant has no management calculator.", isCustomerVariant())
+        assumeTrue("The Essential plan does not include the price calculator.", isCalculatorAvailable())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withText("ABRIR CALCULADORA"))
+                .perform(scrollTo(), click())
+
+            onView(withHint("Ex.: 3,20"))
+                .perform(replaceText("3,20"))
+
+            onView(withHint("Ex.: 30"))
+                .perform(replaceText("0,01"))
+
+            onView(withText("Calcular preço sugerido"))
+                .perform(scrollTo(), click())
+
+            onView(withText(containsString("0,01%")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+
+            onView(withText(containsString("99,99%")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
         }
     }
 
