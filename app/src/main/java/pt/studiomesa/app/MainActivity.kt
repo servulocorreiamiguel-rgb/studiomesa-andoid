@@ -1691,9 +1691,13 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun requiresSessionReverification(error: Exception): Boolean =
+        SessionAuthorizationErrorClassifier.requiresReverification(error)
+
     private fun runBackend(
         task: () -> String,
         refreshSession: Boolean = true,
+        onError: ((Exception) -> Unit)? = null,
         onSuccess: (String) -> Unit
     ) {
         val progress = AlertDialog.Builder(this)
@@ -1716,11 +1720,21 @@ class MainActivity : Activity() {
                 runOnUiThread {
                     if (!isFinishing) {
                         progress.dismiss()
-                        AlertDialog.Builder(this)
-                            .setTitle("Não foi possível concluir")
-                            .setMessage(friendlyBackendError(error.message))
-                            .setPositiveButton("OK", null)
-                            .show()
+                        if (requiresSessionReverification(error)) {
+                            // Authorization failures take precedence over screen-specific
+                            // handlers: never leave cached tenant data visible after access
+                            // could not be confirmed.
+                            clearCachedTenantState()
+                            renderSessionVerificationScreen(isVerifying = false)
+                        } else if (onError != null) {
+                            onError(error)
+                        } else {
+                            AlertDialog.Builder(this)
+                                .setTitle("Não foi possível concluir")
+                                .setMessage(friendlyBackendError(error.message))
+                                .setPositiveButton("OK", null)
+                                .show()
+                        }
                     }
                 }
             }
