@@ -22,6 +22,8 @@ import android.widget.TextView
 import org.json.JSONArray
 import org.json.JSONObject
 import java.math.BigDecimal
+import java.text.DecimalFormat
+import java.text.DecimalFormatSymbols
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -1243,13 +1245,9 @@ class MainActivity : Activity() {
 
             result.text = "PREÇO INDICATIVO\n" + money(calculation.suggestedPrice) +
                 "\n\nCusto por unidade: " + money(calculation.cost) +
-                "\nCusto sobre o preço final: " + String.format(
-                    Locale("pt", "PT"), "%.1f%%", calculation.actualCostPercent.toDouble()
-                ) +
+                "\nCusto sobre o preço final: " + formatPercentage(calculation.actualCostPercent) +
                 "\nMargem bruta estimada: " + money(calculation.grossProfit) +
-                "\nMargem bruta: " + String.format(
-                    Locale("pt", "PT"), "%.1f%%", calculation.grossMarginPercent.toDouble()
-                )
+                "\nMargem bruta: " + formatPercentage(calculation.grossMarginPercent)
             result.setTextColor(forest)
         }, LinearLayout.LayoutParams(-1, dp(48)))
         addGap(form, 10)
@@ -3789,6 +3787,10 @@ class MainActivity : Activity() {
 
     private fun money(value: BigDecimal): String =
         NumberFormat.getCurrencyInstance(Locale("pt", "PT")).format(value)
+
+    // Keep one decimal for ordinary values but retain a second decimal when it is material (e.g. 0.01%).
+    private fun formatPercentage(value: BigDecimal): String =
+        DecimalFormat("0.0#", DecimalFormatSymbols.getInstance(Locale("pt", "PT"))).format(value) + "%"
 
     private fun money(value: Double): String =
         NumberFormat.getCurrencyInstance(Locale("pt", "PT")).format(value)
