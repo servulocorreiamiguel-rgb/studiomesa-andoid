@@ -175,7 +175,8 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot
           script: |
-            set -euo pipefail
+            # The emulator action executes this script with /usr/bin/sh, not Bash.
+            set -eu
             for test_task in \
               connectedEssencialRestauranteDebugAndroidTest \
               connectedProfissionalRestauranteDebugAndroidTest \
@@ -234,7 +235,8 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot
           script: |
-            set -euo pipefail
+            # The emulator action executes this script with /usr/bin/sh, not Bash.
+            set -eu
             for test_task in \
               connectedEssencialRestauranteDebugAndroidTest \
               connectedProfissionalRestauranteDebugAndroidTest \
