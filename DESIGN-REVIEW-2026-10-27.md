@@ -45,6 +45,16 @@ Referências públicas:
 9. **Identidade por restaurante.** Depois de o restaurante configurar o espaço, considerar logótipo e nome verdadeiros no cabeçalho, sem perder a identidade StudioMesa e sem mostrar nomes de demonstração em produção.
 10. **Análise visual.** Os gráficos só devem ser acrescentados quando houver dados históricos suficientes e claros. Os ecrãs de análise não devem mostrar gráficos vazios ou números decorativos.
 
+## Aplicação de cliente: o que falta clarificar
+
+A aplicação de cliente tem uma base visual coerente — cartão de fidelização, saldo de pontos e carta publicada —, mas o fluxo atual é essencialmente uma **experiência de fidelização e consulta da carta**, não uma aplicação completa de encomendas ou reservas.
+
+1. **Prémios e regras de pontos:** o cartão mostra “Próximos prémios”, mas o próprio ecrã indica que as regras ainda serão definidas com o restaurante. Antes de mostrar esta área a clientes reais, definir e implementar regras, ou ocultar o bloco até existir conteúdo real.
+2. **Carta mais visual:** os artigos aparecem como texto, descrição, preço e indicação de alergénios; não encontrei um fluxo de fotografias de artigos. Fotografias aprovadas, categorias e pesquisa ajudariam numa carta longa. Os alergénios devem continuar a ser declarados pelo restaurante e apresentados com a indicação para confirmar com a equipa.
+3. **Separar tarefas quando o produto crescer:** o ecrã é atualmente uma página longa, com cartão, carta e perfil. Para um produto com mais tarefas, considerar três áreas claras — Cartão, Carta e Conta — em vez de acrescentar cada vez mais conteúdo à mesma página.
+4. **Não prometer fluxos ainda não presentes:** não encontrei no ecrã de cliente um fluxo de encomenda ou de reserva. Se esses serviços fizerem parte da oferta comercial, terão de ser concebidos e testados como funcionalidades próprias; caso contrário, descrever o produto como cartão de fidelização e consulta da carta.
+5. **Estados da conta fáceis de entender:** manter claras as diferenças entre cartão demonstrativo, conta ainda não associada, sessão iniciada e saldo atualizado. Não apresentar pontos de demonstração como saldo real.
+
 ## Fora do âmbito desta alteração
 
 A navegação não torna automaticamente a aplicação pronta para venda. Continuam a exigir validação separada os testes em dispositivos reais, sessões expiradas/rede instável, sincronização concorrente, cópias de segurança e recuperação, privacidade, configuração de autenticação e uma compilação comercial assinada. POS/pagamentos, faturação, impressoras, lembretes automáticos e integrações só devem ser anunciados quando estiverem implementados e testados.
