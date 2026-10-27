@@ -51,21 +51,26 @@ jobs:
           import json, sys
           expected_sha = sys.argv[1]
           runs = json.load(sys.stdin).get("workflow_runs", [])
-          passed = [
+          matching = [
               run for run in runs
               if run.get("head_sha") == expected_sha
               and run.get("head_branch") == "main"
               and run.get("event") == "push"
-              and run.get("status") == "completed"
-              and run.get("conclusion") == "success"
           ]
-          if not passed:
+          if not matching:
               print(
-                  "Release blocked: full Android CI has not passed for this exact commit. "
-                  "Wait for the Build StudioMesa Android APK workflow on main to finish successfully."
+                  "Release blocked: no full Android CI run was found for this exact commit. "
+                  "Wait for the Build StudioMesa Android APK workflow on main to finish."
               )
               sys.exit(1)
-          print(f"Verified successful full CI for commit {expected_sha}.")
+          latest = max(matching, key=lambda run: run.get("created_at", ""))
+          if latest.get("status") != "completed" or latest.get("conclusion") != "success":
+              print(
+                  "Release blocked: the latest full Android CI run for this commit "
+                  "has not completed successfully."
+              )
+              sys.exit(1)
+          print(f"Verified latest full CI success for commit {expected_sha}.")
           ' "$GITHUB_SHA" <<< "$response"
 
       - name: Set up Java 17
