@@ -31,6 +31,8 @@ internal object PriceCalculator {
     private const val MAX_INPUT_LENGTH = 64
     private val zero = BigDecimal.ZERO
     private val oneHundred = BigDecimal("100")
+    // Matches the positive maximum of numeric(10,2) used by menu price/cost columns.
+    private val maximumMoney = BigDecimal("99999999.99")
     // Percentages are shown to at most two decimal places; smaller targets can produce
     // misleading zero-looking margins and implausibly large suggested prices.
     private val minimumTargetPercent = BigDecimal("0.01")
@@ -44,6 +46,12 @@ internal object PriceCalculator {
             throw PriceCalculationException(PriceInputField.COST, "Usa no máximo duas casas decimais no custo.")
         }
         val cost = costEntered.setScale(2, RoundingMode.UNNECESSARY)
+        if (cost > maximumMoney) {
+            throw PriceCalculationException(
+                PriceInputField.COST,
+                "O custo excede o limite suportado pela carta (99 999 999,99 €)."
+            )
+        }
 
         val targetPercent = parseDecimal(
             targetCostPercentText,
@@ -66,6 +74,12 @@ internal object PriceCalculator {
             throw PriceCalculationException(
                 PriceInputField.TARGET_COST_PERCENT,
                 "Os valores são demasiado elevados para calcular um preço."
+            )
+        }
+        if (suggestedPrice > maximumMoney) {
+            throw PriceCalculationException(
+                PriceInputField.TARGET_COST_PERCENT,
+                "O preço sugerido excede o limite suportado pela carta (99 999 999,99 €). Aumenta a percentagem pretendida ou revê os valores."
             )
         }
 
