@@ -1976,7 +1976,14 @@ class MainActivity : Activity() {
                                             .putString("user_id", user.optString("id"))
                                             .putString("user_email", email)
                                             .apply()
-                                        if (isCustomerApp) restoreCustomerMembership(token) else restoreOwnedRestaurant(token)
+                                        val restored = if (isCustomerApp) {
+                                            restoreCustomerMembership(token)
+                                        } else {
+                                            restoreOwnedRestaurant(token)
+                                        }
+                                        if (!restored) {
+                                            throw IllegalStateException("Não foi possível confirmar as permissões da conta. Verifica a ligação e tenta novamente.")
+                                        }
                                         "SIGNED_IN"
                                     }
                                     user != null -> {
@@ -1998,7 +2005,14 @@ class MainActivity : Activity() {
                                     .putString("user_id", session.userId)
                                     .putString("user_email", session.email)
                                     .apply()
-                                if (isCustomerApp) restoreCustomerMembership(session.accessToken) else restoreOwnedRestaurant(session.accessToken)
+                                val restored = if (isCustomerApp) {
+                                    restoreCustomerMembership(session.accessToken)
+                                } else {
+                                    restoreOwnedRestaurant(session.accessToken)
+                                }
+                                if (!restored) {
+                                    throw IllegalStateException("Não foi possível confirmar as permissões da conta. Verifica a ligação e tenta novamente.")
+                                }
                                 "SIGNED_IN"
                             }
                         }, refreshSession = false) { result ->
