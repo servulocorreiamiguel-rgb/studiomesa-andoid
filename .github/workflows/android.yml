@@ -174,20 +174,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot
-          script: |
-            # The emulator action executes this script with /usr/bin/sh, not Bash.
-            set -eu
-            for test_task in \
-              connectedEssencialRestauranteDebugAndroidTest \
-              connectedProfissionalRestauranteDebugAndroidTest \
-              connectedProfissionalClienteDebugAndroidTest \
-              connectedPremiumRestauranteDebugAndroidTest \
-              connectedPremiumClienteDebugAndroidTest
-            do
-              echo "STARTING_ANDROID_SMOKE_TASK=$test_task"
-              timeout --signal=TERM --kill-after=30s 8m gradle --no-daemon --max-workers=1 "$test_task"
-              echo "PASSED_ANDROID_SMOKE_TASK=$test_task"
-            done
+          script: set -eu; for test_task in connectedEssencialRestauranteDebugAndroidTest connectedProfissionalRestauranteDebugAndroidTest connectedProfissionalClienteDebugAndroidTest connectedPremiumRestauranteDebugAndroidTest connectedPremiumClienteDebugAndroidTest; do echo "STARTING_ANDROID_SMOKE_TASK=$test_task"; timeout --signal=TERM --kill-after=30s 8m gradle --no-daemon --max-workers=1 "$test_task" || exit $?; echo "PASSED_ANDROID_SMOKE_TASK=$test_task"; done
 
       - name: Upload emulator test results
         if: always()
@@ -234,20 +221,7 @@ jobs:
           profile: Nexus 5X
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot
-          script: |
-            # The emulator action executes this script with /usr/bin/sh, not Bash.
-            set -eu
-            for test_task in \
-              connectedEssencialRestauranteDebugAndroidTest \
-              connectedProfissionalRestauranteDebugAndroidTest \
-              connectedProfissionalClienteDebugAndroidTest \
-              connectedPremiumRestauranteDebugAndroidTest \
-              connectedPremiumClienteDebugAndroidTest
-            do
-              echo "STARTING_ANDROID_SMOKE_TASK=$test_task"
-              timeout --signal=TERM --kill-after=30s 8m gradle --no-daemon --max-workers=1 "$test_task"
-              echo "PASSED_ANDROID_SMOKE_TASK=$test_task"
-            done
+          script: set -eu; for test_task in connectedEssencialRestauranteDebugAndroidTest connectedProfissionalRestauranteDebugAndroidTest connectedProfissionalClienteDebugAndroidTest connectedPremiumRestauranteDebugAndroidTest connectedPremiumClienteDebugAndroidTest; do echo "STARTING_ANDROID_SMOKE_TASK=$test_task"; timeout --signal=TERM --kill-after=30s 8m gradle --no-daemon --max-workers=1 "$test_task" || exit $?; echo "PASSED_ANDROID_SMOKE_TASK=$test_task"; done
 
       - name: Upload Android 8 test results
         if: always()
