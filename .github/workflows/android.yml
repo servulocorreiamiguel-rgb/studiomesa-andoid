@@ -38,6 +38,11 @@ jobs:
           python3 scripts/test_audit_supabase_security.py
           python3 scripts/audit_supabase_security.py
 
+      - name: Audit Android HTTP transport safety
+        run: |
+          python3 scripts/test_check_android_http_safety.py
+          python3 scripts/check_android_http_safety.py
+
       - name: Set up Java 17
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
         with:
