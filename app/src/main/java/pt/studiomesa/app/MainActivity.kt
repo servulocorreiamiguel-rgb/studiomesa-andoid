@@ -86,28 +86,61 @@ class MainActivity : Activity() {
         }
         window.statusBarColor = forestDeep
         window.navigationBarColor = forestDeep
-        renderApp()
-        handleAuthCallback(intent)
-
-        // Refresh shared data when an already-authenticated user opens the app,
-        // but do not start a second request while processing an OAuth callback.
-        if (intent?.data == null && backendToken().isNotBlank()) {
-            if (isCustomerApp && backendMemberId().isNotBlank()) {
-                refreshCustomerMembership()
-            } else if (!isCustomerApp && hasRemoteRestaurant()) {
-                refreshRemoteOperations()
-            }
+        // Do not render restaurant/customer data from disk before the server verifies
+        // the saved session and the current membership/role.
+        if (isAuthCallbackIntent(intent)) {
+            clearCachedTenantState()
+            renderSessionVerificationScreen(isVerifying = true)
+            handleAuthCallback(intent)
+        } else if (hasStoredSession()) {
+            verifyExistingSessionAndRender()
+        } else {
+            clearCachedTenantState()
+            backendPrefs.edit()
+                .remove("user_id")
+                .remove("user_email")
+                .remove("access_token")
+                .remove("refresh_token")
+                .apply()
+            renderApp()
         }
     }
 
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleAuthCallback(intent)
+        if (isAuthCallbackIntent(intent)) {
+            clearCachedTenantState()
+            renderSessionVerificationScreen(isVerifying = true)
+            handleAuthCallback(intent)
+        } else if (hasStoredSession()) {
+            verifyExistingSessionAndRender()
+        } else {
+            clearCachedTenantState()
+            renderApp()
+        }
     }
 
     private fun parseAuthParams(raw: String?): Map<String, String> =
         AuthCallbackParser.parse(raw)
+
+    private fun isAuthCallbackIntent(callbackIntent: android.content.Intent?): Boolean {
+        val uri = callbackIntent?.data ?: return false
+        return uri.scheme == "studiomesa" && uri.host == "auth-callback"
+    }
+
+    private fun hasStoredSession(): Boolean =
+        backendToken().isNotBlank() || secureSession.refreshToken().isNotBlank()
+
+    private fun recoverAfterAuthCallbackFailure() {
+        if (hasStoredSession()) {
+            verifyExistingSessionAndRender()
+        } else {
+            clearCachedTenantState()
+            backendPrefs.edit().remove("user_id").remove("user_email").apply()
+            renderApp()
+        }
+    }
 
     private fun handleAuthCallback(callbackIntent: android.content.Intent?) {
         val uri = callbackIntent?.data ?: return
@@ -125,7 +158,7 @@ class MainActivity : Activity() {
             AlertDialog.Builder(this)
                 .setTitle("Autenticação não concluída")
                 .setMessage(errorText.replace('+', ' ').take(500))
-                .setPositiveButton("OK", null)
+                .setPositiveButton("OK") { _, _ -> recoverAfterAuthCallbackFailure() }
                 .show()
             return
         }
@@ -140,7 +173,7 @@ class MainActivity : Activity() {
             AlertDialog.Builder(this)
                 .setTitle("Ligação de autenticação inválida")
                 .setMessage("Não foi recebida uma ligação protegida válida. Pede uma nova ligação e abre-a neste telemóvel, com a aplicação instalada.")
-                .setPositiveButton("OK", null)
+                .setPositiveButton("OK") { _, _ -> recoverAfterAuthCallbackFailure() }
                 .show()
             return
         }
@@ -158,10 +191,22 @@ class MainActivity : Activity() {
                 .putString("user_id", id)
                 .putString("user_email", user.optString("email", session.email))
                 .apply()
-            if (isCustomerApp) restoreCustomerMembership(session.accessToken)
-            else restoreOwnedRestaurant(session.accessToken)
+            val restored = if (isCustomerApp) {
+                restoreCustomerMembership(session.accessToken)
+            } else {
+                restoreOwnedRestaurant(session.accessToken)
+            }
+            if (!restored) {
+                throw IllegalStateException("Não foi possível confirmar o acesso aos dados da conta. Verifica a ligação e tenta novamente.")
+            }
             "SIGNED_IN"
-        }, refreshSession = false) {
+        }, refreshSession = false, onError = { error ->
+            AlertDialog.Builder(this)
+                .setTitle("Não foi possível concluir a autenticação")
+                .setMessage(friendlyBackendError(error.message))
+                .setPositiveButton("OK") { _, _ -> recoverAfterAuthCallbackFailure() }
+                .show()
+        }) {
             if (isPasswordRecovery) {
                 showSetNewPasswordDialog()
             } else {
@@ -170,7 +215,7 @@ class MainActivity : Activity() {
                     .setTitle("Sessão iniciada")
                     .setMessage("A conta foi ligada ao StudioMesa. " +
                         if (isCustomerApp) "Agora associa-te ao restaurante com o respetivo código." else "Agora configura o restaurante para gerar um código de adesão.")
-                    .setPositiveButton("OK", null)
+                    .setPositiveButton("OK") { _, _ -> recoverAfterAuthCallbackFailure() }
                     .show()
             }
         }
