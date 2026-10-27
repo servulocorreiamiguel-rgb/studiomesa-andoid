@@ -30,8 +30,24 @@ jobs:
             exit 1
           fi
 
+      - name: Require the reviewed main branch
+        shell: bash
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "Stopped: signed commercial releases must be built from the reviewed main branch."
+            exit 1
+          fi
+
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Test commercial release workflow safeguards
+        run: |
+          python3 scripts/test_check_commercial_release_workflow.py
+          python3 scripts/check_commercial_release_workflow.py
 
       - name: Set up Java 17
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
