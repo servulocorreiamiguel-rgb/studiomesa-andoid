@@ -112,6 +112,16 @@ class PriceCalculatorTest {
     }
 
     @Test
+    fun avoidsIntermediateRoundingThatMakesPercentagesSumToOneHundredPointZeroOne() {
+        val result = PriceCalculator.calculate("50.01", "50.005")
+
+        assertEquals(BigDecimal("100.01"), result.suggestedPrice)
+        assertEquals(BigDecimal("50.00"), result.actualCostPercent)
+        assertEquals(BigDecimal("50.00"), result.grossMarginPercent)
+        assertEquals(BigDecimal("100.00"), result.actualCostPercent.add(result.grossMarginPercent))
+    }
+
+    @Test
     fun preservesSmallValidPercentagesInsteadOfRoundingCostShareToZero() {
         val result = PriceCalculator.calculate("3,20", "0,01")
 
