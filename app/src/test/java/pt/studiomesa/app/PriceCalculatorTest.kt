@@ -59,6 +59,15 @@ class PriceCalculatorTest {
     }
 
     @Test
+    fun rejectsTargetPercentageBelowDisplayPrecision() {
+        val error = assertThrows(PriceCalculationException::class.java) {
+            PriceCalculator.calculate("3.20", "0.009")
+        }
+        assertEquals(PriceInputField.TARGET_COST_PERCENT, error.field)
+        assertEquals("Usa uma percentagem entre 0,01 e 100.", error.message)
+    }
+
+    @Test
     fun rejectsTargetPercentageAboveOneHundred() {
         val error = assertThrows(PriceCalculationException::class.java) {
             PriceCalculator.calculate("3.20", "100.01")
@@ -100,6 +109,16 @@ class PriceCalculatorTest {
         assertEquals(BigDecimal("2.34"), result.grossProfit)
         assertEquals(BigDecimal("29.94"), result.actualCostPercent)
         assertEquals(BigDecimal("70.06"), result.grossMarginPercent)
+    }
+
+    @Test
+    fun avoidsIntermediateRoundingThatMakesPercentagesSumToOneHundredPointZeroOne() {
+        val result = PriceCalculator.calculate("50.01", "50.005")
+
+        assertEquals(BigDecimal("100.01"), result.suggestedPrice)
+        assertEquals(BigDecimal("50.00"), result.actualCostPercent)
+        assertEquals(BigDecimal("50.00"), result.grossMarginPercent)
+        assertEquals(BigDecimal("100.00"), result.actualCostPercent.add(result.grossMarginPercent))
     }
 
     @Test

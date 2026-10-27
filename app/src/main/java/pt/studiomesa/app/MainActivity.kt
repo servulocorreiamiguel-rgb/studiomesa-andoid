@@ -1227,6 +1227,19 @@ class MainActivity : Activity() {
         costField.addTextChangedListener(inputChangeWatcher)
         percentageField.addTextChangedListener(inputChangeWatcher)
 
+        // Clear only the edited field's validation error as soon as the user corrects it.
+        fun clearValidationErrorWhenEdited(field: EditText) {
+            field.addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    field.error = null
+                }
+                override fun afterTextChanged(s: android.text.Editable?) = Unit
+            })
+        }
+        clearValidationErrorWhenEdited(costField)
+        clearValidationErrorWhenEdited(percentageField)
+
         form.addView(primaryButton("Calcular preço sugerido") {
             val calculation = try {
                 PriceCalculator.calculate(

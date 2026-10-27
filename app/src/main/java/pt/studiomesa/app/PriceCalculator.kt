@@ -31,6 +31,9 @@ internal object PriceCalculator {
     private const val MAX_INPUT_LENGTH = 64
     private val zero = BigDecimal.ZERO
     private val oneHundred = BigDecimal("100")
+    // Percentages are shown to at most two decimal places; smaller targets can produce
+    // misleading zero-looking margins and implausibly large suggested prices.
+    private val minimumTargetPercent = BigDecimal("0.01")
 
     fun calculate(costText: String, targetCostPercentText: String): PriceCalculationResult {
         val costEntered = parseDecimal(costText, PriceInputField.COST, "Introduz um custo numérico válido.")
@@ -47,10 +50,10 @@ internal object PriceCalculator {
             PriceInputField.TARGET_COST_PERCENT,
             "Introduz uma percentagem numérica válida."
         )
-        if (targetPercent <= zero || targetPercent > oneHundred) {
+        if (targetPercent < minimumTargetPercent || targetPercent > oneHundred) {
             throw PriceCalculationException(
                 PriceInputField.TARGET_COST_PERCENT,
-                "Usa uma percentagem superior a 0 e até 100."
+                "Usa uma percentagem entre 0,01 e 100."
             )
         }
 
@@ -67,13 +70,15 @@ internal object PriceCalculator {
         }
 
         val grossProfit = suggestedPrice.subtract(cost).setScale(2, RoundingMode.HALF_UP)
+        // Multiply before dividing, and keep guard digits until the final percentage rounding.
+        // Rounding the ratio first can move values across a HALF_UP boundary (e.g. 50.01 / 100.01).
         val actualCostPercent = cost
-            .divide(suggestedPrice, 8, RoundingMode.HALF_UP)
             .multiply(oneHundred)
+            .divide(suggestedPrice, 10, RoundingMode.HALF_UP)
             .setScale(2, RoundingMode.HALF_UP)
         val grossMarginPercent = grossProfit
-            .divide(suggestedPrice, 8, RoundingMode.HALF_UP)
             .multiply(oneHundred)
+            .divide(suggestedPrice, 10, RoundingMode.HALF_UP)
             .setScale(2, RoundingMode.HALF_UP)
 
         return PriceCalculationResult(
