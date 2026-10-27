@@ -64,8 +64,8 @@ class MainActivity : Activity() {
     private val line = Color.rgb(230, 229, 220)
     private val paleGreen = Color.rgb(235, 242, 236)
     private val paleRed = Color.rgb(249, 237, 233)
-    private val red = Color.rgb(169, 89, 78)
-    private val green = Color.rgb(84, 123, 98)
+    private val red = Color.rgb(157, 65, 56)
+    private val green = Color.rgb(55, 105, 72)
 
     private val planTitle: String
         get() = when {
@@ -410,7 +410,7 @@ class MainActivity : Activity() {
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
         })
-        brandText.addView(label("StudioMesa · Gestão de sala", 10f, true, copper))
+        brandText.addView(label("StudioMesa · Gestão de sala", 10f, true, copperPale))
         brandRow.addView(brandText, LinearLayout.LayoutParams(0, -2, 1f))
 
         val planChip = label(planTitle, 9.5f, true, forestDeep).apply {
@@ -928,7 +928,7 @@ class MainActivity : Activity() {
                 }
                 top.addView(label("Mesa " + order.optInt("table_number", 1).toString().padStart(2, '0'), 10f, true, forestSoft),
                     LinearLayout.LayoutParams(0, -2, 1f))
-                top.addView(label(status.uppercase(Locale("pt", "PT")), 9f, true, if (closed) green else copper).apply {
+                top.addView(label(status.uppercase(Locale("pt", "PT")), 9f, true, if (closed) green else forestSoft).apply {
                     setPadding(dp(8), dp(6), dp(8), dp(6))
                     background = rounded(if (closed) paleGreen else copperPale, 12)
                 })
@@ -995,7 +995,7 @@ class MainActivity : Activity() {
                 gravity = Gravity.CENTER_VERTICAL
             }
             top.addView(label("Mesa " + order.table.toString().padStart(2, '0'), 10f, true, forestSoft), LinearLayout.LayoutParams(0, -2, 1f))
-            top.addView(label(if (done) "CONCLUÍDO" else "EM ABERTO", 9f, true, if (done) green else copper).apply {
+            top.addView(label(if (done) "CONCLUÍDO" else "EM ABERTO", 9f, true, if (done) green else forestSoft).apply {
                 setPadding(dp(8), dp(6), dp(8), dp(6))
                 background = rounded(if (done) paleGreen else copperPale, 12)
             })
@@ -2659,7 +2659,7 @@ class MainActivity : Activity() {
             ellipsize = android.text.TextUtils.TruncateAt.END
         })
         addGap(header, 4)
-        header.addView(label("Cartão digital de cliente · " + planTitle, 10.5f, true, copper))
+        header.addView(label("Cartão digital de cliente · " + planTitle, 10.5f, true, copperPale))
         addGap(header, 9)
         header.addView(label("A tua experiência, num só lugar.", 16f, true, white))
         header.addView(label(
@@ -2742,7 +2742,7 @@ class MainActivity : Activity() {
         addGap(container, 15)
 
         val loyalty = makeCard(18, forest)
-        loyalty.addView(label("O meu cartão", 10.5f, true, copper))
+        loyalty.addView(label("O meu cartão", 10.5f, true, copperPale))
         addGap(loyalty, 10)
         loyalty.addView(label(backendPrefs.getInt("member_points", 0).toString(), 42f, true, white))
         loyalty.addView(label(if (backendMemberId().isBlank()) "Pontos de demonstração" else "Pontos disponíveis", 10f, true, copperPale))
