@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from check_commercial_release_workflow import audit_workflow
+from check_commercial_release_workflow import audit_ci_test_bundle, audit_workflow
 
 
 SAFE_WORKFLOW = """name: Build signed StudioMesa commercial AABs
@@ -48,6 +48,21 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           test -n "$ANDROID_KEYSTORE_PASSWORD"
+
+      - name: Verify signed bundles
+        run: |
+          verification_output="$(jarsigner -verify "$bundle" 2>&1)" || exit 1
+          if ! grep -Fq "jar verified." <<< "$verification_output"; then
+            exit 1
+          fi
+"""
+
+SAFE_ANDROID_WORKFLOW = """      - name: Verify temporary CI AAB
+        run: |
+          verification_output="$(jarsigner -verify "$AAB_PATH" 2>&1)" || exit 1
+          if ! grep -Fq "jar verified." <<< "$verification_output"; then
+            exit 1
+          fi
 """
 
 
@@ -96,6 +111,25 @@ class CommercialReleaseWorkflowAuditTests(unittest.TestCase):
         changed = SAFE_WORKFLOW.replace("      - name: Require explicit confirmation\n", "")
         self.assertTrue(
             any("Require explicit confirmation" in error for error in audit_workflow(changed))
+        )
+
+    def test_rejects_jarsigner_check_without_explicit_success_marker(self) -> None:
+        changed = SAFE_WORKFLOW.replace(
+            '          if ! grep -Fq "jar verified." <<< "$verification_output"; then\\n            exit 1\\n          fi\\n',
+            '',
+        )
+        self.assertTrue(
+            any("explicitly reject AABs" in error for error in audit_workflow(changed))
+        )
+
+    def test_android_ci_must_verify_its_temporary_aab_signature(self) -> None:
+        self.assertEqual([], audit_ci_test_bundle(SAFE_ANDROID_WORKFLOW))
+        changed = SAFE_ANDROID_WORKFLOW.replace(
+            '          if ! grep -Fq "jar verified." <<< "$verification_output"; then\\n            exit 1\\n          fi\\n',
+            '',
+        )
+        self.assertTrue(
+            any("explicit" in error for error in audit_ci_test_bundle(changed))
         )
 
     def test_rejects_printing_a_signing_secret(self) -> None:
