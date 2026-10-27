@@ -113,6 +113,24 @@ class CommercialReleaseWorkflowAuditTests(unittest.TestCase):
             any("Require explicit confirmation" in error for error in audit_workflow(changed))
         )
 
+    def test_requires_exact_BUILD_confirmation_value(self) -> None:
+        changed = SAFE_WORKFLOW.replace(
+            'if [ "$CONFIRM" != "BUILD" ]',
+            'if [ "$CONFIRM" = "BUILD" ]',
+        )
+        self.assertTrue(
+            any("exact confirmation value BUILD" in error for error in audit_workflow(changed))
+        )
+
+    def test_confirmation_must_read_dispatch_input(self) -> None:
+        changed = SAFE_WORKFLOW.replace(
+            'CONFIRM: ${{ inputs.confirm }}',
+            'CONFIRM: ${{ github.event_name }}',
+        )
+        self.assertTrue(
+            any("workflow_dispatch confirm input" in error for error in audit_workflow(changed))
+        )
+
     def test_rejects_jarsigner_check_without_explicit_success_marker(self) -> None:
         changed = SAFE_WORKFLOW.replace(
             'grep -Fq "jar verified."',
