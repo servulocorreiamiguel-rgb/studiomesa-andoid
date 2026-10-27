@@ -109,10 +109,12 @@ internal object PriceCalculator {
         field: PriceInputField,
         errorMessage: String
     ): BigDecimal {
-        val normalized = rawText.trim().replace(',', '.')
-        if (normalized.length > MAX_INPUT_LENGTH) {
+        // Enforce the limit before trimming or replacing characters, so oversized pasted
+        // input cannot trigger avoidable copies and surrounding whitespace cannot bypass it.
+        if (rawText.length > MAX_INPUT_LENGTH) {
             throw PriceCalculationException(field, "O valor introduzido é demasiado longo.")
         }
+        val normalized = rawText.trim().replace(',', '.')
         if (normalized.isEmpty() || !decimalInput.matches(normalized)) {
             throw PriceCalculationException(field, errorMessage)
         }
