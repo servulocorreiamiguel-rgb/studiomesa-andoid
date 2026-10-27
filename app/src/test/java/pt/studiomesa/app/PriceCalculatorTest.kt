@@ -13,8 +13,8 @@ class PriceCalculatorTest {
         assertEquals(BigDecimal("3.20"), result.cost)
         assertEquals(BigDecimal("10.67"), result.suggestedPrice)
         assertEquals(BigDecimal("7.47"), result.grossProfit)
-        assertEquals(BigDecimal("30.00"), result.actualCostPercent)
-        assertEquals(BigDecimal("70.00"), result.grossMarginPercent)
+        assertEquals(BigDecimal("29.99"), result.actualCostPercent)
+        assertEquals(BigDecimal("70.01"), result.grossMarginPercent)
     }
 
     @Test
