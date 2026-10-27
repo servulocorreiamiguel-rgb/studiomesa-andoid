@@ -19,16 +19,16 @@ def audit_workflow(text: str) -> list[str]:
         errors.append("Commercial signing workflow must not be triggered automatically.")
 
     confirmation_step = re.search(
-        r"(?ms)^      - name: Require explicit confirmation\\s*\\n(.*?)(?=^      - name: |\\Z)",
+        r"(?ms)^      - name: Require explicit confirmation\s*\n(.*?)(?=^      - name: |\Z)",
         text,
     )
     if confirmation_step is not None:
         body = confirmation_step.group(1)
-        if not re.search(r"(?m)^\\s*CONFIRM: \\$\\{\\{ inputs\\.confirm \\}\\}\\s*$", body):
+        if not re.search(r"(?m)^\s*CONFIRM: \$\{\{ inputs\.confirm \}\}\s*$", body):
             errors.append("The release confirmation must read the workflow_dispatch confirm input.")
         if 'if [ "$CONFIRM" != "BUILD" ]' not in body:
             errors.append("The release workflow must require the exact confirmation value BUILD.")
-        if not re.search(r"(?m)^\\s*exit 1\\s*$", body):
+        if not re.search(r"(?m)^\s*exit 1\s*$", body):
             errors.append("The release workflow must stop when the confirmation value is not BUILD.")
 
     def step_position(name: str) -> int | None:
