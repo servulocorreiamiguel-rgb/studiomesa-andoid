@@ -59,6 +59,15 @@ class PriceCalculatorTest {
     }
 
     @Test
+    fun rejectsTargetPercentageBelowDisplayPrecision() {
+        val error = assertThrows(PriceCalculationException::class.java) {
+            PriceCalculator.calculate("3.20", "0.009")
+        }
+        assertEquals(PriceInputField.TARGET_COST_PERCENT, error.field)
+        assertEquals("Usa uma percentagem entre 0,01 e 100.", error.message)
+    }
+
+    @Test
     fun rejectsTargetPercentageAboveOneHundred() {
         val error = assertThrows(PriceCalculationException::class.java) {
             PriceCalculator.calculate("3.20", "100.01")
