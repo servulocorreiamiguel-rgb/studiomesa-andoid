@@ -40,6 +40,8 @@ class MainActivity : Activity() {
     private lateinit var appRoot: LinearLayout
     private var activePage = "Início"
     private var activeCustomerPage = "Cartão"
+    private var assistantQuestion = ""
+    private var assistantAnswer: StudioMesaAssistantAnswer? = null
     private val backendPrefs by lazy { getSharedPreferences("studiomesa_backend", MODE_PRIVATE) }
     private val secureSession by lazy { SecureSessionStore(this) }
     private val pendingRequestIds by lazy { PendingRequestIds(this) }
@@ -182,7 +184,7 @@ class MainActivity : Activity() {
     }
 
     private fun availablePages(): List<String> {
-        val pages = mutableListOf("Início", "Mesas", "Pedidos", "Cozinha", "Carta", "Pontos", "Conta")
+        val pages = mutableListOf("Início", "Mesas", "Pedidos", "Cozinha", "Carta", "Pontos", "Assistente", "Conta")
         if (hasCalculator) {
             pages.add("Reservas")
             pages.add("Preço Justo")
@@ -242,6 +244,7 @@ class MainActivity : Activity() {
         val pageGroups = listOf(
             "OPERAÇÃO" to listOf("Início", "Mesas", "Pedidos", "Cozinha"),
             "GESTÃO DO RESTAURANTE" to listOf("Carta", "Pontos", "Reservas", "Preço Justo", "Stock", "Análise"),
+            "ASSISTÊNCIA" to listOf("Assistente"),
             "CONTA" to listOf("Conta")
         )
         pageGroups.forEach { (groupTitle, groupPages) ->
@@ -314,6 +317,7 @@ class MainActivity : Activity() {
         "Preço Justo" -> "€"
         "Stock" -> "▣"
         "Análise" -> "↗"
+        "Assistente" -> "✦"
         else -> "•"
     }
     /**
@@ -501,6 +505,7 @@ class MainActivity : Activity() {
             "Reservas" -> renderReservations(container)
             "Stock" -> renderStock(container)
             "Análise" -> renderAnalysis(container)
+            "Assistente" -> renderAssistant(container)
             else -> renderHome(container)
         }
     }
@@ -565,6 +570,9 @@ class MainActivity : Activity() {
             actionCard(container, "08", "Análise operacional", "Resumo dos pedidos, artigos e custos registados.", "VER ANÁLISE") {
                 activePage = "Análise"; renderApp()
             }
+        }
+        actionCard(container, "IA", "Assistente StudioMesa", "Sugestões de operação e preços com os dados disponíveis.", "ABRIR ASSISTENTE") {
+            activePage = "Assistente"; renderApp()
         }
 
         addGap(container, 6)
@@ -3445,6 +3453,138 @@ class MainActivity : Activity() {
                 .setPositiveButton("Fechar", null)
                 .show()
         }
+    }
+
+    private fun assistantSnapshot(): StudioMesaAssistantSnapshot {
+        val remote = hasRemoteRestaurant()
+        val menu = (if (remote) remoteMenuEntries() else store.getMenu()).map { item ->
+            AssistantMenuItem(
+                name = item.name,
+                sellingPrice = item.price.takeIf { it.isFinite() && it > 0.0 }?.let { BigDecimal.valueOf(it) } ?: BigDecimal.ZERO,
+                unitCost = item.cost.takeIf { it.isFinite() && it > 0.0 }?.let { BigDecimal.valueOf(it) } ?: BigDecimal.ZERO
+            )
+        }
+        val statuses: List<String> = if (remote) {
+            val orders = remoteOrders()
+            (0 until orders.length()).mapNotNull { orders.optJSONObject(it)?.optString("status", "Aberto") }
+        } else {
+            store.getOrders().map { it.status }
+        }
+        val active = statuses.count { it !in setOf("Concluído", "Cancelado") }
+        val preparing = statuses.count { it == "Em preparação" }
+        val stockLoaded = isPremium && remote && backendPrefs.getBoolean("inventory_loaded", false)
+        val stockItems = if (stockLoaded) {
+            val items = remoteInventoryItems()
+            (0 until items.length()).mapNotNull { index ->
+                val item = items.optJSONObject(index) ?: return@mapNotNull null
+                val name = item.optString("name").trim()
+                if (name.isBlank()) return@mapNotNull null
+                val quantity = item.optDouble("quantity", 0.0)
+                val minimum = item.optDouble("low_stock_threshold", 0.0)
+                if (!quantity.isFinite() || !minimum.isFinite()) return@mapNotNull null
+                AssistantStockItem(name, BigDecimal.valueOf(quantity), BigDecimal.valueOf(minimum))
+            }
+        } else emptyList()
+        val reservationsAreLoaded = hasCalculator && remote && reservationsLoaded
+        val pendingReservations = if (reservationsAreLoaded) {
+            (0 until remoteReservations().length()).count { index ->
+                remoteReservations().optJSONObject(index)?.optString("status") == "Pendente"
+            }
+        } else 0
+        return StudioMesaAssistantSnapshot(
+            isDemo = !remote,
+            restaurantConfigured = remote,
+            menuItems = menu,
+            activeOrderCount = active,
+            preparationOrderCount = preparing,
+            stockFeatureAvailable = isPremium,
+            stockLoaded = stockLoaded,
+            stockItems = stockItems,
+            reservationsFeatureAvailable = hasCalculator,
+            reservationsLoaded = reservationsAreLoaded,
+            pendingReservations = pendingReservations
+        )
+    }
+
+    private fun assistantActionTarget(page: String?): String? {
+        if (page.isNullOrBlank()) return null
+        val target = if (page == "Preço Justo" && page !in availablePages()) "Carta" else page
+        return target.takeIf { it in availablePages() }
+    }
+
+    private fun renderAssistant(container: LinearLayout) {
+        val snapshot = assistantSnapshot()
+        pageIntro(container, "Assistente StudioMesa", "Apoio à operação com os dados que já estão disponíveis.")
+        addGap(container, 8)
+
+        val privacyCard = makeCard(15, forest)
+        privacyCard.addView(label("ASSISTENTE LOCAL · SEM API PAGA", 10f, true, copper))
+        addGap(privacyCard, 5)
+        privacyCard.addView(label(
+            "As análises são calculadas neste dispositivo. As perguntas não são enviadas nem guardadas como histórico. Esta versão usa regras e cálculos locais, não um modelo generativo; não altera registos por ti.",
+            12.5f, false, white
+        ))
+        container.addView(privacyCard, cardParams())
+
+        addGap(container, 5)
+        sectionHeading(container, "Pergunta ao assistente", "Experimenta perguntar sobre custos, preços, pedidos, stock, reservas ou um problema de sincronização.")
+        val questionField = multilineInputField("Ex.: Como posso melhorar o preço dos pratos?")
+        questionField.setText(assistantQuestion)
+        container.addView(questionField, multilineFieldParams())
+        container.addView(primaryButton("Analisar pergunta") {
+            assistantQuestion = questionField.text.toString().trim().take(400)
+            assistantAnswer = StudioMesaAdvisor.answerQuestion(assistantQuestion, snapshot)
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(48)))
+        addGap(container, 12)
+
+        assistantAnswer?.let { answer ->
+            val answerCard = makeCard(16, copperPale)
+            answerCard.addView(label(answer.title, 17f, true, forestDeep))
+            addGap(answerCard, 7)
+            answerCard.addView(label(answer.response, 12.5f, false, ink))
+            assistantActionTarget(answer.actionPage)?.let { target ->
+                addGap(answerCard, 10)
+                answerCard.addView(secondaryButton("Abrir " + target) {
+                    activePage = target
+                    renderApp()
+                }, LinearLayout.LayoutParams(-1, dp(44)))
+            }
+            container.addView(answerCard, cardParams())
+            addGap(container, 6)
+        }
+
+        sectionHeading(container, "Sugestões para rever", "Prioridades estimadas. Confirma os dados e decide antes de alterar qualquer coisa.")
+        StudioMesaAdvisor.recommendations(snapshot).forEach { recommendation ->
+            val (priorityText, textColor, backColor) = when (recommendation.priority) {
+                AssistantPriority.URGENT -> Triple("PRIORIDADE ALTA", red, paleRed)
+                AssistantPriority.ATTENTION -> Triple("A REVER", forestDeep, copperPale)
+                AssistantPriority.TIP -> Triple("SUGESTÃO", forestSoft, paleGreen)
+            }
+            val card = makeCard(15)
+            card.addView(label(priorityText, 9f, true, textColor).apply {
+                setPadding(dp(8), dp(5), dp(8), dp(5))
+                background = rounded(backColor, 10)
+            }, LinearLayout.LayoutParams(-2, -2))
+            addGap(card, 8)
+            card.addView(label(recommendation.title, 16f, true, forestDeep))
+            addGap(card, 5)
+            card.addView(label(recommendation.detail, 12.5f, false, muted))
+            assistantActionTarget(recommendation.actionPage)?.let { target ->
+                addGap(card, 10)
+                card.addView(secondaryButton("Abrir " + target) {
+                    activePage = target
+                    renderApp()
+                }, LinearLayout.LayoutParams(-1, dp(44)))
+            }
+            container.addView(card, cardParams())
+        }
+        addGap(container, 4)
+        container.addView(label(
+            if (snapshot.isDemo) "Fonte atual: dados de demonstração locais. Liga um restaurante na secção Conta para analisar dados partilhados."
+            else "Fonte atual: dados guardados em cache pela aplicação. Confirma a última atualização antes de decidir; esta análise não verifica a conectividade em tempo real.",
+            11f, false, muted
+        ))
     }
 
     private fun renderAnalysis(container: LinearLayout) {

@@ -22,11 +22,17 @@ Estes valores são propostas de referência para avaliação comercial, não pag
 - **Stock e inventário (Premium):** artigos com unidade, quantidade, limite mínimo, alertas visuais de stock baixo/esgotado, entradas/saídas, histórico de movimentos com saldo após cada movimento e autor registado. As alterações são feitas por funções verificadas no servidor e usam identificadores de tentativa para evitar repetir um movimento após perda da resposta. Quantidades, limites e movimentos aceitam no máximo três casas decimais, regra validada na interface e no servidor. Os testes reais de falha de rede continuam pendentes.
 - **Aplicação de cliente:** login, recuperação de palavra-passe por email, consulta de saldo, código de cartão e carta publicada pelo restaurante. A aplicação não recebe os custos ou margens internas. Os alergénios são declarações introduzidas pelo restaurante e devem ser confirmados com a equipa; não são uma garantia médica.
 - **Calculadora de preço indicativo** e **indicadores operacionais** nos planos correspondentes.
+- **Assistente StudioMesa (gestão, todos os planos):** análise local gratuita de custos/preços, pedidos e, quando disponíveis, stock e reservas. Responde a perguntas por regras determinísticas e explica as limitações dos dados. Não envia informação para uma API, não é um LLM generativo e não altera registos; as ações permanecem dependentes de confirmação humana.
+**Importante sobre a designação «IA»:** a implementação atual é um assistente local determinístico, não um LLM generativo. É útil para triagem e cálculos claros; não deve ser apresentada como aconselhamento financeiro ou previsão automática. Se vier a ser adicionado um modelo generativo online, isso terá de ser uma fase separada com escolha explícita de fornecedor, custos, consentimento e regras de privacidade.
 - **Identidade personalizável:** o nome do restaurante aparece depois de configurar a respetiva conta.
 - **Acesso de equipa:** código separado para juntar contas de funcionários, limitado a um restaurante por conta. O proprietário pode renovar o código; os códigos não são apresentados a clientes.
 - **Gestão de equipa do proprietário:** consulta da lista de membros e remoção do acesso de um funcionário. A remoção exige autorização do proprietário e roda o código partilhado de adesão, para que o código antigo não volte a ser usado. As permissões ainda são gerais para todos os funcionários; não existe matriz de permissões por função.
 - **Gestão da carta:** editar nome, categoria, descrição, preço, custo e alergénios declarados ou arquivar um artigo sem apagar artigos de pedidos antigos.
 - **Histórico de pedidos no servidor:** registo de criação e alterações de estado com hora e utilizador, acessível apenas à equipa autenticada.
+
+## Assistente StudioMesa
+
+A primeira versão está documentada em `AI-ASSISTANT-2026-10-27.md`. Funciona sem chave de API e sem chamadas externas. O cálculo de preço usa uma referência ilustrativa de percentagem de custo, não uma recomendação comercial universal. Não ativar alterações automáticas de dados sem desenho de autorização, confirmação e auditoria.
 
 ## O que ainda falta antes da venda ou utilização em serviço real
 

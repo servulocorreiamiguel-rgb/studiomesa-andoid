@@ -264,6 +264,7 @@ class MainActivitySmokeTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
             onView(withContentDescription("Abrir secção Cozinha")).perform(scrollTo()).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo()).check(matches(isDisplayed()))
             onView(withContentDescription("Abrir secção Carta")).perform(scrollTo()).check(matches(isDisplayed()))
             onView(withContentDescription("Abrir secção Pontos")).perform(scrollTo()).check(matches(isDisplayed()))
             onView(withContentDescription("Abrir secção Conta")).perform(scrollTo()).check(matches(isDisplayed()))
@@ -314,6 +315,25 @@ class MainActivitySmokeTest {
 
             onView(withContentDescription("Abrir secção Cartão")).perform(click())
             onView(withText("Cartão de fidelização do restaurante.")).check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
+    fun restaurantAssistantShowsLocalAnalysisAndAnswersPricingQuestions() {
+        assumeFalse("Customer variant has its own customer navigation.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withContentDescription("Abrir menu de navegação")).perform(click())
+            onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            onView(withText("Assistente StudioMesa")).check(matches(isDisplayed()))
+            onView(withText(containsString("SEM API PAGA"))).check(matches(isDisplayed()))
+            onView(withHint("Ex.: Como posso melhorar o preço dos pratos?"))
+                .perform(replaceText("Como melhorar o preço?"))
+            onView(withText("Analisar pergunta")).perform(scrollTo(), click())
+            onView(withText("Análise de preços")).perform(scrollTo()).check(matches(isDisplayed()))
+            onView(withText(containsString("Não alterei nenhum preço.")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
         }
     }
 
