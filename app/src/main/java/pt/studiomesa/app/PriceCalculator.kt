@@ -70,11 +70,11 @@ internal object PriceCalculator {
         val actualCostPercent = cost
             .divide(suggestedPrice, 8, RoundingMode.HALF_UP)
             .multiply(oneHundred)
-            .setScale(1, RoundingMode.HALF_UP)
+            .setScale(2, RoundingMode.HALF_UP)
         val grossMarginPercent = grossProfit
             .divide(suggestedPrice, 8, RoundingMode.HALF_UP)
             .multiply(oneHundred)
-            .setScale(1, RoundingMode.HALF_UP)
+            .setScale(2, RoundingMode.HALF_UP)
 
         return PriceCalculationResult(
             cost = cost,
