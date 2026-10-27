@@ -42,21 +42,45 @@ class SecureSessionStore(context: Context) {
         if (!editor.commit()) {
             throw IllegalStateException("Não foi possível guardar a sessão cifrada neste dispositivo.")
         }
-        legacyPrefs.edit()
-            .remove("access_token")
-            .remove("refresh_token")
-            .apply()
+        // Finish deleting the plaintext legacy copy before returning from migration/login.
+        if (!runCatching {
+                legacyPrefs.edit()
+                    .remove("access_token")
+                    .remove("refresh_token")
+                    .commit()
+            }.getOrDefault(false)) {
+            clear()
+            throw IllegalStateException("Não foi possível remover a sessão antiga em texto simples.")
+        }
     }
 
     @Synchronized
-    fun clear() {
-        securePrefs.edit()
-            .remove("access_token")
-            .remove("refresh_token")
-            .remove("pending_code_verifier")
-            .remove("pending_code_flow")
-            .commit()
-        legacyPrefs.edit().remove("access_token").remove("refresh_token").apply()
+    fun clear(): Boolean {
+        val secureCleared = runCatching {
+            securePrefs.edit()
+                .remove("access_token")
+                .remove("refresh_token")
+                .remove("pending_code_verifier")
+                .remove("pending_code_flow")
+                .commit()
+        }.getOrDefault(false)
+
+        // Persist legacy-token removal synchronously so a process exit cannot restore a
+        // plaintext session that the caller has just cleared.
+        val legacyCleared = runCatching {
+            legacyPrefs.edit().remove("access_token").remove("refresh_token").commit()
+        }.getOrDefault(false)
+
+        // If preference persistence fails, invalidating the Keystore key prevents stale
+        // encrypted tokens or PKCE verifiers from being recovered after a process restart.
+        val keyInvalidated = runCatching {
+            KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(KEY_ALIAS)
+            true
+        }.getOrDefault(false)
+
+        // Report success if the encrypted store was cleared OR its key was invalidated,
+        // and the plaintext legacy tokens were removed.
+        return legacyCleared && (secureCleared || keyInvalidated)
     }
 
     /**
@@ -110,7 +134,10 @@ class SecureSessionStore(context: Context) {
     private fun getToken(key: String): String {
         val encrypted = securePrefs.getString(key, null)
         if (!encrypted.isNullOrBlank()) {
-            legacyPrefs.edit().remove(key).apply()
+            if (!runCatching { legacyPrefs.edit().remove(key).commit() }.getOrDefault(false)) {
+                clear()
+                return ""
+            }
             return try {
                 decrypt(encrypted)
             } catch (_: Exception) {
