@@ -2,8 +2,6 @@ package pt.studiomesa.app
 
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -29,6 +27,10 @@ object SupabaseApi {
             requestMethod = method
             connectTimeout = 12000
             readTimeout = 12000
+            // Supabase REST/Auth endpoints should return API responses, not redirects.
+            // Fail closed instead of following a redirect with session headers.
+            instanceFollowRedirects = false
+            useCaches = false
             setRequestProperty("apikey", API_KEY)
             setRequestProperty("Accept", "application/json")
             setRequestProperty("Content-Type", "application/json")
@@ -46,16 +48,19 @@ object SupabaseApi {
             }
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-            val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            val text = ResponseBodyReader.read(stream)
             if (code !in 200..299) {
+                // Only show recognized message fields. Never surface an arbitrary HTML or
+                // proxy response body to the user, and always cap the displayed message.
                 val message = try {
-                    JSONObject(text).optString("msg").ifBlank {
-                        JSONObject(text).optString("message").ifBlank {
-                            JSONObject(text).optString("error_description").ifBlank { text }
-                        }
-                    }
-                } catch (_: Exception) { text }
-                throw IllegalStateException(message.ifBlank { "Erro de ligação ($code)." })
+                    val error = JSONObject(text)
+                    sequenceOf("msg", "message", "error_description")
+                        .map { key -> error.optString(key, "") }
+                        .firstOrNull { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+                } catch (_: Exception) {
+                    null
+                }
+                throw BackendHttpException(code, path, ApiErrorMessage.sanitize(message, code))
             }
             return text
         } finally {
