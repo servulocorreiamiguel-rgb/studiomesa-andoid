@@ -13,6 +13,7 @@ import androidx.test.espresso.matcher.ViewMatchers.withHint
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.platform.app.InstrumentationRegistry
 import org.hamcrest.Matchers.containsString
+import org.hamcrest.Matchers.not
 import org.junit.Assume.assumeFalse
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -138,6 +139,22 @@ class MainActivitySmokeTest {
 
             onView(withText(containsString("8,00")))
                 .check(doesNotExist())
+
+            onView(withHint("Ex.: 3,20"))
+                .check(matches(hasErrorText("Introduz um custo superior a zero.")))
+
+            onView(withHint("Ex.: 3,20"))
+                .perform(replaceText("3,20"))
+
+            onView(withHint("Ex.: 3,20"))
+                .check(matches(not(hasErrorText("Introduz um custo superior a zero."))))
+
+            onView(withText("Calcular preço sugerido"))
+                .perform(scrollTo(), click())
+
+            onView(withText(containsString("8,00")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
         }
     }
 
@@ -164,6 +181,33 @@ class MainActivitySmokeTest {
                 .check(matches(isDisplayed()))
 
             onView(withText(containsString("99,99%")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
+    fun calculatorRejectsPercentagesBelowSupportedPrecision() {
+        assumeFalse("Customer variant has no management calculator.", isCustomerVariant())
+        assumeTrue("The Essential plan does not include the price calculator.", isCalculatorAvailable())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withText("ABRIR CALCULADORA"))
+                .perform(scrollTo(), click())
+
+            onView(withHint("Ex.: 3,20"))
+                .perform(replaceText("3,20"))
+
+            onView(withHint("Ex.: 30"))
+                .perform(replaceText("0,009"))
+
+            onView(withText("Calcular preço sugerido"))
+                .perform(scrollTo(), click())
+
+            onView(withHint("Ex.: 30"))
+                .check(matches(hasErrorText("Usa uma percentagem entre 0,01 e 100.")))
+
+            onView(withText(containsString("Corrige os valores assinalados")))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
         }
