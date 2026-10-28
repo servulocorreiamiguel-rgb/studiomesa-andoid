@@ -296,7 +296,7 @@ internal object StudioMesaAdvisor {
         }
         return StudioMesaAssistantAnswer(
             "Contribuição estimada por artigo",
-            "$orderExplanation Isto é contribuição unitária estimada; não indica popularidade nem substitui vendas históricas. Não inclui automaticamente IVA, pessoal, renda, energia, desperdício ou taxas.\n$details",
+            "$orderExplanation Isto é contribuição unitária estimada, não é lucro líquido; não indica popularidade nem substitui vendas históricas. Não inclui automaticamente IVA, pessoal, renda, energia, desperdício ou taxas.\n$details",
             "Carta"
         )
     }
