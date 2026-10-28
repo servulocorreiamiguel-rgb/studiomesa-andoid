@@ -485,4 +485,27 @@ class StudioMesaAdvisorTest {
         assertFalse(answer.response.contains("média das últimas quatro semanas"))
     }
 
+
+    @Test fun dishDoseCostQuestionGuidesToRecipeCalculationInsteadOfInventingIngredients() {
+        val answer = StudioMesaAdvisor.answerQuestion("Quanto custa uma dose de lasanha?", snapshot())
+        assertEquals("Custo por receita e ingredientes", answer.title)
+        assertTrue(answer.response.contains("quantidade por dose"))
+        assertTrue(answer.response.contains("Não vou inventar ingredientes"))
+    }
+
+    @Test fun unknownStockItemWithExhaustedOrSufficientWordingIsNotConfusedWithGlobalStock() {
+        val data = snapshot(
+            stockAvailable = true,
+            stockLoaded = true,
+            stockItems = listOf(AssistantStockItem("Frango", BigDecimal("8"), BigDecimal("3")))
+        )
+        val exhausted = StudioMesaAdvisor.answerQuestion("O arroz acabou", data)
+        assertEquals("Artigo de stock não encontrado", exhausted.title)
+        assertTrue(exhausted.response.contains("arroz"))
+        val sufficient = StudioMesaAdvisor.answerQuestion("Há arroz suficiente?", data)
+        assertEquals("Artigo de stock não encontrado", sufficient.title)
+        assertTrue(sufficient.response.contains("arroz"))
+        assertFalse(sufficient.response.contains("Não encontrei artigos abaixo do limite mínimo"))
+    }
+
 }
