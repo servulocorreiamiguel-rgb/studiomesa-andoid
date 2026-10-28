@@ -91,6 +91,33 @@ class StudioMesaAdvisorTest {
         )
         assertEquals("Análise de preços", answer.title)
     }
+
+    @Test fun pricingQuestionAnalysesTheNamedMenuItemOnly() {
+        val data = snapshot(menu = listOf(
+            item("Sopa", "5.00", "2.00"),
+            item("Hambúrguer", "12.00", "5.00"),
+            item("Salada", "8.00", "2.00")
+        ))
+        val answer = StudioMesaAdvisor.answerQuestion("Qual deve ser o preço de venda da Sopa?", data)
+        assertEquals("Análise de preços", answer.title)
+        assertTrue(answer.response.contains("Sopa"))
+        assertFalse(answer.response.contains("Hambúrguer"))
+        assertFalse(answer.response.contains("Salada"))
+        assertTrue(answer.response.contains("o artigo selecionado"))
+    }
+
+    @Test fun pricingQuestionClarifiesWhenDishNameIsAmbiguous() {
+        val data = snapshot(menu = listOf(
+            item("Hambúrguer Clássico", "14.00", "5.00"),
+            item("Hambúrguer Vegetariano", "13.00", "5.00"),
+            item("Sopa", "5.00", "2.00")
+        ))
+        val answer = StudioMesaAdvisor.answerQuestion("Quanto devo cobrar pelo hambúrguer?", data)
+        assertEquals("Qual artigo da carta?", answer.title)
+        assertTrue(answer.response.contains("Hambúrguer Clássico"))
+        assertTrue(answer.response.contains("Hambúrguer Vegetariano"))
+        assertTrue(answer.response.contains("Não alterei nenhum valor"))
+    }
     @Test fun unknownQuestionsReceiveAnHonestClarificationInsteadOfUnrelatedAdvice() {
         val answer = StudioMesaAdvisor.answerQuestion(
             "Compara o custo da energia e a concorrência na minha zona",
