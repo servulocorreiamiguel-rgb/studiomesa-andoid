@@ -10,6 +10,7 @@ class RestaurantAssistantIntentClassifierTest {
             "Faz um resumo da tesouraria e do custo alimentar",
             "Como comparo fornecedores?",
             "Como calculo o custo dos ingredientes por dose?",
+            "Como calculo o custo de produção deste prato?",
             "Como preparo a ficha técnica do prato?",
             "Que quantidade devo encomendar ao fornecedor?",
             "Como analiso os custos fixos e variáveis?",
@@ -38,13 +39,32 @@ class RestaurantAssistantIntentClassifierTest {
     }
 
     @Test fun distinguishesSalesGrowthFromSpecificPriceQuestions() {
-        assertEquals(
-            RestaurantAssistantIntent.MENU_ENGINEERING,
-            RestaurantAssistantIntentClassifier.classify("Como posso aumentar as vendas?").intent
-        )
+        listOf(
+            "Como posso aumentar as vendas?",
+            "Qual é a rentabilidade do menu?",
+            "Quais pratos dão mais lucro?",
+            "Como aumento a faturação?"
+        ).forEach { question ->
+            assertEquals(question, RestaurantAssistantIntent.MENU_ENGINEERING, RestaurantAssistantIntentClassifier.classify(question).intent)
+        }
         assertEquals(
             RestaurantAssistantIntent.PRICING,
             RestaurantAssistantIntentClassifier.classify("Qual deve ser o preço de venda deste prato?").intent
+        )
+    }
+
+    @Test fun recognizesInventoryWarningsAndSaveFailures() {
+        assertEquals(
+            RestaurantAssistantIntent.STOCK,
+            RestaurantAssistantIntentClassifier.classify("Que ingredientes estão a acabar?").intent
+        )
+        assertEquals(
+            RestaurantAssistantIntent.TROUBLESHOOTING,
+            RestaurantAssistantIntentClassifier.classify("Não consigo guardar uma reserva").intent
+        )
+        assertEquals(
+            RestaurantAssistantIntent.DAILY_BRIEFING,
+            RestaurantAssistantIntentClassifier.classify("Faz resumo da operação e do stock").intent
         )
     }
 
