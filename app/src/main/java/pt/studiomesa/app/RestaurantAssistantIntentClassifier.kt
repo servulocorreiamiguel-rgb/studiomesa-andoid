@@ -34,6 +34,7 @@ internal object RestaurantAssistantIntentClassifier {
             "ponto de equilibrio", "break even", "quantidade a encomendar", "previsao financeira",
             "ficha tecnica", "custo dos ingredientes", "custo de ingredientes", "custo por dose",
             "custo por porcao", "preco de compra", "precos de compra", "comparar fornecedores",
+            "comparo fornecedores", "comparacao de fornecedores",
             "planeamento de compras", "desperdicio por motivo", "consumo teorico", "vendas da proxima semana"),
         rule(RestaurantAssistantIntent.ECONOMIC_MANAGER, 9,
             "fluxo de caixa", "custos fixos", "custo fixo", "custos variaveis", "custo variavel",
@@ -46,7 +47,7 @@ internal object RestaurantAssistantIntentClassifier {
             "consumo real", "custo da receita", "variacao de stock", "rentabilidade do negocio",
             "analise financeira", "margem de contribuicao", "saldo no fim do mes", "caixa negativo"),
         rule(RestaurantAssistantIntent.ECONOMIC_MANAGER, 8,
-            "tesouraria", "fornecedor", "orcamento", "desperdicio", "previsao", "financas",
+            "tesouraria", "fornecedor", "fornecedores", "orcamento", "desperdicio", "previsao", "financas",
             "financeiro", "financeira", "planeamento de compras", "despesas", "rentabilidade"),
 
         rule(RestaurantAssistantIntent.DAILY_BRIEFING, 10,
