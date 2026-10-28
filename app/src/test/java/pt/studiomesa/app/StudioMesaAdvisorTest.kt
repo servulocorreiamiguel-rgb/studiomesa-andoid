@@ -515,6 +515,7 @@ class StudioMesaAdvisorTest {
             "Quais artigos foram mais vendidos nos últimos 30 dias?",
             "Quanto vendi em março?",
             "Quais pratos foram mais rentáveis no mês passado?",
+            "Quais pratos foram mais rentáveis do mês de setembro?",
             "Quais artigos tiveram a margem mais alta na semana passada?",
             "Qual era a margem do Bitoque no mês passado?"
         )
