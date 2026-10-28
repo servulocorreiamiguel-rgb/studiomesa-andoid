@@ -36,11 +36,15 @@ internal object RestaurantAssistantIntentClassifier {
     private val salesLanguagePattern = Regex(
         """\b(?:vendas?|vendi|vendemos|venderam|vendeu|vendido|vendidos|vendida|vendidas|faturacao|faturamos|faturou|receita|receitas)\b"""
     )
+    private val salesGrowthOrMarketingPattern = Regex(
+        """\b(?:aumentar|aumento|melhorar|melhore|crescer|divulgar|promover|promocao|campanha|publicar|publicacao|marketing|estrategia|ideias de|vender mais|como vender|quero vender|conseguir vender)\b"""
+    )
 
     fun requestsDatedSales(question: String): Boolean {
         val normalized = normalize(question)
         return datedPeriodPattern.containsMatchIn(normalized) &&
-            salesLanguagePattern.containsMatchIn(normalized)
+            salesLanguagePattern.containsMatchIn(normalized) &&
+            !salesGrowthOrMarketingPattern.containsMatchIn(normalized)
     }
 
     private val rules = listOf(
