@@ -432,7 +432,7 @@ internal object StudioMesaAdvisor {
     private fun answerEconomicQuestion(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
         val q = normalizeLookupText(rawQuestion)
         if (RestaurantAssistantIntentClassifier.requestsDatedMenuPerformance(rawQuestion) &&
-            containsAny(q, "margem", "margens", "rentabilidade", "rentavel", "rentaveis", "contribuicao", "prejuizo", "prejuizos", "preco", "precos", "custo", "custos", "despesa", "despesas", "gasto", "gastos", "gastei", "gastamos", "gastou", "paguei", "pagamos", "pagou", "pagamento", "pagamentos", "compra", "compras", "salario", "salarios")) {
+            !RestaurantAssistantIntentClassifier.requestsDatedSales(rawQuestion)) {
             return StudioMesaAssistantAnswer(
                 "Período de desempenho não confirmado",
                 "Não tenho um filtro temporal fiável para consultar preços, custos, despesas ou margens do intervalo pedido. Os valores de custo/preço carregados representam os valores atuais e não provam os valores históricos desse período. A página Análise mostra totais gerais sem filtro temporal; confirma os registos históricos antes de tomar decisões.",

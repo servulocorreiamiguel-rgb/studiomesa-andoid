@@ -528,7 +528,8 @@ class StudioMesaAdvisorTest {
             "Qual era o preço do Bitoque no mês passado?",
             "Quanto gastei em salários este mês?",
             "Quanto gastei em setembro?",
-            "Quanto paguei em março?"
+            "Quanto paguei em março?",
+            "Qual foi o lucro em março?"
         )
         questions.forEach { question ->
             val answer = StudioMesaAdvisor.answerQuestion(question, data)
