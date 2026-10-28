@@ -70,7 +70,13 @@ class RestaurantEconomicManagerTest {
     }
 
     @Test fun cashForecastRequiresAllThreeInputsAndCalculatesManualProjection() {
-        assertNull(RestaurantEconomicManager.analyze(input(cash = "1000")).projectedCashIn30Days)
+        assertNull(RestaurantEconomicManager.analyze(input()).projectedCashIn30Days)
+        try {
+            RestaurantEconomicManager.analyze(input(cash = "1000"))
+            fail("Partial cash inputs must be rejected.")
+        } catch (e: IllegalArgumentException) {
+            assertTrue(e.message.orEmpty().contains("preenche saldo disponível"))
+        }
         val result = RestaurantEconomicManager.analyze(input(cash = "1000", receipts = "4000", due = "3500"))
         assertEquals(amount("1500.00"), result.projectedCashIn30Days)
     }
