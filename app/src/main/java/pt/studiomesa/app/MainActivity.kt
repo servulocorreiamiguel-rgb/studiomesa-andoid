@@ -2,6 +2,8 @@ package pt.studiomesa.app
 
 import android.app.Activity
 import android.app.Dialog
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.res.ColorStateList
 import android.app.AlertDialog
 import android.graphics.Color
@@ -23,6 +25,7 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
+import android.widget.Toast
 import org.json.JSONArray
 import org.json.JSONObject
 import java.math.BigDecimal
@@ -3461,7 +3464,9 @@ class MainActivity : Activity() {
             AssistantMenuItem(
                 name = item.name,
                 sellingPrice = item.price.takeIf { it.isFinite() && it > 0.0 }?.let { BigDecimal.valueOf(it) } ?: BigDecimal.ZERO,
-                unitCost = item.cost.takeIf { it.isFinite() && it > 0.0 }?.let { BigDecimal.valueOf(it) } ?: BigDecimal.ZERO
+                unitCost = item.cost.takeIf { it.isFinite() && it > 0.0 }?.let { BigDecimal.valueOf(it) } ?: BigDecimal.ZERO,
+                category = item.category,
+                description = item.description
             )
         }
         val statuses: List<String> = if (remote) {
@@ -3491,6 +3496,19 @@ class MainActivity : Activity() {
                 remoteReservations().optJSONObject(index)?.optString("status") == "Pendente"
             }
         } else 0
+        val salesLines = if (remote) {
+            val orders = remoteOrders()
+            (0 until orders.length()).mapNotNull { index ->
+                val order = orders.optJSONObject(index) ?: return@mapNotNull null
+                AssistantSaleLine(
+                    itemName = order.optString("item_name").trim(),
+                    quantity = order.optInt("quantity", 1),
+                    status = order.optString("status", "Aberto")
+                ).takeIf { it.itemName.isNotBlank() }
+            }
+        } else {
+            store.getOrders().map { AssistantSaleLine(it.itemName, it.quantity, it.status) }
+        }
         return StudioMesaAssistantSnapshot(
             isDemo = !remote,
             restaurantConfigured = remote,
@@ -3502,7 +3520,8 @@ class MainActivity : Activity() {
             stockItems = stockItems,
             reservationsFeatureAvailable = hasCalculator,
             reservationsLoaded = reservationsAreLoaded,
-            pendingReservations = pendingReservations
+            pendingReservations = pendingReservations,
+            salesLines = salesLines
         )
     }
 
@@ -3536,6 +3555,12 @@ class MainActivity : Activity() {
             assistantAnswer = StudioMesaAdvisor.answerQuestion(assistantQuestion, snapshot)
             renderApp()
         }, LinearLayout.LayoutParams(-1, dp(48)))
+        addGap(container, 5)
+        container.addView(secondaryButton("Gerar resumo da operação") {
+            assistantQuestion = "Resumo da operação"
+            assistantAnswer = StudioMesaAdvisor.dailyBriefing(assistantSnapshot())
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(46)))
         addGap(container, 12)
 
         assistantAnswer?.let { answer ->
@@ -3579,12 +3604,83 @@ class MainActivity : Activity() {
             }
             container.addView(card, cardParams())
         }
+        sectionHeading(container, "Engenharia da carta", "Combina unidades de pedidos concluídos com a contribuição estimada por artigo.")
+        val engineering = StudioMesaAdvisor.menuEngineering(snapshot)
+        if (!engineering.hasEnoughSales) {
+            container.addView(emptyCard(
+                "Ainda não há pelo menos ${engineering.requiredUnits} unidades concluídas que correspondam aos artigos atuais (${engineering.completedUnits} encontradas). A análise não inventa popularidade."
+            ), cardParams())
+        } else {
+            if (!engineering.hasMarginData) {
+                container.addView(emptyCard("Existem vendas, mas faltam custos válidos nos artigos vendidos para comparar a contribuição. Confirma os custos na Carta."), cardParams())
+            }
+            engineering.items.forEach { item ->
+                val title = when (item.classification) {
+                    MenuEngineeringClass.STAR -> "ESTRELA"
+                    MenuEngineeringClass.WORKHORSE -> "POPULAR · REVER MARGEM"
+                    MenuEngineeringClass.PUZZLE -> "MARGEM ALTA · REVER PROCURA"
+                    MenuEngineeringClass.DOG -> "REVER ARTIGO"
+                    MenuEngineeringClass.MISSING_COST -> "CUSTO EM FALTA"
+                }
+                val backColor = when (item.classification) {
+                    MenuEngineeringClass.STAR -> paleGreen
+                    MenuEngineeringClass.WORKHORSE, MenuEngineeringClass.PUZZLE -> copperPale
+                    MenuEngineeringClass.DOG, MenuEngineeringClass.MISSING_COST -> paleRed
+                }
+                val card = makeCard(14)
+                card.addView(label(title, 9f, true, forestDeep).apply {
+                    setPadding(dp(8), dp(5), dp(8), dp(5))
+                    background = rounded(backColor, 10)
+                }, LinearLayout.LayoutParams(-2, -2))
+                addGap(card, 7)
+                card.addView(label(item.itemName, 16f, true, forestDeep))
+                addGap(card, 4)
+                card.addView(label(
+                    "${item.unitsSold} unidade(s) concluídas · ${item.popularitySharePercent}% das unidades correspondentes · contribuição atual: ${item.contributionPerUnit?.let { money(it) } ?: "custo em falta"} por unidade.",
+                    11.5f, true, muted
+                ))
+                addGap(card, 5)
+                card.addView(label(item.recommendation, 12.5f, false, ink))
+                container.addView(card, cardParams())
+            }
+            container.addView(label(
+                "Triagem com pedidos concluídos e preço/custo atuais; não é lucro contabilístico nem custo histórico e não inclui IVA, mão de obra, desperdício ou encargos.",
+                10.5f, false, muted
+            ))
+        }
+
+        sectionHeading(container, "Ideias de conteúdo", "Rascunhos para revisão; só usam nomes, descrições e preços registados na carta.")
+        val drafts = StudioMesaAdvisor.marketingDrafts(snapshot)
+        if (drafts.isEmpty()) {
+            container.addView(emptyCard("Adiciona artigos com nome e preço válidos para criar rascunhos."), cardParams())
+        } else {
+            drafts.forEach { draft ->
+                val card = makeCard(14)
+                card.addView(label(draft.itemName, 16f, true, forestDeep))
+                addGap(card, 6)
+                card.addView(label(draft.caption, 13f, false, ink))
+                addGap(card, 5)
+                card.addView(label(draft.basis, 10.5f, false, muted))
+                addGap(card, 8)
+                card.addView(secondaryButton("Copiar rascunho") {
+                    copyAssistantText(draft.caption)
+                }, LinearLayout.LayoutParams(-1, dp(44)))
+                container.addView(card, cardParams())
+            }
+        }
+
         addGap(container, 4)
         container.addView(label(
             if (snapshot.isDemo) "Fonte atual: dados de demonstração locais. Liga um restaurante na secção Conta para analisar dados partilhados."
             else "Fonte atual: dados guardados em cache pela aplicação. Confirma a última atualização antes de decidir; esta análise não verifica a conectividade em tempo real.",
             11f, false, muted
         ))
+    }
+
+    private fun copyAssistantText(value: String) {
+        val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("Rascunho StudioMesa", value))
+        Toast.makeText(this, "Rascunho copiado. Revê antes de publicar.", Toast.LENGTH_SHORT).show()
     }
 
     private fun renderAnalysis(container: LinearLayout) {

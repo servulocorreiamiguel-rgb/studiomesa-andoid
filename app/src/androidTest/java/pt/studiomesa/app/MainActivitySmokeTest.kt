@@ -338,6 +338,20 @@ class MainActivitySmokeTest {
     }
 
     @Test
+    fun restaurantAssistantOffersBriefingMenuEngineeringAndMarketingDrafts() {
+        assumeFalse("Customer variant has its own customer navigation.", isCustomerVariant())
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withContentDescription("Abrir menu de navegação")).perform(click())
+            onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            onView(withText("Engenharia da carta")).perform(scrollTo()).check(matches(isDisplayed()))
+            onView(withText("Ideias de conteúdo")).perform(scrollTo()).check(matches(isDisplayed()))
+            onView(withText("Gerar resumo da operação")).perform(scrollTo(), click())
+            onView(withText("Resumo da operação")).perform(scrollTo()).check(matches(isDisplayed()))
+            onView(withText(containsString("não é previsão de vendas"))).perform(scrollTo()).check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
     fun customerCanOpenAccountChooserWithoutNetworkCredentials() {
         assumeTrue("Restaurant variant uses the management account flow.", isCustomerVariant())
 
