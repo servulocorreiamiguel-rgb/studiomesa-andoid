@@ -91,6 +91,19 @@ class StudioMesaAdvisorTest {
         )
         assertEquals("Análise de preços", answer.title)
     }
+    @Test fun unknownQuestionsReceiveAnHonestClarificationInsteadOfUnrelatedAdvice() {
+        val answer = StudioMesaAdvisor.answerQuestion(
+            "Compara o custo da energia e a concorrência na minha zona",
+            snapshot()
+        )
+        assertEquals("Preciso de uma pergunta mais específica", answer.title)
+        assertTrue(answer.response.contains("não consegui identificar com segurança"))
+        assertNull(answer.actionPage)
+
+        val blank = StudioMesaAdvisor.answerQuestion("   ", snapshot())
+        assertTrue(blank.response.contains("Escreve uma pergunta concreta"))
+    }
+
     @Test fun problemResponseDoesNotPretendToTestConnectivity() {
         assertTrue(StudioMesaAdvisor.answerQuestion("A app está com erro de ligação?", snapshot()).response.contains("Não consigo testar a ligação à Internet"))
     }
