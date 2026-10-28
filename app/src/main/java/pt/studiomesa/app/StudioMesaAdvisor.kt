@@ -193,7 +193,7 @@ internal object StudioMesaAdvisor {
             priorities.forEach { lines += "• ${it.title}: ${it.detail}" }
         }
         lines += "Resumo dos registos disponíveis; não é previsão de vendas nem prova de pagamentos ou de atualização em tempo real."
-        return StudioMesaAssistantAnswer("Resumo da operação", lines.joinToString("\\n"), priorities.firstNotNullOfOrNull { it.actionPage })
+        return StudioMesaAssistantAnswer("Resumo da operação", lines.joinToString("\n"), priorities.firstNotNullOfOrNull { it.actionPage })
     }
 
     fun marketingDrafts(snapshot: StudioMesaAssistantSnapshot, limit: Int = 3): List<AssistantMarketingDraft> {
@@ -228,11 +228,11 @@ internal object StudioMesaAdvisor {
             "Há ${report.completedUnits} unidades concluídas, mas faltam custos válidos nos artigos vendidos para comparar a contribuição. Confirma os custos na Carta.",
             "Carta"
         )
-        val details = report.items.take(6).joinToString("\\n") { item ->
+        val details = report.items.take(6).joinToString("\n") { item ->
             "• ${item.itemName}: ${classificationLabel(item.classification)}, ${item.unitsSold} unidades (${item.popularitySharePercent}%), contribuição atual ${item.contributionPerUnit?.let { euro(it) } ?: "sem custo"}. ${item.recommendation}"
         }
         return StudioMesaAssistantAnswer("Engenharia da carta",
-            "Triagem indicativa com ${report.completedUnits} unidades concluídas e custos/preços atuais. Não é lucro contabilístico nem custo histórico; não inclui IVA, mão de obra, desperdício ou encargos.\\n$details",
+            "Triagem indicativa com ${report.completedUnits} unidades concluídas e custos/preços atuais. Não é lucro contabilístico nem custo histórico; não inclui IVA, mão de obra, desperdício ou encargos.\n$details",
             "Pedidos")
     }
 
@@ -240,8 +240,8 @@ internal object StudioMesaAdvisor {
         val drafts = marketingDrafts(snapshot)
         if (drafts.isEmpty()) return StudioMesaAssistantAnswer("Conteúdo para redes sociais", "Não há artigos com nome e preço válidos para criar rascunhos. Confirma a carta primeiro.", "Carta")
         return StudioMesaAssistantAnswer("Rascunhos para rever",
-            drafts.joinToString("\\n\\n") { "• ${it.itemName}\\n${it.caption}\\n${it.basis}" } +
-                "\\nRevê e aprova o texto antes de publicar. Não foram inventados ingredientes, descontos, prémios ou alegações sobre alergénios.",
+            drafts.joinToString("\n\n") { "• ${it.itemName}\n${it.caption}\n${it.basis}" } +
+                "\nRevê e aprova o texto antes de publicar. Não foram inventados ingredientes, descontos, prémios ou alegações sobre alergénios.",
             "Carta")
     }
 

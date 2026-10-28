@@ -20,6 +20,12 @@ Assistente de apoio operacional gratuito e executado no dispositivo. Usa regras 
 - Perguntas e respostas não são enviadas para a rede nem guardadas como histórico.
 - O diagnóstico de ligação é orientativo e não mede conectividade em tempo real.
 
+## Capacidades acrescentadas em 28/10/2026
+
+- **Resumo da operação:** mostra os dados carregados da carta, pedidos, custos em falta e, quando carregados, stock e reservas. Não é previsão de vendas.
+- **Engenharia da carta:** classifica os artigos em Estrela, Popular com margem baixa, Margem alta com pouca procura e Rever artigo. Exige pelo menos cinco unidades de pedidos concluídos correspondentes aos artigos atuais. Usa os custos/preços atuais, não reconstrói a contabilidade histórica.
+- **Rascunhos de marketing:** gera texto a partir de nome, descrição e preço registados e permite copiar para revisão manual antes de publicar.
+
 ## Limites
 Não é um LLM generativo, não faz pesquisa na Internet, não prevê procura, não consulta fornecedores e não executa ações autónomas. Uma futura integração com modelo generativo exigiria uma decisão separada sobre fornecedor, custo, consentimento, minimização de dados e segurança.
 
