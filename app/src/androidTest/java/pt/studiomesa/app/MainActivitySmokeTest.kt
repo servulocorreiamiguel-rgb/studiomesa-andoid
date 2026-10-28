@@ -328,7 +328,7 @@ class MainActivitySmokeTest {
             onView(withText("Assistente StudioMesa")).check(matches(isDisplayed()))
             onView(withText(containsString("SEM API PAGA"))).check(matches(isDisplayed()))
             onView(withHint("Ex.: Como posso melhorar o preço dos pratos?"))
-                .perform(replaceText("Como melhorar o preço?"))
+                .perform(scrollTo(), replaceText("Como melhorar o preço?"))
             onView(withText("Analisar pergunta")).perform(scrollTo(), click())
             onView(withText("Análise de preços")).perform(scrollTo()).check(matches(isDisplayed()))
             onView(withText(containsString("Não alterei nenhum preço.")))
