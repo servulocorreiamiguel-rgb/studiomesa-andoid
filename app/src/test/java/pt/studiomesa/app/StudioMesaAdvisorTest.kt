@@ -502,6 +502,13 @@ class StudioMesaAdvisorTest {
         assertFalse(answer.response.contains("média das últimas quatro semanas"))
     }
 
+    @Test fun dateGuardExplainsThatAnalysisHasNoPeriodFilter() {
+        val answer = StudioMesaAdvisor.answerQuestion("Qual foi o prato mais vendido ontem?", snapshot())
+        assertEquals("Período de desempenho não confirmado", answer.title)
+        assertTrue(answer.response.contains("ainda não permite filtrar estes dados por período"))
+        assertFalse(answer.response.contains("Abre a vista de vendas e seleciona o período pretendido"))
+    }
+
     @Test fun datedMenuSalesNeverReuseAllTimeSalesAsIfTheyBelongedToRequestedPeriod() {
         val data = snapshot(
             menu = listOf(item("Sopa", "5.00", "2.00"), item("Bitoque", "14.00", "4.50")),
@@ -525,6 +532,7 @@ class StudioMesaAdvisorTest {
             val answer = StudioMesaAdvisor.answerQuestion(question, data)
             assertTrue("$question -> ${answer.title}", answer.title.contains("Período") && answer.title.contains("não confirmado"))
             assertTrue(answer.response.contains("filtro temporal fiável"))
+            assertFalse(answer.response.contains("seleciona o período pretendido"))
             assertFalse(answer.response.contains("Triagem indicativa"))
             assertFalse(answer.response.contains("20 unidades"))
         }

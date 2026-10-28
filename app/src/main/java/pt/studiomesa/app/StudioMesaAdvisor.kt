@@ -221,7 +221,7 @@ internal object StudioMesaAdvisor {
         if (RestaurantAssistantIntentClassifier.requestsDatedMenuPerformance(rawQuestion)) {
             return StudioMesaAssistantAnswer(
                 "Período de desempenho não confirmado",
-                "Os dados disponíveis nesta análise não incluem um filtro temporal fiável para vendas, popularidade, preços, custos ou margens por período. Não vou apresentar valores atuais ou acumulados como se pertencessem ao intervalo indicado. Abre a vista correspondente, seleciona o período pretendido e confirma os registos históricos antes de comparar artigos.",
+                "Os dados disponíveis nesta análise não incluem um filtro temporal fiável para vendas, popularidade, preços, custos ou margens por período. Não vou apresentar valores atuais ou acumulados como se pertencessem ao intervalo indicado. A página Análise mostra totais gerais e ainda não permite filtrar estes dados por período; confirma os registos datados e os custos/preços históricos antes de comparar artigos.",
                 "Pedidos"
             )
         }
@@ -435,14 +435,14 @@ internal object StudioMesaAdvisor {
             containsAny(q, "margem", "margens", "rentabilidade", "rentavel", "rentaveis", "contribuicao", "prejuizo", "prejuizos", "preco", "precos", "custo", "custos", "despesa", "despesas", "gasto", "gastos", "salario", "salarios")) {
             return StudioMesaAssistantAnswer(
                 "Período de desempenho não confirmado",
-                "Não tenho um filtro temporal fiável para consultar preços, custos, despesas ou margens do intervalo pedido. Os valores de custo/preço carregados representam os valores atuais e não provam os valores históricos desse período. Confirma os registos datados antes de tomar decisões.",
+                "Não tenho um filtro temporal fiável para consultar preços, custos, despesas ou margens do intervalo pedido. Os valores de custo/preço carregados representam os valores atuais e não provam os valores históricos desse período. A página Análise mostra totais gerais sem filtro temporal; confirma os registos históricos antes de tomar decisões.",
                 "Pedidos"
             )
         }
         if (RestaurantAssistantIntentClassifier.requestsDatedSales(rawQuestion)) {
             return StudioMesaAssistantAnswer(
                 "Período de vendas não confirmado",
-                "Os dados disponíveis nesta análise não incluem um filtro temporal fiável para o período pedido. Não vou apresentar totais de outros dias, semanas ou meses como se pertencessem ao intervalo indicado. Abre a vista de vendas e seleciona o período pretendido antes de comparar resultados.",
+                "Os dados disponíveis nesta análise não incluem um filtro temporal fiável para o período pedido. Não vou apresentar totais de outros dias, semanas ou meses como se pertencessem ao intervalo indicado. A página Análise mostra totais gerais e ainda não tem filtro temporal; confirma os registos de vendas datados antes de comparar resultados.",
                 "Pedidos"
             )
         }
