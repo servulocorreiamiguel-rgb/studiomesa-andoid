@@ -3557,7 +3557,7 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(-1, dp(48)))
         addGap(container, 5)
         container.addView(secondaryButton("Gerar resumo da operação") {
-            assistantQuestion = "Resumo da operação"
+            // Keep the user's question intact; the briefing is a separate action.
             assistantAnswer = StudioMesaAdvisor.dailyBriefing(assistantSnapshot())
             renderApp()
         }, LinearLayout.LayoutParams(-1, dp(46)))
