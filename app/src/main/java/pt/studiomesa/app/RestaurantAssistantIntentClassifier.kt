@@ -36,13 +36,17 @@ internal object RestaurantAssistantIntentClassifier {
             "custo por porcao", "preco de compra", "precos de compra", "comparar fornecedores",
             "planeamento de compras", "desperdicio por motivo", "consumo teorico", "vendas da proxima semana"),
         rule(RestaurantAssistantIntent.ECONOMIC_MANAGER, 9,
-            "fluxo de caixa", "custos fixos", "custos variaveis", "custo de pessoal",
-            "horas de equipa", "prever vendas", "repor stock", "reabastecer", "preco fornecedor",
-            "resultado operacional", "custo alimentar", "despesas mensais", "orcamento versus real",
-            "orcamento e realizado", "consumo real", "custo da receita", "variacao de stock"),
+            "fluxo de caixa", "custos fixos", "custo fixo", "custos variaveis", "custo variavel",
+            "custo de pessoal", "horas de equipa", "prever vendas", "repor stock", "reabastecer",
+            "preco fornecedor", "resultado operacional", "resultado mensal", "lucro mensal",
+            "prejuizo mensal", "prejuizo", "perder dinheiro", "estou a perder dinheiro",
+            "reduzir custos", "poupar dinheiro", "custos dos ingredientes", "custos de ingredientes",
+            "custo alimentar", "despesas mensais", "orcamento versus real", "orcamento e realizado",
+            "consumo real", "custo da receita", "variacao de stock", "rentabilidade do negocio",
+            "analise financeira", "margem de contribuicao", "saldo no fim do mes", "caixa negativo"),
         rule(RestaurantAssistantIntent.ECONOMIC_MANAGER, 8,
             "tesouraria", "fornecedor", "orcamento", "desperdicio", "previsao", "financas",
-            "financeiro", "financeira", "planeamento de compras"),
+            "financeiro", "financeira", "planeamento de compras", "despesas", "rentabilidade"),
 
         rule(RestaurantAssistantIntent.DAILY_BRIEFING, 10,
             "resumo da operacao", "estado da operacao", "prioridades de hoje", "resumo do dia"),
@@ -74,8 +78,10 @@ internal object RestaurantAssistantIntentClassifier {
         rule(RestaurantAssistantIntent.RESERVATIONS, 7, "mesa para", "reservar mesa"),
         rule(RestaurantAssistantIntent.RESERVATIONS, 5, "reserva", "reservas"),
 
-        rule(RestaurantAssistantIntent.ORDERS, 8, "pedidos ativos", "fila da cozinha"),
-        rule(RestaurantAssistantIntent.ORDERS, 7, "em preparacao", "pedido atrasado"),
+        rule(RestaurantAssistantIntent.ORDERS, 8,
+            "pedidos ativos", "pedidos em aberto", "pedidos concluidos", "pedidos em preparacao",
+            "fila da cozinha", "pedido atrasado"),
+        rule(RestaurantAssistantIntent.ORDERS, 7, "em preparacao", "pedido atrasado", "pedidos"),
         rule(RestaurantAssistantIntent.ORDERS, 5, "pedido", "cozinha", "fila", "atraso"),
 
         rule(RestaurantAssistantIntent.TROUBLESHOOTING, 9,
@@ -86,7 +92,7 @@ internal object RestaurantAssistantIntentClassifier {
         rule(RestaurantAssistantIntent.TROUBLESHOOTING, 5, "erro", "problema", "falha"),
 
         rule(RestaurantAssistantIntent.ACCESS, 9, "convidar colaborador", "remover utilizador", "alterar permissoes"),
-        rule(RestaurantAssistantIntent.ACCESS, 7, "permissoes", "acesso a conta"),
+        rule(RestaurantAssistantIntent.ACCESS, 7, "permissoes", "permissao", "acesso a conta"),
         rule(RestaurantAssistantIntent.ACCESS, 5, "equipa", "funcionario", "acesso")
     ).flatten()
 
