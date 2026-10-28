@@ -12,7 +12,11 @@ class RestaurantAssistantIntentClassifierTest {
             "Como preparo a ficha técnica do prato?",
             "Que quantidade devo encomendar ao fornecedor?",
             "Como analiso os custos fixos e variáveis?",
-            "Como faço uma previsão financeira?"
+            "Como faço uma previsão financeira?",
+            "Onde estou a perder dinheiro?",
+            "Qual é o meu lucro mensal?",
+            "Como reduzo despesas?",
+            "Como analiso o cash flow?"
         )
         questions.forEach { question ->
             val match = RestaurantAssistantIntentClassifier.classify(question)
