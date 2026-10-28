@@ -100,3 +100,12 @@ A página foi verificada por carregamento HTTP público, mas **o percurso comple
 - Revisão dos requisitos atuais de publicação. A configuração atual usa `targetSdk = 36`, que satisfaz o requisito de API de destino anunciado pela Google para novas aplicações móveis submetidas desde 31 de agosto de 2026: https://support.google.com/googleplay/android-developer/answer/11926878?hl=pt
 
 A verificação da compilação, por si só, não certifica que a aplicação esteja pronta para operação comercial.
+
+
+## Auditoria do projeto alojado — 28/10/2026
+
+Foi feita uma auditoria de leitura à base Supabase, registada em [`PRODUCTION-READINESS-2026-10-28.md`](PRODUCTION-READINESS-2026-10-28.md). Não foram alterados dados, permissões, migrações, utilizadores ou definições de Auth.
+
+A auditoria confirmou RLS em todas as 11 tabelas públicas, políticas presentes, ausência de execução de funções `SECURITY DEFINER` pelo papel `anon` e `search_path` vazio nas funções auditadas. O Security Advisor mantém, no entanto, a proteção contra palavras-passe comprometidas desativada e avisa sobre funções privilegiadas chamadas por utilizadores autenticados. A organização está no plano Free; a verificação de palavras-passe comprometidas requer Pro ou superior segundo a [documentação Supabase](https://supabase.com/docs/guides/auth/password-security).
+
+Estes resultados não substituem os testes de autenticação ponta a ponta, os testes com contas separadas de diferentes restaurantes, a revisão independente das RPCs privilegiadas nem os testes em dispositivos físicos. Consulta o relatório antes de executar a preparação comercial.
