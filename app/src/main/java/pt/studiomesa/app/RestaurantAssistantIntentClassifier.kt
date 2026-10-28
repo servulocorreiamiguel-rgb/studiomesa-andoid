@@ -28,6 +28,21 @@ internal object RestaurantAssistantIntentClassifier {
         val weight: Int
     )
 
+    // A request for a specific time range must never be answered with all-time
+    // totals. All inputs are normalized first, including Portuguese accents.
+    private val datedPeriodPattern = Regex(
+        """\b(?:hoje|ontem|amanha|esta semana|nesta semana|na semana|semana passada|ultima semana|proxima semana|na proxima semana|este mes|neste mes|mes passado|no mes passado|ultimo mes|proximo mes|no proximo mes|(?:ultimos?|ultimas?) \d{1,3} dias|ultimas? \d{1,2} semanas|fim de semana(?: passado)?|(?:no )?inicio do mes|(?:no )?final do mes|este ano|neste ano|ano atual|ano passado|este trimestre|ultimo trimestre|domingo(?: passado)?|segunda(?: feira)?(?: passada)?|terca(?: feira)?(?: passada)?|quarta(?: feira)?(?: passada)?|quinta(?: feira)?(?: passada)?|sexta(?: feira)?(?: passada)?|sabado(?: passado)?|em janeiro|em fevereiro|em marco|em abril|em maio|em junho|em julho|em agosto|em setembro|em outubro|em novembro|em dezembro|dia \d{1,2}|em \d{4})\b"""
+    )
+    private val salesLanguagePattern = Regex(
+        """\b(?:vendas?|vendi|vendemos|venderam|vendeu|vendido|vendidos|vendida|vendidas|faturacao|faturamos|faturou|receita|receitas)\b"""
+    )
+
+    fun requestsDatedSales(question: String): Boolean {
+        val normalized = normalize(question)
+        return datedPeriodPattern.containsMatchIn(normalized) &&
+            salesLanguagePattern.containsMatchIn(normalized)
+    }
+
     private val rules = listOf(
         rule(RestaurantAssistantIntent.ECONOMIC_MANAGER, 10,
             "gestao economica", "gestor economico", "gestao financeira", "gestor financeiro",
@@ -84,7 +99,9 @@ internal object RestaurantAssistantIntentClassifier {
             "quais artigos tem melhor margem", "artigos com melhor margem", "melhor margem",
             "maior margem", "margem mais baixa", "menor margem", "mais vendido", "vendeu mais"),
         rule(RestaurantAssistantIntent.MENU_ENGINEERING, 8,
-            "popularidade", "artigos que vendem", "vender mais", "analisa as vendas", "vendas do menu"),
+            "popularidade", "artigos que vendem", "vender mais", "analisa as vendas", "vendas do menu",
+            "quais pratos venderam mais", "que pratos venderam mais",
+            "quais artigos venderam mais", "que artigos venderam mais"),
 
         rule(RestaurantAssistantIntent.MARKETING, 9, "redes sociais", "texto promocional", "ideias de publicacao"),
         rule(RestaurantAssistantIntent.MARKETING, 8,
@@ -162,11 +179,8 @@ internal object RestaurantAssistantIntentClassifier {
             )
         }
 
-        val asksDatedSales = Regex("\\b(?:hoje|ontem|amanha|esta semana|nesta semana|semana passada|mes passado|ultimos 7 dias)\\b")
-            .containsMatchIn(normalized) &&
-            Regex("\\b(?:vendas|vendemos|vendi|faturacao|faturamos|receita|vendeu|vendido)\\b")
-                .containsMatchIn(normalized)
-        val asksAboutSpecificMenuSales = Regex("\\b(?:prato|pratos|artigo|artigos|item|itens|mais vendido|vendeu mais)\\b")
+        val asksDatedSales = requestsDatedSales(normalized)
+        val asksAboutSpecificMenuSales = Regex("\\b(?:prato|pratos|artigo|artigos|item|itens|mais vendido|mais vendidos|vendeu mais|venderam mais)\\b")
             .containsMatchIn(normalized)
         if (asksDatedSales && !asksAboutSpecificMenuSales) {
             return RestaurantAssistantIntentMatch(
