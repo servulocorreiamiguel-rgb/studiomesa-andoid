@@ -340,4 +340,48 @@ class StudioMesaAdvisorTest {
         assertFalse(answer.response.contains("verifica a conta e o restaurante"))
     }
 
+
+    @Test fun stockQuestionAnswersOnlyTheNamedItemWhenAvailable() {
+        val data = snapshot(
+            stockAvailable = true,
+            stockLoaded = true,
+            stockItems = listOf(
+                AssistantStockItem("Arroz", BigDecimal("2"), BigDecimal("5")),
+                AssistantStockItem("Frango", BigDecimal("8"), BigDecimal("3"))
+            )
+        )
+        val answer = StudioMesaAdvisor.answerQuestion("Quanto tenho de arroz em stock?", data)
+        assertEquals("Stock de Arroz", answer.title)
+        assertTrue(answer.response.contains("2 disponíveis"))
+        assertTrue(answer.response.contains("limite mínimo 5"))
+        assertFalse(answer.response.contains("Frango"))
+    }
+
+    @Test fun stockQuestionDoesNotConfuseUnknownNamedItemWithNoLowStock() {
+        val data = snapshot(
+            stockAvailable = true,
+            stockLoaded = true,
+            stockItems = listOf(AssistantStockItem("Frango", BigDecimal("8"), BigDecimal("3")))
+        )
+        val answer = StudioMesaAdvisor.answerQuestion("Quanto tenho de arroz em stock?", data)
+        assertEquals("Artigo de stock não encontrado", answer.title)
+        assertTrue(answer.response.contains("não prova que não exista fisicamente"))
+        assertFalse(answer.response.contains("Não encontrei artigos abaixo do limite mínimo"))
+    }
+
+    @Test fun stockQuestionAsksForClarificationWhenSeveralItemsAreNamed() {
+        val data = snapshot(
+            stockAvailable = true,
+            stockLoaded = true,
+            stockItems = listOf(
+                AssistantStockItem("Arroz", BigDecimal("2"), BigDecimal("5")),
+                AssistantStockItem("Frango", BigDecimal("8"), BigDecimal("3"))
+            )
+        )
+        val answer = StudioMesaAdvisor.answerQuestion("Compara arroz e frango em stock", data)
+        assertEquals("Qual artigo de stock?", answer.title)
+        assertTrue(answer.response.contains("Arroz"))
+        assertTrue(answer.response.contains("Frango"))
+    }
+
 }
