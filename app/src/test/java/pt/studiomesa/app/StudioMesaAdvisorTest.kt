@@ -286,7 +286,9 @@ class StudioMesaAdvisorTest {
         ))
         val answer = StudioMesaAdvisor.answerQuestion("Quais pratos estão a dar prejuízo?", data)
         assertEquals("Contribuição estimada por artigo", answer.title)
-        assertTrue(answer.response.indexOf("Bitoque") < answer.response.indexOf("Sopa"))
+        assertTrue(answer.response.contains("Bitoque"))
+        assertFalse(answer.response.contains("Sopa"))
+        assertFalse(answer.response.contains("Salada"))
         assertTrue(answer.response.contains("não prova prejuízo líquido"))
         assertTrue(answer.response.contains("custo interno registado ultrapassa o preço"))
     }
@@ -506,6 +508,20 @@ class StudioMesaAdvisorTest {
         assertEquals("Artigo de stock não encontrado", sufficient.title)
         assertTrue(sufficient.response.contains("arroz"))
         assertFalse(sufficient.response.contains("Não encontrei artigos abaixo do limite mínimo"))
+    }
+
+
+    @Test fun lossQuestionDoesNotLabelPositiveContributionsAsLosses() {
+        val data = snapshot(menu = listOf(
+            item("Sopa", "5.00", "2.00"),
+            item("Bitoque", "14.00", "4.50"),
+            item("Salada", "8.00", "2.00")
+        ))
+        val answer = StudioMesaAdvisor.answerQuestion("Quais pratos estão a dar prejuízo?", data)
+        assertEquals("Não há contribuição unitária negativa registada", answer.title)
+        assertTrue(answer.response.contains("não encontrei artigos cujo custo interno unitário ultrapasse o preço"))
+        assertTrue(answer.response.contains("Isto não prova que sejam lucrativos"))
+        assertFalse(answer.response.contains("Sopa: contribuição"))
     }
 
 }
