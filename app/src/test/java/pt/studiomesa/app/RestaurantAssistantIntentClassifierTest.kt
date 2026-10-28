@@ -8,6 +8,7 @@ class RestaurantAssistantIntentClassifierTest {
     @Test fun routesSpecificEconomicQuestionsToEconomicManager() {
         val questions = listOf(
             "Faz um resumo da tesouraria e do custo alimentar",
+            "Como comparo fornecedores?",
             "Como calculo o custo dos ingredientes por dose?",
             "Como preparo a ficha técnica do prato?",
             "Que quantidade devo encomendar ao fornecedor?",
