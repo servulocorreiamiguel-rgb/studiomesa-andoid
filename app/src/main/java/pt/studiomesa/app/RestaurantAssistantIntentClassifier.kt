@@ -37,10 +37,13 @@ internal object RestaurantAssistantIntentClassifier {
             "precos de compra", "comparar fornecedores",
             "comparo fornecedores", "comparacao de fornecedores",
             "planeamento de compras", "desperdicio por motivo", "consumo teorico", "vendas da proxima semana",
-            "resumo financeiro", "resumo economico", "quanto custa cada receita",
+            "resumo financeiro", "resumo economico", "resumo do dinheiro", "quanto custa cada receita",
             "quanto custa uma receita", "custo de uma receita", "custo de cada dose",
-            "custo de uma dose", "custo para uma dose", "vendas desta semana",
-            "vendas esta semana", "faturacao esta semana", "faturacao diaria",
+            "custo de uma dose", "custo para uma dose", "quanto custa uma dose", "quanto custa a dose",
+            "custo da dose", "custos mensais", "analise dos custos mensais",
+            "o que comprar esta semana", "lista de compras", "o que devo comprar",
+            "conta de luz", "conta da luz", "custo da energia", "custo de eletricidade",
+            "vendas desta semana", "vendas esta semana", "faturacao esta semana", "faturacao diaria",
             "como esta a faturacao", "custos operacionais", "custo operacional"),
         rule(RestaurantAssistantIntent.ECONOMIC_MANAGER, 9,
             "fluxo de caixa", "custos fixos", "custo fixo", "custos variaveis", "custo variavel",
@@ -75,7 +78,8 @@ internal object RestaurantAssistantIntentClassifier {
             "melhorar a faturacao", "aumentar receitas", "aumento de vendas", "crescer as vendas",
             "aumentar o volume de vendas"),
         rule(RestaurantAssistantIntent.MENU_ENGINEERING, 10,
-            "quais pratos estao a dar prejuizo", "quais pratos dao prejuizo",
+            "quais pratos estao a dar prejuizo", "quais pratos dao prejuizo", "quais pratos deram prejuizo",
+            "quais pratos tiveram prejuizo", "pratos deram prejuizo", "pratos com prejuizo", "pratos a perder dinheiro",
             "quais pratos sao menos rentaveis", "pratos menos rentaveis", "artigos menos rentaveis",
             "quais artigos tem melhor margem", "artigos com melhor margem", "melhor margem",
             "maior margem", "margem mais baixa", "menor margem", "mais vendido", "vendeu mais"),
@@ -86,13 +90,14 @@ internal object RestaurantAssistantIntentClassifier {
         rule(RestaurantAssistantIntent.MARKETING, 8,
             "instagram", "marketing", "publicacao", "divulgacao", "post para", "campanha",
             "o que devo publicar", "o que publicar", "story", "stories", "legenda para",
-            "publicar nas redes", "cria um post"),
+            "publicar nas redes", "cria um post", "ideias de promocao", "promocao", "promocoes", "campanha promocional"),
         rule(RestaurantAssistantIntent.MARKETING, 7, "conteudo", "anuncio"),
 
         rule(RestaurantAssistantIntent.PRICING, 9,
             "quanto devo cobrar", "que preco devo cobrar", "calcular preco", "analise de preco"),
         rule(RestaurantAssistantIntent.PRICING, 8, "preco de venda", "preco justo", "definir o preco",
-            "custo dos pratos", "custos dos pratos", "custo dos artigos", "custos dos artigos"),
+            "custo dos pratos", "custos dos pratos", "custo dos artigos", "custos dos artigos",
+            "rentavel", "rentabilidade do artigo", "rentabilidade do prato", "vale a pena vender"),
         rule(RestaurantAssistantIntent.PRICING, 6, "preco", "margem", "lucro", "custo por artigo"),
 
         rule(RestaurantAssistantIntent.STOCK, 9, "quantidade em stock", "quanto tenho de stock"),
@@ -141,15 +146,31 @@ internal object RestaurantAssistantIntentClassifier {
             return RestaurantAssistantIntentMatch(RestaurantAssistantIntent.GENERAL, 0, emptyList())
         }
 
-        val stockActionPattern = Regex("\\b(?:quanto resta de|quanto sobrou de|acabou (?:o|a|os|as)|ficou sem) [a-z0-9]+\\b")
-        val financialContext = Regex("\\b(?:dinheiro|saldo|caixa|tesouraria|faturacao|orcamento|pagamento|pagar)\\b")
-        val nonStockContext = Regex("\\b(?:internet|servidor|ligacao|resposta|aplicacao|app|pedido|reserva|energia|servico)\\b")
-        if (stockActionPattern.containsMatchIn(normalized) &&
+        val stockActionPattern = Regex("\\b(?:quanto tenho de|quanto tem de|quanto resta de|quanto sobra de|quanto sobrou de|stock de|estoque de|tenho stock de|acabou (?:o|a|os|as)|ficou sem) [a-z0-9]+\\b")
+        val exhaustedItemPattern = Regex("\\b(?:o|a|os|as)\\s+[a-z0-9]+\\s+(?:acabou|acabaram|esgotou|esgotaram|esta a acabar|esta esgotado)\\b")
+        val sufficientItemPattern = Regex("\\b(?:ha|tenho|temos|tem)\\s+(?:(?:o|a|os|as)\\s+)?[a-z0-9]+\\s+(?:suficiente|suficientes|bastante|bastantes)\\b")
+        val financialContext = Regex("\\b(?:dinheiro|saldo|caixa|tesouraria|faturacao|orcamento|pagamento|pagar|pessoal|salario|salarios|custo|custos|despesa|despesas|venda|vendas|receita|receitas|funcionario|funcionarios|equipa)\\b")
+        val nonStockContext = Regex("\\b(?:internet|servidor|ligacao|resposta|aplicacao|app|pedido|pedidos|reserva|reservas|energia|servico|tempo|cliente|clientes)\\b")
+        if ((stockActionPattern.containsMatchIn(normalized) ||
+             exhaustedItemPattern.containsMatchIn(normalized) ||
+             sufficientItemPattern.containsMatchIn(normalized)) &&
             !financialContext.containsMatchIn(normalized) &&
             !nonStockContext.containsMatchIn(normalized)
         ) {
             return RestaurantAssistantIntentMatch(
                 RestaurantAssistantIntent.STOCK, 10, listOf("pergunta de disponibilidade de artigo")
+            )
+        }
+
+        val asksDatedSales = Regex("\\b(?:hoje|ontem|amanha|esta semana|nesta semana|semana passada|mes passado|ultimos 7 dias)\\b")
+            .containsMatchIn(normalized) &&
+            Regex("\\b(?:vendas|vendemos|vendi|faturacao|faturamos|receita|vendeu|vendido)\\b")
+                .containsMatchIn(normalized)
+        val asksAboutSpecificMenuSales = Regex("\\b(?:prato|pratos|artigo|artigos|item|itens|mais vendido|vendeu mais)\\b")
+            .containsMatchIn(normalized)
+        if (asksDatedSales && !asksAboutSpecificMenuSales) {
+            return RestaurantAssistantIntentMatch(
+                RestaurantAssistantIntent.ECONOMIC_MANAGER, 10, listOf("pergunta de vendas com período")
             )
         }
 
