@@ -411,4 +411,20 @@ class StudioMesaAdvisorTest {
         assertTrue(answer.response.contains("Hambúrguer Vegetariano"))
     }
 
+
+    @Test fun genericLowStockQuestionStillListsLowItemsInsteadOfInventingAnItemName() {
+        val data = snapshot(
+            stockAvailable = true,
+            stockLoaded = true,
+            stockItems = listOf(
+                AssistantStockItem("Arroz", BigDecimal("2"), BigDecimal("5")),
+                AssistantStockItem("Frango", BigDecimal("8"), BigDecimal("3"))
+            )
+        )
+        val answer = StudioMesaAdvisor.answerQuestion("Quais artigos estão baixos em stock?", data)
+        assertEquals("Análise de stock", answer.title)
+        assertTrue(answer.response.contains("Arroz"))
+        assertFalse(answer.response.contains("Artigo de stock não encontrado"))
+    }
+
 }
