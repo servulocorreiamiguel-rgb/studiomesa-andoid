@@ -256,7 +256,6 @@ internal object StudioMesaAdvisor {
     fun answerQuestion(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
         val q = normalize(rawQuestion)
         return when {
-            containsAny(q, "resumo", "briefing", "prioridades de hoje", "estado da operacao") -> dailyBriefing(snapshot)
             containsAny(
                 q, "gestao economica", "gestor economico", "ponto de equilibrio", "break even",
                 "tesouraria", "fluxo de caixa", "desperdicio", "desperdicio por motivo", "custo alimentar",
@@ -268,6 +267,7 @@ internal object StudioMesaAdvisor {
                 "Gestor económico (opcional)",
                 "Nesta página, ativa o Gestor económico se o proprietário quiser fazer estas análises. Inclui indicadores mensais, ponto de equilíbrio, projeção manual de tesouraria, média simples de vendas semanais, custo por receita/dose e quantidade teórica de reposição. Usa apenas os valores introduzidos nesta sessão; não consulta bancos ou fornecedores, não altera preços nem envia encomendas."
             )
+            containsAny(q, "resumo", "briefing", "prioridades de hoje", "estado da operacao") -> dailyBriefing(snapshot)
             containsAny(
                 q, "engenharia da carta", "popularidade", "mais vendidos", "rentabilidade da carta",
                 "artigos que vendem", "menu engineering", "vendas", "vender mais", "aumentar as vendas",
