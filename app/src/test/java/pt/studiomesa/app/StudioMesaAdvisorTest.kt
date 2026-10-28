@@ -50,6 +50,24 @@ class StudioMesaAdvisorTest {
         assertEquals("Análise de preços", StudioMesaAdvisor.answerQuestion("Como melhoro o preço?", data).title)
         assertEquals("Análise de pedidos", StudioMesaAdvisor.answerQuestion("Como está a fila da cozinha?", data).title)
     }
+
+    @Test fun salesGrowthQuestionsAreNotMisroutedToPriceAnalysis() {
+        val data = snapshot(
+            menu = listOf(item("Sopa", "5.00", "2.00")),
+            salesLines = listOf(AssistantSaleLine("Sopa", 6, "Concluído"))
+        )
+        val answer = StudioMesaAdvisor.answerQuestion("Como posso aumentar as vendas?", data)
+        assertEquals("Engenharia da carta", answer.title)
+        assertTrue(answer.response.contains("Triagem indicativa"))
+    }
+
+    @Test fun specificPriceQuestionsStillUsePriceAnalysis() {
+        val answer = StudioMesaAdvisor.answerQuestion(
+            "Qual deve ser o preço de venda deste prato?",
+            snapshot(menu = listOf(item("Prato", "10.00", "4.00")))
+        )
+        assertEquals("Análise de preços", answer.title)
+    }
     @Test fun problemResponseDoesNotPretendToTestConnectivity() {
         assertTrue(StudioMesaAdvisor.answerQuestion("A app está com erro de ligação?", snapshot()).response.contains("Não consigo testar a ligação à Internet"))
     }
