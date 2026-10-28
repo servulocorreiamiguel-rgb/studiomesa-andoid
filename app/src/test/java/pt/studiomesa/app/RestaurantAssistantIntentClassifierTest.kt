@@ -187,6 +187,7 @@ class RestaurantAssistantIntentClassifierTest {
         assertTrue(RestaurantAssistantIntentClassifier.requestsDatedSales("Quanto foi a receita em 2025?"))
         assertTrue(!RestaurantAssistantIntentClassifier.requestsDatedSales("Como posso aumentar as vendas?"))
         assertTrue(!RestaurantAssistantIntentClassifier.requestsDatedSales("Como posso aumentar as vendas no próximo domingo?"))
+        assertTrue(!RestaurantAssistantIntentClassifier.requestsDatedMenuPerformance("Como posso reduzir custos esta semana?"))
         assertTrue(!RestaurantAssistantIntentClassifier.requestsDatedSales("Previsão de vendas para amanhã"))
         assertTrue(!RestaurantAssistantIntentClassifier.requestsDatedSales("Quanto vou vender na próxima semana?"))
         assertTrue(!RestaurantAssistantIntentClassifier.requestsDatedMenuPerformance("Previsão de vendas da próxima semana"))
@@ -214,7 +215,9 @@ class RestaurantAssistantIntentClassifierTest {
             "Quais pratos foram mais rentáveis no mês passado?" to RestaurantAssistantIntent.MENU_ENGINEERING,
             "Quais pratos foram mais rentáveis do mês de setembro?" to RestaurantAssistantIntent.MENU_ENGINEERING,
             "Quais artigos tiveram a margem mais alta na semana passada?" to RestaurantAssistantIntent.MENU_ENGINEERING,
-            "Qual foi a margem média em março?" to RestaurantAssistantIntent.ECONOMIC_MANAGER
+            "Qual foi a margem média em março?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,
+            "Qual era o preço do Bitoque no mês passado?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,
+            "Quanto gastei em salários este mês?" to RestaurantAssistantIntent.ECONOMIC_MANAGER
         )
         cases.forEach { (question, expected) ->
             assertEquals("$question -> ${RestaurantAssistantIntentClassifier.classify(question)}",
