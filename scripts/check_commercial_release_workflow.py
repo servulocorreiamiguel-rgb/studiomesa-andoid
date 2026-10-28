@@ -91,7 +91,7 @@ def audit_workflow(text: str) -> list[str]:
         errors.append("The commercial workflow must build all five signed release APK variants.")
     if "mapfile -d '' apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' -print0)" not in text:
         errors.append("The commercial workflow must enumerate the release APKs before uploading them.")
-    if 'apksigner verify --verbose "$apk"' not in text:
+    if '"$APKSIGNER" verify --verbose "$apk"' not in text:
         errors.append("The commercial workflow must verify each release APK with apksigner.")
     if "app/build/outputs/apk/**/release/*.apk" not in text:
         errors.append("The commercial artifact must include the signed APKs for direct installation.")
