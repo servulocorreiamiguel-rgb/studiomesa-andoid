@@ -36,7 +36,12 @@ internal object RestaurantAssistantIntentClassifier {
             "custo deste prato", "custo por dose", "custo por porcao", "preco de compra",
             "precos de compra", "comparar fornecedores",
             "comparo fornecedores", "comparacao de fornecedores",
-            "planeamento de compras", "desperdicio por motivo", "consumo teorico", "vendas da proxima semana"),
+            "planeamento de compras", "desperdicio por motivo", "consumo teorico", "vendas da proxima semana",
+            "resumo financeiro", "resumo economico", "quanto custa cada receita",
+            "quanto custa uma receita", "custo de uma receita", "custo de cada dose",
+            "custo de uma dose", "custo para uma dose", "vendas desta semana",
+            "vendas esta semana", "faturacao esta semana", "faturacao diaria",
+            "como esta a faturacao", "custos operacionais", "custo operacional"),
         rule(RestaurantAssistantIntent.ECONOMIC_MANAGER, 9,
             "fluxo de caixa", "custos fixos", "custo fixo", "custos variaveis", "custo variavel",
             "custo de pessoal", "horas de equipa", "prever vendas", "repor stock", "reabastecer",
@@ -55,7 +60,8 @@ internal object RestaurantAssistantIntentClassifier {
             "financeiro", "financeira", "planeamento de compras", "despesas", "rentabilidade"),
 
         rule(RestaurantAssistantIntent.DAILY_BRIEFING, 10,
-            "resumo da operacao", "estado da operacao", "prioridades de hoje", "resumo do dia"),
+            "resumo da operacao", "estado da operacao", "prioridades de hoje", "resumo do dia",
+            "resumo das reservas", "resumo dos pedidos", "resumo da cozinha", "resumo do stock"),
         rule(RestaurantAssistantIntent.DAILY_BRIEFING, 8, "briefing", "resumo geral"),
 
         rule(RestaurantAssistantIntent.MENU_ENGINEERING, 10, "engenharia da carta", "menu engineering"),
@@ -66,6 +72,11 @@ internal object RestaurantAssistantIntentClassifier {
             "melhorar vendas", "aumento a faturacao", "aumento da faturacao", "aumentar a faturacao",
             "melhorar a faturacao", "aumentar receitas", "aumento de vendas", "crescer as vendas",
             "aumentar o volume de vendas"),
+        rule(RestaurantAssistantIntent.MENU_ENGINEERING, 10,
+            "quais pratos estao a dar prejuizo", "quais pratos dao prejuizo",
+            "quais pratos sao menos rentaveis", "pratos menos rentaveis", "artigos menos rentaveis",
+            "quais artigos tem melhor margem", "artigos com melhor margem", "melhor margem",
+            "maior margem", "margem mais baixa", "menor margem", "mais vendido", "vendeu mais"),
         rule(RestaurantAssistantIntent.MENU_ENGINEERING, 8,
             "popularidade", "artigos que vendem", "vender mais", "analisa as vendas", "vendas do menu"),
 
@@ -84,9 +95,13 @@ internal object RestaurantAssistantIntentClassifier {
             "stock baixo", "stock esgotado", "stock a acabar", "ingrediente em falta",
             "ingredientes a acabar", "ingredientes estao a acabar", "ingredientes quase esgotados",
             "produto a acabar", "produtos a acabar", "artigos a acabar"),
+        rule(RestaurantAssistantIntent.STOCK, 9,
+            "quanto resta de", "quanto sobrou de", "stock do", "quantidade disponivel"),
         rule(RestaurantAssistantIntent.STOCK, 5, "stock"),
 
-        rule(RestaurantAssistantIntent.RESERVATIONS, 9, "confirmar reserva", "reservas pendentes", "marcar mesa"),
+        rule(RestaurantAssistantIntent.RESERVATIONS, 9,
+            "confirmar reserva", "reservas pendentes", "marcar mesa", "mesas reservadas",
+            "reservas de hoje", "reservas para hoje", "disponibilidade de mesa"),
         rule(RestaurantAssistantIntent.RESERVATIONS, 7, "mesa para", "reservar mesa"),
         rule(RestaurantAssistantIntent.RESERVATIONS, 5, "reserva", "reservas"),
 
@@ -102,7 +117,10 @@ internal object RestaurantAssistantIntentClassifier {
             "nao consigo confirmar reserva", "reserva nao guarda"),
         rule(RestaurantAssistantIntent.TROUBLESHOOTING, 9,
             "nao consigo iniciar sessao", "nao consigo entrar", "erro de sincronizacao",
-            "problema de ligacao", "a app nao funciona"),
+            "problema de ligacao", "a app nao funciona", "a app fecha", "aplicacao fecha",
+            "fecha ao guardar", "nao aparece a resposta", "resposta nao aparece",
+            "a ia nao responde", "ia nao responde", "app nao abre", "aplicacao nao abre",
+            "fica bloqueada", "erro ao iniciar"),
         rule(RestaurantAssistantIntent.TROUBLESHOOTING, 7,
             "internet", "ligacao", "sincronizacao", "sincronizar", "servidor"),
         rule(RestaurantAssistantIntent.TROUBLESHOOTING, 5, "erro", "problema", "falha"),
@@ -116,6 +134,18 @@ internal object RestaurantAssistantIntentClassifier {
         val normalized = normalize(question)
         if (normalized.isBlank()) {
             return RestaurantAssistantIntentMatch(RestaurantAssistantIntent.GENERAL, 0, emptyList())
+        }
+
+        val stockActionPattern = Regex("\\b(?:quanto resta de|quanto sobrou de|acabou (?:o|a|os|as)|ficou sem) [a-z0-9]+\\b")
+        val financialContext = Regex("\\b(?:dinheiro|saldo|caixa|tesouraria|faturacao|orcamento|pagamento|pagar)\\b")
+        val nonStockContext = Regex("\\b(?:internet|servidor|ligacao|resposta|aplicacao|app|pedido|reserva|energia|servico)\\b")
+        if (stockActionPattern.containsMatchIn(normalized) &&
+            !financialContext.containsMatchIn(normalized) &&
+            !nonStockContext.containsMatchIn(normalized)
+        ) {
+            return RestaurantAssistantIntentMatch(
+                RestaurantAssistantIntent.STOCK, 10, listOf("pergunta de disponibilidade de artigo")
+            )
         }
 
         val padded = " $normalized "
