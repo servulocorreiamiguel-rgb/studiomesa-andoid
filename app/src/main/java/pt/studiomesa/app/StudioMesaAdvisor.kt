@@ -507,7 +507,8 @@ internal object StudioMesaAdvisor {
                 "Assistente"
             )
         }
-        if (containsAny(q, "fornecedor", "fornecedores", "comparar propostas", "preco de compra")) {
+        if (containsAny(q, "fornecedor", "fornecedores", "comparar propostas", "preco de compra") &&
+            !containsAny(q, "quantidade a encomendar", "quantidade devo encomendar", "que quantidade devo encomendar", "quanto devo encomendar", "quanto encomendar", "repor stock", "reabastecer", "ponto de encomenda")) {
             return StudioMesaAssistantAnswer(
                 "Comparar fornecedores",
                 "Ativa o Gestor económico e usa «Comparação de fornecedores». Introduz uma linha por proposta no formato artigo | fornecedor | unidade | quantidade na embalagem | preço da embalagem. Compara o mesmo artigo e unidades equivalentes; o sistema calcula o preço por unidade com base nos valores introduzidos. Não consulta fornecedores online, não confirma qualidade, transporte ou IVA e não faz encomendas.",
