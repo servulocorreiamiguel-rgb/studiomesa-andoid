@@ -254,7 +254,8 @@ internal object StudioMesaAdvisor {
     }
 
     fun answerQuestion(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
-        return when (RestaurantAssistantIntentClassifier.classify(rawQuestion).intent) {
+        val intentMatch = RestaurantAssistantIntentClassifier.classify(rawQuestion)
+        return when (intentMatch.intent) {
             RestaurantAssistantIntent.ECONOMIC_MANAGER -> StudioMesaAssistantAnswer(
                 "Gestor económico (opcional)",
                 "Nesta página, ativa o Gestor económico se o proprietário quiser fazer estas análises. Inclui indicadores mensais, ponto de equilíbrio, projeção manual de tesouraria, média simples de vendas semanais, custo por receita/dose e quantidade teórica de reposição. Usa apenas os valores introduzidos nesta sessão; não consulta bancos ou fornecedores, não altera preços nem envia encomendas."
@@ -272,7 +273,7 @@ internal object StudioMesaAdvisor {
                 "Confirma em Conta quem tem acesso ao restaurante. Esta versão não altera permissões nem verifica revogações em tempo real. Antes de remover ou convidar alguém, confirma a identidade e o restaurante selecionado.",
                 "Conta"
             )
-            RestaurantAssistantIntent.GENERAL -> answerGeneral(snapshot)
+            RestaurantAssistantIntent.GENERAL -> answerGeneral(rawQuestion, snapshot, intentMatch)
         }
     }
 
@@ -340,14 +341,17 @@ internal object StudioMesaAdvisor {
         return StudioMesaAssistantAnswer("Diagnóstico inicial", response, "Conta")
     }
 
-    private fun answerGeneral(s: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
-        val insights = recommendations(s).take(4)
-        val detail = insights.joinToString("\n\n") { "• ${it.title}: ${it.detail}" }
-        return StudioMesaAssistantAnswer(
-            "Resumo do assistente",
-            if (detail.isBlank()) "Ainda não há dados suficientes. Atualiza os dados do restaurante e volta a analisar." else detail,
-            insights.firstNotNullOfOrNull { it.actionPage }
-        )
+    private fun answerGeneral(
+        rawQuestion: String,
+        snapshot: StudioMesaAssistantSnapshot,
+        match: RestaurantAssistantIntentMatch
+    ): StudioMesaAssistantAnswer {
+        val response = if (rawQuestion.isBlank()) {
+            "Escreve uma pergunta concreta sobre o restaurante para eu analisar os dados disponíveis."
+        } else {
+            "Ainda não consegui identificar com segurança o tema desta pergunta. Experimenta perguntar sobre preços e margens, vendas e artigos da carta, marketing, stock, reservas, pedidos/cozinha, acesso ou gestão económica. Não alterei dados do restaurante."
+        }
+        return StudioMesaAssistantAnswer("Preciso de uma pergunta mais específica", response)
     }
 
     private fun normalize(value: String): String =
