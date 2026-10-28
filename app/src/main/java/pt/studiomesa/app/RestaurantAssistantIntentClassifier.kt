@@ -88,7 +88,7 @@ internal object RestaurantAssistantIntentClassifier {
         rule(RestaurantAssistantIntent.ACCESS, 9, "convidar colaborador", "remover utilizador", "alterar permissoes"),
         rule(RestaurantAssistantIntent.ACCESS, 7, "permissoes", "acesso a conta"),
         rule(RestaurantAssistantIntent.ACCESS, 5, "equipa", "funcionario", "acesso")
-    )
+    ).flatten()
 
     fun classify(question: String): RestaurantAssistantIntentMatch {
         val normalized = normalize(question)
