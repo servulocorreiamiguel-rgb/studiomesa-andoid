@@ -37,7 +37,7 @@ internal object RestaurantAssistantIntentClassifier {
         """\b(?:vendas?|vendi|vendemos|venderam|vendeu|vendido|vendidos|vendida|vendidas|faturacao|faturamos|faturou|receita|receitas)\b"""
     )
     private val salesGrowthOrMarketingPattern = Regex(
-        """\b(?:aumentar|aumento|melhorar|melhore|crescer|divulgar|promover|promocao|campanha|publicar|publicacao|marketing|estrategia|ideias de|vender mais|como vender|quero vender|conseguir vender)\b"""
+        """\b(?:aumentar|aumento|melhorar|melhore|crescer|reduzir|reduza|poupar|economizar|diminuir|baixar|otimizar|divulgar|promover|promocao|campanha|publicar|publicacao|marketing|estrategia|ideias de|vender mais|como vender|quero vender|conseguir vender)\b"""
     )
 
     fun requestsDatedSales(question: String): Boolean {
@@ -48,7 +48,7 @@ internal object RestaurantAssistantIntentClassifier {
     }
 
     private val menuPerformanceLanguagePattern = Regex(
-        """\b(?:vendas?|vendi|vendemos|venderam|vendeu|vendido|vendidos|vendida|vendidas|faturacao|faturamos|faturou|receita|receitas|lucro|lucros|prejuizo|prejuizos|margem|margens|rentavel|rentaveis|rentabilidade|contribuicao)\b"""
+        """\b(?:vendas?|vendi|vendemos|venderam|vendeu|vendido|vendidos|vendida|vendidas|faturacao|faturamos|faturou|receita|receitas|lucro|lucros|prejuizo|prejuizos|margem|margens|rentavel|rentaveis|rentabilidade|contribuicao|preco|precos|custo|custos|despesa|despesas|gasto|gastos|salario|salarios)\b"""
     )
 
     fun requestsDatedMenuPerformance(question: String): Boolean {
