@@ -66,6 +66,16 @@ class StudioMesaAdvisorTest {
         assertEquals("Gestor económico (opcional)", answer.title)
         assertTrue(answer.response.contains("não consulta bancos ou fornecedores"))
     }
+    @Test fun newEconomicQuestionsRouteToTheOptInManager() {
+        listOf(
+            "Como comparo fornecedores?",
+            "Como controlo desperdício por motivo?",
+            "Como comparo orçamento com o consumo real?",
+            "Como calculo o custo de pessoal?"
+        ).forEach { question ->
+            assertEquals("Gestor económico (opcional)", StudioMesaAdvisor.answerQuestion(question, snapshot()).title)
+        }
+    }
 
     @Test fun specificPriceQuestionsStillUsePriceAnalysis() {
         val answer = StudioMesaAdvisor.answerQuestion(
