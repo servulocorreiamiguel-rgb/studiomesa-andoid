@@ -218,10 +218,10 @@ internal object StudioMesaAdvisor {
 
     private fun answerMenuEngineering(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
         val q = normalizeLookupText(rawQuestion)
-        if (RestaurantAssistantIntentClassifier.requestsDatedSales(rawQuestion)) {
+        if (RestaurantAssistantIntentClassifier.requestsDatedMenuPerformance(rawQuestion)) {
             return StudioMesaAssistantAnswer(
-                "Período de vendas não confirmado",
-                "Os dados de vendas disponíveis nesta análise não incluem um filtro temporal fiável para o período pedido. Não vou apresentar vendas de outros dias, semanas ou meses como se pertencessem ao intervalo indicado. Abre a vista de vendas e seleciona o período pretendido antes de comparar artigos.",
+                "Período de desempenho não confirmado",
+                "Os dados disponíveis nesta análise não incluem um filtro temporal fiável para vendas, popularidade ou margem por período. Não vou apresentar resultados atuais ou acumulados como se pertencessem ao intervalo indicado. Abre a vista de vendas, seleciona o período pretendido e confirma os custos aplicáveis antes de comparar artigos.",
                 "Pedidos"
             )
         }
@@ -431,6 +431,14 @@ internal object StudioMesaAdvisor {
 
     private fun answerEconomicQuestion(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
         val q = normalizeLookupText(rawQuestion)
+        if (RestaurantAssistantIntentClassifier.requestsDatedMenuPerformance(rawQuestion) &&
+            containsAny(q, "margem", "margens", "rentabilidade", "rentavel", "rentaveis", "contribuicao", "prejuizo", "prejuizos")) {
+            return StudioMesaAssistantAnswer(
+                "Período de desempenho não confirmado",
+                "Não tenho um filtro temporal fiável para calcular a margem ou contribuição do intervalo pedido. O custo/preço atual na Carta não prova a margem histórica desse mês ou dia. Confirma as vendas e os custos aplicáveis ao mesmo período antes de tomar decisões.",
+                "Pedidos"
+            )
+        }
         if (RestaurantAssistantIntentClassifier.requestsDatedSales(rawQuestion)) {
             return StudioMesaAssistantAnswer(
                 "Período de vendas não confirmado",
