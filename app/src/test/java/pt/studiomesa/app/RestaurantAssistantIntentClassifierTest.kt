@@ -217,7 +217,9 @@ class RestaurantAssistantIntentClassifierTest {
             "Quais artigos tiveram a margem mais alta na semana passada?" to RestaurantAssistantIntent.MENU_ENGINEERING,
             "Qual foi a margem média em março?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,
             "Qual era o preço do Bitoque no mês passado?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,
-            "Quanto gastei em salários este mês?" to RestaurantAssistantIntent.ECONOMIC_MANAGER
+            "Quanto gastei em salários este mês?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,
+            "Quanto gastei em setembro?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,
+            "Quanto paguei em março?" to RestaurantAssistantIntent.ECONOMIC_MANAGER
         )
         cases.forEach { (question, expected) ->
             assertEquals("$question -> ${RestaurantAssistantIntentClassifier.classify(question)}",

@@ -48,7 +48,7 @@ internal object RestaurantAssistantIntentClassifier {
     }
 
     private val menuPerformanceLanguagePattern = Regex(
-        """\b(?:vendas?|vendi|vendemos|venderam|vendeu|vendido|vendidos|vendida|vendidas|faturacao|faturamos|faturou|receita|receitas|lucro|lucros|prejuizo|prejuizos|margem|margens|rentavel|rentaveis|rentabilidade|contribuicao|preco|precos|custo|custos|despesa|despesas|gasto|gastos|salario|salarios)\b"""
+        """\b(?:vendas?|vendi|vendemos|venderam|vendeu|vendido|vendidos|vendida|vendidas|faturacao|faturamos|faturou|receita|receitas|lucro|lucros|prejuizo|prejuizos|margem|margens|rentavel|rentaveis|rentabilidade|contribuicao|preco|precos|custo|custos|despesa|despesas|gasto|gastos|gastei|gastamos|gastou|paguei|pagamos|pagou|pagamento|pagamentos|compra|compras|salario|salarios)\b"""
     )
 
     fun requestsDatedMenuPerformance(question: String): Boolean {

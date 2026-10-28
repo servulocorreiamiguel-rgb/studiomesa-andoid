@@ -526,7 +526,9 @@ class StudioMesaAdvisorTest {
             "Quais artigos tiveram a margem mais alta na semana passada?",
             "Qual era a margem do Bitoque no mês passado?",
             "Qual era o preço do Bitoque no mês passado?",
-            "Quanto gastei em salários este mês?"
+            "Quanto gastei em salários este mês?",
+            "Quanto gastei em setembro?",
+            "Quanto paguei em março?"
         )
         questions.forEach { question ->
             val answer = StudioMesaAdvisor.answerQuestion(question, data)
