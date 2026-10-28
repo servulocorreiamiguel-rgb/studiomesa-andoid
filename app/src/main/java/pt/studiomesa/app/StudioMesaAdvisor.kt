@@ -5,8 +5,13 @@ import java.math.RoundingMode
 import java.text.Normalizer
 import java.util.Locale
 
-internal data class AssistantMenuItem(val name: String, val sellingPrice: BigDecimal, val unitCost: BigDecimal)
+internal data class AssistantMenuItem(val name: String, val sellingPrice: BigDecimal, val unitCost: BigDecimal, val category: String = "Prato principal", val description: String = "")
+internal data class AssistantSaleLine(val itemName: String, val quantity: Int, val status: String)
 internal data class AssistantStockItem(val name: String, val quantity: BigDecimal, val minimumQuantity: BigDecimal)
+internal enum class MenuEngineeringClass { STAR, WORKHORSE, PUZZLE, DOG, MISSING_COST }
+internal data class AssistantMenuEngineeringItem(val itemName: String, val unitsSold: Int, val popularitySharePercent: BigDecimal, val contributionPerUnit: BigDecimal?, val classification: MenuEngineeringClass, val recommendation: String)
+internal data class AssistantMenuEngineeringReport(val hasEnoughSales: Boolean, val hasMarginData: Boolean, val completedUnits: Int, val requiredUnits: Int = 5, val items: List<AssistantMenuEngineeringItem> = emptyList())
+internal data class AssistantMarketingDraft(val itemName: String, val caption: String, val basis: String)
 internal data class StudioMesaAssistantSnapshot(
     val isDemo: Boolean,
     val restaurantConfigured: Boolean,
@@ -18,7 +23,8 @@ internal data class StudioMesaAssistantSnapshot(
     val stockItems: List<AssistantStockItem> = emptyList(),
     val reservationsFeatureAvailable: Boolean = false,
     val reservationsLoaded: Boolean = false,
-    val pendingReservations: Int = 0
+    val pendingReservations: Int = 0,
+    val salesLines: List<AssistantSaleLine> = emptyList()
 )
 internal enum class AssistantPriority { URGENT, ATTENTION, TIP }
 internal data class AssistantRecommendation(
@@ -125,9 +131,134 @@ internal object StudioMesaAdvisor {
         return out.sortedBy { ranks[it.priority] ?: 3 }.take(7)
     }
 
+    fun menuEngineering(snapshot: StudioMesaAssistantSnapshot): AssistantMenuEngineeringReport {
+        val menu = snapshot.menuItems.filter { it.name.isNotBlank() && it.sellingPrice > zero }.distinctBy { normalize(it.name) }
+        if (menu.isEmpty()) return AssistantMenuEngineeringReport(false, false, 0)
+        val names = menu.map { normalize(it.name) }.toSet()
+        val sold = snapshot.salesLines.filter {
+            normalize(it.status) == "concluido" && it.quantity in 1..99 && normalize(it.itemName) in names
+        }.groupBy { normalize(it.itemName) }.mapValues { (_, lines) -> lines.sumOf { it.quantity } }
+        val total = sold.values.sum()
+        if (total < 5) return AssistantMenuEngineeringReport(false, false, total)
+        val popularityLimit = BigDecimal("70").divide(BigDecimal(menu.size), 4, RoundingMode.HALF_UP)
+        val marginSamples = menu.mapNotNull { item ->
+            if (item.unitCost <= zero) return@mapNotNull null
+            val units = sold[normalize(item.name)] ?: 0
+            if (units <= 0) return@mapNotNull null
+            item.sellingPrice.subtract(item.unitCost).multiply(BigDecimal(units)) to units
+        }
+        val weightedUnits = marginSamples.sumOf { it.second }
+        val avgMargin = if (weightedUnits == 0) null else marginSamples.fold(zero) { a, b -> a.add(b.first) }.divide(BigDecimal(weightedUnits), 4, RoundingMode.HALF_UP)
+        val result = menu.map { item ->
+            val units = sold[normalize(item.name)] ?: 0
+            val share = BigDecimal(units).multiply(BigDecimal("100")).divide(BigDecimal(total), 2, RoundingMode.HALF_UP)
+            val margin = if (item.unitCost > zero) item.sellingPrice.subtract(item.unitCost) else null
+            val cls = when {
+                margin == null || avgMargin == null -> MenuEngineeringClass.MISSING_COST
+                share >= popularityLimit && margin >= avgMargin -> MenuEngineeringClass.STAR
+                share >= popularityLimit -> MenuEngineeringClass.WORKHORSE
+                margin >= avgMargin -> MenuEngineeringClass.PUZZLE
+                else -> MenuEngineeringClass.DOG
+            }
+            val advice = when (cls) {
+                MenuEngineeringClass.STAR -> "Mantém qualidade e disponibilidade; combina procura observada com contribuição unitária acima da média."
+                MenuEngineeringClass.WORKHORSE -> "É procurado, mas a contribuição fica abaixo da média. Revê custo de porção, desperdício e preço sem reduzir qualidade automaticamente."
+                MenuEngineeringClass.PUZZLE -> "A contribuição é alta, mas a procura observada é baixa. Testa descrição ou posição do menu antes de decidir removê-lo."
+                MenuEngineeringClass.DOG -> "Procura e contribuição estão abaixo das referências deste menu. Revê custo e apresentação antes de decidir mantê-lo."
+                MenuEngineeringClass.MISSING_COST -> "Falta custo válido para comparar a contribuição. Confirma o custo por porção."
+            }
+            AssistantMenuEngineeringItem(item.name, units, share, margin, cls, advice)
+        }.sortedWith(compareBy<AssistantMenuEngineeringItem> { it.classification.ordinal }.thenByDescending { it.unitsSold }.thenBy { it.itemName.lowercase(Locale.ROOT) })
+        return AssistantMenuEngineeringReport(true, avgMargin != null, total, items = result)
+    }
+
+    fun dailyBriefing(snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
+        val missingCosts = snapshot.menuItems.count { it.unitCost <= zero }
+        val lowStock = if (snapshot.stockLoaded) snapshot.stockItems.count { it.quantity <= it.minimumQuantity } else null
+        val report = menuEngineering(snapshot)
+        val lines = mutableListOf<String>()
+        lines += "Fonte: " + if (snapshot.isDemo) "dados de demonstração locais." else "dados carregados pela aplicação."
+        lines += "Carta: ${snapshot.menuItems.size} artigo(s); $missingCosts sem custo interno válido."
+        lines += "Pedidos ativos: ${snapshot.activeOrderCount}; em preparação: ${snapshot.preparationOrderCount}."
+        if (snapshot.stockFeatureAvailable) lines += if (lowStock == null) "Stock: dados ainda não carregados; não é possível confirmar artigos baixos." else "Stock: $lowStock artigo(s) no limite mínimo ou abaixo dele."
+        if (snapshot.reservationsFeatureAvailable) lines += if (!snapshot.reservationsLoaded) "Reservas: lista ainda não carregada; não assumas que está vazia." else "Reservas pendentes: ${snapshot.pendingReservations}."
+        lines += when {
+            !report.hasEnoughSales -> "Engenharia da carta: só ${report.completedUnits} unidade(s) concluídas correspondem à carta atual; são precisas ${report.requiredUnits} para uma triagem inicial."
+            !report.hasMarginData -> "Engenharia da carta: faltam custos válidos em artigos vendidos para comparar contribuições."
+            else -> "Engenharia da carta: ${report.items.count { it.classification == MenuEngineeringClass.STAR }} artigo(s) Estrela; revê os classificados com procura ou contribuição baixa."
+        }
+        val priorities = recommendations(snapshot).take(3)
+        if (priorities.isNotEmpty()) {
+            lines += "Prioridades para rever:"
+            priorities.forEach { lines += "• ${it.title}: ${it.detail}" }
+        }
+        lines += "Resumo dos registos disponíveis; não é previsão de vendas nem prova de pagamentos ou de atualização em tempo real."
+        return StudioMesaAssistantAnswer("Resumo da operação", lines.joinToString("\\n"), priorities.firstNotNullOfOrNull { it.actionPage })
+    }
+
+    fun marketingDrafts(snapshot: StudioMesaAssistantSnapshot, limit: Int = 3): List<AssistantMarketingDraft> {
+        if (limit <= 0) return emptyList()
+        return snapshot.menuItems.filter { it.name.isNotBlank() && it.sellingPrice > zero }
+            .distinctBy { normalize(it.name) }
+            .sortedWith(compareByDescending<AssistantMenuItem> { it.unitCost > zero }
+                .thenByDescending { if (it.unitCost > zero) it.sellingPrice.subtract(it.unitCost) else zero }
+                .thenBy { it.name.lowercase(Locale.ROOT) })
+            .take(limit)
+            .map { item ->
+                val caption = buildString {
+                    append("Na nossa carta: ${item.name}.")
+                    if (item.description.isNotBlank()) append(" ").append(item.description.trim())
+                    append(" Preço: ").append(euro(item.sellingPrice)).append(". Consulta a carta completa.")
+                }
+                AssistantMarketingDraft(item.name, caption, if (item.unitCost > zero)
+                    "Ordenado por contribuição unitária com preço/custo atuais; não mede popularidade."
+                else "Texto baseado no nome e preço; falta custo válido para ordenar por contribuição.")
+            }
+    }
+
+    private fun answerMenuEngineering(snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
+        val report = menuEngineering(snapshot)
+        if (!report.hasEnoughSales) return StudioMesaAssistantAnswer(
+            "Engenharia da carta",
+            "Só encontrei ${report.completedUnits} unidade(s) concluídas que correspondem aos artigos atuais. Preciso de pelo menos ${report.requiredUnits} para iniciar a triagem. Não vou inventar popularidade.",
+            "Pedidos"
+        )
+        if (!report.hasMarginData) return StudioMesaAssistantAnswer(
+            "Engenharia da carta",
+            "Há ${report.completedUnits} unidades concluídas, mas faltam custos válidos nos artigos vendidos para comparar a contribuição. Confirma os custos na Carta.",
+            "Carta"
+        )
+        val details = report.items.take(6).joinToString("\\n") { item ->
+            "• ${item.itemName}: ${classificationLabel(item.classification)}, ${item.unitsSold} unidades (${item.popularitySharePercent}%), contribuição atual ${item.contributionPerUnit?.let { euro(it) } ?: "sem custo"}. ${item.recommendation}"
+        }
+        return StudioMesaAssistantAnswer("Engenharia da carta",
+            "Triagem indicativa com ${report.completedUnits} unidades concluídas e custos/preços atuais. Não é lucro contabilístico nem custo histórico; não inclui IVA, mão de obra, desperdício ou encargos.\\n$details",
+            "Pedidos")
+    }
+
+    private fun answerMarketing(snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
+        val drafts = marketingDrafts(snapshot)
+        if (drafts.isEmpty()) return StudioMesaAssistantAnswer("Conteúdo para redes sociais", "Não há artigos com nome e preço válidos para criar rascunhos. Confirma a carta primeiro.", "Carta")
+        return StudioMesaAssistantAnswer("Rascunhos para rever",
+            drafts.joinToString("\\n\\n") { "• ${it.itemName}\\n${it.caption}\\n${it.basis}" } +
+                "\\nRevê e aprova o texto antes de publicar. Não foram inventados ingredientes, descontos, prémios ou alegações sobre alergénios.",
+            "Carta")
+    }
+
+    private fun classificationLabel(value: MenuEngineeringClass): String = when (value) {
+        MenuEngineeringClass.STAR -> "Estrela"
+        MenuEngineeringClass.WORKHORSE -> "Popular com margem baixa"
+        MenuEngineeringClass.PUZZLE -> "Margem alta, pouca procura"
+        MenuEngineeringClass.DOG -> "Pouca procura e margem baixa"
+        MenuEngineeringClass.MISSING_COST -> "Custo em falta"
+    }
+
     fun answerQuestion(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
         val q = normalize(rawQuestion)
         return when {
+            containsAny(q, "resumo", "briefing", "prioridades de hoje", "estado da operacao") -> dailyBriefing(snapshot)
+            containsAny(q, "engenharia da carta", "popularidade", "mais vendidos", "rentabilidade da carta", "artigos que vendem", "menu engineering") -> answerMenuEngineering(snapshot)
+            containsAny(q, "instagram", "publicacao", "marketing", "redes sociais", "divulgacao", "post para") -> answerMarketing(snapshot)
             containsAny(q, "preco", "custo", "margem", "lucro", "venda") -> answerPricing(snapshot)
             containsAny(q, "stock", "inventario", "ingrediente", "esgotado", "quantidade") -> answerStock(snapshot)
             containsAny(q, "reserva", "reservar", "mesa para") -> answerReservations(snapshot)

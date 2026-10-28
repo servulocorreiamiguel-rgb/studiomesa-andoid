@@ -11,13 +11,14 @@ class StudioMesaAdvisorTest {
         demo: Boolean = false, configured: Boolean = true, activeOrders: Int = 0,
         stockAvailable: Boolean = false, stockLoaded: Boolean = false,
         stockItems: List<AssistantStockItem> = emptyList(),
-        reservationsAvailable: Boolean = false, reservationsLoaded: Boolean = false, pendingReservations: Int = 0
+        reservationsAvailable: Boolean = false, reservationsLoaded: Boolean = false, pendingReservations: Int = 0,
+        salesLines: List<AssistantSaleLine> = emptyList()
     ) = StudioMesaAssistantSnapshot(
         isDemo = demo, restaurantConfigured = configured, menuItems = menu,
         activeOrderCount = activeOrders, preparationOrderCount = activeOrders.coerceAtMost(1),
         stockFeatureAvailable = stockAvailable, stockLoaded = stockLoaded, stockItems = stockItems,
         reservationsFeatureAvailable = reservationsAvailable, reservationsLoaded = reservationsLoaded,
-        pendingReservations = pendingReservations
+        pendingReservations = pendingReservations, salesLines = salesLines
     )
 
     @Test fun suggestedSellingPriceUsesChosenCostShareAndRoundsToCents() {
@@ -61,5 +62,44 @@ class StudioMesaAdvisorTest {
         assertFalse(notLoaded.any { it.id == "pending-reservations" })
         val loaded = StudioMesaAdvisor.recommendations(snapshot(reservationsAvailable = true, reservationsLoaded = true, pendingReservations = 3))
         assertTrue(loaded.any { it.id == "pending-reservations" })
+    }
+
+    @Test fun menuEngineeringClassifiesFourGroupsFromCompletedSales() {
+        val menu = listOf(item("Estrela", "20.00", "5.00"), item("Popular", "10.00", "9.00"), item("Puzzle", "20.00", "2.00"), item("Rever", "5.00", "4.50"))
+        val sales = listOf(AssistantSaleLine("Estrela", 6, "Concluído"), AssistantSaleLine("Popular", 14, "Concluído"), AssistantSaleLine("Puzzle", 2, "Cancelado"), AssistantSaleLine("Rever", 1, "Aberto"))
+        val report = StudioMesaAdvisor.menuEngineering(snapshot(menu = menu, salesLines = sales))
+        assertTrue(report.hasEnoughSales)
+        assertTrue(report.hasMarginData)
+        assertEquals(20, report.completedUnits)
+        assertEquals(MenuEngineeringClass.STAR, report.items.first { it.itemName == "Estrela" }.classification)
+        assertEquals(MenuEngineeringClass.WORKHORSE, report.items.first { it.itemName == "Popular" }.classification)
+        assertEquals(MenuEngineeringClass.PUZZLE, report.items.first { it.itemName == "Puzzle" }.classification)
+        assertEquals(MenuEngineeringClass.DOG, report.items.first { it.itemName == "Rever" }.classification)
+    }
+
+    @Test fun menuEngineeringIgnoresOpenAndCancelledOrdersAndRequiresMinimumSample() {
+        val data = snapshot(menu = listOf(item("Prato", "10.00", "4.00")), salesLines = listOf(AssistantSaleLine("Prato", 3, "Aberto"), AssistantSaleLine("Prato", 8, "Cancelado")))
+        val report = StudioMesaAdvisor.menuEngineering(data)
+        assertFalse(report.hasEnoughSales)
+        assertEquals(0, report.completedUnits)
+        assertTrue(StudioMesaAdvisor.answerQuestion("Analisa a popularidade do menu", data).response.contains("Não vou inventar popularidade"))
+    }
+
+    @Test fun dailyBriefingSummarizesDataAndDoesNotClaimToForecast() {
+        val answer = StudioMesaAdvisor.dailyBriefing(snapshot(menu = listOf(item("Prato", "10.00", "0")), demo = true, configured = false, activeOrders = 4))
+        assertEquals("Resumo da operação", answer.title)
+        assertTrue(answer.response.contains("Pedidos ativos: 4"))
+        assertTrue(answer.response.contains("não é previsão de vendas"))
+    }
+
+    @Test fun marketingDraftUsesOnlyStoredNameDescriptionAndPrice() {
+        val menuItem = AssistantMenuItem("Bolo da casa", BigDecimal("3.50"), BigDecimal("1.00"), description = "Bolo de chocolate")
+        val drafts = StudioMesaAdvisor.marketingDrafts(snapshot(menu = listOf(menuItem)))
+        assertEquals(1, drafts.size)
+        assertTrue(drafts[0].caption.contains("Bolo da casa"))
+        assertTrue(drafts[0].caption.contains("Bolo de chocolate"))
+        assertTrue(drafts[0].caption.contains("3,50"))
+        assertFalse(drafts[0].caption.contains("desconto"))
+        assertTrue(StudioMesaAdvisor.answerQuestion("Escreve um post para Instagram", snapshot(menu = listOf(menuItem))).response.contains("Revê e aprova"))
     }
 }

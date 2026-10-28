@@ -1,4 +1,4 @@
-# Assistente StudioMesa — primeira versão local
+# Assistente StudioMesa — capacidades e limites (revisão 28/10/2026)
 
 ## O que é
 Assistente de apoio operacional gratuito e executado no dispositivo. Usa regras determinísticas e os dados que já estão carregados na app. **Não é um modelo generativo de linguagem** e não envia dados do restaurante para um fornecedor de IA.
