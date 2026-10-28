@@ -171,6 +171,35 @@ class RestaurantAssistantIntentClassifierTest {
         }
     }
 
+    @Test fun identifiesDatedSalesAcrossDaysWeeksMonthsAndYears() {
+        val datedQuestions = listOf(
+            "Quanto vendi no domingo passado?",
+            "Qual foi a faturação nos últimos 30 dias?",
+            "Quanto vendemos em março?",
+            "Quais pratos venderam mais na semana passada?"
+        )
+        datedQuestions.forEach { question ->
+            assertTrue("$question should be recognized as a dated sales question",
+                RestaurantAssistantIntentClassifier.requestsDatedSales(question))
+        }
+        assertTrue(RestaurantAssistantIntentClassifier.requestsDatedSales("Quanto foi a receita em 2025?"))
+        assertTrue(!RestaurantAssistantIntentClassifier.requestsDatedSales("Como posso aumentar as vendas?"))
+    }
+
+    @Test fun routesDatedSpecificDishSalesToMenuEngineeringWithoutGuessingThePeriod() {
+        val cases = listOf(
+            "Quanto vendi no domingo passado?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,
+            "Qual foi a faturação nos últimos 30 dias?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,
+            "Quais pratos venderam mais no domingo passado?" to RestaurantAssistantIntent.MENU_ENGINEERING,
+            "Quais foram os artigos mais vendidos no último mês?" to RestaurantAssistantIntent.MENU_ENGINEERING,
+            "Que artigos venderam mais em março?" to RestaurantAssistantIntent.MENU_ENGINEERING
+        )
+        cases.forEach { (question, expected) ->
+            assertEquals("$question -> ${RestaurantAssistantIntentClassifier.classify(question)}",
+                expected, RestaurantAssistantIntentClassifier.classify(question).intent)
+        }
+    }
+
     @Test fun routesDatedSalesPromotionsEnergyAndDishProfitQuestions() {
         val cases = listOf(
             "Quanto vendemos hoje?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,
