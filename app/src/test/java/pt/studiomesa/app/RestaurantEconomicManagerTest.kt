@@ -49,6 +49,7 @@ class RestaurantEconomicManagerTest {
         )
         assertEquals(amount("-500.00"), result.estimatedOperatingResult)
         assertEquals(amount("4.0"), result.recordedWasteAsPercentOfSales)
+        assertEquals(amount("9.1"), result.recordedWasteAsPercentOfFoodCost)
         assertTrue(result.warnings.any { it.contains("negativo") })
         assertTrue(result.warnings.any { it.contains("não é subtraído novamente") })
     }
