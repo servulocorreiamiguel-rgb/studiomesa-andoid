@@ -68,6 +68,11 @@ jobs:
           for apk in "${apks[@]}"; do
             "$APKSIGNER" verify --verbose "$apk"
           done
+
+      - name: Upload signed release artifacts
+        with:
+          path: |
+            app/build/outputs/apk/**/release/*.apk
 """
 
 SAFE_ANDROID_WORKFLOW = """      - name: Verify temporary CI AAB and APK
