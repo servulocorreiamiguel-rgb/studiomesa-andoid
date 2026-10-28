@@ -426,6 +426,21 @@ internal object StudioMesaAdvisor {
 
     private fun answerEconomicQuestion(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
         val q = normalizeLookupText(rawQuestion)
+        if (containsAny(q, "hoje", "ontem", "esta semana", "nesta semana", "semana passada", "mes passado", "ultimos 7 dias") &&
+            containsAny(q, "vendas", "vendido", "vendemos", "vendeu", "faturacao", "faturamos", "receita")) {
+            return StudioMesaAssistantAnswer(
+                "Período de vendas não confirmado",
+                "Os dados disponíveis nesta análise não incluem um filtro temporal fiável para o período pedido. Não vou apresentar totais de outros dias como se fossem de hoje ou desta semana. Abre a vista de vendas e seleciona o período pretendido antes de comparar resultados.",
+                "Pedidos"
+            )
+        }
+
+        if (containsAny(q, "prejuizo", "a perder dinheiro", "perde dinheiro", "perde dinheiro neste prato")) {
+            val candidates = findMenuItemCandidates(rawQuestion, snapshot.menuItems)
+            if (candidates.size > 1) return clarificationForMenuItems(candidates, "verificar o custo e a contribuição")
+            if (candidates.size == 1) return answerRegisteredItemCost(rawQuestion, snapshot)
+        }
+
         if (containsAny(
                 q, "custo dos ingredientes", "custo de ingredientes", "custo da receita",
                 "quanto custa cada receita", "quanto custa uma receita", "custo de uma receita",
@@ -541,6 +556,9 @@ internal object StudioMesaAdvisor {
                     append("\nPreço de venda registado: ").append(euro(selected.sellingPrice))
                     append("; contribuição unitária estimada: ").append(euro(contribution))
                     append("; custo/preço: ").append(percent(costShare)).append(".")
+                    if (contribution < zero) {
+                        append(" O custo interno registado ultrapassa o preço de venda: contribuição unitária negativa. Isto não prova o prejuízo líquido do artigo e exige confirmar custos, unidades e período.")
+                    }
                 } else {
                     append("\nO preço de venda ainda não é válido, por isso não calculo a contribuição.")
                 }
