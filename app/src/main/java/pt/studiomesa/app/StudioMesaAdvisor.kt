@@ -229,7 +229,7 @@ internal object StudioMesaAdvisor {
         val report = menuEngineering(snapshot)
         if (!report.hasEnoughSales) return StudioMesaAssistantAnswer(
             "Engenharia da carta",
-            "Só encontrei ${report.completedUnits} unidade(s) concluídas que correspondem aos artigos atuais. Preciso de pelo menos ${report.requiredUnits} para analisar popularidade; não vou inventar popularidade nem vendas. Posso comparar contribuição unitária se os custos e preços estiverem registados.",
+            "Só encontrei ${report.completedUnits} unidade(s) concluídas que correspondem aos artigos atuais. Preciso de pelo menos ${report.requiredUnits} para analisar popularidade. Não vou inventar popularidade nem vendas. Posso comparar contribuição unitária se os custos e preços estiverem registados.",
             "Pedidos"
         )
         if (!report.hasMarginData) return StudioMesaAssistantAnswer(
