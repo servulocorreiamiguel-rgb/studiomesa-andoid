@@ -106,6 +106,22 @@ class StudioMesaAdvisorTest {
         assertTrue(answer.response.contains("o artigo selecionado"))
     }
 
+    @Test fun pricingQuestionPrefersTheFullDishNameOverAShorterPrefix() {
+        val data = snapshot(menu = listOf(
+            item("Hambúrguer", "10.00", "4.00"),
+            item("Hambúrguer Clássico", "14.00", "5.00"),
+            item("Sopa", "5.00", "2.00")
+        ))
+        val answer = StudioMesaAdvisor.answerQuestion(
+            "Qual é o preço do Hambúrguer Clássico?",
+            data
+        )
+        assertEquals("Análise de preços", answer.title)
+        assertTrue(answer.response.contains("Hambúrguer Clássico"))
+        assertFalse(answer.response.contains("Hambúrguer: custo"))
+        assertFalse(answer.response.contains("Sopa"))
+    }
+
     @Test fun pricingQuestionClarifiesWhenDishNameIsAmbiguous() {
         val data = snapshot(menu = listOf(
             item("Hambúrguer Clássico", "14.00", "5.00"),
