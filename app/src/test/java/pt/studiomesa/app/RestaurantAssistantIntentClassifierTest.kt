@@ -15,6 +15,8 @@ class RestaurantAssistantIntentClassifierTest {
             "Que quantidade devo encomendar ao fornecedor?",
             "Como analiso os custos fixos e variáveis?",
             "Como faço uma previsão financeira?",
+            "Como calculo o custo do prato?",
+            "Quanto lucro tive este mês?",
             "Onde estou a perder dinheiro?",
             "Qual é o meu lucro mensal?",
             "Como reduzo despesas?",
