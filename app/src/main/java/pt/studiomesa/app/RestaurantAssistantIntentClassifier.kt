@@ -47,6 +47,17 @@ internal object RestaurantAssistantIntentClassifier {
             !salesGrowthOrMarketingPattern.containsMatchIn(normalized)
     }
 
+    private val menuPerformanceLanguagePattern = Regex(
+        """\b(?:vendas?|vendi|vendemos|venderam|vendeu|vendido|vendidos|vendida|vendidas|faturacao|faturamos|faturou|receita|receitas|lucro|lucros|prejuizo|prejuizos|margem|margens|rentavel|rentaveis|rentabilidade|contribuicao)\b"""
+    )
+
+    fun requestsDatedMenuPerformance(question: String): Boolean {
+        val normalized = normalize(question)
+        return datedPeriodPattern.containsMatchIn(normalized) &&
+            menuPerformanceLanguagePattern.containsMatchIn(normalized) &&
+            !salesGrowthOrMarketingPattern.containsMatchIn(normalized)
+    }
+
     private val rules = listOf(
         rule(RestaurantAssistantIntent.ECONOMIC_MANAGER, 10,
             "gestao economica", "gestor economico", "gestao financeira", "gestor financeiro",
@@ -183,12 +194,17 @@ internal object RestaurantAssistantIntentClassifier {
             )
         }
 
-        val asksDatedSales = requestsDatedSales(normalized)
+        val asksDatedMenuPerformance = requestsDatedMenuPerformance(normalized)
         val asksAboutSpecificMenuSales = Regex("\\b(?:prato|pratos|artigo|artigos|item|itens|mais vendido|mais vendidos|vendeu mais|venderam mais)\\b")
             .containsMatchIn(normalized)
-        if (asksDatedSales && !asksAboutSpecificMenuSales) {
+        if (asksDatedMenuPerformance) {
+            val intent = if (asksAboutSpecificMenuSales) {
+                RestaurantAssistantIntent.MENU_ENGINEERING
+            } else {
+                RestaurantAssistantIntent.ECONOMIC_MANAGER
+            }
             return RestaurantAssistantIntentMatch(
-                RestaurantAssistantIntent.ECONOMIC_MANAGER, 10, listOf("pergunta de vendas com período")
+                intent, 10, listOf("pergunta de desempenho com período")
             )
         }
 
