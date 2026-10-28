@@ -217,6 +217,7 @@ internal object StudioMesaAdvisor {
     }
 
     private fun answerMenuEngineering(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
+        val q = normalizeLookupText(rawQuestion)
         if (RestaurantAssistantIntentClassifier.requestsDatedSales(rawQuestion)) {
             return StudioMesaAssistantAnswer(
                 "Período de vendas não confirmado",
