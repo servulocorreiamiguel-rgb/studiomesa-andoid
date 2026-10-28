@@ -30,6 +30,10 @@ jobs:
       - name: Audit immutable GitHub Actions pins
         run: python3 scripts/check_github_action_pins.py
 
+      - name: Test commercial release workflow safeguards
+        run: |
+          python3 scripts/test_check_commercial_release_workflow.py
+          python3 scripts/check_commercial_release_workflow.py
       - name: Validate SQL migration function delimiters
         run: python3 scripts/check_sql_function_delimiters.py
 
@@ -131,15 +135,30 @@ jobs:
           gradle --no-daemon \
             -PstudiomesaCommercialRelease=true \
             -PstudiomesaReleaseApplicationId=pt.studiomesa.ci \
-            bundleEssencialRestauranteRelease
-          find app/build/outputs/bundle -type f -name '*.aab' -print -quit | grep -q .
+            bundleEssencialRestauranteRelease \
+            assembleEssencialRestauranteRelease
+          AAB_PATH="$(find app/build/outputs/bundle -type f -name '*.aab' -print -quit)"
+          test -n "$AAB_PATH"
+          verification_output="$(jarsigner -verify "$AAB_PATH" 2>&1)" || {
+            printf '%s\n' "$verification_output"
+            echo "CI AAB signature verification command failed."
+            exit 1
+          }
+          printf '%s\n' "$verification_output"
+          if ! grep -Fq "jar verified." <<< "$verification_output"; then
+            echo "CI AAB is not confirmed as correctly signed."
+            exit 1
+          fi
+          APK_PATH="$(find app/build/outputs/apk/essencialRestaurante/release -type f -name '*.apk' -print -quit)"
+          test -n "$APK_PATH"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$APK_PATH"
           rm -f "$KEYSTORE_PATH"
 
       - name: Upload debug APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: StudioMesa-1.5.0-Demo-APKs
-          path: app/build/outputs/apk/**/*.apk
+          path: app/build/outputs/apk/**/debug/*.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -171,6 +190,7 @@ jobs:
 
       - name: Run smoke tests on Android 16
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        timeout-minutes: 50
         with:
           api-level: 36
           target: google_apis
@@ -178,7 +198,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot
-          script: gradle --no-daemon --max-workers=1 connectedEssencialRestauranteDebugAndroidTest connectedProfissionalRestauranteDebugAndroidTest connectedProfissionalClienteDebugAndroidTest connectedPremiumRestauranteDebugAndroidTest connectedPremiumClienteDebugAndroidTest
+          script: set -eu; for test_task in connectedEssencialRestauranteDebugAndroidTest connectedProfissionalRestauranteDebugAndroidTest connectedProfissionalClienteDebugAndroidTest connectedPremiumRestauranteDebugAndroidTest connectedPremiumClienteDebugAndroidTest; do echo "STARTING_ANDROID_SMOKE_TASK=$test_task"; timeout --signal=TERM --kill-after=30s 8m gradle --no-daemon --max-workers=1 "$test_task"; echo "PASSED_ANDROID_SMOKE_TASK=$test_task"; done
 
       - name: Upload emulator test results
         if: always()
@@ -217,6 +237,7 @@ jobs:
 
       - name: Run smoke tests on Android 8
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        timeout-minutes: 50
         with:
           api-level: 26
           target: google_apis
@@ -224,7 +245,7 @@ jobs:
           profile: Nexus 5X
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot
-          script: gradle --no-daemon --max-workers=1 connectedEssencialRestauranteDebugAndroidTest connectedProfissionalRestauranteDebugAndroidTest connectedProfissionalClienteDebugAndroidTest connectedPremiumRestauranteDebugAndroidTest connectedPremiumClienteDebugAndroidTest
+          script: set -eu; for test_task in connectedEssencialRestauranteDebugAndroidTest connectedProfissionalRestauranteDebugAndroidTest connectedProfissionalClienteDebugAndroidTest connectedPremiumRestauranteDebugAndroidTest connectedPremiumClienteDebugAndroidTest; do echo "STARTING_ANDROID_SMOKE_TASK=$test_task"; timeout --signal=TERM --kill-after=30s 8m gradle --no-daemon --max-workers=1 "$test_task"; echo "PASSED_ANDROID_SMOKE_TASK=$test_task"; done
 
       - name: Upload Android 8 test results
         if: always()

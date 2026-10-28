@@ -1,4 +1,4 @@
-name: Build signed StudioMesa commercial AABs
+name: Build signed StudioMesa commercial AABs and APKs
 
 on:
   workflow_dispatch:
@@ -31,8 +31,24 @@ jobs:
             exit 1
           fi
 
+      - name: Require the reviewed main branch
+        shell: bash
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "Stopped: signed commercial releases must be built from the reviewed main branch."
+            exit 1
+          fi
+
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Test commercial release workflow safeguards
+        run: |
+          python3 scripts/test_check_commercial_release_workflow.py
+          python3 scripts/check_commercial_release_workflow.py
 
       # Fail closed: only sign a release from a commit whose full Android CI
       # (build, migration/auth checks, lint, and Android 8/16 UI tests) passed.
@@ -134,7 +150,7 @@ jobs:
         timeout-minutes: 10
         run: gradle --no-daemon lint
 
-      - name: Build signed commercial bundles
+      - name: Build signed commercial bundles and APKs
         shell: bash
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -150,23 +166,48 @@ jobs:
             bundleProfissionalRestauranteRelease \
             bundleProfissionalClienteRelease \
             bundlePremiumRestauranteRelease \
-            bundlePremiumClienteRelease
+            bundlePremiumClienteRelease \
+            assembleEssencialRestauranteRelease \
+            assembleProfissionalRestauranteRelease \
+            assembleProfissionalClienteRelease \
+            assemblePremiumRestauranteRelease \
+            assemblePremiumClienteRelease
           mapfile -d '' bundles < <(find app/build/outputs/bundle -type f -name '*.aab' -print0)
           if [ "${#bundles[@]}" -ne 5 ]; then
             echo "Expected five AABs, found ${#bundles[@]}."
             exit 1
           fi
           for bundle in "${bundles[@]}"; do
-            jarsigner -verify "$bundle"
+            verification_output="$(jarsigner -verify "$bundle" 2>&1)" || {
+              printf '%s\n' "$verification_output"
+              echo "Signature verification command failed for: $bundle"
+              exit 1
+            }
+            printf '%s\n' "$verification_output"
+            if ! grep -Fq "jar verified." <<< "$verification_output"; then
+              echo "AAB is not confirmed as correctly signed: $bundle"
+              exit 1
+            fi
           done
-          sha256sum "${bundles[@]}" > release-checksums.txt
+          mapfile -d '' apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' -print0)
+          if [ "${#apks[@]}" -ne 5 ]; then
+            echo "Expected exactly five release APKs, found ${#apks[@]}."
+            exit 1
+          fi
+          APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          test -x "$APKSIGNER"
+          for apk in "${apks[@]}"; do
+            "$APKSIGNER" verify --verbose "$apk"
+          done
+          sha256sum "${bundles[@]}" "${apks[@]}" > release-checksums.txt
 
-      - name: Upload signed AABs and checksums
+      - name: Upload signed AABs, APKs and checksums
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: StudioMesa-Commercial-AABs
+          name: StudioMesa-Commercial-AABs-and-APKs
           path: |
             app/build/outputs/bundle/**/*.aab
+            app/build/outputs/apk/**/release/*.apk
             release-checksums.txt
           if-no-files-found: error
           retention-days: 14
