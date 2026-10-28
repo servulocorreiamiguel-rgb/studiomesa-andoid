@@ -316,7 +316,7 @@ class StudioMesaAdvisorTest {
             salesLines = listOf(AssistantSaleLine("Bitoque", 10, "Concluído"))
         )
         val answer = StudioMesaAdvisor.answerQuestion("Qual foi o prato mais vendido ontem?", data)
-        assertEquals("Período de vendas não confirmado", answer.title)
+        assertEquals("Período de desempenho não confirmado", answer.title)
         assertTrue(answer.response.contains("não incluem um filtro temporal fiável"))
         assertFalse(answer.response.contains("10 unidades"))
     }
