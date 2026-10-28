@@ -218,10 +218,25 @@ internal object StudioMesaAdvisor {
 
     private fun answerMenuEngineering(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
         val q = normalizeLookupText(rawQuestion)
+        if (containsAny(q, "ontem", "hoje", "esta semana", "nesta semana", "semana passada", "mes passado", "no mes passado", "ultimos 7 dias") &&
+            containsAny(q, "vendas", "vendido", "vendeu", "faturacao", "receita")) {
+            return StudioMesaAssistantAnswer(
+                "Período de vendas não confirmado",
+                "Os dados de vendas disponíveis nesta análise não incluem um filtro temporal fiável para o período pedido. Não vou apresentar vendas de outros dias como se fossem de hoje ou de ontem. Abre a vista de vendas e seleciona o período pretendido antes de comparar artigos.",
+                "Pedidos"
+            )
+        }
+        if (containsAny(q, "prejuizo", "contribuicao negativa")) {
+            return answerContributionRanking(snapshot, lowestContribution = true)
+        }
+        if (containsAny(q, "menos rentaveis", "menor margem", "margem mais baixa", "menos margem", "margem baixa", "melhor margem", "melhores margens", "maior margem", "mais margem", "margem mais alta")) {
+            val lowest = containsAny(q, "menos rentaveis", "menor margem", "margem mais baixa", "menos margem", "margem baixa")
+            return answerMarginRanking(snapshot, lowest)
+        }
         if (containsAny(
-                q, "mais lucro", "pratos mais lucrativos", "mais rentaveis", "rentabilidade do menu",
-                "maior margem", "mais margem", "margem mais alta", "maior contribuicao",
-                "contribuicao por unidade", "quais pratos dao mais lucro", "pratos dao mais lucro"
+                q, "mais lucro", "pratos mais lucrativos", "rentabilidade do menu",
+                "maior contribuicao", "contribuicao por unidade",
+                "quais pratos dao mais lucro", "pratos dao mais lucro"
             )) {
             return answerContributionRanking(snapshot)
         }
@@ -245,7 +260,10 @@ internal object StudioMesaAdvisor {
             "Pedidos")
     }
 
-    private fun answerContributionRanking(snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
+    private fun answerContributionRanking(
+        snapshot: StudioMesaAssistantSnapshot,
+        lowestContribution: Boolean = false
+    ): StudioMesaAssistantAnswer {
         val eligible = snapshot.menuItems.filter {
             it.name.isNotBlank() && it.sellingPrice > zero && it.unitCost > zero
         }
@@ -254,20 +272,62 @@ internal object StudioMesaAdvisor {
             "Não encontrei artigos com preço de venda e custo interno válidos. Confirma esses valores na Carta antes de comparar contribuições; não vou inventar lucro."
         )
 
+        val comparator = if (lowestContribution) {
+            compareBy<Triple<AssistantMenuItem, BigDecimal, BigDecimal>> { it.second }
+                .thenBy { it.first.name.lowercase(Locale.ROOT) }
+        } else {
+            compareByDescending<Triple<AssistantMenuItem, BigDecimal, BigDecimal>> { it.second }
+                .thenBy { it.first.name.lowercase(Locale.ROOT) }
+        }
         val ranking = eligible.map { item ->
             val contribution = item.sellingPrice.subtract(item.unitCost)
             val costShare = item.unitCost.multiply(hundred)
                 .divide(item.sellingPrice, 4, RoundingMode.HALF_UP)
             Triple(item, contribution, costShare)
-        }.sortedWith(compareByDescending<Triple<AssistantMenuItem, BigDecimal, BigDecimal>> { it.second }
-            .thenBy { it.first.name.lowercase(Locale.ROOT) })
+        }.sortedWith(comparator)
 
         val details = ranking.take(5).joinToString("\n") { (item, contribution, costShare) ->
             "• ${item.name}: contribuição unitária estimada ${euro(contribution)}; custo ${euro(item.unitCost)} de ${euro(item.sellingPrice)} (${percent(costShare)} do preço)."
         }
+        val orderExplanation = if (lowestContribution) {
+            "Ordenei do menor para o maior pela diferença entre preço e custo interno registados. Se essa diferença for negativa, o custo interno registado ultrapassa o preço de venda; isto não prova prejuízo líquido e não inclui encargos indiretos."
+        } else {
+            "Ordenei os artigos pela diferença entre o preço e o custo interno registados."
+        }
         return StudioMesaAssistantAnswer(
             "Contribuição estimada por artigo",
-            "Ordenei os artigos pela diferença entre o preço e o custo interno registados. Isto apresenta contribuição unitária estimada; não é lucro líquido, não indica popularidade nem substitui vendas históricas. Não inclui automaticamente IVA, pessoal, renda, energia, desperdício ou taxas.\n$details",
+            "$orderExplanation Isto é contribuição unitária estimada; não indica popularidade nem substitui vendas históricas. Não inclui automaticamente IVA, pessoal, renda, energia, desperdício ou taxas.\n$details",
+            "Carta"
+        )
+    }
+
+    private fun answerMarginRanking(snapshot: StudioMesaAssistantSnapshot, lowestMargin: Boolean): StudioMesaAssistantAnswer {
+        val eligible = snapshot.menuItems.filter {
+            it.name.isNotBlank() && it.sellingPrice > zero && it.unitCost > zero
+        }
+        if (eligible.isEmpty()) return StudioMesaAssistantAnswer(
+            "Faltam custos para comparar margens",
+            "Não encontrei artigos com preço de venda e custo interno válidos. Confirma os valores na Carta antes de comparar margens; não vou inventar dados."
+        )
+        val comparator = if (lowestMargin) {
+            compareBy<Pair<AssistantMenuItem, BigDecimal>> { it.second }
+                .thenBy { it.first.name.lowercase(Locale.ROOT) }
+        } else {
+            compareByDescending<Pair<AssistantMenuItem, BigDecimal>> { it.second }
+                .thenBy { it.first.name.lowercase(Locale.ROOT) }
+        }
+        val ranked = eligible.map { item ->
+            val margin = item.sellingPrice.subtract(item.unitCost).multiply(hundred)
+                .divide(item.sellingPrice, 4, RoundingMode.HALF_UP)
+            item to margin
+        }.sortedWith(comparator)
+        val details = ranked.take(5).joinToString("\n") { (item, margin) ->
+            "• ${item.name}: margem de contribuição estimada ${percent(margin)}; custo ${euro(item.unitCost)} de ${euro(item.sellingPrice)}."
+        }
+        val direction = if (lowestMargin) "menor para a maior" else "maior para a menor"
+        return StudioMesaAssistantAnswer(
+            "Margem estimada por artigo",
+            "Ordenei da $direction percentagem de margem de contribuição calculada por (preço de venda − custo interno) ÷ preço de venda. Não é lucro líquido, não mede popularidade e não inclui automaticamente IVA, pessoal, renda, energia, desperdício ou taxas.\n$details",
             "Carta"
         )
     }
@@ -298,9 +358,9 @@ internal object StudioMesaAdvisor {
             RestaurantAssistantIntent.MARKETING -> answerMarketing(snapshot)
             RestaurantAssistantIntent.PRICING -> answerPricing(rawQuestion, snapshot)
             RestaurantAssistantIntent.STOCK -> answerStock(snapshot)
-            RestaurantAssistantIntent.RESERVATIONS -> answerReservations(snapshot)
+            RestaurantAssistantIntent.RESERVATIONS -> answerReservations(rawQuestion, snapshot)
             RestaurantAssistantIntent.ORDERS -> answerOrders(snapshot)
-            RestaurantAssistantIntent.TROUBLESHOOTING -> answerProblem(snapshot)
+            RestaurantAssistantIntent.TROUBLESHOOTING -> answerProblem(rawQuestion, snapshot)
             RestaurantAssistantIntent.ACCESS -> StudioMesaAssistantAnswer(
                 "Acesso e equipa",
                 "Confirma em Conta quem tem acesso ao restaurante. Esta versão não altera permissões nem verifica revogações em tempo real. Antes de remover ou convidar alguém, confirma a identidade e o restaurante selecionado.",
@@ -357,6 +417,7 @@ internal object StudioMesaAdvisor {
         val q = normalizeLookupText(rawQuestion)
         if (containsAny(
                 q, "custo dos ingredientes", "custo de ingredientes", "custo da receita",
+                "quanto custa cada receita", "quanto custa uma receita", "custo de uma receita",
                 "ficha tecnica", "custo de producao", "quanto custa produzir"
             )) {
             return StudioMesaAssistantAnswer(
@@ -366,7 +427,9 @@ internal object StudioMesaAdvisor {
             )
         }
 
-        if (containsAny(q, "custo do prato", "custo deste prato", "custo por dose", "custo por porcao", "calcular custo do prato")) {
+        if (containsAny(q, "custo do prato", "custo deste prato", "custo por dose", "custo por porcao",
+                "custo de uma dose", "custo de cada dose", "custo para uma dose", "quanto custa uma dose",
+                "calcular custo do prato")) {
             return answerRegisteredItemCost(rawQuestion, snapshot)
         }
 
@@ -495,13 +558,21 @@ internal object StudioMesaAdvisor {
         return StudioMesaAssistantAnswer("Análise de stock", detail, "Stock")
     }
 
-    private fun answerReservations(s: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
+    private fun answerReservations(rawQuestion: String, s: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
         if (!s.reservationsFeatureAvailable) return StudioMesaAssistantAnswer("Análise de reservas", "A gestão de reservas está disponível nos planos Profissional e Premium. Não há dados de reservas disponíveis neste plano.")
         if (!s.restaurantConfigured || !s.reservationsLoaded) return StudioMesaAssistantAnswer(
             "Análise de reservas",
             "Ainda não tenho uma lista de reservas carregada nesta sessão. Abre Reservas e atualiza a lista; não vou assumir que não existem reservas só porque não foram carregadas.",
             "Reservas"
         )
+        val q = normalizeLookupText(rawQuestion)
+        if (containsAny(q, "hoje", "ontem", "amanha", "mesas reservadas", "quantas mesas", "disponibilidade de mesa", "mesas livres")) {
+            return StudioMesaAssistantAnswer(
+                "Disponibilidade de reservas não confirmada",
+                "Os dados que a IA recebe só incluem o número de reservas pendentes, não um mapa confirmado de mesas nem um total filtrado por dia. Não vou afirmar quantas mesas estão ocupadas ou livres. Confirma a lista e o horário na vista Reservas.",
+                "Reservas"
+            )
+        }
         return StudioMesaAssistantAnswer(
             "Análise de reservas",
             if (s.pendingReservations == 0) "Não encontrei reservas pendentes nos dados carregados. Confirma a lista e a capacidade antes de garantir disponibilidade."
@@ -517,8 +588,11 @@ internal object StudioMesaAdvisor {
         return StudioMesaAssistantAnswer("Análise de pedidos", response, "Pedidos")
     }
 
-    private fun answerProblem(s: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
-        val response = if (!s.restaurantConfigured) "A aplicação está em modo de demonstração ou ainda sem restaurante configurado. Vai a Conta e confirma que existe sessão e que o restaurante correto está associado. A demonstração não sincroniza dados com outros dispositivos."
+    private fun answerProblem(rawQuestion: String, s: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
+        val q = normalizeLookupText(rawQuestion)
+        val response = if (containsAny(q, "nao aparece a resposta", "resposta nao aparece", "ia nao responde", "a app fecha", "aplicacao fecha", "fecha ao guardar", "fica bloqueada", "nao abre")) {
+            "Não consigo ver os registos de falha do dispositivo a partir daqui. Fecha e volta a abrir a aplicação, confirma se o erro se repete e evita repetir operações de escrita sem verificar primeiro se foram guardadas. Se continuar, regista o ecrã e a mensagem de erro para diagnosticar o ponto exato; não vou fingir que testei o dispositivo."
+        } else if (!s.restaurantConfigured) "A aplicação está em modo de demonstração ou ainda sem restaurante configurado. Vai a Conta e confirma que existe sessão e que o restaurante correto está associado. A demonstração não sincroniza dados com outros dispositivos."
         else "Não consigo testar a ligação à Internet nem confirmar a saúde do servidor a partir desta análise local. Abre Conta, verifica a conta e o restaurante e atualiza a secção afetada. Se falhar, confirma a Internet e inicia sessão novamente se necessário. Não repitas várias vezes uma operação de escrita sem verificar se foi registada."
         return StudioMesaAssistantAnswer("Diagnóstico inicial", response, "Conta")
     }
