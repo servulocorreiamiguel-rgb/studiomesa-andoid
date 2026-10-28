@@ -49,6 +49,7 @@ class MainActivity : Activity() {
     // Optional economic tools are opt-in and session-only until secure, owner-scoped
     // persistence and multi-device authorization are designed and tested.
     private var economicManagerEnabled = false
+    private var economicScopeKey: String? = null
     private val economicInputs = mutableMapOf<String, String>()
     private var economicReportText = ""
     private var recipeReportText = ""
@@ -1612,6 +1613,7 @@ class MainActivity : Activity() {
             throw IllegalStateException("O servidor não devolveu um identificador de conta válido.")
         }
 
+        clearEconomicManagerState()
         store.clearLocalDemoData()
         backendPrefs.edit()
             .putBoolean("local_demo_data_isolated_v1", true)
@@ -2289,377 +2291,380 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(-1, dp(48)))
             addGap(container, 7)
         }
-        container.addView(secondaryButton("Terminar sessão neste dispositivo") {
-            val tokenToRevoke = backendToken()
-            if (tokenToRevoke.isNotBlank()) {
-                Thread { runCatching { SupabaseApi.signOut(tokenToRevoke) } }.start()
-            }
-            secureSession.clear()
+        package pt.studiomesa.app
+
+import android.app.Activity
+import android.app.Dialog
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.res.ColorStateList
+import android.app.AlertDialog
+import android.graphics.Color
+import android.graphics.Typeface
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
+import android.os.Build
+import android.os.Bundle
+import android.text.InputType
+import android.view.Gravity
+import android.view.View
+import android.view.WindowInsets
+import android.widget.ArrayAdapter
+import android.widget.Button
+import android.widget.EditText
+import android.widget.HorizontalScrollView
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.Spinner
+import android.widget.TextView
+import android.widget.Toast
+import org.json.JSONArray
+import org.json.JSONObject
+import java.math.BigDecimal
+import java.text.DecimalFormat
+import java.text.DecimalFormatSymbols
+import java.text.NumberFormat
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
+
+class MainActivity : Activity() {
+    private lateinit var store: RestaurantStore
+    private lateinit var appRoot: LinearLayout
+    private var activePage = "Início"
+    private var activeCustomerPage = "Cartão"
+    private var assistantQuestion = ""
+    private var assistantAnswer: StudioMesaAssistantAnswer? = null
+
+    // Optional economic tools are opt-in and session-only until secure, owner-scoped
+    // persistence and multi-device authorization are designed and tested.
+    private var economicManagerEnabled = false
+    private var economicScopeKey: String? = null
+    private val economicInputs = mutableMapOf<String, String>()
+    private var economicReportText = ""
+    private var recipeReportText = ""
+    private var reorderReportText = ""
+
+    private val backendPrefs by lazy { getSharedPreferences("studiomesa_backend", MODE_PRIVATE) }
+    private val secureSession by lazy { SecureSessionStore(this) }
+    private val pendingRequestIds by lazy { PendingRequestIds(this) }
+    // Reservation contacts are kept in memory only, not persisted to SharedPreferences.
+    private var reservationCache = JSONArray()
+    private var reservationsLoaded = false
+
+    private val flavor = BuildConfig.FLAVOR.lowercase(Locale.ROOT)
+    private val isCustomerApp = flavor.contains("cliente")
+    private val isPremium = flavor.contains("premium")
+    private val hasCalculator = flavor.contains("profissional") || isPremium
+
+    private val forest = Color.rgb(57, 78, 67)
+    private val forestDeep = Color.rgb(43, 59, 50)
+    private val forestSoft = Color.rgb(77, 101, 87)
+    private val copper = Color.rgb(211, 177, 139)
+    private val copperPale = Color.rgb(245, 237, 224)
+    private val paper = Color.rgb(248, 248, 244)
+    private val white = Color.WHITE
+    private val ink = Color.rgb(47, 57, 51)
+    private val muted = Color.rgb(106, 116, 108)
+    private val line = Color.rgb(230, 229, 220)
+    private val paleGreen = Color.rgb(235, 242, 236)
+    private val paleRed = Color.rgb(249, 237, 233)
+    private val red = Color.rgb(157, 65, 56)
+    private val green = Color.rgb(55, 105, 72)
+
+    private val planTitle: String
+        get() = when {
+            flavor.contains("essencial") -> "ESSENCIAL"
+            flavor.contains("premium") -> "PREMIUM"
+            else -> "PROFISSIONAL"
+        }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // Remove reservation contact data left by older demo builds which cached it on disk.
+        backendPrefs.edit()
+            .remove("remote_reservations_json")
+            .remove("reservations_loaded")
+            .apply()
+        store = RestaurantStore(this)
+        // Remove pre-release local demo records from accounts that were already signed in
+        // when this privacy isolation was introduced.
+        if (backendPrefs.getString("user_id", "").orEmpty().isNotBlank() &&
+            !backendPrefs.getBoolean("local_demo_data_isolated_v1", false)) {
             store.clearLocalDemoData()
-            backendPrefs.edit().putBoolean("local_demo_data_isolated_v1", true)
-                .remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
-                .remove("restaurant_id").remove("restaurant_name").remove("join_code")
-                .remove("staff_join_code").remove("restaurant_role")
-                .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
-                .remove("remote_members_json").remove("remote_tables_json")
-                .remove("remote_menu_json").remove("remote_orders_json").remove("customer_menu_json")
-                .remove("remote_inventory_json").remove("inventory_loaded")
-                .remove("remote_reservations_json").remove("reservations_loaded")
-                .apply()
-            reservationCache = JSONArray()
-            reservationsLoaded = false
-            renderApp()
-        }, LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(container, 10)
-        container.addView(label("As funções de gestão e os dados de cada restaurante são controlados por permissões no servidor.", 12f, false, muted))
+            backendPrefs.edit().putBoolean("local_demo_data_isolated_v1", true).apply()
+        }
+        window.statusBarColor = forestDeep
+        window.navigationBarColor = forestDeep
+        renderApp()
+        handleAuthCallback(intent)
+
+        // Refresh shared data when an already-authenticated user opens the app,
+        // but do not start a second request while processing an OAuth callback.
+        if (intent?.data == null && backendToken().isNotBlank()) {
+            if (isCustomerApp && backendMemberId().isNotBlank()) {
+                refreshCustomerMembership()
+            } else if (!isCustomerApp && hasRemoteRestaurant()) {
+                refreshRemoteOperations()
+            }
+        }
     }
 
-    private fun showDeleteAccountConfirmation() {
-        if (backendToken().isBlank()) {
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleAuthCallback(intent)
+    }
+
+    private fun parseAuthParams(raw: String?): Map<String, String> =
+        AuthCallbackParser.parse(raw)
+
+    private fun handleAuthCallback(callbackIntent: android.content.Intent?) {
+        val uri = callbackIntent?.data ?: return
+        if (uri.scheme != "studiomesa" || uri.host != "auth-callback") return
+        // Parse the raw query/fragment defensively. getQueryParameter() and
+        // URLDecoder can throw on malformed percent-encoding in an external deep link.
+        val query = parseAuthParams(uri.encodedQuery)
+        val fragment = parseAuthParams(uri.encodedFragment)
+        val errorText = query["error_description"]
+            ?: fragment["error_description"]
+            ?: query["error"]
+            ?: fragment["error"]
+
+        if (!errorText.isNullOrBlank()) {
             AlertDialog.Builder(this)
-                .setTitle("Inicia sessão")
-                .setMessage("Inicia sessão na conta que pretendes eliminar e tenta novamente.")
+                .setTitle("Autenticação não concluída")
+                .setMessage(errorText.replace('+', ' ').take(500))
                 .setPositiveButton("OK", null)
                 .show()
             return
         }
 
-        val isOwner = backendPrefs.getString("restaurant_role", "").orEmpty() == "owner" &&
-            backendRestaurantId().isNotBlank()
-
-        if (isOwner) {
+        // Accept only the one-time PKCE authorization code. Do not accept bearer
+        // access/refresh tokens supplied directly in a custom-scheme URL.
+        val authCode = query["code"].orEmpty()
+        val pendingFlow = secureSession.pendingCodeFlowType()
+        val codeVerifier = secureSession.pendingCodeVerifier()
+        if (authCode.isBlank() || codeVerifier.isBlank() ||
+            pendingFlow !in setOf("oauth", "recovery", "signup")) {
             AlertDialog.Builder(this)
-                .setTitle("Eliminar conta e restaurante?")
-                .setMessage(
-                    "A eliminação de uma conta de proprietário também elimina permanentemente o restaurante, " +
-                        "a carta, as mesas, os pedidos, as reservas, o stock, os códigos e os dados de fidelização " +
-                        "associados. Esta ação não pode ser desfeita. Os outros membros da equipa têm de ser " +
-                        "removidos primeiro; o servidor verifica esta condição antes de eliminar qualquer dado."
-                )
-                .setNegativeButton("Cancelar", null)
-                .setPositiveButton("Continuar") { _, _ ->
-                    AlertDialog.Builder(this)
-                        .setTitle("Confirmação final")
-                        .setMessage("Confirma que queres eliminar definitivamente a tua conta e todos os dados deste restaurante?")
-                        .setNegativeButton("Manter conta", null)
-                        .setPositiveButton("Eliminar definitivamente") { _, _ ->
-                            performAccountDeletion(deleteRestaurantData = true)
-                        }
-                        .show()
-                }
+                .setTitle("Ligação de autenticação inválida")
+                .setMessage("Não foi recebida uma ligação protegida válida. Pede uma nova ligação e abre-a neste telemóvel, com a aplicação instalada.")
+                .setPositiveButton("OK", null)
                 .show()
-        } else {
-            AlertDialog.Builder(this)
-                .setTitle("Eliminar conta?")
-                .setMessage(
-                    "A conta será eliminada e a associação ao cartão de fidelização será removida. " +
-                        "Os registos operacionais partilhados do restaurante são preservados quando possível, " +
-                        "e a autoria desta conta é anonimizada no histórico. Esta ação não pode ser desfeita."
-                )
-                .setNegativeButton("Cancelar", null)
-                .setPositiveButton("Eliminar conta") { _, _ ->
-                    performAccountDeletion(deleteRestaurantData = false)
-                }
-                .show()
+            return
         }
-    }
+        val isPasswordRecovery = pendingFlow == "recovery"
 
-    private fun performAccountDeletion(deleteRestaurantData: Boolean) {
         runBackend({
-            val restaurantDeleted = SupabaseApi.deleteAccount(backendToken(), deleteRestaurantData)
-            if (restaurantDeleted) "DELETED_RESTAURANT" else "DELETED_ACCOUNT"
-        }) { result ->
-            secureSession.clear()
-            runCatching { pendingRequestIds.clearAll() }
-            store.clearLocalDemoData()
+            val session = SupabaseApi.exchangeCodeForSession(authCode, codeVerifier)
+            val user = SupabaseApi.getUser(session.accessToken)
+            val id = user.optString("id")
+            if (id.isBlank()) throw IllegalStateException("O servidor não devolveu uma conta válida.")
+            secureSession.save(session.accessToken, session.refreshToken)
+            prepareForAuthenticatedUser(id)
+            secureSession.clearPendingCodeVerifier()
             backendPrefs.edit()
-                .clear()
-                .putBoolean("local_demo_data_isolated_v1", true)
+                .putString("user_id", id)
+                .putString("user_email", user.optString("email", session.email))
                 .apply()
-            reservationCache = JSONArray()
-            reservationsLoaded = false
-
-            if (isCustomerApp) renderCustomerApp() else renderApp()
-
-            val message = if (result == "DELETED_RESTAURANT") {
-                "A conta e os dados do restaurante foram eliminados permanentemente."
+            if (isCustomerApp) restoreCustomerMembership(session.accessToken)
+            else restoreOwnedRestaurant(session.accessToken)
+            "SIGNED_IN"
+        }, refreshSession = false) {
+            if (isPasswordRecovery) {
+                showSetNewPasswordDialog()
             } else {
-                "A conta foi eliminada. A associação de fidelização foi removida e a autoria dos registos operacionais preservados foi anonimizada."
+                if (isCustomerApp) renderCustomerApp() else renderApp()
+                AlertDialog.Builder(this)
+                    .setTitle("Sessão iniciada")
+                    .setMessage("A conta foi ligada ao StudioMesa. " +
+                        if (isCustomerApp) "Agora associa-te ao restaurante com o respetivo código." else "Agora configura o restaurante para gerar um código de adesão.")
+                    .setPositiveButton("OK", null)
+                    .show()
             }
-            AlertDialog.Builder(this)
-                .setTitle("Conta eliminada")
-                .setMessage(message)
-                .setPositiveButton("OK", null)
-                .show()
         }
     }
 
-    private fun loadRemoteCustomers(): MutableList<LoyaltyCustomer> {
-        val raw = backendPrefs.getString("remote_members_json", "[]") ?: "[]"
-        val result = mutableListOf<LoyaltyCustomer>()
-        try {
-            val array = org.json.JSONArray(raw)
-            for (i in 0 until array.length()) {
-                val item = array.getJSONObject(i)
-                result.add(LoyaltyCustomer(
-                    item.optString("display_name"),
-                    item.optString("member_code"),
-                    item.optInt("points", 0).coerceAtLeast(0),
-                    item.optString("id").takeIf { it.isNotBlank() }
-                ))
-            }
-        } catch (_: Exception) { }
-        return result
+    private fun availablePages(): List<String> {
+        val pages = mutableListOf("Início", "Mesas", "Pedidos", "Cozinha", "Carta", "Pontos", "Assistente", "Conta")
+        if (hasCalculator) {
+            pages.add("Reservas")
+            pages.add("Preço Justo")
+        }
+        if (isPremium) {
+            pages.add("Stock")
+            pages.add("Análise")
+        }
+        return pages
     }
 
-    private fun refreshRemoteCustomers() {
-        val restaurantId = backendRestaurantId()
-        if (backendToken().isBlank() || restaurantId.isBlank()) {
-            AlertDialog.Builder(this).setMessage("Inicia sessão e configura primeiro o restaurante na secção Conta.")
-                .setPositiveButton("OK", null).show()
-            return
-        }
-        runBackend({
-            val members = SupabaseApi.listMembers(backendToken(), restaurantId)
-            backendPrefs.edit().putString("remote_members_json", members.toString()).apply()
-            members.length().toString()
-        }) { count ->
-            if (activePage == "Pontos") renderApp()
-            AlertDialog.Builder(this).setTitle("Lista atualizada")
-                .setMessage("$count cartões de cliente encontrados no servidor.")
-                .setPositiveButton("OK", null).show()
-        }
-    }
-
-    private fun showRestaurantJoinCode() {
-        val code = backendPrefs.getString("join_code", "") ?: ""
-        AlertDialog.Builder(this)
-            .setTitle("Código de adesão")
-            .setMessage("Código: $code\n\nO cliente deve abrir a aplicação «StudioMesa - Cliente», criar conta ou iniciar sessão e escolher «Associar ao restaurante».")
-            .setPositiveButton("OK", null)
-            .show()
-    }
-
-    private fun renderCustomers(container: LinearLayout) {
-        pageIntro(container, "Fidelização por pontos", "Regista clientes e gere pontos manualmente.")
-        addGap(container, 9)
-
-        val remoteMode = backendToken().isNotBlank() && backendRestaurantId().isNotBlank()
-        val notice = makeCard(14, copperPale)
-        notice.addView(label(if (remoteMode) "FIDELIZAÇÃO PARTILHADA" else "REGRAS A DEFINIR COM O RESTAURANTE", 10f, true, forest))
-        addGap(notice, 5)
-        notice.addView(label(if (remoteMode) "Os pontos são guardados no servidor e as alterações ficam registadas. A acumulação automática por compra e os prémios ainda precisam de regras comerciais." else "No modo local, os dados ficam apenas neste telemóvel. Liga uma conta e configura o restaurante na secção Conta para ativar a fidelização partilhada.", 12.5f, false, ink))
-        container.addView(notice, cardParams())
-        if (remoteMode) {
-            container.addView(primaryButton("Atualizar clientes do servidor") { refreshRemoteCustomers() }, LinearLayout.LayoutParams(-1, dp(48)))
-            addGap(container, 6)
-            container.addView(secondaryButton("Ver código de adesão") { showRestaurantJoinCode() }, LinearLayout.LayoutParams(-1, dp(48)))
-        } else {
-            container.addView(primaryButton("+  Adicionar cliente (local)") { showAddCustomerDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
-        }
-        addGap(container, 13)
-
-        val customers = if (remoteMode) loadRemoteCustomers() else store.getCustomers()
-        if (customers.isEmpty()) {
-            container.addView(emptyCard("Ainda não há cartões de fidelização. Adiciona um cliente para começar a testar os pontos."))
-            return
-        }
-
-        customers.forEach { customer ->
-            val card = makeCard(15)
-            val top = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-            }
-            val details = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-            details.addView(label(customer.name, 16f, true, forestDeep))
-            addGap(details, 3)
-            details.addView(label("Cartão " + customer.code, 11f, false, muted))
-            top.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
-            top.addView(label(customer.points.toString(), 25f, true, forest))
-            card.addView(top)
-            addGap(card, 2)
-            card.addView(label("Pontos disponíveis", 9f, true, forestSoft))
-            addGap(card, 12)
-
-            val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            actions.addView(secondaryButton("+ Atribuir") {
-                showCustomerPointsDialog(customer, false)
-            }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { setMargins(0, 0, dp(5), 0) })
-            actions.addView(secondaryButton("− Descontar") {
-                showCustomerPointsDialog(customer, true)
-            }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { setMargins(dp(5), 0, 0, 0) })
-            card.addView(actions)
-            container.addView(card, cardParams())
-        }
-    }
-
-    private fun showAddCustomerDialog() {
-        if (backendToken().isNotBlank() && backendRestaurantId().isNotBlank()) {
-            showRestaurantJoinCode()
-            return
-        }
-        val nameField = inputField("Nome do cliente", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
-        val form = LinearLayout(this).apply {
+    private fun showNavigationDrawer() {
+        val dialog = Dialog(this)
+        val drawerRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(8), dp(20), dp(2))
+            setBackgroundColor(white)
         }
-        form.addView(label("Nome para identificar o cartão", 10f, true, forestSoft))
-        form.addView(nameField, fieldParams())
 
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Novo cartão de fidelização")
-            .setView(form)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Criar cartão", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val name = nameField.text.toString().trim()
-                if (name.isBlank()) {
-                    nameField.error = "Escreve o nome do cliente"
-                } else {
-                    val customer = store.addLoyaltyCustomer(name)
-                    dialog.dismiss()
-                    renderApp()
-                    AlertDialog.Builder(this)
-                        .setTitle("Cartão criado")
-                        .setMessage("Código do cartão: " + customer.code + "\nSaldo inicial: 0 pontos.\nGuarda o código para referência.")
-                        .setPositiveButton("OK", null)
-                        .show()
-                }
-            }
+        val drawerHeader = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(20), dp(24), dp(14), dp(22))
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(forestDeep, forest, forestSoft)
+            ).apply { cornerRadius = dp(18).toFloat() }
         }
-        dialog.show()
-    }
+        val titleStack = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        titleStack.addView(label("StudioMesa", 24f, true, white))
+        titleStack.addView(label(displayRestaurantName(), 14f, true, copperPale).apply {
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        })
+        titleStack.addView(label(planTitle + " · " + if (hasRemoteRestaurant()) "Restaurante configurado" else "Demonstração", 10.5f, false, copperPale))
+        drawerHeader.addView(titleStack, LinearLayout.LayoutParams(0, -2, 1f))
+        drawerHeader.addView(label("×", 27f, false, white).apply {
+            gravity = Gravity.CENTER
+            contentDescription = "Fechar menu"
+            background = rippleBackground(Color.argb(40, 255, 255, 255), 12, Color.argb(70, 255, 255, 255))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { dialog.dismiss() }
+        }, LinearLayout.LayoutParams(dp(48), dp(48)))
+        drawerRoot.addView(drawerHeader, LinearLayout.LayoutParams(-1, -2).apply {
+            setMargins(dp(8), dp(8), dp(8), dp(6))
+        })
 
-    private fun showCustomerPointsDialog(customer: LoyaltyCustomer, redeem: Boolean) {
-        val amountField = inputField("Número inteiro de pontos", InputType.TYPE_CLASS_NUMBER)
-        val form = LinearLayout(this).apply {
+        val listScroll = ScrollView(this).apply {
+            isFillViewport = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            isVerticalScrollBarEnabled = false
+        }
+        val list = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(8), dp(20), dp(2))
+            setPadding(0, dp(4), 0, dp(8))
         }
-        form.addView(label(if (redeem) "PONTOS A DESCONTAR" else "PONTOS A ATRIBUIR", 10f, true, forestSoft))
-        form.addView(amountField, fieldParams())
-
-        val dialog = AlertDialog.Builder(this)
-            .setTitle(if (redeem) "Descontar pontos" else "Atribuir pontos")
-            .setMessage(customer.name + " · saldo atual: " + customer.points + " pontos")
-            .setView(form)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Confirmar", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val amount = amountField.text.toString().trim().toIntOrNull()
-                when {
-                    amount == null || amount <= 0 -> amountField.error = "Introduz um número superior a zero"
-                    redeem && amount > customer.points -> amountField.error = "O saldo não chega para esse desconto"
-                    else -> {
-                        val delta = if (redeem) -amount else amount
-                        if (customer.backendId != null && backendToken().isNotBlank()) {
-                            val memberId = customer.backendId
-                            val restaurantId = backendRestaurantId()
-                            val noteText = if (redeem) "Desconto manual" else "Atribuição manual"
-                            val signature = JSONObject()
-                                .put("restaurant_id", restaurantId)
-                                .put("member_id", memberId)
-                                .put("delta", delta)
-                                .put("note", noteText)
-                                .toString()
-                            val requestOperation = "loyalty_adjust"
-                            val requestAccountId = backendPrefs.getString("user_id", "").orEmpty()
-                            val requestId = try {
-                                pendingRequestIds.getOrCreate(requestOperation, requestAccountId, signature)
-                            } catch (_: Exception) {
-                                amountField.error = "Não foi possível guardar a referência segura. Tenta novamente."
-                                return@setOnClickListener
-                            }
-                            runBackend({
-                                SupabaseApi.adjustPoints(
-                                    backendToken(), restaurantId, memberId, delta, noteText, requestId
-                                )
-                                val members = SupabaseApi.listMembers(backendToken(), restaurantId)
-                                backendPrefs.edit().putString("remote_members_json", members.toString()).apply()
-                                "OK"
-                            }) {
-                                dialog.dismiss()
-                                renderApp()
-                                pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
-                            }
-                        } else if (store.adjustCustomerPoints(customer.code, delta)) {
+        val pageGroups = listOf(
+            "OPERAÇÃO" to listOf("Início", "Mesas", "Pedidos", "Cozinha"),
+            "GESTÃO DO RESTAURANTE" to listOf("Carta", "Pontos", "Reservas", "Preço Justo", "Stock", "Análise"),
+            "ASSISTÊNCIA" to listOf("Assistente"),
+            "CONTA" to listOf("Conta")
+        )
+        pageGroups.forEach { (groupTitle, groupPages) ->
+            val visiblePages = groupPages.filter { it in availablePages() }
+            if (visiblePages.isNotEmpty()) {
+                list.addView(label(groupTitle, 10f, true, forestSoft).apply {
+                    setPadding(dp(20), dp(13), dp(14), dp(7))
+                    letterSpacing = 0.08f
+                }, LinearLayout.LayoutParams(-1, -2))
+                visiblePages.forEach { page ->
+                    val selected = activePage == page
+                    val item = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        setPadding(dp(9), dp(3), dp(12), dp(3))
+                        background = rippleBackground(if (selected) paleGreen else white, 12)
+                        contentDescription = "Abrir secção " + page
+                        isClickable = true
+                        isFocusable = true
+                        setOnClickListener {
                             dialog.dismiss()
+                            activePage = page
                             renderApp()
-                        } else {
-                            amountField.error = "Não foi possível atualizar o saldo"
                         }
                     }
+                    item.addView(TextView(this).apply {
+                        text = pageGlyph(page)
+                        textSize = 19f
+                        gravity = Gravity.CENTER
+                        setTextColor(if (selected) forestDeep else forestSoft)
+                    }, LinearLayout.LayoutParams(dp(36), -1))
+                    item.addView(label(page, 14.5f, selected, if (selected) forestDeep else ink),
+                        LinearLayout.LayoutParams(0, -2, 1f))
+                    list.addView(item, LinearLayout.LayoutParams(-1, dp(48)).apply {
+                        setMargins(dp(10), dp(2), dp(10), dp(2))
+                    })
                 }
             }
         }
-        dialog.show()
-    }
+        listScroll.addView(list)
+        drawerRoot.addView(listScroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
-    private fun showCustomerJoinDialog() {
-        if (backendToken().isBlank()) { showAuthChooser { renderCustomerApp() }; return }
-        val form = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(22), dp(8), dp(22), dp(4)) }
-        val codeField = inputField("Código de adesão do restaurante", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS)
-        val nameField = inputField("O teu nome", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
-        nameField.setText(store.getCustomerProfileName())
-        form.addView(label("Código do restaurante", 10f, true, forestSoft)); form.addView(codeField, fieldParams())
-        addGap(form, 4); form.addView(label("Nome para o cartão", 10f, true, forestSoft)); form.addView(nameField, fieldParams())
-        val dialog = AlertDialog.Builder(this).setTitle("Associar ao restaurante")
-            .setMessage("Pede o código de adesão ao restaurante.").setView(form)
-            .setNegativeButton("Cancelar", null).setPositiveButton("Associar", null).create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val code = codeField.text.toString().trim().uppercase(Locale.ROOT)
-                val name = nameField.text.toString().trim()
-                when {
-                    code.length !in 6..12 -> codeField.error = "O código deve ter 6 a 12 caracteres"
-                    name.isBlank() || name.length > 100 -> nameField.error = "Introduz um nome válido"
-                    else -> {
-                        runBackend({
-                            val token = backendToken()
-                            val member = SupabaseApi.joinRestaurant(token, code, name)
-                            val memberId = member.optString("member_id")
-                            val menu = SupabaseApi.listCustomerMenu(token, memberId)
-                            backendPrefs.edit().putString("member_id", memberId)
-                                .putString("member_code", member.optString("member_code"))
-                                .putInt("member_points", member.optInt("points", 0))
-                                .putString("member_restaurant_name", member.optString("restaurant_name"))
-                                .putString("customer_menu_json", menu.toString())
-                                .apply()
-                            store.saveCustomerProfileName(name)
-                            "OK"
-                        }) {
-                            dialog.dismiss()
-                            renderCustomerApp()
-                        }
-                    }
-                }
-            }
+        drawerRoot.addView(View(this).apply { setBackgroundColor(line) },
+            LinearLayout.LayoutParams(-1, dp(1)))
+        drawerRoot.addView(label("StudioMesa · Gestão de sala", 10.5f, false, muted).apply {
+            setPadding(dp(20), dp(12), dp(20), dp(16))
+        }, LinearLayout.LayoutParams(-1, -2))
+
+        dialog.setContentView(drawerRoot)
+        dialog.show()
+        val drawerWidth = minOf(resources.displayMetrics.widthPixels - dp(48), dp(340))
+        dialog.window?.apply {
+            setBackgroundDrawableResource(android.R.color.transparent)
+            setDimAmount(0.42f)
+            setGravity(Gravity.START)
+            setLayout(drawerWidth, -1)
         }
-        dialog.show()
     }
 
-    private fun refreshCustomerMembership() {
-        val memberId = backendMemberId()
-        if (backendToken().isBlank() || memberId.isBlank()) { showCustomerJoinDialog(); return }
-        runBackend({
-            val token = backendToken()
-            val member = SupabaseApi.getMember(token, memberId)
-            val menu = SupabaseApi.listCustomerMenu(token, memberId)
-            backendPrefs.edit().putInt("member_points", member.optInt("points", 0))
-                .putString("member_code", member.optString("member_code"))
-                .putString("customer_menu_json", menu.toString())
-                .apply()
-            "OK"
-        }) { renderCustomerApp() }
+    private fun pageGlyph(page: String): String = when (page) {
+        "Cartão" -> "▣"
+        "Início" -> "⌂"
+        "Mesas" -> "▦"
+        "Pedidos" -> "≡"
+        "Cozinha" -> "◉"
+        "Carta" -> "▤"
+        "Pontos" -> "◎"
+        "Conta" -> "⚙"
+        "Reservas" -> "◷"
+        "Preço Justo" -> "€"
+        "Stock" -> "▣"
+        "Análise" -> "↗"
+        "Assistente" -> "✦"
+        else -> "•"
+    }
+    /**
+     * Android 15+ enforces edge-to-edge for apps targeting API 35+, and Android 16
+     * removes the opt-out for apps targeting API 36. Keep interactive content out
+     * from behind status/navigation bars and display cutouts on every supported version.
+     *
+     * Padding is always based on the root's original values so inset updates never
+     * accumulate padding as the system UI changes (for example, on rotation).
+     */
+    private fun applySystemBarInsets(root: View) {
+        // Traditional decor fitting already keeps content below the system bars on
+        // Android 14 and earlier, so manual padding is only needed from API 35 onward.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) return
+
+        val baseLeft = root.paddingLeft
+        val baseTop = root.paddingTop
+        val baseRight = root.paddingRight
+        val baseBottom = root.paddingBottom
+
+        root.setOnApplyWindowInsetsListener { view, insets ->
+            val safeInsets = insets.getInsets(
+                WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()
+            )
+            view.setPadding(
+                baseLeft + safeInsets.left,
+                baseTop + safeInsets.top,
+                baseRight + safeInsets.right,
+                baseBottom + safeInsets.bottom
+            )
+            insets
+        }
     }
 
-    private fun renderCustomerApp() {
-        if (activeCustomerPage !in setOf("Cartão", "Carta", "Conta")) activeCustomerPage = "Cartão"
+    private fun renderApp() {
+        if (isCustomerApp) {
+            renderCustomerApp()
+            return
+        }
+        if (activePage !in availablePages()) activePage = "Início"
+
         appRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(paper)
@@ -2668,46 +2673,91 @@ class MainActivity : Activity() {
 
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(15), dp(18), dp(15))
+            setPadding(dp(18), dp(16), dp(18), dp(17))
             background = GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
                 intArrayOf(forestDeep, forest, forestSoft)
             ).apply { cornerRadius = dp(22).toFloat() }
         }
-        header.addView(label(displayCustomerRestaurantName(), 23f, true, white).apply {
+
+        val brandRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val menuButton = TextView(this).apply {
+            text = "☰"
+            textSize = 23f
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setTextColor(white)
+            contentDescription = "Abrir menu de navegação"
+            background = rippleBackground(Color.argb(42, 255, 255, 255), 12, Color.argb(70, 255, 255, 255))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { showNavigationDrawer() }
+        }
+        brandRow.addView(menuButton, LinearLayout.LayoutParams(dp(48), dp(48)).apply {
+            setMargins(0, 0, dp(8), 0)
+        })
+
+        val mark = TextView(this).apply {
+            text = "SM"
+            textSize = 15f
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setTextColor(forestDeep)
+            background = rounded(copper, 14)
+            elevation = dp(2).toFloat()
+        }
+        brandRow.addView(mark, LinearLayout.LayoutParams(dp(44), dp(44)))
+
+        val brandText = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(11), 0, dp(5), 0)
+        }
+        brandText.addView(label(displayRestaurantName(), 23f, true, white).apply {
+            letterSpacing = 0.02f
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
         })
-        addGap(header, 4)
-        header.addView(label("Cartão digital de cliente · " + planTitle, 10.5f, true, copperPale))
-        addGap(header, 9)
-        header.addView(label("A tua experiência, num só lugar.", 16f, true, white))
-        header.addView(label(
-            if (backendMemberId().isBlank()) "Consulta a carta e acompanha os teus pontos."
-            else "O teu cartão de fidelização.",
-            12f, false, copperPale
-        ))
-        appRoot.addView(header, LinearLayout.LayoutParams(-1, -2).apply {
-            setMargins(dp(12), dp(8), dp(12), dp(4))
-        })
+        brandText.addView(label("StudioMesa · Gestão de sala", 10f, true, copperPale))
+        brandRow.addView(brandText, LinearLayout.LayoutParams(0, -2, 1f))
+
+        val planChip = label(planTitle, 9.5f, true, forestDeep).apply {
+            gravity = Gravity.CENTER
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            background = rounded(copper, 18)
+        }
+        brandRow.addView(planChip)
+        header.addView(brandRow)
+
+        addGap(header, 15)
+        val separator = View(this).apply { setBackgroundColor(Color.argb(65, 255, 255, 255)) }
+        header.addView(separator, LinearLayout.LayoutParams(-1, dp(1)))
+        addGap(header, 12)
+        header.addView(label(if (hasRemoteRestaurant()) "Restaurante configurado · dados do servidor" else "Demonstração · Dados de exemplo", 10.5f, true, copperPale))
+        header.addView(label("Uma experiência de gestão pensada para o ritmo da sala.", 13f, false, Color.rgb(229, 235, 228)))
+
+        val headerParams = LinearLayout.LayoutParams(-1, -2).apply {
+            setMargins(dp(12), dp(10), dp(12), dp(5))
+        }
+        appRoot.addView(header, headerParams)
 
         val scroll = ScrollView(this).apply {
             isFillViewport = true
+            clipToPadding = false
             overScrollMode = View.OVER_SCROLL_NEVER
-            isVerticalScrollBarEnabled = false
         }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(14), dp(16), dp(18))
-        }
-        when (activeCustomerPage) {
-            "Cartão" -> renderCustomerLoyaltyPage(content)
-            "Carta" -> renderCustomerMenuPage(content)
-            "Conta" -> renderCustomerAccountPage(content)
+            setPadding(dp(16), dp(16), dp(16), dp(22))
         }
         scroll.addView(content)
         appRoot.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        renderPage(content)
 
+        // Keep the three high-frequency destinations visible on phones.
+        // Secondary destinations remain available from the hamburger drawer above.
         val nav = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -2715,19 +2765,19 @@ class MainActivity : Activity() {
             setBackgroundColor(white)
             elevation = dp(6).toFloat()
         }
-        listOf("Cartão", "Carta", "Conta").forEach { page ->
-            val selected = activeCustomerPage == page
+        listOf("Início", "Mesas", "Pedidos").forEach { page ->
+            val selected = activePage == page
             val item = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
                 setPadding(dp(3), dp(3), dp(3), dp(3))
-                background = rippleBackground(if (selected) paleGreen else white, 12)
+                background = rounded(if (selected) copperPale else white, 12)
                 contentDescription = "Abrir secção " + page
                 isClickable = true
                 isFocusable = true
                 setOnClickListener {
-                    activeCustomerPage = page
-                    renderCustomerApp()
+                    activePage = page
+                    renderApp()
                 }
             }
             item.addView(TextView(this).apply {
@@ -2748,684 +2798,317 @@ class MainActivity : Activity() {
         setContentView(appRoot)
     }
 
-    private fun renderCustomerLoyaltyPage(container: LinearLayout) {
-        val savedName = store.getCustomerProfileName()
-        container.addView(label(if (savedName.isBlank()) "Olá!" else "Olá, " + savedName + "!", 25f, true, forestDeep))
-        addGap(container, 5)
-        container.addView(label("Cartão de fidelização do restaurante.", 13.5f, false, muted))
-        addGap(container, 12)
-        when {
-            backendToken().isBlank() -> container.addView(primaryButton("Criar conta / iniciar sessão") { showAuthChooser { renderCustomerApp() } }, LinearLayout.LayoutParams(-1, dp(48)))
-            backendMemberId().isBlank() -> container.addView(primaryButton("Associar ao restaurante") { showCustomerJoinDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
-            else -> container.addView(primaryButton("Atualizar saldo no servidor") { refreshCustomerMembership() }, LinearLayout.LayoutParams(-1, dp(48)))
+    private fun renderPage(container: LinearLayout) {
+        when (activePage) {
+            "Início" -> renderHome(container)
+            "Mesas" -> renderTables(container)
+            "Pedidos" -> renderOrders(container)
+            "Cozinha" -> renderKitchen(container)
+            "Carta" -> renderMenu(container)
+            "Pontos" -> renderCustomers(container)
+            "Conta" -> renderBackendAccount(container)
+            "Preço Justo" -> renderPriceCalculator(container)
+            "Reservas" -> renderReservations(container)
+            "Stock" -> renderStock(container)
+            "Análise" -> renderAnalysis(container)
+            "Assistente" -> renderAssistant(container)
+            else -> renderHome(container)
         }
-        addGap(container, 15)
-
-        val loyalty = makeCard(18, forest)
-        loyalty.addView(label("O meu cartão", 10.5f, true, copperPale))
-        addGap(loyalty, 10)
-        loyalty.addView(label(backendPrefs.getInt("member_points", 0).toString(), 42f, true, white))
-        loyalty.addView(label(if (backendMemberId().isBlank()) "Pontos de demonstração" else "Pontos disponíveis", 10f, true, copperPale))
-        addGap(loyalty, 13)
-        val code = backendPrefs.getString("member_code", "")?.takeIf { it.isNotBlank() } ?: store.getCustomerMemberCode()
-        loyalty.addView(label("Código de cliente", 11f, false, copperPale))
-        addGap(loyalty, 3)
-        loyalty.addView(label(code, 20f, true, white))
-        addGap(loyalty, 9)
-        loyalty.addView(label(if (backendMemberId().isBlank()) "Este é um cartão demonstrativo. Cria sessão e associa-o ao código do restaurante para consultar os pontos reais." else "Saldo obtido do sistema de fidelização partilhado. A atribuição de pontos é controlada pelo restaurante.", 12f, false, Color.rgb(229, 235, 228)))
-        container.addView(loyalty, cardParams())
-        addGap(container, 5)
-        container.addView(secondaryButton("Consultar a carta") {
-            activeCustomerPage = "Carta"
-            renderCustomerApp()
-        }, LinearLayout.LayoutParams(-1, dp(48)))
     }
 
-    private fun renderCustomerMenuPage(container: LinearLayout) {
-        container.addView(label("CARTA DO RESTAURANTE", 10.5f, true, forestSoft))
-        addGap(container, 4)
-        container.addView(label("Descobre o menu.", 25f, true, forestDeep))
-        addGap(container, 4)
-        container.addView(label("Consulta os artigos, descrições e preços disponíveis.", 13.5f, false, muted))
-        addGap(container, 12)
-        val menuCard = makeCard(16)
-        val isLinkedToRestaurant = backendMemberId().isNotBlank()
-        menuCard.addView(label(if (isLinkedToRestaurant) "Carta do restaurante" else "Carta de demonstração", 10f, true, forestSoft))
-        addGap(menuCard, 7)
-        menuCard.addView(label(if (isLinkedToRestaurant) "A nossa carta" else "Exemplos de artigos", 18f, true, forestDeep))
-        addGap(menuCard, 4)
-        menuCard.addView(label(
-            if (isLinkedToRestaurant) "Preços publicados pelo restaurante. Os custos internos não são mostrados."
-            else "Nomes e preços de exemplo; associa a tua conta a um restaurante para veres a carta real.",
-            12f, false, muted
-        ))
-        addGap(menuCard, 10)
-        if (isLinkedToRestaurant) {
-            val publishedMenu = savedRemoteArray("customer_menu_json")
-            if (publishedMenu.length() == 0) {
-                menuCard.addView(label("O restaurante ainda não publicou artigos ativos na carta.", 13f, false, muted))
-            } else {
-                for (index in 0 until publishedMenu.length()) {
-                    val item = publishedMenu.optJSONObject(index) ?: continue
-                    val itemCard = makeCard(12, paper)
-                    itemCard.addView(label(item.optString("category", "Prato principal"), 10f, true, forestSoft))
-                    addGap(itemCard, 3)
-                    itemCard.addView(label(item.optString("name"), 16f, true, forestDeep))
-                    val description = item.optString("description").trim()
-                    if (description.isNotBlank()) {
-                        addGap(itemCard, 5)
-                        itemCard.addView(label(description, 12.5f, false, ink))
-                    }
-                    addGap(itemCard, 7)
-                    val priceRow = LinearLayout(this).apply {
-                        orientation = LinearLayout.HORIZONTAL
-                        gravity = Gravity.CENTER_VERTICAL
-                    }
-                    priceRow.addView(label("Preço", 11f, false, muted), LinearLayout.LayoutParams(0, -2, 1f))
-                    priceRow.addView(label(money(item.optDouble("price", 0.0)), 15f, true, forest))
-                    itemCard.addView(priceRow)
-                    addGap(itemCard, 5)
-                    val allergens = item.optString("allergens").trim()
-                    itemCard.addView(label(
-                        if (allergens.isBlank()) "Alergénios não indicados. Confirma com a equipa antes de encomendar."
-                        else "Alergénios declarados: $allergens. Confirma com a equipa se tiveres uma alergia.",
-                        11f, false, muted
-                    ))
-                    menuCard.addView(itemCard, cardParams())
-                }
-            }
+    private fun renderHome(container: LinearLayout) {
+        container.addView(label("Painel de operação", 10f, true, forestSoft))
+        addGap(container, 5)
+        container.addView(label("A sala, num relance.", 27f, true, forestDeep))
+        addGap(container, 5)
+        container.addView(label("Demonstração StudioMesa. Os dados, a carta e os pedidos são exemplos; configura o restaurante e introduz dados aprovados antes de qualquer utilização real.", 14f, false, muted))
+        addGap(container, 18)
+
+        val tableTotal: Int
+        val occupied = if (hasRemoteRestaurant()) {
+            val tables = remoteTables()
+            tableTotal = tables.length()
+            (0 until tables.length()).count { tables.optJSONObject(it)?.optBoolean("is_occupied", false) == true }
         } else {
-            store.getMenu().forEach { item ->
-                val itemCard = makeCard(12, paper)
-                itemCard.addView(label(item.category, 10f, true, forestSoft))
-                addGap(itemCard, 3)
-                itemCard.addView(label(item.name, 15f, true, forestDeep))
-                if (item.description.isNotBlank()) {
-                    addGap(itemCard, 5)
-                    itemCard.addView(label(item.description, 12.5f, false, ink))
-                }
-                addGap(itemCard, 7)
-                val priceRow = LinearLayout(this).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.CENTER_VERTICAL
-                }
-                priceRow.addView(label("Preço", 11f, false, muted), LinearLayout.LayoutParams(0, -2, 1f))
-                priceRow.addView(label(money(item.price), 15f, true, forest))
-                itemCard.addView(priceRow)
-                addGap(itemCard, 5)
-                itemCard.addView(label(
-                    if (item.allergens.isBlank()) "Alergénios não indicados. Confirma com a equipa antes de encomendar."
-                    else "Alergénios declarados: " + item.allergens + ". Confirma com a equipa se tiveres uma alergia.",
-                    11f, false, muted
-                ))
-                menuCard.addView(itemCard, cardParams())
+            tableTotal = 12
+            store.occupiedTableCount()
+        }
+        val activeOrders = if (hasRemoteRestaurant()) {
+            val orders = remoteOrders()
+            (0 until orders.length()).count {
+                val status = orders.optJSONObject(it)?.optString("status").orEmpty()
+                status != "Concluído" && status != "Cancelado"
+            }
+        } else store.getOrders().count { it.status != "Concluído" && it.status != "Cancelado" }
+        val stats = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        stats.addView(statCard("MESAS OCUPADAS", "$occupied / $tableTotal", if (occupied > 0) copper else forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), 0) })
+        stats.addView(statCard("PEDIDOS ATIVOS", activeOrders.toString(), if (activeOrders > 0) copper else forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, 0) })
+        container.addView(stats)
+
+        addGap(container, 21)
+        sectionHeading(container, "Acesso rápido", "Escolhe uma área para continuar.")
+        actionCard(container, "01", "Mesas", "Consulta as " + tableTotal + " mesas do restaurante.", "ABRIR MESAS") {
+            activePage = "Mesas"; renderApp()
+        }
+        actionCard(container, "02", "Pedidos", "Regista pedidos e acompanha a conclusão.", "ABRIR PEDIDOS") {
+            activePage = "Pedidos"; renderApp()
+        }
+        actionCard(container, "03", "Carta e custos", "Artigos de exemplo, preços e custos.", "ABRIR CARTA") {
+            activePage = "Carta"; renderApp()
+        }
+        actionCard(container, "04", "Pontos de fidelização", "Cria cartões de cliente e ajusta saldos de pontos.", "GERIR CLIENTES") {
+            activePage = "Pontos"; renderApp()
+        }
+        if (hasCalculator) {
+            actionCard(container, "05", "Reservas", "Regista reservas, capacidade e disponibilidade de mesas.", "GERIR RESERVAS") {
+                activePage = "Reservas"; renderApp()
+            }
+            actionCard(container, "06", "Preço Justo", "Calcula um preço indicativo a partir do custo.", "ABRIR CALCULADORA") {
+                activePage = "Preço Justo"; renderApp()
             }
         }
-        container.addView(menuCard, cardParams())
-    }
-
-    private fun renderCustomerAccountPage(container: LinearLayout) {
-        container.addView(label("A tua conta", 25f, true, forestDeep))
-        addGap(container, 4)
-        container.addView(label("Perfil, associação ao restaurante e segurança.", 13.5f, false, muted))
-        addGap(container, 13)
-        when {
-            backendToken().isBlank() -> container.addView(
-                primaryButton("Criar conta / iniciar sessão") { showAuthChooser { renderCustomerApp() } },
-                LinearLayout.LayoutParams(-1, dp(48))
-            )
-            backendMemberId().isBlank() -> container.addView(
-                primaryButton("Associar ao restaurante") { showCustomerJoinDialog() },
-                LinearLayout.LayoutParams(-1, dp(48))
-            )
-            else -> container.addView(
-                primaryButton("Atualizar saldo no servidor") { refreshCustomerMembership() },
-                LinearLayout.LayoutParams(-1, dp(48))
-            )
-        }
-        addGap(container, 8)
-        container.addView(secondaryButton("Definir o meu nome") { showCustomerProfileDialog() },
-            LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(container, 12)
-        val syncNote = makeCard(13)
-        syncNote.addView(label(if (backendMemberId().isBlank()) "CARTÃO AINDA NÃO ASSOCIADO" else "CONTA LIGADA", 10f, true, if (backendMemberId().isBlank()) red else green))
-        addGap(syncNote, 5)
-        syncNote.addView(label(if (backendMemberId().isBlank()) "Para ver o saldo real, inicia sessão e associa a conta com o código fornecido pelo restaurante." else "Restaurante associado: " + (backendPrefs.getString("member_restaurant_name", "Restaurante") ?: "Restaurante") + ". Atualiza o saldo quando quiseres consultar as alterações mais recentes.", 12f, false, muted))
-        container.addView(syncNote, cardParams())
-        if (backendToken().isNotBlank()) {
-            container.addView(secondaryButton("Eliminar conta permanentemente") {
-                showDeleteAccountConfirmation()
-            }, LinearLayout.LayoutParams(-1, dp(48)))
-            addGap(container, 7)
-            container.addView(secondaryButton("Terminar sessão neste dispositivo") {
-                val tokenToRevoke = backendToken()
-                if (tokenToRevoke.isNotBlank()) {
-                    Thread { runCatching { SupabaseApi.signOut(tokenToRevoke) } }.start()
-                }
-                secureSession.clear()
-                store.clearCustomerLocalIdentity()
-                backendPrefs.edit()
-                    .remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
-                    .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
-                    .remove("customer_menu_json")
-                    .apply()
-                activeCustomerPage = "Cartão"
-                renderCustomerApp()
-            }, LinearLayout.LayoutParams(-1, dp(48)))
-        }
-    }
-
-    private fun showCustomerProfileDialog() {
-        val field = inputField("O teu nome", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
-        field.setText(store.getCustomerProfileName())
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Perfil de demonstração")
-            .setMessage("O nome fica guardado apenas nesta instalação.")
-            .setView(field)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Guardar", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val name = field.text.toString().trim()
-                if (name.isBlank()) {
-                    field.error = "Escreve o teu nome"
-                } else {
-                    store.saveCustomerProfileName(name)
-                    dialog.dismiss()
-                    renderCustomerApp()
-                }
+        if (isPremium) {
+            actionCard(container, "07", "Stock e inventário", "Controla quantidades, níveis mínimos e movimentos.", "GERIR STOCK") {
+                activePage = "Stock"; renderApp()
+            }
+            actionCard(container, "08", "Análise operacional", "Resumo dos pedidos, artigos e custos registados.", "VER ANÁLISE") {
+                activePage = "Análise"; renderApp()
             }
         }
-        dialog.show()
-    }
-
-
-    private fun remoteInventoryItems(): JSONArray =
-        runCatching { JSONArray(backendPrefs.getString("remote_inventory_json", "[]") ?: "[]") }
-            .getOrElse { JSONArray() }
-
-    private fun remoteReservations(): JSONArray = reservationCache
-
-    private fun refreshInventoryItems() {
-        if (!hasRemoteRestaurant()) {
-            AlertDialog.Builder(this).setTitle("Liga o restaurante")
-                .setMessage("O inventário partilhado exige uma conta autenticada e um restaurante configurado.")
-                .setPositiveButton("OK", null).show()
-            return
+        actionCard(container, "IA", "Assistente StudioMesa", "Sugestões de operação e preços com os dados disponíveis.", "ABRIR ASSISTENTE") {
+            activePage = "Assistente"; renderApp()
         }
-        runBackend({
-            val items = SupabaseApi.listInventoryItems(backendToken(), backendRestaurantId())
-            backendPrefs.edit().putString("remote_inventory_json", items.toString())
-                .putBoolean("inventory_loaded", true).apply()
-            "OK"
-        }) { renderApp() }
-    }
 
-    private fun refreshReservations() {
-        if (!hasRemoteRestaurant()) {
-            AlertDialog.Builder(this).setTitle("Liga o restaurante")
-                .setMessage("As reservas partilhadas exigem uma conta autenticada e um restaurante configurado.")
-                .setPositiveButton("OK", null).show()
-            return
-        }
-        runBackend({
-            val reservations = SupabaseApi.listReservations(backendToken(), backendRestaurantId())
-            reservationCache = reservations
-            reservationsLoaded = true
-            "OK"
-        }) { renderApp() }
-    }
-
-    private fun renderReservations(container: LinearLayout) {
-        pageIntro(container, "Reservas", "Agenda de reservas partilhada com a equipa.")
-        addGap(container, 8)
-        if (!hasRemoteRestaurant()) {
-            container.addView(emptyCard("Para proteger os dados dos clientes e sincronizar as reservas, inicia sessão e configura o restaurante na secção Conta."))
-            return
-        }
-        container.addView(primaryButton("+  Nova reserva") { showReservationDialog() },
-            LinearLayout.LayoutParams(-1, dp(48)))
         addGap(container, 6)
-        container.addView(secondaryButton("Atualizar reservas") { refreshReservations() },
-            LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(container, 12)
-
-        if (!reservationsLoaded) {
-            container.addView(emptyCard("A carregar as reservas do servidor…"))
-            refreshReservations()
-            return
-        }
-
-        val reservations = remoteReservations()
-        if (reservations.length() == 0) {
-            container.addView(emptyCard("Ainda não há reservas. Usa «Nova reserva» para registar a primeira."))
-            return
-        }
-
-        val displayFormat = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "PT"))
-        val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US)
-        for (index in 0 until reservations.length()) {
-            val reservation = reservations.optJSONObject(index) ?: continue
-            val id = reservation.optString("id")
-            val guest = reservation.optString("guest_name", "Cliente")
-            val status = reservation.optString("status", "Pendente")
-            val card = makeCard(15)
-            val top = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-            }
-            top.addView(label(guest, 17f, true, forestDeep), LinearLayout.LayoutParams(0, -2, 1f))
-            top.addView(label(status, 10f, true, if (status == "Confirmada") green else if (status == "Cancelada" || status == "Concluída" || status == "Não compareceu") muted else forestSoft).apply {
-                setPadding(dp(8), dp(6), dp(8), dp(6))
-                background = rounded(if (status == "Confirmada") paleGreen else copperPale, 12)
-            })
-            card.addView(top)
-            addGap(card, 6)
-            val rawDate = reservation.optString("reservation_at")
-            val dateText = runCatching { displayFormat.format(isoFormat.parse(rawDate) ?: Date()) }
-                .getOrElse { rawDate.replace('T', ' ').take(16) }
-            val tableNo = reservation.optInt("table_number", 0)
-            card.addView(label("$dateText · ${reservation.optInt("party_size", 1)} pessoa(s)", 12.5f, true, ink))
-            card.addView(label(if (tableNo > 0) "Mesa $tableNo · ${reservation.optInt("duration_minutes", 90)} min" else "Mesa por atribuir · ${reservation.optInt("duration_minutes", 90)} min", 11.5f, false, muted))
-            val phone = reservation.optString("guest_phone").trim()
-            if (phone.isNotBlank()) card.addView(label("Contacto: $phone", 11.5f, false, muted))
-            val notes = reservation.optString("notes").trim()
-            if (notes.isNotBlank()) card.addView(label("Notas: $notes", 11.5f, false, muted))
-            addGap(card, 10)
-            when (status) {
-                "Pendente" -> card.addView(primaryButton("Confirmar reserva") {
-                    setReservationStatus(id, "Confirmada")
-                }, LinearLayout.LayoutParams(-1, dp(48)))
-                "Confirmada" -> {
-                    card.addView(primaryButton("Marcar como concluída") {
-                        setReservationStatus(id, "Concluída")
-                    }, LinearLayout.LayoutParams(-1, dp(48)))
-                    addGap(card, 5)
-                    card.addView(secondaryButton("Não compareceu") {
-                        setReservationStatus(id, "Não compareceu")
-                    }, LinearLayout.LayoutParams(-1, dp(48)))
-                }
-            }
-            if (status == "Pendente" || status == "Confirmada") {
-                addGap(card, 5)
-                card.addView(secondaryButton("Cancelar reserva") {
-                    AlertDialog.Builder(this)
-                        .setTitle("Cancelar reserva?")
-                        .setMessage("A reserva de $guest será marcada como cancelada.")
-                        .setNegativeButton("Manter", null)
-                        .setPositiveButton("Cancelar reserva") { _, _ -> setReservationStatus(id, "Cancelada") }
-                        .show()
-                }, LinearLayout.LayoutParams(-1, dp(48)))
-            }
-            container.addView(card, cardParams())
-        }
+        val note = makeCard(14, copperPale)
+        note.addView(label(if (hasRemoteRestaurant()) "OPERAÇÃO PARTILHADA" else "DEMONSTRAÇÃO", 10f, true, forest))
+        addGap(note, 4)
+        note.addView(label(
+            if (hasRemoteRestaurant()) "Mesas, carta, pedidos e estados ficam guardados no servidor e podem ser consultados pela equipa autenticada. Ainda não existe integração com caixa registadora, pagamentos ou impressora de cozinha."
+            else "O modo de demonstração guarda mesas, carta e pedidos apenas neste telemóvel. Liga uma conta e configura o restaurante para usar os dados partilhados no servidor.",
+            12.5f, false, ink
+        ))
+        container.addView(note, cardParams())
     }
 
-    private fun setReservationStatus(reservationId: String, status: String) {
-        runBackend({
-            SupabaseApi.updateReservationStatus(backendToken(), reservationId, status)
-            val latest = SupabaseApi.listReservations(backendToken(), backendRestaurantId())
-            reservationCache = latest
-            reservationsLoaded = true
-            "OK"
-        }) { renderApp() }
-    }
-
-    private fun showReservationDialog() {
-        if (!hasRemoteRestaurant()) {
-            AlertDialog.Builder(this).setMessage("Liga primeiro o restaurante na secção Conta.")
-                .setPositiveButton("OK", null).show()
-            return
-        }
-        val form = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(8), dp(18), dp(10))
-        }
-        val guest = inputField("Nome do cliente", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS)
-        val phone = inputField("Contacto (opcional)", InputType.TYPE_CLASS_PHONE)
-        val party = inputField("Número de pessoas", InputType.TYPE_CLASS_NUMBER).apply { setText("2") }
-        val date = inputField("dd/MM/aaaa HH:mm", InputType.TYPE_CLASS_DATETIME).apply {
-            val defaultDate = Date(System.currentTimeMillis() + 24L * 60L * 60L * 1000L)
-            setText(SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "PT")).format(defaultDate))
-        }
-        val duration = inputField("Duração em minutos", InputType.TYPE_CLASS_NUMBER).apply { setText("90") }
-        val table = inputField("Número da mesa (opcional)", InputType.TYPE_CLASS_NUMBER)
-        val notes = multilineInputField("Notas úteis (opcional)")
-        listOf(
-            "Nome do cliente" to guest,
-            "Contacto" to phone,
-            "Número de pessoas" to party,
-            "Data e hora (dd/MM/aaaa HH:mm)" to date,
-            "Duração (minutos)" to duration,
-            "Mesa (opcional)" to table,
-            "Notas" to notes
-        ).forEach { (caption, field) ->
-            form.addView(label(caption, 11f, true, forestSoft))
-            form.addView(field, if (field === notes) multilineFieldParams() else fieldParams())
-            addGap(form, 5)
-        }
-        val scroll = ScrollView(this).apply { addView(form) }
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Nova reserva")
-            .setView(scroll)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Guardar", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val guestName = guest.text.toString().trim()
-                val partySize = party.text.toString().trim().toIntOrNull()
-                val durationMinutes = duration.text.toString().trim().toIntOrNull()
-                val tableNumber = table.text.toString().trim().takeIf { it.isNotBlank() }?.toIntOrNull()
-                val parsedDate = runCatching {
-                    SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "PT")).apply { isLenient = false }
-                        .parse(date.text.toString().trim())
-                }.getOrNull()
-                when {
-                    guestName.isBlank() || guestName.length > 100 -> guest.error = "Indica um nome (máximo 100 caracteres)."
-                    partySize == null || partySize !in 1..60 -> party.error = "Usa um número entre 1 e 60."
-                    durationMinutes == null || durationMinutes !in 30..480 -> duration.error = "Usa 30 a 480 minutos."
-                    parsedDate == null || parsedDate.time < System.currentTimeMillis() -> date.error = "Indica uma data futura válida."
-                    table.text.toString().isNotBlank() && (tableNumber == null || tableNumber !in 1..100) -> table.error = "Usa uma mesa entre 1 e 100."
-                    notes.text.toString().length > 1000 -> notes.error = "Máximo de 1000 caracteres."
-                    else -> {
-                        val reservationAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).format(parsedDate)
-                        val normalizedPhone = phone.text.toString().trim()
-                        val normalizedNotes = notes.text.toString().trim()
-                        val restaurantId = backendRestaurantId()
-                        val signature = JSONObject()
-                            .put("restaurant_id", restaurantId)
-                            .put("guest_name", guestName)
-                            .put("guest_phone", normalizedPhone)
-                            .put("party_size", partySize)
-                            .put("reservation_at", reservationAt)
-                            .put("duration_minutes", durationMinutes)
-                            .put("table_number", tableNumber ?: JSONObject.NULL)
-                            .put("notes", normalizedNotes)
-                            .toString()
-                        // If the server committed but the reply was lost, the same payload
-                        // reuses its UUID; changed form data receives a different UUID.
-                        val requestOperation = "reservation_create"
-                        val requestAccountId = backendPrefs.getString("user_id", "").orEmpty()
-                        val requestId = try {
-                            pendingRequestIds.getOrCreate(requestOperation, requestAccountId, signature)
-                        } catch (_: Exception) {
-                            notes.error = "Não foi possível guardar a referência segura. Tenta novamente."
-                            return@setOnClickListener
-                        }
-                        runBackend({
-                            SupabaseApi.createReservation(
-                                backendToken(), requestId, restaurantId, guestName,
-                                normalizedPhone, partySize, reservationAt, durationMinutes,
-                                tableNumber, normalizedNotes
-                            )
-                            val latest = SupabaseApi.listReservations(backendToken(), restaurantId)
-                            reservationCache = latest
-                            reservationsLoaded = true
-                            "OK"
-                        }) {
-                            // Close the form only after the server confirmed the save.
-                            // If the request fails, runBackend shows the error and the
-                            // user's entered reservation details remain available to retry.
-                            dialog.dismiss()
-                            renderApp()
-                            pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
-                        }
-                    }
-                }
-            }
-        }
-        dialog.show()
-        dialog.window?.setLayout(-1, dp(590))
-    }
-
-    private fun renderStock(container: LinearLayout) {
-        pageIntro(container, "Stock e inventário", "Quantidades, níveis mínimos e histórico de movimentos.")
+    private fun renderTables(container: LinearLayout) {
+        pageIntro(container, "Mesas", if (hasRemoteRestaurant())
+            "Estado, zona e capacidade partilhados pela equipa."
+        else "Toca numa mesa para alternar entre livre e ocupada.")
         addGap(container, 8)
-        if (!hasRemoteRestaurant()) {
-            container.addView(emptyCard("O inventário partilhado exige uma conta autenticada e um restaurante configurado na secção Conta."))
-            return
-        }
-        container.addView(primaryButton("+  Adicionar artigo de stock") { showInventoryItemDialog(null) },
-            LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(container, 6)
-        container.addView(secondaryButton("Atualizar stock") { refreshInventoryItems() },
-            LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(container, 12)
 
-        if (!backendPrefs.getBoolean("inventory_loaded", false)) {
-            container.addView(emptyCard("A carregar o inventário do servidor…"))
-            refreshInventoryItems()
-            return
-        }
-        val items = remoteInventoryItems()
-        if (items.length() == 0) {
-            container.addView(emptyCard("Ainda não há artigos de stock. Adiciona ingredientes, bebidas ou consumíveis e define um limite mínimo."))
-            return
-        }
-        var lowCount = 0
-        for (index in 0 until items.length()) {
-            val item = items.optJSONObject(index) ?: continue
-            val id = item.optString("id")
-            val name = item.optString("name", "Artigo")
-            val unit = item.optString("unit", "unidades")
-            val quantity = item.optDouble("quantity", 0.0)
-            val threshold = item.optDouble("low_stock_threshold", 0.0)
-            val isLow = quantity <= threshold
-            if (isLow) lowCount++
-            val card = makeCard(15)
-            val top = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
+        if (hasRemoteRestaurant()) {
+            container.addView(primaryButton("+  Adicionar mesa") { showAddTableDialog() },
+                LinearLayout.LayoutParams(-1, dp(48)))
+            addGap(container, 6)
+            container.addView(secondaryButton("Atualizar do servidor") { refreshRemoteOperations() },
+                LinearLayout.LayoutParams(-1, dp(48)))
+            addGap(container, 10)
+
+            val tableData = remoteTables()
+            if (tableData.length() == 0) {
+                container.addView(emptyCard("Ainda não existem mesas sincronizadas. Atualiza os dados ou volta a iniciar sessão."))
+                return
             }
-            top.addView(label(name, 16f, true, forestDeep), LinearLayout.LayoutParams(0, -2, 1f))
-            if (isLow) {
-                top.addView(label(if (quantity <= 0.0) "Esgotado" else "Stock baixo", 9.5f, true, red).apply {
-                    setPadding(dp(8), dp(6), dp(8), dp(6))
-                    background = rounded(paleRed, 10)
+
+            for (index in 0 until tableData.length() step 2) {
+                val first = tableData.optJSONObject(index) ?: continue
+                val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                row.addView(remoteTableCard(
+                    first.optString("id"),
+                    first.optInt("table_number", index + 1),
+                    first.optBoolean("is_occupied", false),
+                    first.optString("area", "Sala principal"),
+                    first.optInt("seats", 2)
+                ), LinearLayout.LayoutParams(0, -2, 1f).apply {
+                    setMargins(0, 0, dp(6), dp(10))
                 })
+                if (index + 1 < tableData.length()) {
+                    val second = tableData.optJSONObject(index + 1)
+                    if (second != null) {
+                        row.addView(remoteTableCard(
+                            second.optString("id"),
+                            second.optInt("table_number", index + 2),
+                            second.optBoolean("is_occupied", false),
+                            second.optString("area", "Sala principal"),
+                            second.optInt("seats", 2)
+                        ), LinearLayout.LayoutParams(0, -2, 1f).apply {
+                            setMargins(dp(6), 0, 0, dp(10))
+                        })
+                    } else {
+                        row.addView(View(this), LinearLayout.LayoutParams(0, dp(1), 1f))
+                    }
+                } else {
+                    row.addView(View(this), LinearLayout.LayoutParams(0, dp(1), 1f))
+                }
+                container.addView(row)
             }
-            card.addView(top)
-            addGap(card, 8)
-            card.addView(label("${formatQuantity(quantity)} $unit", 22f, true, if (isLow) red else forest))
-            card.addView(label("Alerta a ${formatQuantity(threshold)} $unit", 11.5f, false, muted))
-            addGap(card, 10)
-            card.addView(secondaryButton("Editar artigo e limite") { showInventoryItemDialog(item) },
-                LinearLayout.LayoutParams(-1, dp(48)))
-            addGap(card, 5)
-            val buttons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            buttons.addView(secondaryButton("+ Entrada") { showStockAdjustmentDialog(id, name, unit, true) },
-                LinearLayout.LayoutParams(0, dp(48), 1f).apply { setMargins(0, 0, dp(4), 0) })
-            buttons.addView(secondaryButton("− Saída") { showStockAdjustmentDialog(id, name, unit, false) },
-                LinearLayout.LayoutParams(0, dp(48), 1f).apply { setMargins(dp(4), 0, 0, 0) })
-            card.addView(buttons)
-            addGap(card, 5)
-            card.addView(secondaryButton("Ver histórico de movimentos") { showInventoryMovements(id, name) },
-                LinearLayout.LayoutParams(-1, dp(48)))
-            container.addView(card, cardParams())
-        }
-        val summary = makeCard(13, if (lowCount > 0) paleRed else paleGreen)
-        summary.addView(label(if (lowCount > 0) "$lowCount artigo(s) no limite mínimo ou abaixo dele" else "Todos os artigos acima dos respetivos limites", 12.5f, true, if (lowCount > 0) red else forest))
-        container.addView(summary, cardParams())
-    }
-
-    private fun formatQuantity(value: Double): String =
-        String.format(Locale("pt", "PT"), "%.3f", value).trimEnd('0').trimEnd(',')
-
-    private fun showInventoryItemDialog(item: JSONObject?) {
-        if (!hasRemoteRestaurant()) {
-            AlertDialog.Builder(this).setMessage("Liga primeiro o restaurante na secção Conta.")
-                .setPositiveButton("OK", null).show()
+            container.addView(label("Mesas numeradas até 100. As zonas e os lugares podem ser configurados para refletir a organização real do restaurante.", 12f, false, muted))
             return
         }
-        val form = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(8), dp(18), dp(10))
+
+        val legend = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
         }
-        val name = inputField("Nome do artigo", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES).apply {
-            setText(item?.optString("name", "").orEmpty())
+        legend.addView(statusDot(green), LinearLayout.LayoutParams(dp(8), dp(8)))
+        legend.addView(label("  Livre", 12f, false, muted))
+        addGap(legend, 1)
+        legend.addView(statusDot(red), LinearLayout.LayoutParams(dp(8), dp(8)))
+        legend.addView(label("  Ocupada", 12f, false, muted))
+        container.addView(legend)
+        addGap(container, 14)
+
+        for (table in 1..12 step 2) {
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            row.addView(tableCard(table), LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), dp(10)) })
+            row.addView(tableCard(table + 1), LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, dp(10)) })
+            container.addView(row)
         }
-        val unit = inputField("Unidade (kg, L, unidades…)", InputType.TYPE_CLASS_TEXT).apply {
-            setText(item?.optString("unit", "unidades") ?: "unidades")
-        }
-        val quantity = inputField("Quantidade atual", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL).apply {
-            setText(formatQuantity(item?.optDouble("quantity", 0.0) ?: 0.0))
-        }
-        val threshold = inputField("Avisar quando for igual ou inferior a", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL).apply {
-            setText(formatQuantity(item?.optDouble("low_stock_threshold", 0.0) ?: 0.0))
-        }
-        val note = inputField("Motivo (opcional)", InputType.TYPE_CLASS_TEXT).apply { setText(if (item == null) "Stock inicial" else "Correção de inventário") }
-        listOf(
-            "Nome" to name,
-            "Unidade" to unit,
-            "Quantidade" to quantity,
-            "Limite mínimo" to threshold,
-            "Nota do movimento" to note
-        ).forEach { (caption, field) ->
-            form.addView(label(caption, 11f, true, forestSoft))
-            form.addView(field, fieldParams())
-            addGap(form, 5)
-        }
-        val dialog = AlertDialog.Builder(this)
-            .setTitle(if (item == null) "Novo artigo de stock" else "Editar artigo de stock")
-            .setView(form)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Guardar", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val itemName = name.text.toString().trim()
-                val itemUnit = unit.text.toString().trim()
-                val qtyText = quantity.text.toString().trim().replace(',', '.')
-                val lowText = threshold.text.toString().trim().replace(',', '.')
-                val qty = qtyText.toDoubleOrNull()
-                val low = lowText.toDoubleOrNull()
-                when {
-                    itemName.isBlank() || itemName.length > 100 -> name.error = "Indica um nome até 100 caracteres."
-                    itemUnit.isBlank() || itemUnit.length > 24 -> unit.error = "Indica uma unidade até 24 caracteres."
-                    qty == null || !qty.isFinite() || qty < 0 || qty > 999999999 -> quantity.error = "Quantidade inválida."
-                    !StockDecimalValidator.hasAtMostThreeDecimalPlaces(qtyText) -> quantity.error = "Usa no máximo três casas decimais."
-                    low == null || !low.isFinite() || low < 0 || low > 999999999 -> threshold.error = "Limite inválido."
-                    !StockDecimalValidator.hasAtMostThreeDecimalPlaces(lowText) -> threshold.error = "Usa no máximo três casas decimais."
-                    note.text.toString().length > 500 -> note.error = "Máximo de 500 caracteres."
-                    else -> {
-                        val restaurantId = backendRestaurantId()
-                        val itemNote = note.text.toString().trim()
-                        val requestOperation = "stock_item_create"
-                        val requestAccountId = backendPrefs.getString("user_id", "").orEmpty()
-                        val signature = if (item == null) {
-                            JSONObject()
-                                .put("restaurant_id", restaurantId)
-                                .put("name", itemName)
-                                .put("unit", itemUnit)
-                                .put("quantity", qty)
-                                .put("low_stock_threshold", low)
-                                .put("note", itemNote)
-                                .toString()
-                        } else ""
-                        val requestId = if (item == null) {
-                            try {
-                                pendingRequestIds.getOrCreate(requestOperation, requestAccountId, signature)
-                            } catch (_: Exception) {
-                                name.error = "Não foi possível guardar a referência segura. Tenta novamente."
-                                return@setOnClickListener
-                            }
-                        } else null
-                        runBackend({
-                            val token = backendToken()
-                            if (item == null) {
-                                SupabaseApi.createInventoryItem(
-                                    token, requireNotNull(requestId), restaurantId,
-                                    itemName, itemUnit, qty, low, itemNote
-                                )
-                            } else {
-                                SupabaseApi.saveInventoryItem(
-                                    token, restaurantId, item.optString("id"),
-                                    itemName, itemUnit, qty, low, itemNote
-                                )
-                            }
-                            val latest = SupabaseApi.listInventoryItems(token, restaurantId)
-                            backendPrefs.edit().putString("remote_inventory_json", latest.toString())
-                                .putBoolean("inventory_loaded", true).apply()
-                            "OK"
-                        }) {
-                            dialog.dismiss()
-                            renderApp()
-                            if (requestId != null) {
-                                pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        dialog.show()
-        dialog.window?.setLayout(-1, dp(520))
+        addGap(container, 3)
+        container.addView(label("O modo de demonstração local inclui 12 mesas. Configura um restaurante para gerir a planta no servidor.", 12f, false, muted))
     }
 
-    private fun showStockAdjustmentDialog(itemId: String, itemName: String, unit: String, isInbound: Boolean) {
+    private fun remoteTableCard(
+        tableId: String,
+        tableNumber: Int,
+        occupied: Boolean,
+        area: String,
+        seats: Int
+    ): LinearLayout {
+        val card = makeCard(14, if (occupied) paleRed else white)
+        card.addView(label("Mesa  " + tableNumber.toString().padStart(2, '0'), 10f, true, muted))
+        addGap(card, 8)
+        card.addView(label(if (occupied) "Ocupada" else "Livre", 18f, true, if (occupied) red else forest))
+        addGap(card, 4)
+        card.addView(label(area, 12f, true, forestSoft))
+        card.addView(label("$seats lugares", 11f, false, muted))
+        addGap(card, 9)
+        card.addView(label(if (occupied) "MARCAR LIVRE" else "MARCAR OCUPADA", 9f, true, if (occupied) red else green).apply {
+            setPadding(dp(7), dp(6), dp(7), dp(6))
+            gravity = Gravity.CENTER
+            background = rounded(if (occupied) Color.rgb(255, 246, 243) else paleGreen, 12)
+        })
+        addGap(card, 5)
+        card.addView(secondaryButton("Editar zona / lugares") {
+            showEditTableDialog(tableId, tableNumber, area, seats)
+        }, LinearLayout.LayoutParams(-1, dp(38)))
+        card.isClickable = true
+        card.isFocusable = true
+        card.setOnClickListener {
+            if (tableId.isBlank()) return@setOnClickListener
+            runBackend({
+                val token = backendToken()
+                SupabaseApi.updateTable(token, tableId, !occupied)
+                cacheRemoteOperations(token, backendRestaurantId())
+                "OK"
+            }) { renderApp() }
+        }
+        return card
+    }
+
+    private fun showAddTableDialog() {
+        if (!hasRemoteRestaurant()) return
+        val existing = remoteTables()
+        val usedNumbers = (0 until existing.length()).mapNotNull {
+            existing.optJSONObject(it)?.optInt("table_number")
+        }.toSet()
+        val nextNumber = (1..100).firstOrNull { it !in usedNumbers } ?: 0
+
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(8), dp(18), dp(10))
+            setPadding(dp(22), dp(10), dp(22), dp(4))
         }
-        val amount = inputField("Quantidade", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
-        val note = inputField("Nota (opcional)", InputType.TYPE_CLASS_TEXT).apply {
-            setText(if (isInbound) "Entrada de stock" else "Consumo/quebra")
+        val numberField = inputField("Número da mesa (1–100)", InputType.TYPE_CLASS_NUMBER).apply {
+            if (nextNumber > 0) setText(nextNumber.toString())
         }
-        form.addView(label("Artigo: $itemName", 12f, true, forest))
-        addGap(form, 8)
-        form.addView(label("Quantidade a ${if (isInbound) "adicionar" else "retirar"} ($unit)", 11f, true, forestSoft))
-        form.addView(amount, fieldParams())
-        addGap(form, 5)
-        form.addView(label("Regista a razão para manter um histórico útil.", 11f, false, muted))
-        form.addView(note, fieldParams())
+        val areaField = inputField("Zona: Sala principal, Terraço…", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES).apply {
+            setText("Sala principal")
+        }
+        val seatsField = inputField("Número de lugares (1–30)", InputType.TYPE_CLASS_NUMBER).apply {
+            setText("2")
+        }
+        form.addView(label("Número", 10f, true, forestSoft)); form.addView(numberField, fieldParams())
+        addGap(form, 2)
+        form.addView(label("Zona", 10f, true, forestSoft)); form.addView(areaField, fieldParams())
+        addGap(form, 2)
+        form.addView(label("Capacidade", 10f, true, forestSoft)); form.addView(seatsField, fieldParams())
+
         val dialog = AlertDialog.Builder(this)
-            .setTitle(if (isInbound) "Entrada de stock" else "Saída de stock")
+            .setTitle("Adicionar mesa")
+            .setMessage("Define o número, a zona e a capacidade para a planta do restaurante.")
             .setView(form)
             .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Registar", null)
+            .setPositiveButton("Adicionar", null)
             .create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val rawValue = amount.text.toString().trim().replace(',', '.')
-                val value = rawValue.toDoubleOrNull()
-                if (value == null || !value.isFinite() || value <= 0 || value > 999999999) {
-                    amount.error = "Indica uma quantidade positiva válida."
-                } else if (!StockDecimalValidator.hasAtMostThreeDecimalPlaces(rawValue)) {
-                    amount.error = "Usa no máximo três casas decimais."
-                } else if (note.text.toString().length > 500) {
-                    note.error = "Máximo de 500 caracteres."
-                } else {
-                    val delta = if (isInbound) value else -value
-                    val normalizedNote = note.text.toString().trim().take(500)
-                    val restaurantId = backendRestaurantId()
-                    val signature = JSONObject()
-                        .put("restaurant_id", restaurantId)
-                        .put("item_id", itemId)
-                        .put("delta", delta)
-                        .put("note", normalizedNote)
-                        .toString()
-                    val requestOperation = "stock_adjust"
-                    val requestAccountId = backendPrefs.getString("user_id", "").orEmpty()
-                    val requestId = try {
-                        pendingRequestIds.getOrCreate(requestOperation, requestAccountId, signature)
-                    } catch (_: Exception) {
-                        amount.error = "Não foi possível guardar a referência segura. Tenta novamente."
-                        return@setOnClickListener
-                    }
-                    runBackend({
-                        SupabaseApi.adjustInventoryStock(
-                            backendToken(), restaurantId, itemId, delta, normalizedNote, requestId
-                        )
-                        val latest = SupabaseApi.listInventoryItems(backendToken(), restaurantId)
-                        backendPrefs.edit().putString("remote_inventory_json", latest.toString())
-                            .putBoolean("inventory_loaded", true).apply()
+                val number = numberField.text.toString().trim().toIntOrNull()
+                val area = areaField.text.toString().trim()
+                val seats = seatsField.text.toString().trim().toIntOrNull()
+                when {
+                    number == null || number !in 1..100 -> numberField.error = "Usa um número entre 1 e 100"
+                    number in usedNumbers -> numberField.error = "Esse número já está em uso"
+                    area.isBlank() || area.length > 80 -> areaField.error = "Introduz uma zona com 1 a 80 caracteres"
+                    seats == null || seats !in 1..30 -> seatsField.error = "Usa entre 1 e 30 lugares"
+                    else -> runBackend({
+                        val token = backendToken()
+                        val restaurantId = backendRestaurantId()
+                        SupabaseApi.addTable(token, restaurantId, number, area, seats)
+                        cacheRemoteOperations(token, restaurantId)
                         "OK"
                     }) {
                         dialog.dismiss()
                         renderApp()
-                        pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
+                    }
+                }
+            }
+        }
+        dialog.show()
+        if (nextNumber == 0) {
+            numberField.error = "Já foram usados os números de mesa de 1 a 100"
+        }
+    }
+
+    private fun showEditTableDialog(tableId: String, tableNumber: Int, currentArea: String, currentSeats: Int) {
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(10), dp(22), dp(4))
+        }
+        val areaField = inputField("Zona da mesa", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES).apply {
+            setText(currentArea)
+        }
+        val seatsField = inputField("Número de lugares (1–30)", InputType.TYPE_CLASS_NUMBER).apply {
+            setText(currentSeats.toString())
+        }
+        form.addView(label("Mesa " + tableNumber.toString().padStart(2, '0'), 11f, true, forestSoft))
+        addGap(form, 5)
+        form.addView(label("Zona", 10f, true, forestSoft)); form.addView(areaField, fieldParams())
+        addGap(form, 2)
+        form.addView(label("Capacidade", 10f, true, forestSoft)); form.addView(seatsField, fieldParams())
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Configurar mesa")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Guardar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val area = areaField.text.toString().trim()
+                val seats = seatsField.text.toString().trim().toIntOrNull()
+                when {
+                    area.isBlank() || area.length > 80 -> areaField.error = "Introduz uma zona com 1 a 80 caracteres"
+                    seats == null || seats !in 1..30 -> seatsField.error = "Usa entre 1 e 30 lugares"
+                    else -> runBackend({
+                        val token = backendToken()
+                        SupabaseApi.updateTableDetails(token, tableId, tableNumber, area, seats)
+                        cacheRemoteOperations(token, backendRestaurantId())
+                        "OK"
+                    }) {
+                        dialog.dismiss()
+                        renderApp()
                     }
                 }
             }
@@ -3433,1124 +3116,1472 @@ class MainActivity : Activity() {
         dialog.show()
     }
 
-    private fun showInventoryMovements(itemId: String, itemName: String) {
+
+
+    private fun tableCard(table: Int): LinearLayout {
+        val occupied = store.isTableOccupied(table)
+        val card = makeCard(15, if (occupied) paleRed else white)
+        card.addView(label("Mesa  " + table.toString().padStart(2, '0'), 10f, true, muted))
+        addGap(card, 11)
+        card.addView(label(if (occupied) "Ocupada" else "Livre", 18f, true, if (occupied) red else forest))
+        addGap(card, 8)
+        val badge = label(if (occupied) "MARCAR LIVRE" else "MARCAR OCUPADA", 9f, true, if (occupied) red else green).apply {
+            setPadding(dp(7), dp(6), dp(7), dp(6))
+            gravity = Gravity.CENTER
+            background = rounded(if (occupied) Color.rgb(255, 246, 243) else paleGreen, 12)
+        }
+        card.addView(badge)
+        card.isClickable = true
+        card.isFocusable = true
+        card.setOnClickListener {
+            store.setTableOccupied(table, !occupied)
+            renderApp()
+        }
+        return card
+    }
+
+    private fun showOrderHistory(orderId: String) {
+        if (orderId.isBlank() || !hasRemoteRestaurant()) return
         runBackend({
-            SupabaseApi.listInventoryMovements(backendToken(), itemId).toString()
-        }) { raw ->
-            val rows = JSONArray(raw)
-            if (rows.length() == 0) {
-                AlertDialog.Builder(this).setTitle("Histórico · $itemName")
-                    .setMessage("Ainda não há movimentos registados.")
-                    .setPositiveButton("OK", null).show()
-                return@runBackend
-            }
-            val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "PT"))
-            val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US)
-            val message = buildString {
-                for (index in 0 until rows.length()) {
-                    val row = rows.optJSONObject(index) ?: continue
-                    val delta = row.optDouble("delta", 0.0)
-                    val date = runCatching { dateFormat.format(isoFormat.parse(row.optString("created_at")) ?: Date()) }
-                        .getOrElse { row.optString("created_at").take(16) }
-                    append(date).append(" · ")
-                    append(if (delta > 0) "+" else "").append(formatQuantity(delta))
-                    append(" → saldo ").append(formatQuantity(row.optDouble("quantity_after", 0.0)))
-                    val noteText = row.optString("note").trim()
-                    if (noteText.isNotBlank()) append(" · ").append(noteText)
-                    if (index < rows.length() - 1) append('\n')
+            val events = SupabaseApi.listOrderEvents(backendToken(), orderId)
+            if (events.length() == 0) {
+                "Ainda não há eventos de histórico para este pedido."
+            } else {
+                buildString {
+                    for (index in 0 until events.length()) {
+                        val event = events.optJSONObject(index) ?: continue
+                        val type = event.optString("event_type")
+                        val oldStatus = event.optString("old_status")
+                        val newStatus = event.optString("new_status")
+                        val description = when (type) {
+                            "created" -> "Pedido criado · estado inicial: " + newStatus.ifBlank { "Aberto" }
+                            "status_changed" -> (oldStatus.ifBlank { "—" }) + " → " + newStatus.ifBlank { "—" }
+                            else -> "Evento registado: " + type
+                        }
+                        val timestamp = event.optString("created_at")
+                        val readableTime = timestamp.replace('T', ' ').take(19)
+                        val zone = when {
+                            timestamp.endsWith("Z") || timestamp.endsWith("+00:00") -> " UTC"
+                            timestamp.matches(Regex(".*[+-]\\d{2}:\\d{2}$")) -> " " + timestamp.takeLast(6)
+                            else -> ""
+                        }
+                        append(readableTime).append(zone).append("\n")
+                        append(description)
+                        val actor = event.optString("actor_user_id")
+                        if (actor.isNotBlank()) append("\nConta: …").append(actor.takeLast(8))
+                        if (index < events.length() - 1) append("\n\n")
+                    }
                 }
             }
-            AlertDialog.Builder(this).setTitle("Histórico · $itemName")
-                .setMessage(message)
+        }) { history ->
+            val textView = TextView(this).apply {
+                text = history
+                textSize = 13f
+                setTextColor(ink)
+                setPadding(dp(20), dp(12), dp(20), dp(12))
+                setLineSpacing(dp(3).toFloat(), 1.0f)
+            }
+            val scroll = ScrollView(this).apply { addView(textView) }
+            AlertDialog.Builder(this)
+                .setTitle("Histórico do pedido")
+                .setView(scroll)
                 .setPositiveButton("Fechar", null)
                 .show()
         }
     }
 
-    private fun assistantSnapshot(): StudioMesaAssistantSnapshot {
-        val remote = hasRemoteRestaurant()
-        val menu = (if (remote) remoteMenuEntries() else store.getMenu()).map { item ->
-            AssistantMenuItem(
-                name = item.name,
-                sellingPrice = item.price.takeIf { it.isFinite() && it > 0.0 }?.let { BigDecimal.valueOf(it) } ?: BigDecimal.ZERO,
-                unitCost = item.cost.takeIf { it.isFinite() && it > 0.0 }?.let { BigDecimal.valueOf(it) } ?: BigDecimal.ZERO,
-                category = item.category,
-                description = item.description
-            )
-        }
-        val statuses: List<String> = if (remote) {
-            val orders = remoteOrders()
-            (0 until orders.length()).mapNotNull { orders.optJSONObject(it)?.optString("status", "Aberto") }
-        } else {
-            store.getOrders().map { it.status }
-        }
-        val active = statuses.count { it !in setOf("Concluído", "Cancelado") }
-        val preparing = statuses.count { it == "Em preparação" }
-        val stockLoaded = isPremium && remote && backendPrefs.getBoolean("inventory_loaded", false)
-        val stockItems = if (stockLoaded) {
-            val items = remoteInventoryItems()
-            (0 until items.length()).mapNotNull { index ->
-                val item = items.optJSONObject(index) ?: return@mapNotNull null
-                val name = item.optString("name").trim()
-                if (name.isBlank()) return@mapNotNull null
-                val quantity = item.optDouble("quantity", 0.0)
-                val minimum = item.optDouble("low_stock_threshold", 0.0)
-                if (!quantity.isFinite() || !minimum.isFinite()) return@mapNotNull null
-                AssistantStockItem(name, BigDecimal.valueOf(quantity), BigDecimal.valueOf(minimum))
+    private fun confirmCancelOrder(orderId: String, tableNumber: Int, itemName: String) {
+        AlertDialog.Builder(this)
+            .setTitle("Cancelar pedido?")
+            .setMessage("Mesa $tableNumber · $itemName\n\nO cancelamento ficará registado no histórico do pedido.")
+            .setNegativeButton("Manter pedido", null)
+            .setPositiveButton("Cancelar pedido") { _, _ ->
+                runBackend({
+                    val token = backendToken()
+                    SupabaseApi.updateOrder(token, orderId, "Cancelado")
+                    cacheRemoteOperations(token, backendRestaurantId())
+                    "OK"
+                }) { renderApp() }
             }
-        } else emptyList()
-        val reservationsAreLoaded = hasCalculator && remote && reservationsLoaded
-        val pendingReservations = if (reservationsAreLoaded) {
-            (0 until remoteReservations().length()).count { index ->
-                remoteReservations().optJSONObject(index)?.optString("status") == "Pendente"
-            }
-        } else 0
-        val salesLines = if (remote) {
-            val orders = remoteOrders()
-            (0 until orders.length()).mapNotNull { index ->
-                val order = orders.optJSONObject(index) ?: return@mapNotNull null
-                AssistantSaleLine(
-                    itemName = order.optString("item_name").trim(),
-                    quantity = order.optInt("quantity", 1),
-                    status = order.optString("status", "Aberto")
-                ).takeIf { it.itemName.isNotBlank() }
-            }
-        } else {
-            store.getOrders().map { AssistantSaleLine(it.itemName, it.quantity, it.status) }
-        }
-        return StudioMesaAssistantSnapshot(
-            isDemo = !remote,
-            restaurantConfigured = remote,
-            menuItems = menu,
-            activeOrderCount = active,
-            preparationOrderCount = preparing,
-            stockFeatureAvailable = isPremium,
-            stockLoaded = stockLoaded,
-            stockItems = stockItems,
-            reservationsFeatureAvailable = hasCalculator,
-            reservationsLoaded = reservationsAreLoaded,
-            pendingReservations = pendingReservations,
-            salesLines = salesLines
-        )
+            .show()
     }
 
-    private fun assistantActionTarget(page: String?): String? {
-        if (page.isNullOrBlank()) return null
-        val target = if (page == "Preço Justo" && page !in availablePages()) "Carta" else page
-        return target.takeIf { it in availablePages() }
-    }
-
-    private fun renderAssistant(container: LinearLayout) {
-        val snapshot = assistantSnapshot()
-        pageIntro(container, "Assistente StudioMesa", "Apoio à operação com os dados que já estão disponíveis.")
-        addGap(container, 8)
-
-        val privacyCard = makeCard(15, forest)
-        privacyCard.addView(label("ASSISTENTE LOCAL · SEM API PAGA", 10f, true, copper))
-        addGap(privacyCard, 5)
-        privacyCard.addView(label(
-            "As análises são calculadas neste dispositivo. As perguntas não são enviadas nem guardadas como histórico. Esta versão usa regras e cálculos locais, não um modelo generativo; não altera registos por ti.",
-            12.5f, false, white
-        ))
-        container.addView(privacyCard, cardParams())
-
-        addGap(container, 9)
-        renderEconomicManager(container)
-
-        addGap(container, 5)
-        sectionHeading(container, "Pergunta ao assistente", "Experimenta perguntar sobre custos, preços, pedidos, stock, reservas ou um problema de sincronização.")
-        val questionField = multilineInputField("Ex.: Como posso melhorar o preço dos pratos?")
-        questionField.setText(assistantQuestion)
-        container.addView(questionField, multilineFieldParams())
-        container.addView(primaryButton("Analisar pergunta") {
-            assistantQuestion = questionField.text.toString().trim().take(400)
-            assistantAnswer = StudioMesaAdvisor.answerQuestion(assistantQuestion, snapshot)
-            renderApp()
-        }, LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(container, 5)
-        container.addView(secondaryButton("Gerar resumo da operação") {
-            // Keep the user's question intact; the briefing is a separate action.
-            assistantAnswer = StudioMesaAdvisor.dailyBriefing(assistantSnapshot())
-            renderApp()
-        }, LinearLayout.LayoutParams(-1, dp(46)))
-        addGap(container, 12)
-
-        assistantAnswer?.let { answer ->
-            val answerCard = makeCard(16, copperPale)
-            answerCard.addView(label(answer.title, 17f, true, forestDeep))
-            addGap(answerCard, 7)
-            answerCard.addView(label(answer.response, 12.5f, false, ink))
-            assistantActionTarget(answer.actionPage)?.let { target ->
-                addGap(answerCard, 10)
-                answerCard.addView(secondaryButton("Abrir " + target) {
-                    activePage = target
-                    renderApp()
-                }, LinearLayout.LayoutParams(-1, dp(44)))
-            }
-            container.addView(answerCard, cardParams())
-            addGap(container, 6)
+    private fun renderOrders(container: LinearLayout) {
+        pageIntro(container, "Pedidos", if (hasRemoteRestaurant())
+            "Pedidos partilhados com o resto da equipa."
+        else "Registo simples de pedidos por mesa.")
+        addGap(container, 10)
+        if (hasRemoteRestaurant()) {
+            container.addView(secondaryButton("Atualizar do servidor") { refreshRemoteOperations() },
+                LinearLayout.LayoutParams(-1, dp(48)))
+            addGap(container, 7)
         }
-
-        sectionHeading(container, "Sugestões para rever", "Prioridades estimadas. Confirma os dados e decide antes de alterar qualquer coisa.")
-        StudioMesaAdvisor.recommendations(snapshot).forEach { recommendation ->
-            val (priorityText, textColor, backColor) = when (recommendation.priority) {
-                AssistantPriority.URGENT -> Triple("PRIORIDADE ALTA", red, paleRed)
-                AssistantPriority.ATTENTION -> Triple("A REVER", forestDeep, copperPale)
-                AssistantPriority.TIP -> Triple("SUGESTÃO", forestSoft, paleGreen)
-            }
-            val card = makeCard(15)
-            card.addView(label(priorityText, 9f, true, textColor).apply {
-                setPadding(dp(8), dp(5), dp(8), dp(5))
-                background = rounded(backColor, 10)
-            }, LinearLayout.LayoutParams(-2, -2))
-            addGap(card, 8)
-            card.addView(label(recommendation.title, 16f, true, forestDeep))
-            addGap(card, 5)
-            card.addView(label(recommendation.detail, 12.5f, false, muted))
-            assistantActionTarget(recommendation.actionPage)?.let { target ->
-                addGap(card, 10)
-                card.addView(secondaryButton("Abrir " + target) {
-                    activePage = target
-                    renderApp()
-                }, LinearLayout.LayoutParams(-1, dp(44)))
-            }
-            container.addView(card, cardParams())
-        }
-        sectionHeading(container, "Engenharia da carta", "Combina unidades de pedidos concluídos com a contribuição estimada por artigo.")
-        val engineering = StudioMesaAdvisor.menuEngineering(snapshot)
-        if (!engineering.hasEnoughSales) {
-            container.addView(emptyCard(
-                "Ainda não há pelo menos ${engineering.requiredUnits} unidades concluídas que correspondam aos artigos atuais (${engineering.completedUnits} encontradas). A análise não inventa popularidade."
-            ), cardParams())
-        } else {
-            if (!engineering.hasMarginData) {
-                container.addView(emptyCard("Existem vendas, mas faltam custos válidos nos artigos vendidos para comparar a contribuição. Confirma os custos na Carta."), cardParams())
-            }
-            engineering.items.forEach { item ->
-                val title = when (item.classification) {
-                    MenuEngineeringClass.STAR -> "ESTRELA"
-                    MenuEngineeringClass.WORKHORSE -> "POPULAR · REVER MARGEM"
-                    MenuEngineeringClass.PUZZLE -> "MARGEM ALTA · REVER PROCURA"
-                    MenuEngineeringClass.DOG -> "REVER ARTIGO"
-                    MenuEngineeringClass.MISSING_COST -> "CUSTO EM FALTA"
-                }
-                val backColor = when (item.classification) {
-                    MenuEngineeringClass.STAR -> paleGreen
-                    MenuEngineeringClass.WORKHORSE, MenuEngineeringClass.PUZZLE -> copperPale
-                    MenuEngineeringClass.DOG, MenuEngineeringClass.MISSING_COST -> paleRed
-                }
-                val card = makeCard(14)
-                card.addView(label(title, 9f, true, forestDeep).apply {
-                    setPadding(dp(8), dp(5), dp(8), dp(5))
-                    background = rounded(backColor, 10)
-                }, LinearLayout.LayoutParams(-2, -2))
-                addGap(card, 7)
-                card.addView(label(item.itemName, 16f, true, forestDeep))
-                addGap(card, 4)
-                card.addView(label(
-                    "${item.unitsSold} unidade(s) concluídas · ${item.popularitySharePercent}% das unidades correspondentes · contribuição atual: ${item.contributionPerUnit?.let { money(it) } ?: "custo em falta"} por unidade.",
-                    11.5f, true, muted
-                ))
-                addGap(card, 5)
-                card.addView(label(item.recommendation, 12.5f, false, ink))
-                container.addView(card, cardParams())
-            }
-            container.addView(label(
-                "Triagem com pedidos concluídos e preço/custo atuais; não é lucro contabilístico nem custo histórico e não inclui IVA, mão de obra, desperdício ou encargos.",
-                10.5f, false, muted
-            ))
-        }
-
-        sectionHeading(container, "Ideias de conteúdo", "Rascunhos para revisão; só usam nomes, descrições e preços registados na carta.")
-        val drafts = StudioMesaAdvisor.marketingDrafts(snapshot)
-        if (drafts.isEmpty()) {
-            container.addView(emptyCard("Adiciona artigos com nome e preço válidos para criar rascunhos."), cardParams())
-        } else {
-            drafts.forEach { draft ->
-                val card = makeCard(14)
-                card.addView(label(draft.itemName, 16f, true, forestDeep))
-                addGap(card, 6)
-                card.addView(label(draft.caption, 13f, false, ink))
-                addGap(card, 5)
-                card.addView(label(draft.basis, 10.5f, false, muted))
-                addGap(card, 8)
-                card.addView(secondaryButton("Copiar rascunho") {
-                    copyAssistantText(draft.caption)
-                }, LinearLayout.LayoutParams(-1, dp(44)))
-                container.addView(card, cardParams())
-            }
-        }
-
-        addGap(container, 4)
-        container.addView(label(
-            if (snapshot.isDemo) "Fonte atual: dados de demonstração locais. Liga um restaurante na secção Conta para analisar dados partilhados."
-            else "Fonte atual: dados guardados em cache pela aplicação. Confirma a última atualização antes de decidir; esta análise não verifica a conectividade em tempo real.",
-            11f, false, muted
-        ))
-    }
-
-
-    private fun renderEconomicManager(container: LinearLayout) {
-        if (hasRemoteRestaurant() && backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") {
-            sectionHeading(container, "Gestor económico · opcional", "Área de gestão financeira reservada ao proprietário.")
-            container.addView(emptyCard(
-                "Nesta conta, o gestor económico está disponível apenas para o proprietário do restaurante. Não são recolhidos nem guardados dados financeiros nesta secção."
-            ), cardParams())
-            return
-        }
-        sectionHeading(
-            container,
-            "Gestor económico · opcional",
-            "Para o proprietário que quer analisar custos, receitas, desperdício, tesouraria e compras. Só funciona quando é ativado."
-        )
-        val toggleCard = makeCard(14)
-        toggleCard.addView(label(
-            if (economicManagerEnabled) "Gestor económico ativo nesta sessão" else "Gestor económico desativado",
-            15f, true, forestDeep
-        ))
-        addGap(toggleCard, 5)
-        toggleCard.addView(label(
-            "Os valores introduzidos ficam apenas em memória durante esta sessão. Não são guardados, sincronizados nem enviados para a Internet.",
-            11.5f, false, muted
-        ))
-        addGap(toggleCard, 8)
-        toggleCard.addView(secondaryButton(
-            if (economicManagerEnabled) "Desativar e limpar os valores" else "Ativar gestão económica"
-        ) {
-            economicManagerEnabled = !economicManagerEnabled
-            economicInputs.clear()
-            economicReportText = ""
-            recipeReportText = ""
-            reorderReportText = ""
-            renderApp()
-        }, LinearLayout.LayoutParams(-1, dp(44)))
-        container.addView(toggleCard, cardParams())
-        if (!economicManagerEnabled) return
-
-        addGap(container, 6)
-        val financialCard = makeCard(15)
-        financialCard.addView(label("1 · Indicadores económicos mensais", 17f, true, forestDeep))
-        addGap(financialCard, 4)
-        financialCard.addView(label(
-            "Introduz valores do mesmo mês. Usa vendas sem IVA e custos reais do período; o resultado é uma estimativa de gestão, não contabilidade oficial.",
-            11.5f, false, muted
-        ))
-        addGap(financialCard, 8)
-        economicNumberField(financialCard, "sales", "Vendas mensais sem IVA (€)", "Ex.: 18000")
-        economicNumberField(financialCard, "food", "Custo alimentar realmente consumido, incluindo desperdício (€)", "Ex.: 5400")
-        economicNumberField(financialCard, "payroll", "Custo total mensal de pessoal, incluindo encargos (€)", "Ex.: 6200")
-        economicNumberField(financialCard, "fixed", "Outros custos fixos mensais (€)", "Renda, seguros, subscrições…")
-        economicNumberField(financialCard, "variable", "Outros custos variáveis mensais, sem comida e pessoal (€)", "Ex.: 450")
-        economicNumberField(
-            financialCard,
-            "foodTarget",
-            "Objetivo de custo alimentar (%) — 30% é apenas um valor de exemplo",
-            "Escolhe o objetivo adequado",
-            "30"
-        )
-        economicNumberField(financialCard, "waste", "Desperdício medido no período (€) — opcional", "Indicador; não será somado outra vez")
-        addGap(financialCard, 5)
-        financialCard.addView(label("Tesouraria para os próximos 30 dias · opcional", 14f, true, forestDeep))
-        financialCard.addView(label(
-            "Preenche os três campos para estimar saldo + recebimentos previstos − pagamentos a vencer. Não existe ligação bancária.",
-            11f, false, muted
-        ))
-        economicNumberField(financialCard, "cash", "Saldo de caixa/banco disponível (€)", "Ex.: 2500")
-        economicNumberField(financialCard, "receipts", "Recebimentos esperados nos próximos 30 dias (€)", "Ex.: 12000")
-        economicNumberField(financialCard, "due", "Pagamentos a vencer nos próximos 30 dias (€)", "Ex.: 10500")
-        addGap(financialCard, 5)
-        financialCard.addView(label("Histórico de vendas semanais · opcional", 14f, true, forestDeep))
-        financialCard.addView(label(
-            "Introduz 4 a 8 semanas comparáveis, da mais antiga para a mais recente, separadas por ponto e vírgula. Ex.: 4200; 4600; 4400; 5100. É apenas uma média simples.",
-            11f, false, muted
-        ))
-        economicTextField(financialCard, "weeks", "Vendas sem IVA por semana; separa os valores com ;")
-        addGap(financialCard, 8)
-        financialCard.addView(primaryButton("Calcular indicadores e alertas") {
-            economicReportText = try {
-                val sales = economicRequiredAmount("sales", "vendas mensais")
-                val food = economicRequiredAmount("food", "custo alimentar")
-                val payroll = economicRequiredAmount("payroll", "custo de pessoal")
-                val fixed = economicRequiredAmount("fixed", "custos fixos")
-                val variable = economicRequiredAmount("variable", "outros custos variáveis")
-                val target = economicRequiredAmount("foodTarget", "objetivo de custo alimentar")
-                val waste = economicInputs["waste"].orEmpty().trim().takeIf { it.isNotEmpty() }
-                    ?.let { RestaurantEconomicManager.parseNonNegative(it, "desperdício") }
-                val cashValues = listOf("cash", "receipts", "due").map { economicInputs[it].orEmpty().trim() }
-                if (cashValues.any { it.isNotEmpty() } && cashValues.any { it.isEmpty() }) {
-                    throw IllegalArgumentException("Para a tesouraria, preenche os três campos: saldo, recebimentos e pagamentos.")
-                }
-                val weeks = RestaurantEconomicManager.parseWeeklySales(economicInputs["weeks"].orEmpty())
-                val analysis = RestaurantEconomicManager.analyze(EconomicManagerInput(
-                    monthlyNetSales = sales,
-                    foodCostConsumedIncludingWaste = food,
-                    monthlyPayroll = payroll,
-                    otherFixedCosts = fixed,
-                    otherVariableCosts = variable,
-                    targetFoodCostPercent = target,
-                    recordedWasteCost = waste,
-                    cashAvailableNow = cashValues[0].takeIf { it.isNotEmpty() }?.let { RestaurantEconomicManager.parseNonNegative(it, "saldo disponível") },
-                    expectedReceiptsNext30Days = cashValues[1].takeIf { it.isNotEmpty() }?.let { RestaurantEconomicManager.parseNonNegative(it, "recebimentos previstos") },
-                    paymentsDueNext30Days = cashValues[2].takeIf { it.isNotEmpty() }?.let { RestaurantEconomicManager.parseNonNegative(it, "pagamentos a vencer") },
-                    weeklyNetSalesHistory = weeks
-                ))
-                buildString {
-                    append("Custo alimentar / vendas: ").append(economicPercent(analysis.foodCostPercent)).append("\n")
-                    append("Pessoal / vendas: ").append(economicPercent(analysis.payrollPercent)).append("\n")
-                    append("Custo alimentar + pessoal / vendas: ").append(economicPercent(analysis.primeCostPercent)).append("\n")
-                    append("Resultado operacional estimado: ").append(money(analysis.estimatedOperatingResult)).append("\n")
-                    if (analysis.estimatedBreakEvenSales != null) {
-                        append("Ponto de equilíbrio mensal estimado: ").append(money(analysis.estimatedBreakEvenSales)).append("\n")
-                        if (sales >= analysis.estimatedBreakEvenSales) {
-                            append("As vendas introduzidas estão acima do ponto de equilíbrio por cerca de ")
-                                .append(money(sales.subtract(analysis.estimatedBreakEvenSales))).append(".\n")
-                        } else {
-                            append("Vendas adicionais estimadas para atingir o ponto de equilíbrio: ")
-                                .append(money(analysis.estimatedBreakEvenSales.subtract(sales))).append(".\n")
-                        }
-                    }
-                    if (analysis.recordedWasteAsPercentOfSales != null) {
-                        append("Desperdício registado / vendas: ").append(economicPercent(analysis.recordedWasteAsPercentOfSales))
-                        analysis.recordedWasteAsPercentOfFoodCost?.let {
-                            append(" (").append(economicPercent(it)).append(" do custo alimentar)")
-                        }
-                        append(".\n")
-                    }
-                    analysis.projectedCashIn30Days?.let {
-                        append("Tesouraria estimada a 30 dias: ").append(money(it)).append(".\n")
-                    }
-                    analysis.forecastNextWeekSales?.let {
-                        append("Referência para a próxima semana (média simples das últimas 4 semanas): ")
-                            .append(money(it)).append(".\n")
-                    }
-                    analysis.warnings.forEach { append("• ").append(it).append("\n") }
-                }.trim()
-            } catch (e: IllegalArgumentException) {
-                "Não foi possível calcular: ${e.message ?: "confirma os valores introduzidos"}"
-            }
-            renderApp()
-        }, LinearLayout.LayoutParams(-1, dp(46)))
-        if (economicReportText.isNotBlank()) {
-            addGap(financialCard, 9)
-            financialCard.addView(label(economicReportText, 12f, false, ink))
-        }
-        container.addView(financialCard, cardParams())
-
-        addGap(container, 6)
-        val recipeCard = makeCard(15)
-        recipeCard.addView(label("2 · Custo por receita e dose", 17f, true, forestDeep))
-        addGap(recipeCard, 5)
-        recipeCard.addView(label(
-            "Cada linha segue o formato ingrediente | quantidade por dose | preço por unidade | desperdício %. Usa unidades compatíveis (ex.: kg e €/kg). O preço indicativo divide o custo estimado pelo objetivo de custo alimentar.",
-            11.5f, false, muted
-        ))
-        economicTextField(recipeCard, "recipe", "Exemplo:\nFarinha | 0,2 | 2,50 | 5\nMolho | 0,1 | 4,00 | 0")
-        addGap(recipeCard, 4)
-        recipeCard.addView(primaryButton("Calcular custo da receita") {
-            recipeReportText = try {
-                val target = economicRequiredAmount("foodTarget", "objetivo de custo alimentar")
-                val result = RestaurantEconomicManager.costRecipe(economicInputs["recipe"].orEmpty(), target)
-                buildString {
-                    append("Custo estimado por dose: ").append(money(result.totalCostPerPortion)).append("\n")
-                    append("Preço indicativo a ").append(economicPercent(result.targetFoodCostPercent))
-                        .append(" de custo alimentar: ").append(money(result.suggestedPriceAtTarget)).append("\n")
-                    result.ingredients.forEach { append("• ").append(it.name).append(": ")
-                        .append(money(it.costPerPortion)).append(" por dose.\n") }
-                    append("Confirma quantidades, unidades de compra, rendimento, IVA e outros custos antes de usar o preço.")
-                }
-            } catch (e: IllegalArgumentException) {
-                "Não foi possível calcular a receita: ${e.message ?: "confirma as linhas introduzidas"}"
-            }
-            renderApp()
-        }, LinearLayout.LayoutParams(-1, dp(46)))
-        if (recipeReportText.isNotBlank()) {
-            addGap(recipeCard, 8)
-            recipeCard.addView(label(recipeReportText, 12f, false, ink))
-        }
-        container.addView(recipeCard, cardParams())
-
-        addGap(container, 6)
-        val purchasingCard = makeCard(15)
-        purchasingCard.addView(label("3 · Planeamento de reposição", 17f, true, forestDeep))
-        addGap(purchasingCard, 5)
-        purchasingCard.addView(label(
-            "Formato: stock atual | consumo médio por dia | prazo do fornecedor em dias | dias de segurança. A indicação é uma quantidade teórica; não cria encomendas nem altera o stock.",
-            11.5f, false, muted
-        ))
-        economicTextField(purchasingCard, "reorder", "Ex.: 5 | 3 | 4 | 2")
-        addGap(purchasingCard, 5)
-        purchasingCard.addView(primaryButton("Calcular reposição sugerida") {
-            reorderReportText = try {
-                val result = RestaurantEconomicManager.recommendReorder(economicInputs["reorder"].orEmpty())
-                if (result.suggestedOrderQuantity.signum() == 0) {
-                    "O stock introduzido cobre os dias de prazo e segurança definidos. Confirma a contagem física antes de decidir."
-                } else {
-                    "Stock de cobertura recomendado: ${result.targetStockForLeadAndSafetyDays.stripTrailingZeros().toPlainString()}.\n" +
-                        "Quantidade indicativa a repor: ${result.suggestedOrderQuantity.stripTrailingZeros().toPlainString()} unidades para ${result.totalCoverageDays} dias. Confirma unidades, validade, consumo e prazo real do fornecedor."
-                }
-            } catch (e: IllegalArgumentException) {
-                "Não foi possível calcular a reposição: ${e.message ?: "confirma os quatro valores"}"
-            }
-            renderApp()
-        }, LinearLayout.LayoutParams(-1, dp(46)))
-        if (reorderReportText.isNotBlank()) {
-            addGap(purchasingCard, 8)
-            purchasingCard.addView(label(reorderReportText, 12f, false, ink))
-        }
-        container.addView(purchasingCard, cardParams())
-
-        addGap(container, 5)
-        container.addView(label(
-            "Limites: as estimativas não são contabilidade certificada, não consultam o banco, fornecedores, meteorologia ou avaliações, e não enviam encomendas nem mudam preços. Para previsão com sazonalidade, comparação real de stock e vários dispositivos, é necessário ligar dados históricos e desenhar permissões do proprietário.",
-            10.5f, false, muted
-        ))
-    }
-
-    private fun economicNumberField(
-        parent: LinearLayout,
-        key: String,
-        title: String,
-        hint: String,
-        defaultValue: String = ""
-    ) {
-        parent.addView(label(title, 11.5f, true, forestDeep))
-        val field = inputField(hint, InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
-        field.addTextChangedListener(object : android.text.TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                economicInputs[key] = s?.toString().orEmpty()
-            }
-            override fun afterTextChanged(s: android.text.Editable?) = Unit
-        })
-        field.setText(economicInputs[key] ?: defaultValue)
-        parent.addView(field, LinearLayout.LayoutParams(-1, dp(45)).apply {
-            setMargins(0, dp(3), 0, dp(7))
-        })
-    }
-
-    private fun economicTextField(parent: LinearLayout, key: String, hint: String) {
-        val field = multilineInputField(hint)
-        field.addTextChangedListener(object : android.text.TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                economicInputs[key] = s?.toString().orEmpty()
-            }
-            override fun afterTextChanged(s: android.text.Editable?) = Unit
-        })
-        field.setText(economicInputs[key].orEmpty())
-        parent.addView(field, multilineFieldParams())
-    }
-
-    private fun economicRequiredAmount(key: String, labelText: String): BigDecimal =
-        RestaurantEconomicManager.parseNonNegative(economicInputs[key].orEmpty(), labelText)
-
-    private fun economicPercent(value: BigDecimal): String =
-        value.setScale(1, java.math.RoundingMode.HALF_UP).toPlainString().replace('.', ',') + "%"
-
-    private fun copyAssistantText(value: String) {
-        val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("Rascunho StudioMesa", value))
-        Toast.makeText(this, "Rascunho copiado. Revê antes de publicar.", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun renderAnalysis(container: LinearLayout) {
-        pageIntro(container, "Análise", if (hasRemoteRestaurant())
-            "Indicadores operacionais dos dados partilhados no servidor."
-        else "Resumo local dos dados de demonstração.")
-        addGap(container, 6)
+        container.addView(primaryButton("+  Novo pedido") { showCreateOrderDialog() }, LinearLayout.LayoutParams(-1, dp(50)))
+        addGap(container, 15)
 
         if (hasRemoteRestaurant()) {
             val orders = remoteOrders()
-            val menu = remoteMenuItems()
-            var activeCount = 0
-            var completedCount = 0
-            var completedValue = 0.0
+            if (orders.length() == 0) {
+                container.addView(emptyCard("Ainda não há pedidos registados no servidor. Cria o primeiro pedido para testar o fluxo."))
+                return
+            }
             for (index in 0 until orders.length()) {
                 val order = orders.optJSONObject(index) ?: continue
-                when (order.optString("status")) {
-                    "Aberto", "Em preparação", "Pronto" -> activeCount++
-                    "Concluído" -> {
-                        completedCount++
-                        completedValue += order.optDouble("amount", 0.0) * order.optInt("quantity", 1).coerceIn(1, 99)
-                    }
+                val status = order.optString("status", "Aberto")
+                val closed = status == "Concluído" || status == "Cancelado"
+                val nextStatus = when (status) {
+                    "Aberto" -> "Em preparação"
+                    "Em preparação" -> "Pronto"
+                    "Pronto" -> "Concluído"
+                    else -> "Aberto"
                 }
+                val card = makeCard(16)
+                val top = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                top.addView(label("Mesa " + order.optInt("table_number", 1).toString().padStart(2, '0'), 10f, true, forestSoft),
+                    LinearLayout.LayoutParams(0, -2, 1f))
+                top.addView(label(status.uppercase(Locale("pt", "PT")), 9f, true, if (closed) green else forestSoft).apply {
+                    setPadding(dp(8), dp(6), dp(8), dp(6))
+                    background = rounded(if (closed) paleGreen else copperPale, 12)
+                })
+                card.addView(top)
+                addGap(card, 10)
+                val itemName = order.optString("item_name", "Artigo")
+                val quantity = order.optInt("quantity", 1).coerceIn(1, 99)
+                card.addView(label((if (quantity > 1) "$quantity × " else "") + itemName, 17f, true, ink))
+                addGap(card, 3)
+                card.addView(label(
+                    order.optString("service_course", "Principal").uppercase(Locale("pt", "PT")),
+                    10f, true, forestSoft
+                ))
+                val notes = order.optString("notes").trim()
+                if (notes.isNotBlank()) {
+                    addGap(card, 5)
+                    card.addView(label("COZINHA · $notes", 11.5f, false, muted))
+                }
+                addGap(card, 5)
+                card.addView(label(money(order.optDouble("amount", 0.0) * quantity), 14f, true, forest))
+                addGap(card, 12)
+                card.addView(primaryButton(if (closed) "Reabrir pedido" else when (status) {
+                    "Aberto" -> "Enviar para preparação"
+                    "Em preparação" -> "Marcar como pronto"
+                    else -> "Concluir pedido"
+                }) {
+                    runBackend({
+                        val token = backendToken()
+                        SupabaseApi.updateOrder(token, order.optString("id"), nextStatus)
+                        cacheRemoteOperations(token, backendRestaurantId())
+                        "OK"
+                    }) { renderApp() }
+                }, LinearLayout.LayoutParams(-1, dp(48)))
+                addGap(card, 5)
+                if (!closed) {
+                    card.addView(secondaryButton("Cancelar pedido") {
+                        confirmCancelOrder(
+                            order.optString("id"),
+                            order.optInt("table_number", 1),
+                            order.optString("item_name", "Artigo")
+                        )
+                    }, LinearLayout.LayoutParams(-1, dp(48)))
+                    addGap(card, 5)
+                }
+                card.addView(secondaryButton("Ver histórico") {
+                    showOrderHistory(order.optString("id"))
+                }, LinearLayout.LayoutParams(-1, dp(48)))
+                container.addView(card, cardParams())
             }
-            val ratios = mutableListOf<Double>()
-            for (index in 0 until menu.length()) {
-                val item = menu.optJSONObject(index) ?: continue
-                val price = item.optDouble("price", 0.0)
-                if (price > 0.0) ratios.add(item.optDouble("cost", 0.0) / price * 100.0)
-            }
-            val avgCostRatio = ratios.average()
-
-            val summary = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            summary.addView(statCard("PEDIDOS NO SERVIDOR", orders.length().toString(), forestSoft),
-                LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), dp(10)) })
-            summary.addView(statCard("EM CURSO", activeCount.toString(), copper),
-                LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, dp(10)) })
-            container.addView(summary)
-
-            val card = makeCard(17)
-            addMetric(card, "Pedidos concluídos", completedCount.toString())
-            addDivider(card)
-            addMetric(card, "Valor nominal de pedidos concluídos", money(completedValue))
-            addDivider(card)
-            addMetric(card, "Artigos ativos na carta", menu.length().toString())
-            addDivider(card)
-            addMetric(card, "Custo médio dos artigos / preço", if (avgCostRatio.isNaN()) "Sem dados" else String.format(Locale("pt", "PT"), "%.1f%%", avgCostRatio))
-            container.addView(card, cardParams())
-
-            addGap(container, 4)
-            val note = makeCard(14, copperPale)
-            note.addView(label("Indicadores operacionais", 13f, true, forest))
-            addGap(note, 5)
-            note.addView(label("Os dados são partilhados no servidor. O valor representa pedidos marcados como concluídos, não pagamentos confirmados nem vendas contabilísticas. Ainda não inclui IVA, custos indiretos, desperdício ou integração com caixa.", 12.5f, false, ink))
-            container.addView(note, cardParams())
             return
         }
 
         val orders = store.getOrders()
-        val activeOrders = orders.filter { it.status != "Concluído" && it.status != "Cancelado" }
-        val completedOrders = orders.filter { it.status == "Concluído" }
-        val menu = store.getMenu()
-        val valueRecorded = completedOrders.sumOf { it.amount * it.quantity }
-        val ratios = menu.filter { it.price > 0.0 }.map { it.cost / it.price * 100.0 }
-        val avgCostRatio = ratios.average()
-        val summary = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        summary.addView(statCard("PEDIDOS REGISTADOS", orders.size.toString(), forestSoft),
-            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), dp(10)) })
-        summary.addView(statCard("EM ABERTO", activeOrders.size.toString(), copper),
-            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, dp(10)) })
-        container.addView(summary)
+        if (orders.isEmpty()) {
+            container.addView(emptyCard("Ainda não há pedidos registados. Cria um pedido de demonstração para experimentar o fluxo."))
+            return
+        }
 
-        val card = makeCard(17)
-        addMetric(card, "Valor nominal de pedidos concluídos", money(valueRecorded))
-        addDivider(card)
-        addMetric(card, "Pedidos concluídos", completedOrders.size.toString())
-        addDivider(card)
-        addMetric(card, "Artigos na carta", menu.size.toString())
-        addDivider(card)
-        addMetric(card, "Custo médio dos artigos / preço", if (avgCostRatio.isNaN()) "Sem dados" else String.format(Locale("pt", "PT"), "%.1f%%", avgCostRatio))
+        orders.forEach { order ->
+            val done = order.status == "Concluído"
+            val card = makeCard(16)
+            val top = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            top.addView(label("Mesa " + order.table.toString().padStart(2, '0'), 10f, true, forestSoft), LinearLayout.LayoutParams(0, -2, 1f))
+            top.addView(label(if (done) "CONCLUÍDO" else "EM ABERTO", 9f, true, if (done) green else forestSoft).apply {
+                setPadding(dp(8), dp(6), dp(8), dp(6))
+                background = rounded(if (done) paleGreen else copperPale, 12)
+            })
+            card.addView(top)
+            addGap(card, 10)
+            card.addView(label((if (order.quantity > 1) "${order.quantity} × " else "") + order.itemName, 17f, true, ink))
+            addGap(card, 3)
+            card.addView(label(order.serviceCourse.uppercase(Locale("pt", "PT")), 10f, true, forestSoft))
+            if (order.notes.isNotBlank()) {
+                addGap(card, 5)
+                card.addView(label("Cozinha · " + order.notes, 11.5f, false, muted))
+            }
+            addGap(card, 5)
+            card.addView(label(money(order.amount * order.quantity), 14f, true, forest))
+            addGap(card, 12)
+            card.addView(secondaryButton(if (done) "Reabrir pedido" else "Marcar como concluído") {
+                store.updateOrder(order.id, if (done) "Aberto" else "Concluído")
+                renderApp()
+            }, LinearLayout.LayoutParams(-1, dp(48)))
+            container.addView(card, cardParams())
+        }
+    }
+
+
+    private fun parseOrderTimestamp(value: String): Long {
+        val normalized = value.replace(Regex("\\.\\d+(?=(Z|[+-]\\d{2}:?\\d{2})$)"), "")
+        return runCatching {
+            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).apply {
+                isLenient = false
+            }.parse(normalized)?.time ?: 0L
+        }.getOrDefault(0L)
+    }
+
+    private fun orderWaitLabel(createdAtMillis: Long): String {
+        if (createdAtMillis <= 0L) return "Tempo de espera indisponível"
+        val minutes = ((System.currentTimeMillis() - createdAtMillis) / 60_000L).coerceAtLeast(0L)
+        return when {
+            minutes < 1L -> "Acabado de entrar"
+            minutes < 60L -> "$minutes min em espera"
+            else -> "${minutes / 60L} h ${minutes % 60L} min em espera"
+        }
+    }
+
+    private fun renderKitchen(container: LinearLayout) {
+        pageIntro(container, "Cozinha", "Fila de preparação por estado e tempo de espera.")
+        addGap(container, 8)
+        if (hasRemoteRestaurant()) {
+            container.addView(secondaryButton("Atualizar fila do servidor") { refreshRemoteOperations() },
+                LinearLayout.LayoutParams(-1, dp(48)))
+        } else {
+            container.addView(label("Modo de demonstração · os pedidos não são partilhados com outros dispositivos.", 11f, false, muted))
+        }
+        addGap(container, 12)
+
+        if (hasRemoteRestaurant()) {
+            val orders = remoteOrders()
+            val active = (0 until orders.length())
+                .mapNotNull { orders.optJSONObject(it) }
+                .filter { it.optString("status", "Aberto") !in setOf("Concluído", "Cancelado") }
+                .sortedWith(compareBy<JSONObject>(
+                    { when (it.optString("status", "Aberto")) {
+                        "Aberto" -> 0
+                        "Em preparação" -> 1
+                        "Pronto" -> 2
+                        else -> 3
+                    } },
+                    { parseOrderTimestamp(it.optString("created_at")) }
+                ))
+
+            if (active.isEmpty()) {
+                container.addView(emptyCard("A fila está vazia. Os novos pedidos aparecerão aqui depois de atualizares os dados."))
+                return
+            }
+            container.addView(label("${active.size} pedido(s) ativo(s)", 12f, true, forestSoft))
+            addGap(container, 8)
+            for (order in active) {
+                val status = order.optString("status", "Aberto")
+                val createdAt = parseOrderTimestamp(order.optString("created_at"))
+                val nextStatus = when (status) {
+                    "Aberto" -> "Em preparação"
+                    "Em preparação" -> "Pronto"
+                    "Pronto" -> "Concluído"
+                    else -> status
+                }
+                renderKitchenTicket(
+                    container,
+                    order.optInt("table_number", 1),
+                    order.optString("item_name", "Artigo"),
+                    order.optInt("quantity", 1).coerceIn(1, 99),
+                    order.optString("service_course", "Principal"),
+                    order.optString("notes").trim(),
+                    status,
+                    orderWaitLabel(createdAt)
+                ) {
+                    runBackend({
+                        val token = backendToken()
+                        SupabaseApi.updateOrder(token, order.optString("id"), nextStatus)
+                        cacheRemoteOperations(token, backendRestaurantId())
+                        "OK"
+                    }) { renderApp() }
+                }
+            }
+        } else {
+            val active = store.getOrders()
+                .filter { it.status !in setOf("Concluído", "Cancelado") }
+                .sortedBy { it.createdAt }
+            if (active.isEmpty()) {
+                container.addView(emptyCard("A fila está vazia. Cria um pedido para testar o fluxo da cozinha."))
+                return
+            }
+            container.addView(label("${active.size} pedido(s) ativo(s)", 12f, true, forestSoft))
+            addGap(container, 8)
+            active.forEach { order ->
+                val nextStatus = when (order.status) {
+                    "Aberto" -> "Em preparação"
+                    "Em preparação" -> "Pronto"
+                    "Pronto" -> "Concluído"
+                    else -> order.status
+                }
+                renderKitchenTicket(
+                    container,
+                    order.table,
+                    order.itemName,
+                    order.quantity,
+                    order.serviceCourse,
+                    order.notes,
+                    order.status,
+                    orderWaitLabel(order.createdAt)
+                ) {
+                    store.updateOrder(order.id, nextStatus)
+                    renderApp()
+                }
+            }
+        }
+    }
+
+    private fun renderKitchenTicket(
+        container: LinearLayout,
+        tableNumber: Int,
+        itemName: String,
+        quantity: Int,
+        serviceCourse: String,
+        notes: String,
+        status: String,
+        waitLabel: String,
+        onAdvance: () -> Unit
+    ) {
+        val card = makeCard(16)
+        val statusColor = when (status) {
+            "Pronto" -> green
+            "Em preparação" -> forestSoft
+            else -> copper
+        }
+        val statusBackground = when (status) {
+            "Pronto" -> paleGreen
+            "Em preparação" -> paleGreen
+            else -> copperPale
+        }
+        val top = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        top.addView(label("MESA ${tableNumber.toString().padStart(2, '0')}", 12f, true, forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f))
+        top.addView(label(status.uppercase(Locale("pt", "PT")), 10f, true, statusColor).apply {
+            setPadding(dp(8), dp(6), dp(8), dp(6))
+            background = rounded(statusBackground, 12)
+        })
+        card.addView(top)
+        addGap(card, 8)
+        card.addView(label((if (quantity > 1) "$quantity × " else "") + itemName, 19f, true, forestDeep))
+        addGap(card, 4)
+        card.addView(label(serviceCourse.uppercase(Locale("pt", "PT")), 11f, true, forestSoft))
+        if (notes.isNotBlank()) {
+            addGap(card, 8)
+            card.addView(label("NOTAS PARA A COZINHA", 9.5f, true, muted))
+            card.addView(label(notes, 14f, false, ink))
+        }
+        addGap(card, 8)
+        card.addView(label(waitLabel, 11.5f, true, if (waitLabel.contains("min em espera") || waitLabel.contains("h ")) red else muted))
+        addGap(card, 12)
+        card.addView(primaryButton(when (status) {
+            "Aberto" -> "Iniciar preparação"
+            "Em preparação" -> "Marcar como pronto"
+            "Pronto" -> "Concluir pedido"
+            else -> "Atualizar pedido"
+        }, onAdvance), LinearLayout.LayoutParams(-1, dp(48)))
         container.addView(card, cardParams())
+    }
 
-        addGap(container, 4)
+    private fun renderMenu(container: LinearLayout) {
+        pageIntro(container, "Carta e custos", if (hasRemoteRestaurant())
+            "Carta e custos privados, guardados no servidor."
+        else "Artigos de exemplo para testar a gestão.")
+        addGap(container, 7)
+        if (hasRemoteRestaurant()) {
+            container.addView(makeCard(13, copperPale).apply {
+                addView(label("Carta do restaurante", 10f, true, forest))
+                addGap(this, 4)
+                addView(label("A carta é partilhada pela equipa. Os custos e margens só são apresentados na aplicação de gestão, não no cartão de cliente.", 12.5f, false, ink))
+            }, cardParams())
+            container.addView(secondaryButton("Atualizar do servidor") { refreshRemoteOperations() },
+                LinearLayout.LayoutParams(-1, dp(48)))
+            addGap(container, 6)
+            container.addView(primaryButton("+  Adicionar artigo") { showAddMenuItemDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
+            addGap(container, 15)
+            val items = remoteMenuItems()
+            if (items.length() == 0) {
+                container.addView(emptyCard("A carta do servidor está vazia. Adiciona os primeiros artigos e preços aprovados pelo restaurante."))
+                return
+            }
+            for (index in 0 until items.length()) {
+                val item = items.optJSONObject(index) ?: continue
+                val card = makeCard(15)
+                card.addView(label(item.optString("name"), 17f, true, forestDeep))
+                addGap(card, 3)
+                card.addView(label(item.optString("category", "Prato principal"), 10.5f, true, forestSoft))
+                val description = item.optString("description").trim()
+                if (description.isNotBlank()) {
+                    addGap(card, 5)
+                    card.addView(label(description, 12.5f, false, ink))
+                }
+                val allergens = item.optString("allergens").trim()
+                addGap(card, 5)
+                card.addView(label(
+                    if (allergens.isBlank()) "Alergénios: confirmar com a equipa."
+                    else "Alergénios declarados: $allergens. Confirma com a equipa se tiveres uma alergia.",
+                    11f, false, muted
+                ))
+                addGap(card, 8)
+                val prices = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                val price = item.optDouble("price", 0.0)
+                val cost = item.optDouble("cost", 0.0)
+                prices.addView(priceColumn("PREÇO DE VENDA", money(price)), LinearLayout.LayoutParams(0, -2, 1f))
+                prices.addView(priceColumn("CUSTO ESTIMADO", money(cost)), LinearLayout.LayoutParams(0, -2, 1f))
+                card.addView(prices)
+                val ratio = if (price > 0.0) cost / price * 100.0 else 0.0
+                addGap(card, 9)
+                card.addView(label("Custo do artigo: " + String.format(Locale("pt", "PT"), "%.1f%%", ratio) + " do preço de venda", 11.5f, false, muted))
+                addGap(card, 9)
+                card.addView(secondaryButton("Editar artigo") {
+                    showEditMenuItemDialog(
+                        item.optString("id"),
+                        MenuEntry(
+                            item.optString("name"),
+                            item.optDouble("price", 0.0),
+                            item.optDouble("cost", 0.0),
+                            item.optString("category", "Prato principal"),
+                            item.optString("description", ""),
+                            item.optString("allergens", "")
+                        )
+                    )
+                }, LinearLayout.LayoutParams(-1, dp(48)))
+                addGap(card, 5)
+                card.addView(secondaryButton("Arquivar artigo") {
+                    AlertDialog.Builder(this)
+                        .setTitle("Arquivar artigo?")
+                        .setMessage("«" + item.optString("name") + "» deixa de aparecer na carta ativa. Os pedidos antigos mantêm o registo.")
+                        .setNegativeButton("Cancelar", null)
+                        .setPositiveButton("Arquivar") { _, _ ->
+                            runBackend({
+                                val token = backendToken()
+                                SupabaseApi.deactivateMenuItem(token, item.optString("id"))
+                                cacheRemoteOperations(token, backendRestaurantId())
+                                "OK"
+                            }) { renderApp() }
+                        }
+                        .show()
+                }, LinearLayout.LayoutParams(-1, dp(48)))
+                container.addView(card, cardParams())
+            }
+            return
+        }
+
+        container.addView(makeCard(13, copperPale).apply {
+            addView(label("Carta de demonstração", 10f, true, forest))
+            addGap(this, 4)
+            addView(label("Os nomes e valores abaixo são ilustrativos; não representam a carta real do restaurante.", 12.5f, false, ink))
+        }, cardParams())
+        container.addView(primaryButton("+  Adicionar artigo") { showAddMenuItemDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
+        addGap(container, 15)
+
+        val items = store.getMenu()
+        if (items.isEmpty()) {
+            container.addView(emptyCard("A carta está vazia. Adiciona o primeiro artigo de demonstração."))
+        }
+        items.forEach { item ->
+            val card = makeCard(15)
+            card.addView(label(item.name, 17f, true, forestDeep))
+            addGap(card, 3)
+            card.addView(label(item.category, 10.5f, true, forestSoft))
+            if (item.description.isNotBlank()) {
+                addGap(card, 5)
+                card.addView(label(item.description, 12.5f, false, ink))
+            }
+            addGap(card, 5)
+            card.addView(label(
+                if (item.allergens.isBlank()) "Alergénios: confirmar com a equipa."
+                else "Alergénios declarados: " + item.allergens + ". Confirma com a equipa se tiveres uma alergia.",
+                11f, false, muted
+            ))
+            addGap(card, 8)
+            val prices = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            prices.addView(priceColumn("PREÇO DE VENDA", money(item.price)), LinearLayout.LayoutParams(0, -2, 1f))
+            prices.addView(priceColumn("CUSTO ESTIMADO", money(item.cost)), LinearLayout.LayoutParams(0, -2, 1f))
+            card.addView(prices)
+            val ratio = if (item.price > 0.0) item.cost / item.price * 100.0 else 0.0
+            addGap(card, 9)
+            card.addView(label("Custo do artigo: " + String.format(Locale("pt", "PT"), "%.1f%%", ratio) + " do preço de venda", 11.5f, false, muted))
+            addGap(card, 9)
+            card.addView(secondaryButton("Editar artigo") {
+                showEditMenuItemDialog(null, item)
+            }, LinearLayout.LayoutParams(-1, dp(48)))
+            addGap(card, 5)
+            card.addView(secondaryButton("Remover artigo") {
+                AlertDialog.Builder(this)
+                    .setTitle("Remover artigo?")
+                    .setMessage("Queres remover «" + item.name + "» da carta de demonstração?")
+                    .setNegativeButton("Cancelar", null)
+                    .setPositiveButton("Remover") { _, _ ->
+                        val newItems = store.getMenu()
+                        val index = newItems.indexOfFirst { it.name == item.name && it.price == item.price && it.cost == item.cost }
+                        if (index >= 0) newItems.removeAt(index)
+                        store.saveMenu(newItems)
+                        renderApp()
+                    }
+                    .show()
+            }, LinearLayout.LayoutParams(-1, dp(48)))
+            container.addView(card, cardParams())
+        }
+    }
+
+    private fun renderPriceCalculator(container: LinearLayout) {
+        pageIntro(container, "Preço Justo", "Uma estimativa matemática baseada no custo.")
+        addGap(container, 5)
+        container.addView(label("Não consulta preços concorrentes em tempo real e não substitui uma análise completa de custos.", 12.5f, false, muted))
+        addGap(container, 15)
+
+        val form = makeCard(17)
+        form.addView(label("Custo por unidade (€)", 10f, true, forestSoft))
+        val costField = inputField("Ex.: 3,20", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+        form.addView(costField, fieldParams())
+        addGap(form, 7)
+        form.addView(label("Custo pretendido (% do preço)", 10f, true, forestSoft))
+        val percentageField = inputField("Ex.: 30", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+        percentageField.setText("30")
+        form.addView(percentageField, fieldParams())
+        addGap(form, 10)
+
+        val result = label("Introduz os valores e calcula um preço indicativo.", 14f, false, ink).apply {
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            background = rounded(paper, 12)
+        }
+        // Never leave an old suggested price visible after the user edits the inputs.
+        val inputChangeWatcher = object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                result.text = "Valores alterados. Calcula novamente para atualizar o preço indicativo."
+                result.setTextColor(ink)
+            }
+
+            override fun afterTextChanged(s: android.text.Editable?) = Unit
+        }
+        costField.addTextChangedListener(inputChangeWatcher)
+        percentageField.addTextChangedListener(inputChangeWatcher)
+
+        // Clear only the edited field's validation error as soon as the user corrects it.
+        fun onCalculatorInputEdited(field: EditText) {
+            field.addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    field.error = null
+                    // A result belongs to the exact input pair that produced it. Do not leave
+                    // an old price visible after either input changes.
+                    result.text = "Valores alterados. Calcula novamente para atualizar o preço indicativo."
+                    result.setTextColor(ink)
+                }
+                override fun afterTextChanged(s: android.text.Editable?) = Unit
+            })
+        }
+        onCalculatorInputEdited(costField)
+        onCalculatorInputEdited(percentageField)
+
+        form.addView(primaryButton("Calcular preço sugerido") {
+            val calculation = try {
+                PriceCalculator.calculate(
+                    costField.text.toString(),
+                    percentageField.text.toString()
+                )
+            } catch (error: PriceCalculationException) {
+                result.text = "Corrige os valores assinalados para atualizar o preço indicativo."
+                result.setTextColor(red)
+                when (error.field) {
+                    PriceInputField.COST -> costField.error = error.message
+                    PriceInputField.TARGET_COST_PERCENT -> percentageField.error = error.message
+                }
+                return@primaryButton
+            }
+
+            result.text = "PREÇO INDICATIVO\n" + money(calculation.suggestedPrice) +
+                "\n\nCusto por unidade: " + money(calculation.cost) +
+                "\nCusto sobre o preço final: " + formatPercentage(calculation.actualCostPercent) +
+                "\nMargem bruta estimada: " + money(calculation.grossProfit) +
+                "\nMargem bruta: " + formatPercentage(calculation.grossMarginPercent)
+            result.setTextColor(forest)
+        }, LinearLayout.LayoutParams(-1, dp(48)))
+        addGap(form, 10)
+        form.addView(result)
+        container.addView(form, cardParams())
+
+        addGap(container, 5)
         val note = makeCard(14, copperPale)
-        note.addView(label("Indicadores de demonstração", 13f, true, forest))
+        note.addView(label("Atenção aos custos indiretos", 14f, true, forest))
         addGap(note, 5)
-        note.addView(label("Os valores representam os registos guardados neste dispositivo. Não são pagamentos confirmados, não incluem IVA nem constituem contabilidade ou relatório financeiro oficial.", 12.5f, false, ink))
+        note.addView(label("IVA, salários, renda, energia, comissões, desperdício e outros encargos não são incluídos automaticamente. Confirma esses valores antes de definir preços reais.", 12.5f, false, ink))
         container.addView(note, cardParams())
     }
 
-    private fun showCreateOrderDialog() {
-        val cloudMode = hasRemoteRestaurant()
-        val items = if (cloudMode) remoteMenuEntries() else store.getMenu()
-        if (items.isEmpty()) {
+    private fun displayRestaurantName(): String =
+        backendPrefs.getString("restaurant_name", null)?.trim()?.takeIf { it.isNotEmpty() }
+            ?: "StudioMesa"
+
+    private fun displayCustomerRestaurantName(): String =
+        backendPrefs.getString("member_restaurant_name", null)?.trim()?.takeIf { it.isNotEmpty() }
+            ?: "StudioMesa"
+
+    private fun refreshSessionIfNeeded() {
+        val accessToken = backendToken()
+        val refreshToken = secureSession.refreshToken()
+        if (accessToken.isBlank() || refreshToken.isBlank()) return
+
+        val expiresAt = SupabaseApi.tokenExpiresAtMillis(accessToken)
+        if (expiresAt > System.currentTimeMillis() + 120_000L) return
+
+        val session = SupabaseApi.refreshSession(refreshToken)
+        secureSession.save(session.accessToken, session.refreshToken)
+        backendPrefs.edit()
+            .putString("user_id", session.userId)
+            .putString("user_email", session.email)
+            .apply()
+
+        if (isCustomerApp) restoreCustomerMembership(session.accessToken) else restoreOwnedRestaurant(session.accessToken)
+    }
+
+    private fun restoreOwnedRestaurant(token: String) {
+        if (isCustomerApp || token.isBlank()) return
+
+        try {
+            val restaurant = SupabaseApi.getMyRestaurant(token)
+            val editor = backendPrefs.edit()
+                .remove("restaurant_id")
+                .remove("restaurant_name")
+                .remove("join_code")
+                .remove("staff_join_code")
+                .remove("restaurant_role")
+            if (restaurant != null) {
+                val restaurantId = restaurant.optString("restaurant_id")
+                editor.putString("restaurant_id", restaurantId)
+                    .putString("restaurant_name", restaurant.optString("restaurant_name"))
+                    .putString("join_code", restaurant.optString("join_code"))
+                    .putString("staff_join_code", restaurant.optString("staff_code"))
+                    .putString("restaurant_role", restaurant.optString("user_role", "staff"))
+            }
+            editor.apply()
+            if (restaurant != null) {
+                cacheRemoteOperations(token, restaurant.optString("restaurant_id"))
+            } else {
+                // The server confirmed this account no longer belongs to a restaurant.
+                // Remove data that would otherwise remain on this device after revocation.
+                backendPrefs.edit()
+                    .remove("remote_members_json")
+                    .remove("remote_tables_json")
+                    .remove("remote_menu_json")
+                    .remove("remote_orders_json")
+                    .remove("remote_inventory_json")
+                    .remove("inventory_loaded")
+                    .remove("remote_reservations_json")
+                    .remove("reservations_loaded")
+                    .apply()
+                reservationCache = JSONArray()
+                reservationsLoaded = false
+            }
+        } catch (_: Exception) {
+            // Keep authentication successful if restoring cloud data temporarily fails.
+        }
+    }
+
+
+
+    private fun hasRemoteRestaurant(): Boolean =
+        backendToken().isNotBlank() && backendRestaurantId().isNotBlank()
+
+    private fun savedRemoteArray(key: String): org.json.JSONArray {
+        return try {
+            org.json.JSONArray(backendPrefs.getString(key, "[]") ?: "[]")
+        } catch (_: Exception) {
+            org.json.JSONArray()
+        }
+    }
+
+    private fun remoteTables(): org.json.JSONArray = savedRemoteArray("remote_tables_json")
+    private fun remoteMenuItems(): org.json.JSONArray = savedRemoteArray("remote_menu_json")
+    private fun remoteOrders(): org.json.JSONArray = savedRemoteArray("remote_orders_json")
+
+    private fun remoteMenuEntries(): MutableList<MenuEntry> {
+        val result = mutableListOf<MenuEntry>()
+        val array = remoteMenuItems()
+        for (i in 0 until array.length()) {
+            val item = array.optJSONObject(i) ?: continue
+            val name = item.optString("name").trim()
+            if (name.isNotBlank()) {
+                result.add(MenuEntry(
+                    name,
+                    item.optDouble("price", 0.0).coerceAtLeast(0.0),
+                    item.optDouble("cost", 0.0).coerceAtLeast(0.0),
+                    item.optString("category", "Prato principal"),
+                    item.optString("description", ""),
+                    item.optString("allergens", "")
+                ))
+            }
+        }
+        return result
+    }
+
+    private fun cacheRemoteOperations(token: String, restaurantId: String) {
+        if (token.isBlank() || restaurantId.isBlank()) return
+        val tables = SupabaseApi.listTables(token, restaurantId)
+        val menu = SupabaseApi.listMenuItems(token, restaurantId)
+        val orders = SupabaseApi.listOrders(token, restaurantId)
+        backendPrefs.edit()
+            .putString("remote_tables_json", tables.toString())
+            .putString("remote_menu_json", menu.toString())
+            .putString("remote_orders_json", orders.toString())
+            .apply()
+    }
+
+    private fun refreshRemoteOperations() {
+        val restaurantId = backendRestaurantId()
+        if (!hasRemoteRestaurant() || restaurantId.isBlank()) {
             AlertDialog.Builder(this)
-                .setTitle("Carta vazia")
-                .setMessage("Adiciona primeiro um artigo à carta e tenta novamente.")
-                .setPositiveButton("Abrir carta") { _, _ -> activePage = "Carta"; renderApp() }
-                .setNegativeButton("Fechar", null)
+                .setMessage("Inicia sessão e configura o restaurante na secção Conta para sincronizar os dados.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        runBackend({
+            cacheRemoteOperations(backendToken(), restaurantId)
+            "OK"
+        }) {
+            renderApp()
+        }
+    }
+
+    private fun restoreCustomerMembership(token: String) {
+        if (!isCustomerApp || token.isBlank()) return
+        try {
+            val member = SupabaseApi.getMyLoyaltyMembership(token)
+            if (member == null) {
+                backendPrefs.edit()
+                    .remove("member_id")
+                    .remove("member_code")
+                    .remove("member_points")
+                    .remove("member_restaurant_name")
+                    .putString("customer_menu_json", "[]")
+                    .apply()
+                return
+            }
+
+            val memberId = member.optString("member_id")
+            val menu = if (memberId.isNotBlank()) SupabaseApi.listCustomerMenu(token, memberId) else org.json.JSONArray()
+            backendPrefs.edit()
+                .putString("member_id", memberId)
+                .putString("member_code", member.optString("member_code"))
+                .putInt("member_points", member.optInt("points", 0))
+                .putString("member_restaurant_name", member.optString("restaurant_name"))
+                .putString("customer_menu_json", menu.toString())
+                .apply()
+            val displayName = member.optString("display_name").trim()
+            if (displayName.isNotBlank()) store.saveCustomerProfileName(displayName)
+        } catch (_: Exception) {
+            // Do not discard a valid login if the membership is temporarily unavailable.
+        }
+    }
+
+
+    /**
+     * A freshly established session must not inherit cached operational data.
+     * Clear it even if the account ID matches: restaurant membership or permissions
+     * may have changed while signed out, and the server must repopulate authoritative data.
+     */
+    private fun prepareForAuthenticatedUser(newUserId: String) {
+        if (newUserId.isBlank()) {
+            throw IllegalStateException("O servidor não devolveu um identificador de conta válido.")
+        }
+
+        clearEconomicManagerState()
+        store.clearLocalDemoData()
+        backendPrefs.edit()
+            .putBoolean("local_demo_data_isolated_v1", true)
+            .remove("user_id").remove("user_email")
+            .remove("access_token").remove("refresh_token")
+            .remove("restaurant_id").remove("restaurant_name").remove("join_code")
+            .remove("staff_join_code").remove("restaurant_role")
+            .remove("member_id").remove("member_code").remove("member_points")
+            .remove("member_restaurant_name")
+            .remove("remote_members_json").remove("remote_tables_json")
+            .remove("remote_menu_json").remove("remote_orders_json")
+            .remove("customer_menu_json")
+            .remove("remote_inventory_json").remove("inventory_loaded")
+            .remove("remote_reservations_json").remove("reservations_loaded")
+            .apply()
+
+        reservationCache = JSONArray()
+        reservationsLoaded = false
+    }
+
+    private fun backendToken(): String = secureSession.accessToken()
+    private fun backendRestaurantId(): String = backendPrefs.getString("restaurant_id", "") ?: ""
+    private fun backendMemberId(): String = backendPrefs.getString("member_id", "") ?: ""
+
+    private fun friendlyBackendError(rawMessage: String?): String {
+        val message = rawMessage?.trim().orEmpty()
+        val normalized = message.lowercase(Locale.ROOT)
+        return when {
+            normalized.contains("invalid login credentials") ->
+                "Não foi possível iniciar sessão com estes dados. Se é a primeira utilização, volta atrás e escolhe «Criar conta». Se já tens conta, confirma o email e verifica o endereço e a palavra-passe."
+            normalized.contains("email not confirmed") || normalized.contains("email_not_confirmed") ->
+                "O email ainda não foi confirmado. Abre a mensagem de confirmação enviada pelo Supabase (verifica também Spam) e, depois, escolhe «Iniciar sessão»."
+            normalized.contains("user already registered") || normalized.contains("already been registered") ->
+                "Este email já tem uma conta. Volta atrás e escolhe «Iniciar sessão» em vez de «Criar conta»."
+            normalized.contains("email rate limit exceeded") || normalized.contains("rate limit") ->
+                "O serviço limitou temporariamente os pedidos. Aguarda um pouco antes de tentares novamente."
+            normalized.contains("unable to resolve host") || normalized.contains("failed to connect") ||
+                normalized.contains("network is unreachable") || normalized.contains("timeout") ->
+                "Não foi possível ligar ao servidor. Confirma que o telemóvel tem internet e tenta novamente."
+            else -> message.take(500).ifBlank {
+                "Erro de ligação. Confirma a internet e tenta novamente."
+            }
+        }
+    }
+
+    private fun runBackend(
+        task: () -> String,
+        refreshSession: Boolean = true,
+        onSuccess: (String) -> Unit
+    ) {
+        val progress = AlertDialog.Builder(this)
+            .setTitle("A ligar ao StudioMesa")
+            .setMessage("A validar a conta no servidor. Aguarda, por favor…")
+            .setCancelable(false)
+            .create()
+        progress.show()
+        Thread {
+            try {
+                if (refreshSession) refreshSessionIfNeeded()
+                val result = task()
+                runOnUiThread {
+                    if (!isFinishing) {
+                        progress.dismiss()
+                        onSuccess(result)
+                    }
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    if (!isFinishing) {
+                        progress.dismiss()
+                        AlertDialog.Builder(this)
+                            .setTitle("Não foi possível concluir")
+                            .setMessage(friendlyBackendError(error.message))
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
+                }
+            }
+        }.start()
+    }
+
+    private fun showSetNewPasswordDialog() {
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(10), dp(22), dp(4))
+        }
+        val passwordField = inputField(
+            "Nova palavra-passe (mínimo 8 caracteres)",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        )
+        val repeatField = inputField(
+            "Confirmar nova palavra-passe",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        )
+        form.addView(label("Nova palavra-passe", 10f, true, forestSoft))
+        form.addView(passwordField, fieldParams())
+        addGap(form, 4)
+        form.addView(label("Confirmar palavra-passe", 10f, true, forestSoft))
+        form.addView(repeatField, fieldParams())
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Definir nova palavra-passe")
+            .setMessage("Escolhe uma palavra-passe nova e não a partilhes.")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Guardar palavra-passe", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val password = passwordField.text.toString()
+                val repeated = repeatField.text.toString()
+                when {
+                    password.length < 8 -> passwordField.error = "Usa pelo menos 8 caracteres"
+                    password != repeated -> repeatField.error = "As palavras-passe não coincidem"
+                    backendToken().isBlank() -> {
+                        dialog.dismiss()
+                        AlertDialog.Builder(this)
+                            .setTitle("Ligação expirada")
+                            .setMessage("Abre novamente a ligação de recuperação mais recente que recebeste por email.")
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
+                    else -> runBackend({
+                        SupabaseApi.updatePassword(backendToken(), password)
+                        "UPDATED"
+                    }) {
+                        dialog.dismiss()
+                        AlertDialog.Builder(this)
+                            .setTitle("Palavra-passe atualizada")
+                            .setMessage("A palavra-passe foi alterada. Guarda-a num gestor de palavras-passe e não a partilhes.")
+                            .setPositiveButton("Continuar") { _, _ ->
+                                if (isCustomerApp) renderCustomerApp() else renderApp()
+                            }
+                            .show()
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showAuthChooser(afterAuth: () -> Unit) {
+        // Use explicit buttons in a custom view. Combining setMessage and setItems
+        // can render inconsistently across Android dialog implementations.
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(12), dp(22), dp(6))
+        }
+        form.addView(label(
+            "Primeira utilização? Escolhe «Criar conta». Se já tens uma conta, escolhe «Iniciar sessão».",
+            13f, false, muted
+        ))
+        addGap(form, 14)
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Conta StudioMesa")
+            .setView(form)
+            .setNegativeButton("Fechar", null)
+            .create()
+
+        form.addView(primaryButton("Criar conta") {
+            dialog.dismiss()
+            showCredentialsDialog(true, afterAuth)
+        }, LinearLayout.LayoutParams(-1, dp(48)))
+        addGap(form, 8)
+        form.addView(secondaryButton("Iniciar sessão") {
+            dialog.dismiss()
+            showCredentialsDialog(false, afterAuth)
+        }, LinearLayout.LayoutParams(-1, dp(48)))
+        addGap(form, 14)
+        form.addView(label("Ou continuar com uma conta externa:", 11.5f, true, muted))
+        addGap(form, 6)
+        form.addView(secondaryButton("Continuar com Google") {
+            dialog.dismiss()
+            startOAuth("google")
+        }, LinearLayout.LayoutParams(-1, dp(48)))
+        addGap(form, 6)
+        form.addView(secondaryButton("Continuar com Microsoft (Outlook)") {
+            dialog.dismiss()
+            startOAuth("azure")
+        }, LinearLayout.LayoutParams(-1, dp(48)))
+        addGap(form, 7)
+        form.addView(label(
+            "Google e Outlook só podem ser usados depois de os fornecedores estarem ativados no servidor.",
+            10.5f, false, muted
+        ))
+
+        dialog.show()
+    }
+
+    private fun createPkceVerifier(): String {
+        val random = ByteArray(32)
+        java.security.SecureRandom().nextBytes(random)
+        return android.util.Base64.encodeToString(
+            random,
+            android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP or android.util.Base64.NO_PADDING
+        )
+    }
+
+    private fun createPkceChallenge(verifier: String): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(verifier.toByteArray(Charsets.US_ASCII))
+        return android.util.Base64.encodeToString(
+            digest,
+            android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP or android.util.Base64.NO_PADDING
+        )
+    }
+
+    private fun startOAuth(provider: String) {
+        runBackend({
+            if (!SupabaseApi.isOAuthProviderEnabled(provider)) {
+                throw IllegalStateException(
+                    if (provider == "google") {
+                        "O início de sessão com Google ainda não está ativado no Supabase. É necessário configurar as credenciais OAuth do Google no servidor."
+                    } else {
+                        "O início de sessão com Microsoft/Outlook ainda não está ativado no Supabase. É necessário configurar as credenciais OAuth da Microsoft no servidor."
+                    }
+                )
+            }
+            val verifier = createPkceVerifier()
+            val challenge = createPkceChallenge(verifier)
+            secureSession.savePendingCodeVerifier(verifier, "oauth")
+            SupabaseApi.oauthUrl(provider, challenge)
+        }, refreshSession = false) { authUrl ->
+            try {
+                startActivity(android.content.Intent(
+                    android.content.Intent.ACTION_VIEW,
+                    android.net.Uri.parse(authUrl)
+                ))
+            } catch (_: Exception) {
+                runCatching { secureSession.clearPendingCodeVerifier() }
+                AlertDialog.Builder(this)
+                    .setTitle("Não foi possível abrir o início de sessão")
+                    .setMessage("Confirma que tens um navegador instalado e tenta novamente.")
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
+        }
+    }
+
+    private fun showCredentialsDialog(createAccount: Boolean, afterAuth: () -> Unit) {
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(8), dp(22), dp(4))
+        }
+        val emailField = inputField("Email", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS)
+        val passwordField = inputField("Palavra-passe (mínimo 8 caracteres)", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
+        form.addView(label("Email", 10f, true, forestSoft))
+        form.addView(emailField, fieldParams())
+        addGap(form, 4)
+        form.addView(label("Palavra-passe", 10f, true, forestSoft))
+        form.addView(passwordField, fieldParams())
+        // Keep the instructions inside the custom form so Android always
+        // shows the email and password fields together with the message.
+        form.addView(label(
+            "Usa um email a que tenhas acesso e uma palavra-passe com pelo menos 8 caracteres. Não partilhes estes dados.",
+            12.5f, false, muted
+        ), 0)
+        addGap(form, 10)
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(if (createAccount) "Criar conta" else "Iniciar sessão")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton(if (createAccount) "Criar conta" else "Entrar", null)
+            .create()
+        if (!createAccount) {
+            addGap(form, 2)
+            form.addView(secondaryButton("Esqueci-me da palavra-passe") {
+                val email = emailField.text.toString().trim()
+                if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+                    emailField.error = "Introduz primeiro o email da tua conta"
+                } else {
+                    runBackend({
+                        val verifier = createPkceVerifier()
+                        val challenge = createPkceChallenge(verifier)
+                        secureSession.savePendingCodeVerifier(verifier, "recovery")
+                        SupabaseApi.requestPasswordRecovery(email, challenge)
+                        "SENT"
+                    }, refreshSession = false) {
+                        dialog.dismiss()
+                        AlertDialog.Builder(this)
+                            .setTitle("Verifica o teu email")
+                            .setMessage("Se existir uma conta com este endereço, será enviado um email para recuperar o acesso. Abre a ligação no mesmo telemóvel para definires uma nova palavra-passe. Verifica também Spam.")
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
+                }
+            }, LinearLayout.LayoutParams(-1, dp(48)))
+        }
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val email = emailField.text.toString().trim()
+                val password = passwordField.text.toString()
+                when {
+                    !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches() ->
+                        emailField.error = "Introduz um email válido"
+                    password.length < 8 ->
+                        passwordField.error = "Usa pelo menos 8 caracteres"
+                    else -> {
+                        runBackend({
+                            if (createAccount) {
+                                val verifier = createPkceVerifier()
+                                val challenge = createPkceChallenge(verifier)
+                                secureSession.savePendingCodeVerifier(verifier, "signup")
+                                val result = SupabaseApi.signUp(email, password, challenge)
+                                val token = result.optString("access_token")
+                                val user = result.optJSONObject("user")
+                                when {
+                                    token.isNotBlank() && user != null -> {
+                                        secureSession.save(token, result.optString("refresh_token"))
+                                        prepareForAuthenticatedUser(user.optString("id"))
+                                        secureSession.clearPendingCodeVerifier()
+                                        backendPrefs.edit()
+                                            .putString("user_id", user.optString("id"))
+                                            .putString("user_email", email)
+                                            .apply()
+                                        if (isCustomerApp) restoreCustomerMembership(token) else restoreOwnedRestaurant(token)
+                                        "SIGNED_IN"
+                                    }
+                                    user != null -> {
+                                        backendPrefs.edit()
+                                            .putString("user_id", user.optString("id"))
+                                            .putString("user_email", email)
+                                            .apply()
+                                        "CONFIRM_EMAIL"
+                                    }
+                                    else -> throw IllegalStateException(
+                                        "O servidor não confirmou a criação da conta. Tenta novamente; se o erro continuar, regista a mensagem que aparecer."
+                                    )
+                                }
+                            } else {
+                                val session = SupabaseApi.signIn(email, password)
+                                secureSession.save(session.accessToken, session.refreshToken)
+                                prepareForAuthenticatedUser(session.userId)
+                                backendPrefs.edit()
+                                    .putString("user_id", session.userId)
+                                    .putString("user_email", session.email)
+                                    .apply()
+                                if (isCustomerApp) restoreCustomerMembership(session.accessToken) else restoreOwnedRestaurant(session.accessToken)
+                                "SIGNED_IN"
+                            }
+                        }, refreshSession = false) { result ->
+                            dialog.dismiss()
+                            if (result == "CONFIRM_EMAIL") {
+                                AlertDialog.Builder(this)
+                                    .setTitle("Falta confirmar o email")
+                                    .setMessage("A conta foi criada, mas ainda não foi iniciada sessão. Abre o email de confirmação no mesmo telemóvel e toca na ligação; deverá abrir o StudioMesa. Verifica também Spam/Promoções. Se a ligação não concluir a sessão, pede uma nova. Não cries outra conta com o mesmo email.")
+                                    .setPositiveButton("OK", null)
+                                    .show()
+                            } else {
+                                afterAuth()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun generateSecureCode(length: Int): String {
+        val alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+        val secureRandom = java.security.SecureRandom()
+        return buildString(length) {
+            repeat(length) { append(alphabet[secureRandom.nextInt(alphabet.length)]) }
+        }
+    }
+
+    private fun showCreateRestaurantDialog() {
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(8), dp(22), dp(4))
+        }
+        val nameField = inputField("Nome do restaurante", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+        val code = generateSecureCode(12)
+        form.addView(label("Nome", 10f, true, forestSoft))
+        form.addView(nameField, fieldParams())
+        addGap(form, 5)
+        form.addView(label("Código de adesão gerado", 10f, true, forestSoft))
+        form.addView(label(code, 23f, true, forest).apply { setPadding(dp(4), dp(10), dp(4), dp(10)) })
+        form.addView(label("Guarda este código e partilha-o apenas com os clientes que devem aderir ao programa.", 12f, false, muted))
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Configurar restaurante")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Criar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val name = nameField.text.toString().trim()
+                if (name.length !in 2..100) {
+                    nameField.error = "Usa entre 2 e 100 caracteres"
+                } else {
+                    runBackend({
+                        val token = backendToken()
+                        val restaurantId = SupabaseApi.createRestaurant(token, name, code)
+                        restoreOwnedRestaurant(token)
+                        restaurantId
+                    }) { restaurantId ->
+                        dialog.dismiss()
+                        // A successful create_restaurant RPC creates the current user as owner.
+                        // Keep owner controls available even if the follow-up refresh briefly fails.
+                        backendPrefs.edit().putString("restaurant_id", restaurantId)
+                            .putString("restaurant_name", name).putString("join_code", code)
+                            .putString("restaurant_role", "owner").apply()
+                        renderApp()
+                        AlertDialog.Builder(this)
+                            .setTitle("Restaurante criado")
+                            .setMessage("Código de adesão: $code\n\nOs clientes podem usar este código na aplicação de cliente depois de criarem conta e iniciarem sessão.")
+                            .setPositiveButton("OK", null).show()
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+
+    private fun showRestaurantTeam() {
+        if (backendToken().isBlank() || (backendPrefs.getString("restaurant_role", "") ?: "") != "owner") {
+            AlertDialog.Builder(this)
+                .setTitle("Acesso reservado")
+                .setMessage("Só o proprietário do restaurante pode consultar ou remover membros da equipa.")
+                .setPositiveButton("OK", null)
                 .show()
             return
         }
 
-        val form = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(22), dp(10), dp(22), dp(12))
-        }
-        form.addView(label("Mesa", 10f, true, forestSoft))
-        val tableOptions = mutableListOf<Pair<Int, String>>()
-        if (cloudMode) {
-            val tableData = remoteTables()
-            for (index in 0 until tableData.length()) {
-                val tableItem = tableData.optJSONObject(index) ?: continue
-                val tableNumber = tableItem.optInt("table_number", index + 1)
-                val area = tableItem.optString("area", "Sala principal")
-                tableOptions.add(tableNumber to ("Mesa " + tableNumber.toString().padStart(2, '0') + " · " + area))
+        runBackend({
+            SupabaseApi.listRestaurantTeam(backendToken()).toString()
+        }) { raw ->
+            val members = JSONArray(raw)
+            val content = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(14), dp(8), dp(14), dp(8))
             }
-        } else {
-            (1..12).forEach { tableOptions.add(it to ("Mesa " + it)) }
+            if (members.length() == 0) {
+                content.addView(emptyCard("O servidor não devolveu membros para este restaurante."))
+            }
+
+            lateinit var teamDialog: AlertDialog
+            for (index in 0 until members.length()) {
+                val member = members.optJSONObject(index) ?: continue
+                val userId = member.optString("member_user_id")
+                val email = member.optString("member_email").trim().ifBlank { "Conta " + userId.take(8) }
+                val role = member.optString("member_role", "staff")
+                val joined = member.optString("joined_at")
+                val joinedText = runCatching {
+                    val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US)
+                    val formatter = SimpleDateFormat("dd/MM/yyyy", Locale("pt", "PT"))
+                    formatter.format(parser.parse(joined) ?: Date())
+                }.getOrElse { "" }
+
+                val card = makeCard(12)
+                card.addView(label(email, 14f, true, forestDeep))
+                addGap(card, 3)
+                card.addView(label(
+                    (if (role == "owner") "Proprietário · acesso protegido" else "Funcionário · acesso operacional") +
+                        if (joinedText.isNotBlank()) " · desde $joinedText" else "",
+                    10.5f, false, muted
+                ))
+                if (role == "staff") {
+                    addGap(card, 8)
+                    card.addView(secondaryButton("Remover acesso") {
+                        AlertDialog.Builder(this)
+                            .setTitle("Remover acesso à equipa?")
+                            .setMessage("A conta $email deixará de pertencer a este restaurante. O utilizador poderá voltar a aderir se receber um novo código de acesso.")
+                            .setNegativeButton("Cancelar", null)
+                            .setPositiveButton("Remover") { _, _ ->
+                                runBackend({
+                                    val token = backendToken()
+                                    SupabaseApi.removeRestaurantStaff(token, userId)
+                                    // The server rotates the shared code when access is revoked.
+                                    backendPrefs.edit().remove("staff_join_code").apply()
+                                    runCatching {
+                                        val latestRestaurant = SupabaseApi.getMyRestaurant(token)
+                                        if (latestRestaurant != null) {
+                                            backendPrefs.edit()
+                                                .putString("staff_join_code", latestRestaurant.optString("staff_code"))
+                                                .apply()
+                                        }
+                                    }
+                                    "OK"
+                                }) {
+                                    teamDialog.dismiss()
+                                    AlertDialog.Builder(this)
+                                        .setTitle("Acesso removido")
+                                        .setMessage("O acesso foi revogado e o código antigo da equipa deixou de ser válido. Usa «Ver código de acesso à equipa» para obter o novo código antes de o partilhares com funcionários autorizados.")
+                                        .setPositiveButton("OK") { _, _ -> showRestaurantTeam() }
+                                        .show()
+                                }
+                            }
+                            .show()
+                    }, LinearLayout.LayoutParams(-1, dp(48)))
+                }
+                content.addView(card, cardParams())
+            }
+
+            val scroll = ScrollView(this).apply { addView(content) }
+            teamDialog = AlertDialog.Builder(this)
+                .setTitle("Membros da equipa")
+                .setView(scroll)
+                .setPositiveButton("Fechar", null)
+                .create()
+            teamDialog.show()
+            teamDialog.window?.setLayout(-1, dp(560))
         }
-        if (tableOptions.isEmpty()) {
-            AlertDialog.Builder(this).setTitle("Sem mesas disponíveis")
-                .setMessage("Adiciona uma mesa antes de criar um pedido.")
+    }
+
+    private fun showStaffJoinCode() {
+        val role = backendPrefs.getString("restaurant_role", "") ?: ""
+        if (role != "owner") {
+            AlertDialog.Builder(this)
+                .setTitle("Código não disponível")
+                .setMessage("Só o proprietário pode consultar o código de acesso à equipa.")
                 .setPositiveButton("OK", null).show()
             return
         }
-        val tableSpinner = Spinner(this)
-        tableSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, tableOptions.map { it.second })
-        form.addView(tableSpinner, fieldParams())
-        addGap(form, 3)
-
-        form.addView(label("Artigo", 10f, true, forestSoft))
-        val itemSpinner = Spinner(this)
-        itemSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, items.map { it.name })
-        form.addView(itemSpinner, fieldParams())
-        addGap(form, 3)
-
-        form.addView(label("Quantidade", 10f, true, forestSoft))
-        val quantityField = inputField("1–99 unidades", InputType.TYPE_CLASS_NUMBER).apply { setText("1") }
-        form.addView(quantityField, fieldParams())
-        addGap(form, 3)
-
-        form.addView(label("Momento do serviço", 10f, true, forestSoft))
-        val courseOptions = listOf("Bebidas", "Aperitivo", "Entrada", "Principal", "Sobremesa")
-        val courseSpinner = Spinner(this)
-        courseSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, courseOptions)
-        form.addView(courseSpinner, fieldParams())
-        addGap(form, 3)
-
-        form.addView(label("Notas para a cozinha (opcional)", 10f, true, forestSoft))
-        val notesField = multilineInputField("Ex.: molho à parte, sem sal…")
-        form.addView(notesField, multilineFieldParams())
-        addGap(form, 3)
-        form.addView(label("Os pedidos ficam com o estado «Aberto» até a equipa os encaminhar para preparação.", 11f, false, muted))
-
-        val formScroll = ScrollView(this).apply { addView(form) }
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Novo pedido")
-            .setView(formScroll)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Criar pedido", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val table = tableOptions.getOrNull(tableSpinner.selectedItemPosition)?.first ?: 1
-                val selected = items.getOrNull(itemSpinner.selectedItemPosition)
-                val quantity = quantityField.text.toString().trim().toIntOrNull()
-                val serviceCourse = courseOptions.getOrNull(courseSpinner.selectedItemPosition) ?: "Principal"
-                val notes = notesField.text.toString().trim()
-                when {
-                    selected == null -> itemSpinner.requestFocus()
-                    quantity == null || quantity !in 1..99 -> quantityField.error = "Usa uma quantidade entre 1 e 99"
-                    notes.length > 500 -> notesField.error = "As notas podem ter no máximo 500 caracteres"
-                    else -> {
-                        if (cloudMode) {
-                            val restaurantId = backendRestaurantId()
-                            val signature = JSONObject()
-                                .put("restaurant_id", restaurantId)
-                                .put("table_number", table)
-                                .put("item_name", selected.name)
-                                .put("amount", selected.price)
-                                .put("quantity", quantity)
-                                .put("service_course", serviceCourse)
-                                .put("notes", notes)
-                                .toString()
-                            // Exact retries reuse the same key; edits get a new key.
-                            val requestOperation = "order_create"
-                            val requestAccountId = backendPrefs.getString("user_id", "").orEmpty()
-                            val requestId = try {
-                                pendingRequestIds.getOrCreate(requestOperation, requestAccountId, signature)
-                            } catch (_: Exception) {
-                                quantityField.error = "Não foi possível guardar a referência segura. Tenta novamente."
-                                return@setOnClickListener
-                            }
-                            runBackend({
-                                val token = backendToken()
-                                SupabaseApi.createOrder(
-                                    token, restaurantId, table, selected.name, selected.price,
-                                    quantity, serviceCourse, notes, requestId
-                                )
-                                cacheRemoteOperations(token, restaurantId)
-                                "OK"
-                            }) {
-                                dialog.dismiss()
-                                activePage = "Pedidos"
-                                renderApp()
-                                pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
-                            }
-                        } else {
-                            val now = System.currentTimeMillis()
-                            store.addOrder(OrderEntry(
-                                now, table, selected.name, selected.price, "Aberto", now,
-                                quantity, serviceCourse, notes
-                            ))
-                            dialog.dismiss()
-                            activePage = "Pedidos"
-                            renderApp()
-                        }
-                    }
-                }
-            }
+        // Always fetch the current code. A staff revocation rotates it on the server.
+        runBackend({
+            val restaurant = SupabaseApi.getMyRestaurant(backendToken())
+                ?: throw IllegalStateException("Não foi possível obter os dados do restaurante.")
+            val code = restaurant.optString("staff_code").trim()
+            if (code.isBlank()) throw IllegalStateException("O servidor não devolveu um código válido.")
+            backendPrefs.edit().putString("staff_join_code", code).apply()
+            code
+        }) { code ->
+            AlertDialog.Builder(this)
+                .setTitle("Código de acesso à equipa")
+                .setMessage("Código: $code\n\nPartilha-o apenas com funcionários autorizados. Cada funcionário deve criar a sua própria conta no StudioMesa e escolher «Aderir à equipa de um restaurante».")
+                .setPositiveButton("OK", null)
+                .show()
         }
-        dialog.show()
     }
 
-    private fun showEditMenuItemDialog(itemId: String?, current: MenuEntry) {
-        val form = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(22), dp(10), dp(22), dp(12))
-        }
-        val nameField = inputField("Nome do artigo", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
-        val categoryField = inputField("Categoria (ex.: Entradas, Peixe, Sobremesas)", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
-        val descriptionField = multilineInputField("Descrição do prato, ingredientes principais ou preparação")
-        val priceField = inputField("Preço de venda (€)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
-        val costField = inputField("Custo por unidade (€)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
-        val allergensField = inputField("Alergénios declarados (se aplicável)", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
-        nameField.setText(current.name)
-        categoryField.setText(current.category)
-        descriptionField.setText(current.description)
-        priceField.setText(String.format(Locale("pt", "PT"), "%.2f", current.price))
-        costField.setText(String.format(Locale("pt", "PT"), "%.2f", current.cost))
-        allergensField.setText(current.allergens)
-
-        form.addView(label("Nome do artigo", 10f, true, forestSoft))
-        form.addView(nameField, fieldParams())
-        addGap(form, 2)
-        form.addView(label("Categoria", 10f, true, forestSoft))
-        form.addView(categoryField, fieldParams())
-        addGap(form, 2)
-        form.addView(label("Descrição", 10f, true, forestSoft))
-        form.addView(descriptionField, multilineFieldParams())
-        addGap(form, 2)
-        form.addView(label("Preço de venda (€)", 10f, true, forestSoft))
-        form.addView(priceField, fieldParams())
-        addGap(form, 2)
-        form.addView(label("Custo por unidade (€) · interno", 10f, true, forestSoft))
-        form.addView(costField, fieldParams())
-        addGap(form, 2)
-        form.addView(label("Alergénios declarados", 10f, true, forestSoft))
-        form.addView(allergensField, fieldParams())
-        addGap(form, 5)
-        form.addView(label("A informação de alergénios tem de ser confirmada pelo restaurante e pela equipa de cozinha.", 11f, false, muted))
-
-        val formScroll = ScrollView(this).apply { addView(form) }
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Editar artigo")
-            .setView(formScroll)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Guardar alterações", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val name = nameField.text.toString().trim()
-                val category = categoryField.text.toString().trim()
-                val description = descriptionField.text.toString().trim()
-                val price = priceField.text.toString().trim().replace(',', '.').toDoubleOrNull()
-                val cost = costField.text.toString().trim().replace(',', '.').toDoubleOrNull()
-                val allergens = allergensField.text.toString().trim()
-                when {
-                    name.isBlank() || name.length > 120 -> nameField.error = "Usa entre 1 e 120 caracteres"
-                    category.isBlank() || category.length > 60 -> categoryField.error = "Usa entre 1 e 60 caracteres"
-                    description.length > 500 -> descriptionField.error = "A descrição pode ter no máximo 500 caracteres"
-                    price == null || !price.isFinite() || price < 0.0 -> priceField.error = "Preço inválido"
-                    cost == null || !cost.isFinite() || cost < 0.0 -> costField.error = "Custo inválido"
-                    allergens.length > 300 -> allergensField.error = "Usa no máximo 300 caracteres"
-                    else -> {
-                        if (hasRemoteRestaurant() && !itemId.isNullOrBlank()) {
-                            val restaurantId = backendRestaurantId()
-                            runBackend({
-                                val token = backendToken()
-                                SupabaseApi.updateMenuItem(token, itemId, name, category, description, price, cost, allergens)
-                                cacheRemoteOperations(token, restaurantId)
-                                "OK"
-                            }) {
-                                dialog.dismiss()
-                                renderApp()
-                            }
-                        } else {
-                            val items = store.getMenu()
-                            val index = items.indexOfFirst { it == current }
-                            if (index < 0) {
-                                nameField.error = "O artigo já não existe. Atualiza a carta e tenta novamente."
-                            } else {
-                                items[index] = MenuEntry(name, price, cost, category, description, allergens)
-                                store.saveMenu(items)
-                                dialog.dismiss()
-                                renderApp()
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        dialog.show()
-    }
-
-    private fun showAddMenuItemDialog() {
-        val form = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(22), dp(10), dp(22), dp(12))
-        }
-        val nameField = inputField("Nome do artigo", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
-        val categoryField = inputField("Categoria (ex.: Entradas, Peixe, Sobremesas)", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES).apply {
-            setText("Prato principal")
-        }
-        val descriptionField = multilineInputField("Descrição do prato, ingredientes principais ou preparação")
-        val priceField = inputField("Preço de venda (€)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
-        val costField = inputField("Custo por unidade (€)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
-        val allergensField = inputField("Alergénios declarados (se aplicável)", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
-        form.addView(label("Nome do artigo", 10f, true, forestSoft)); form.addView(nameField, fieldParams())
-        addGap(form, 2)
-        form.addView(label("Categoria", 10f, true, forestSoft)); form.addView(categoryField, fieldParams())
-        addGap(form, 2)
-        form.addView(label("Descrição", 10f, true, forestSoft)); form.addView(descriptionField, multilineFieldParams())
-        addGap(form, 2)
-        form.addView(label("Preço de venda (€)", 10f, true, forestSoft)); form.addView(priceField, fieldParams())
-        addGap(form, 2)
-        form.addView(label("Custo por unidade (€) · interno", 10f, true, forestSoft)); form.addView(costField, fieldParams())
-        addGap(form, 2)
-        form.addView(label("Alergénios declarados", 10f, true, forestSoft)); form.addView(allergensField, fieldParams())
-        addGap(form, 5)
-        form.addView(label("Confirma a descrição e os alergénios com a equipa de cozinha antes de publicar a carta.", 11f, false, muted))
-
-        val formScroll = ScrollView(this).apply { addView(form) }
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Adicionar artigo")
-            .setView(formScroll)
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Guardar", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val name = nameField.text.toString().trim()
-                val category = categoryField.text.toString().trim()
-                val description = descriptionField.text.toString().trim()
-                val price = priceField.text.toString().trim().replace(',', '.').toDoubleOrNull()
-                val cost = costField.text.toString().trim().replace(',', '.').toDoubleOrNull()
-                val allergens = allergensField.text.toString().trim()
-                when {
-                    name.isBlank() || name.length > 120 -> nameField.error = "Usa entre 1 e 120 caracteres"
-                    category.isBlank() || category.length > 60 -> categoryField.error = "Usa entre 1 e 60 caracteres"
-                    description.length > 500 -> descriptionField.error = "A descrição pode ter no máximo 500 caracteres"
-                    price == null || !price.isFinite() || price < 0.0 -> priceField.error = "Preço inválido"
-                    cost == null || !cost.isFinite() || cost < 0.0 -> costField.error = "Custo inválido"
-                    allergens.length > 300 -> allergensField.error = "Usa no máximo 300 caracteres"
-                    else -> {
-                        if (hasRemoteRestaurant()) {
-                            val restaurantId = backendRestaurantId()
-                            val signature = JSONObject()
-                                .put("restaurant_id", restaurantId)
-                                .put("name", name)
-                                .put("category", category)
-                                .put("description", description)
-                                .put("price", price)
-                                .put("cost", cost)
-                                .put("allergens", allergens)
-                                .toString()
-                            val requestOperation = "menu_add"
-                            val requestAccountId = backendPrefs.getString("user_id", "").orEmpty()
-                            val requestId = try {
-                                pendingRequestIds.getOrCreate(requestOperation, requestAccountId, signature)
-                            } catch (_: Exception) {
-                                nameField.error = "Não foi possível guardar a referência segura. Tenta novamente."
-                                return@setOnClickListener
-                            }
-                            runBackend({
-                                val token = backendToken()
-                                SupabaseApi.addMenuItem(token, restaurantId, requestId, name, category, description, price, cost, allergens)
-                                cacheRemoteOperations(token, restaurantId)
-                                "OK"
-                            }) {
-                                dialog.dismiss()
-                                renderApp()
-                                pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
-                            }
-                        } else {
-                            val menu = store.getMenu()
-                            menu.add(MenuEntry(name, price, cost, category, description, allergens))
-                            store.saveMenu(menu)
-                            dialog.dismiss()
-                            renderApp()
-                        }
-                    }
-                }
-            }
-        }
-        dialog.show()
-    }
-
-    private fun pageIntro(container: LinearLayout, title: String, subtitle: String) {
-        container.addView(label("Gestão de restaurante", 10.5f, true, forestSoft))
-        addGap(container, 5)
-        container.addView(label(title, 27f, true, forestDeep))
-        addGap(container, 5)
-        container.addView(label(subtitle, 14f, false, muted))
-    }
-
-    private fun sectionHeading(container: LinearLayout, title: String, subtitle: String) {
-        container.addView(label(title, 18f, true, forestDeep))
-        addGap(container, 3)
-        container.addView(label(subtitle, 12.5f, false, muted))
-        addGap(container, 10)
-    }
-
-    private fun actionCard(parent: LinearLayout, number: String, title: String, subtitle: String, actionText: String, action: () -> Unit) {
-        val card = makeCard(14)
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        row.addView(label(number, 11f, true, forestSoft), LinearLayout.LayoutParams(dp(28), -2))
-        val text = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        text.addView(label(title, 16f, true, ink))
-        addGap(text, 3)
-        text.addView(label(subtitle, 12.5f, false, muted))
-        row.addView(text, LinearLayout.LayoutParams(0, -2, 1f))
-        card.addView(row)
-        addGap(card, 12)
-        card.addView(secondaryButton(actionText, action), LinearLayout.LayoutParams(-1, dp(48)))
-        parent.addView(card, cardParams())
-    }
-
-    private fun statCard(title: String, value: String, accent: Int): LinearLayout {
-        val card = makeCard(14)
-        card.addView(label(title, 9.5f, true, muted))
-        addGap(card, 7)
-        card.addView(label(value, 24f, true, forestDeep))
-        addGap(card, 7)
-        card.addView(View(this).apply { setBackgroundColor(accent) }, LinearLayout.LayoutParams(dp(26), dp(3)))
-        return card
-    }
-
-    private fun priceColumn(title: String, value: String): LinearLayout {
-        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        column.addView(label(title, 9f, true, muted))
-        addGap(column, 4)
-        column.addView(label(value, 14f, true, forest))
-        return column
-    }
-
-    private fun addMetric(parent: LinearLayout, title: String, value: String) {
-        parent.addView(label(title, 10.5f, true, muted))
-        addGap(parent, 4)
-        parent.addView(label(value, 21f, true, forest))
-        addGap(parent, 13)
-    }
-
-    private fun addDivider(parent: LinearLayout) {
-        parent.addView(View(this).apply { setBackgroundColor(line) }, LinearLayout.LayoutParams(-1, dp(1)))
-        addGap(parent, 12)
-    }
-
-    private fun statusDot(color: Int): View =
-        View(this).apply { background = rounded(color, 9) }
-
-    private fun emptyCard(message: String): LinearLayout {
-        val card = makeCard(18, white)
-        card.addView(label("Ainda sem registos", 15f, true, forest))
-        addGap(card, 6)
-        card.addView(label(message, 13f, false, muted))
-        return card
-    }
-
-    private fun makeCard(padding: Int, color: Int = white): LinearLayout =
-        LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(padding), dp(padding), dp(padding), dp(padding))
-            background = rounded(color, 19)
-            elevation = dp(1).toFloat()
-        }
-
-    private fun cardParams(): LinearLayout.LayoutParams =
-        LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 0, 0, dp(11)) }
-
-    private fun fieldParams(): LinearLayout.LayoutParams =
-        LinearLayout.LayoutParams(-1, dp(48)).apply { setMargins(0, dp(5), 0, dp(8)) }
-
-    private fun inputField(hintText: String, type: Int): EditText =
-        EditText(this).apply {
-            hint = hintText
-            inputType = type
-            textSize = 15f
-            setTextColor(ink)
-            setHintTextColor(muted)
-            setPadding(dp(12), dp(8), dp(12), dp(8))
-            background = rounded(white, 12)
-            isSingleLine = true
-        }
-
-    private fun multilineInputField(hintText: String): EditText =
-        EditText(this).apply {
-            hint = hintText
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-            textSize = 14f
-            setTextColor(ink)
-            setHintTextColor(muted)
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-            background = rounded(white, 12)
-            minLines = 2
-            maxLines = 3
-            isSingleLine = false
-            gravity = Gravity.TOP or Gravity.START
-        }
-
-    private fun multilineFieldParams(): LinearLayout.LayoutParams =
-        LinearLayout.LayoutParams(-1, dp(76)).apply { setMargins(0, dp(5), 0, dp(8)) }
-
-    private fun primaryButton(title: String, action: () -> Unit): Button =
-        Button(this).apply {
-            text = title
-            textSize = 13f
-            typeface = Typeface.create("sans-serif", Typeface.BOLD)
-            isAllCaps = false
-            setTextColor(forestDeep)
-            background = rippleBackground(copper, 15)
-            elevation = dp(1).toFloat()
-            setPadding(dp(12), dp(3), dp(12), dp(3))
-            setOnClickListener { action() }
-        }
-
-    private fun secondaryButton(title: String, action: () -> Unit): Button =
-        Button(this).apply {
-            text = title
-            textSize = 11.5f
-            typeface = Typeface.create("sans-serif", Typeface.BOLD)
-            isAllCaps = false
-            setTextColor(forest)
-            background = rippleBackground(paleGreen, 14)
-            elevation = 0f
-            setPadding(dp(8), dp(2), dp(8), dp(2))
-            setOnClickListener { action() }
-        }
-
-    private fun label(value: String, size: Float, bold: Boolean, color: Int): TextView =
-        TextView(this).apply {
-            text = value
-            textSize = size
-            setTextColor(color)
-            if (bold) typeface = Typeface.create(if (size >= 23f) "serif" else "sans-serif", Typeface.BOLD)
-            setLineSpacing(dp(2).toFloat(), 1.0f)
-        }
-
-    private fun rippleBackground(
-        color: Int,
-        radius: Int,
-        rippleColor: Int = Color.argb(42, 43, 59, 50)
-    ): Drawable {
-        val base = rounded(color, radius)
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            RippleDrawable(
-                ColorStateList.valueOf(rippleColor),
-                base,
-                rounded(Color.WHITE, radius)
-            )
+    private fun confirmCodeRotation(staffCode: Boolean) {
+        val title = if (staffCode) "Renovar código da equipa?" else "Renovar código dos clientes?"
+        val message = if (staffCode) {
+            "O código atual deixa de aceitar novas adesões da equipa. Os funcionários já associados mantêm o acesso."
         } else {
-            base
+            "O código atual deixa de aceitar novas adesões de clientes. Os cartões já associados mantêm os pontos."
         }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Gerar novo código", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                runBackend({
+                    val token = backendToken()
+                    val code = if (staffCode) {
+                        SupabaseApi.rotateStaffJoinCode(token)
+                    } else {
+                        SupabaseApi.rotateCustomerJoinCode(token)
+                    }
+                    val key = if (staffCode) "staff_join_code" else "join_code"
+                    backendPrefs.edit().putString(key, code).apply()
+                    code
+                }) { code ->
+                    dialog.dismiss()
+                    renderApp()
+                    AlertDialog.Builder(this)
+                        .setTitle("Novo código gerado")
+                        .setMessage((if (staffCode) "Código da equipa: " else "Código dos clientes: ") + code +
+                            "\n\nGuarda-o e partilha-o apenas com as pessoas autorizadas.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            }
+        }
+        dialog.show()
     }
 
-    private fun rounded(color: Int, radius: Int): GradientDrawable =
-        GradientDrawable().apply {
-            shape = GradientDrawable.RECTANGLE
-            setColor(color)
-            cornerRadius = dp(radius).toFloat()
+    private fun showJoinStaffDialog() {
+        if (backendToken().isBlank()) {
+            showAuthChooser { renderApp() }
+            return
         }
-
-    private fun addGap(parent: LinearLayout, height: Int) {
-        parent.addView(View(this), LinearLayout.LayoutParams(1, dp(height)))
+        val field = inputField("Código de acesso à equipa", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS)
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(8), dp(22), dp(4))
+        }
+        form.addView(label("Código fornecido pelo proprietário", 10f, true, forestSoft))
+        form.addView(field, fieldParams())
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Aderir à equipa")
+            .setMessage("Usa o teu próprio email e a tua própria conta. Nunca partilhes a palavra-passe do proprietário.")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Aderir", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val code = field.text.toString().trim().uppercase(Locale.ROOT)
+                if (code.length !in 6..16) {
+                    field.error = "Introduz um código válido"
+                } else {
+                    runBackend({
+                        val token = backendToken()
+                        SupabaseApi.joinRestaurantStaff(token, code)
+                        restoreOwnedRestaurant(token)
+                        "OK"
+                    }) {
+                        dialog.dismiss()
+                        activePage = "Conta"
+                        renderApp()
+                    }
+                }
+            }
+        }
+        dialog.show()
     }
 
-    private fun money(value: BigDecimal): String =
-        NumberFormat.getCurrencyInstance(Locale("pt", "PT")).format(value)
-
-    // Keep one decimal for ordinary values but retain a second decimal when it is material (e.g. 0.01%).
-    private fun formatPercentage(value: BigDecimal): String =
-        DecimalFormat("0.0#", DecimalFormatSymbols.getInstance(Locale("pt", "PT"))).format(value) + "%"
-
-    private fun money(value: Double): String =
-        NumberFormat.getCurrencyInstance(Locale("pt", "PT")).format(value)
-
-    private fun dp(value: Int): Int =
-        (value * resources.displayMetrics.density).toInt()
-}
+    private fun renderBackendAccount(container: LinearLayout) {
+        pageIntro(container, "Conta e sincronização", "Conta, restaurante e acesso da equipa.")
+        addGap(container, 12)
+        val token = backendToken()
+        val card = makeCard(17)
+        if (token.isBlank()) {
+            card.addView(label("Ainda sem sessão", 10f, true, forestSoft))
+            addGap(card, 6)
+            card.addView(label("Cria uma conta ou inicia sessão para configurar um restaurante ou aderir à equipa de um restaurante existente.", 13f, false, ink))
+            addGap(card, 12)
+            card.addView(primaryButton("Criar conta / iniciar sessão") { showAuthChooser { renderApp() } },
+                LinearLayout.LayoutParams(-1, dp(48)))
+        } else if (backendRestaurantId().isBlank()) {
+            card.addView(label("Sessão iniciada", 10f, true, green))
+            addGap(card, 5)
+            card.addView(label(backendPrefs.getString("user_email", "") ?: "", 13f, false, muted))
+            addGap(card, 12)
+            card.addView(primaryButton("Configurar novo restaurante") { showCreateRestaurantDialog() },
+                LinearLayout.LayoutParams(-1, dp(48)))
+            addGap(card, 7)
+            card.addView(secondaryButton("Aderir à equipa de um restaurante") { showJoinStaffDialog() },
+                LinearLayout.LayoutParams(-1, dp(48)))
+        } else {
+            val restaurantName = backendPrefs.getString("restaurant_name", "Restaurante") ?: "Restaurante"
+            val role = backendPrefs.getString("restaurant_role", "staff") ?: "staff"
+            card.addView(label(if (role == "owner") "CONTA DO PROPRIETÁRIO" else "ACESSO DE EQUIPA", 10f, true, green))
+            addGap(card, 6)
+            card.addView(label(restaurantName, 20f, true, forestDeep))
+            addGap(card, 5)
+            if (role == "owner") {
+                card.addView(label("Código de adesão dos clientes", 11f, false, muted))
+                card.addView(label(backendPrefs.getString("join_code", "") ?: "", 23f, true, forest))
+                addGap(card, 8)
+                card.addView(label("Partilha este código apenas com clientes que devem aderir ao programa de fidelização.", 12f, false, ink))
+                addGap(card, 8)
+                card.addView(secondaryButton("Renovar código de adesão dos clientes") { confirmCodeRotation(false) },
+                    LinearLayout.LayoutParams(-1, dp(48)))
+                addGap(card, 5)
+                card.addView(secondaryButton("Ver código de acesso à equipa") { showStaffJoinCode() },
+                    LinearLayout.LayoutParams(-1, dp(48)))
+                addGap(card, 5)
+                card.addView(secondaryButton("Gerir membros e acessos da equipa") { showRestaurantTeam() },
+                    LinearLayout.LayoutParams(-1, dp(48)))
+                addGap(card, 5)
+                card.addView(secondaryButton("Renovar código da equipa") { confirmCodeRotation(true) },
+                    LinearLayout.LayoutParams(-1, dp(48)))
+            } else {
+                card.addView(label("Esta conta está associada à equipa deste restaurante. As alterações operacionais são guardadas no servidor.", 12f, false, ink))
+            }
+            addGap(card, 12)
+            card.addView(primaryButton("Atualizar lista de clientes") { refreshRemoteCustomers() },
+                LinearLayout.LayoutParams(-1, dp(48)))
+        }
+        container.addView(card, cardParams())
+        addGap(container, 3)
+        if (token.isNotBlank()) {
+            container.addView(secondaryButton("Eliminar conta permanentemente") {
+                showDeleteAccountConfirmation()
+            }, LinearLayout.LayoutParams(-1, dp(48)))
+            addGap(container, 7)
+        }
+        
