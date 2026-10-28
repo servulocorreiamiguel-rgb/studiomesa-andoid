@@ -435,7 +435,7 @@ internal object StudioMesaAdvisor {
             !RestaurantAssistantIntentClassifier.requestsDatedSales(rawQuestion)) {
             return StudioMesaAssistantAnswer(
                 "Período de desempenho não confirmado",
-                "Não tenho um filtro temporal fiável para consultar preços, custos, despesas ou margens do intervalo pedido. Os valores de custo/preço carregados representam os valores atuais e não provam os valores históricos desse período. A página Análise mostra totais gerais sem filtro temporal; confirma os registos históricos antes de tomar decisões.",
+                "Não tenho um filtro temporal fiável para consultar vendas, preços, custos, despesas, lucro ou margens históricas do intervalo pedido. Os valores de custo/preço carregados representam os valores atuais e não provam os valores históricos desse período. A página Análise mostra totais gerais sem filtro temporal; confirma os registos históricos antes de tomar decisões.",
                 "Pedidos"
             )
         }
