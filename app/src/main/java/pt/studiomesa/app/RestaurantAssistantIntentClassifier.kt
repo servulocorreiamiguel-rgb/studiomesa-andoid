@@ -31,7 +31,7 @@ internal object RestaurantAssistantIntentClassifier {
     private val rules = listOf(
         rule(RestaurantAssistantIntent.ECONOMIC_MANAGER, 10,
             "gestao economica", "gestor economico", "gestao financeira", "gestor financeiro",
-            "ponto de equilibrio", "break even", "quantidade a encomendar", "previsao financeira",
+            "ponto de equilibrio", "break even", "quantidade a encomendar", "quanto devo encomendar", "quanto encomendar", "ponto de encomenda", "previsao financeira",
             "ficha tecnica", "custo dos ingredientes", "custo de ingredientes", "custo do prato",
             "custo deste prato", "custo por dose", "custo por porcao", "preco de compra",
             "precos de compra", "comparar fornecedores",
