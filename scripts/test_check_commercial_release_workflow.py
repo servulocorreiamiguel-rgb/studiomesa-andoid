@@ -55,14 +55,28 @@ jobs:
           if ! grep -Fq "jar verified." <<< "$verification_output"; then
             exit 1
           fi
+
+      - name: Build and verify signed APKs
+        run: |
+          gradle assembleEssencialRestauranteRelease assembleProfissionalRestauranteRelease assembleProfissionalClienteRelease assemblePremiumRestauranteRelease assemblePremiumClienteRelease
+          mapfile -d '' apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' -print0)
+          if [ "${#apks[@]}" -ne 5 ]; then
+            echo "Expected exactly five release APKs, found ${#apks[@]}."
+            exit 1
+          fi
+          for apk in "${apks[@]}"; do
+            apksigner verify --verbose "$apk"
+          done
 """
 
-SAFE_ANDROID_WORKFLOW = """      - name: Verify temporary CI AAB
+SAFE_ANDROID_WORKFLOW = """      - name: Verify temporary CI AAB and APK
         run: |
           verification_output="$(jarsigner -verify "$AAB_PATH" 2>&1)" || exit 1
           if ! grep -Fq "jar verified." <<< "$verification_output"; then
             exit 1
           fi
+          assembleEssencialRestauranteRelease
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$APK_PATH"
 """
 
 
@@ -138,6 +152,15 @@ class CommercialReleaseWorkflowAuditTests(unittest.TestCase):
         )
         self.assertTrue(
             any("explicitly reject AABs" in error for error in audit_workflow(changed))
+        )
+
+    def test_rejects_release_workflow_without_apk_signature_verification(self) -> None:
+        changed = SAFE_WORKFLOW.replace(
+            'apksigner verify --verbose "$apk"',
+            'echo "APK verification removed"',
+        )
+        self.assertTrue(
+            any("apksigner" in error for error in audit_workflow(changed))
         )
 
     def test_android_ci_must_verify_its_temporary_aab_signature(self) -> None:
