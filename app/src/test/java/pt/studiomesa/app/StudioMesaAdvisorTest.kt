@@ -488,6 +488,28 @@ class StudioMesaAdvisorTest {
         assertFalse(answer.response.contains("média das últimas quatro semanas"))
     }
 
+    @Test fun datedMenuSalesNeverReuseAllTimeSalesAsIfTheyBelongedToRequestedPeriod() {
+        val data = snapshot(
+            menu = listOf(item("Sopa", "5.00", "2.00"), item("Bitoque", "14.00", "4.50")),
+            salesLines = listOf(
+                AssistantSaleLine("Sopa", 20, "Concluído"),
+                AssistantSaleLine("Bitoque", 8, "Concluído")
+            )
+        )
+        val questions = listOf(
+            "Quais pratos venderam mais no domingo passado?",
+            "Quais artigos foram mais vendidos nos últimos 30 dias?",
+            "Quanto vendi em março?"
+        )
+        questions.forEach { question ->
+            val answer = StudioMesaAdvisor.answerQuestion(question, data)
+            assertEquals("$question -> ${answer.title}", "Período de vendas não confirmado", answer.title)
+            assertTrue(answer.response.contains("filtro temporal fiável"))
+            assertFalse(answer.response.contains("Triagem indicativa"))
+            assertFalse(answer.response.contains("20 unidades"))
+        }
+    }
+
 
     @Test fun dishDoseCostQuestionGuidesToRecipeCalculationInsteadOfInventingIngredients() {
         val answer = StudioMesaAdvisor.answerQuestion("Quanto custa uma dose de lasanha?", snapshot())
