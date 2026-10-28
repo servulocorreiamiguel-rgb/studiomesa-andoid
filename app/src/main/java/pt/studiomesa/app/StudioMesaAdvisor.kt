@@ -612,11 +612,20 @@ internal object StudioMesaAdvisor {
     }
 
     private fun requestedStockItemName(normalizedQuestion: String): String? {
-        val withoutQuestion = normalizedQuestion
-            .replace(Regex("\\b(?:quanto|quantos|quantas|tenho|temos|tem|resta|sobrou|acabou|stock|estoque|disponivel|disponiveis|quantidade|em|no|na|de|do|da|dos|das|o|a|os|as|meu|minha|meus|minhas|por favor|para encomendar|devo encomendar|devo comprar|esta baixo|esta baixa|baixo|baixa|hoje)\\b"), " ")
-            .trim().replace(Regex("\\s+"), " ")
-        if (withoutQuestion.isBlank()) return null
-        return withoutQuestion.takeIf { it.split(" ").any { word -> word.length > 2 } }
+        val patterns = listOf(
+            Regex("\\b(?:quanto tenho de|quanto tem de|quanto resta de|quanto sobrou de|quantidade de|stock de|estoque de|tenho stock de|acabou (?:o|a|os|as)|ficou sem)\\s+(.+)$")
+        )
+        val rawCandidate = patterns.firstNotNullOfOrNull { pattern ->
+            pattern.find(normalizedQuestion)?.groupValues?.getOrNull(1)
+        } ?: return null
+        val candidate = rawCandidate
+            .replace(Regex("\\s+(?:em stock|no stock|em estoque|no estoque)$"), "")
+            .replace(Regex("\\s+(?:quanto|devo|encomendar|comprar|para|por favor)\\b.*$"), "")
+            .trim()
+            .replace(Regex("^(?:o|a|os|as)\\s+"), "")
+            .trim()
+        if (candidate.isBlank() || candidate in setOf("stock", "estoque", "artigo", "artigos", "produto", "produtos")) return null
+        return candidate.takeIf { it.split(" ").any { word -> word.length > 2 } }
     }
 
     private fun answerReservations(rawQuestion: String, s: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
