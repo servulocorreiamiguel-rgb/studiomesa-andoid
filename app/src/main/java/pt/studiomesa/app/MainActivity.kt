@@ -53,6 +53,10 @@ class MainActivity : Activity() {
     private var economicReportText = ""
     private var recipeReportText = ""
     private var reorderReportText = ""
+    private var wasteReportText = ""
+    private var supplierReportText = ""
+    private var budgetReportText = ""
+    private var usageReportText = ""
     private val backendPrefs by lazy { getSharedPreferences("studiomesa_backend", MODE_PRIVATE) }
     private val secureSession by lazy { SecureSessionStore(this) }
     private val pendingRequestIds by lazy { PendingRequestIds(this) }
@@ -3698,6 +3702,10 @@ class MainActivity : Activity() {
         economicReportText = ""
         recipeReportText = ""
         reorderReportText = ""
+        wasteReportText = ""
+        supplierReportText = ""
+        budgetReportText = ""
+        usageReportText = ""
     }
 
     private fun renderEconomicManager(container: LinearLayout) {
@@ -3868,9 +3876,101 @@ class MainActivity : Activity() {
             reorder.addView(label(reorderReportText, 12f, false, ink))
         }
         container.addView(reorder, cardParams())
+
+        addGap(container, 6)
+        economicLogCard(
+            container, "4 · Registo de desperdício por artigo", 
+            "Formato: artigo | quantidade desperdiçada | custo por unidade | motivo. Regista apenas quantidades e custos compatíveis.",
+            "wasteLog", "Frango | 2 | 6,50 | Validade\nSopa | 1 | 4,00 | Produção",
+            "Calcular custo do desperdício", wasteReportText,
+            compute = { raw ->
+                val report = RestaurantEconomicManager.analyzeWasteLog(raw)
+                buildString {
+                    append("Custo total registado: ").append(money(report.totalCost)).append('\n')
+                    report.costByReason.forEach { append("• ").append(it.first).append(": ").append(money(it.second)).append('\n') }
+                    report.entries.forEach { append("• ").append(it.itemName).append(" — ")
+                        .append(it.quantity.stripTrailingZeros().toPlainString()).append(" × ")
+                        .append(money(it.unitCost)).append(" = ").append(money(it.totalCost)).append('\n') }
+                    append("Este cálculo não movimenta stock nem desconta o desperdício outra vez.")
+                }
+            },
+            save = { wasteReportText = it }
+        )
+
+        addGap(container, 6)
+        economicLogCard(
+            container, "5 · Comparar preços de fornecedores",
+            "Formato: artigo | fornecedor | unidade | quantidade na embalagem | preço da embalagem. Compara apenas a mesma unidade (por exemplo, €/kg).",
+            "supplierQuotes", "Tomate | Fornecedor A | kg | 10 | 16,00\nTomate | Fornecedor B | kg | 5 | 7,50",
+            "Comparar custo por unidade", supplierReportText,
+            compute = { raw ->
+                val groups = RestaurantEconomicManager.compareSupplierQuotes(raw)
+                buildString {
+                    groups.forEach { group ->
+                        append(group.itemName).append(" (por ").append(group.unit).append("):\n")
+                        group.options.forEachIndexed { index, quote ->
+                            append(if (index == 0) "• Mais barato: " else "• ")
+                                .append(quote.supplierName).append(" — ")
+                                .append(money(quote.pricePerUnit)).append(" / ").append(group.unit)
+                                .append(" (embalagem ").append(quote.packQuantity.stripTrailingZeros().toPlainString())
+                                .append(" por ").append(money(quote.packPrice)).append(")\n")
+                        }
+                    }
+                    append("Confirma qualidade, transporte, IVA, validade, mínimos de encomenda e condições antes de escolher.")
+                }
+            },
+            save = { supplierReportText = it }
+        )
+
+        addGap(container, 6)
+        economicLogCard(
+            container, "6 · Orçamento versus valor real",
+            "Formato: categoria | orçamento do período | valor real. Usa o mesmo período. Uma diferença positiva não é automaticamente boa nem má.",
+            "budgetComparison", "Vendas | 15000 | 14200\nPessoal | 5200 | 5300\nRenda | 1800 | 1800",
+            "Comparar orçamento e realizado", budgetReportText,
+            compute = { raw ->
+                val rows = RestaurantEconomicManager.compareBudget(raw)
+                buildString {
+                    rows.forEach { row ->
+                        append("• ").append(row.category).append(": orçamento ").append(money(row.budget))
+                            .append("; real ").append(money(row.actual))
+                            .append("; diferença ").append(if (row.variance.signum() > 0) "+" else "").append(money(row.variance))
+                        row.variancePercent?.let { append(" (").append(economicPercent(it)).append(")") }
+                        append('\n')
+                    }
+                    append("Para custos, ficar acima do orçamento pode ser desfavorável; para vendas, o sentido é normalmente o contrário. Revê cada categoria.")
+                }
+            },
+            save = { budgetReportText = it }
+        )
+
+        addGap(container, 6)
+        economicLogCard(
+            container, "7 · Consumo teórico versus real",
+            "Formato: artigo | consumo teórico | consumo real | custo por unidade. Quantidades e unidade de custo têm de coincidir e referir-se ao mesmo período.",
+            "usageVariance", "Frango | 20 | 23 | 6,50\nQueijo | 5 | 4 | 8,00",
+            "Analisar diferenças de consumo", usageReportText,
+            compute = { raw ->
+                val rows = RestaurantEconomicManager.compareTheoreticalAndActualUsage(raw)
+                buildString {
+                    rows.forEach { row ->
+                        append("• ").append(row.itemName).append(": previsto ")
+                            .append(row.expectedUse.stripTrailingZeros().toPlainString())
+                            .append("; real ").append(row.actualUse.stripTrailingZeros().toPlainString())
+                            .append("; diferença ").append(if (row.varianceQuantity.signum() > 0) "+" else "")
+                            .append(row.varianceQuantity.stripTrailingZeros().toPlainString())
+                            .append("; impacto estimado ").append(if (row.varianceCost.signum() > 0) "+" else "")
+                            .append(money(row.varianceCost)).append('\n')
+                    }
+                    append("Diferenças podem resultar de desperdício, porções, contagens, ofertas, erros de receita ou dados incompletos; investiga antes de concluir.")
+                }
+            },
+            save = { usageReportText = it }
+        )
+
         addGap(container, 4)
         container.addView(label(
-            "Limites: cálculos indicativos, sem contabilidade certificada, ligação bancária, preços de fornecedores, registo detalhado de desperdício ou integração entre receitas e consumo real de stock. Não altera preços, stock, pagamentos nem encomendas.",
+            "Limites: cálculos indicativos, sem contabilidade certificada, ligação bancária, leitura automática de faturas, acesso a fornecedores ou movimentos automáticos de stock. Os registos de desperdício, propostas e comparações são manuais e ficam apenas nesta sessão. Não altera preços, stock, pagamentos nem encomendas.",
             10.5f, false, muted
         ))
     }
@@ -3902,6 +4002,40 @@ class MainActivity : Activity() {
         })
         field.setText(economicInputs[key].orEmpty())
         parent.addView(field, multilineFieldParams())
+    }
+
+
+    private fun economicLogCard(
+        parent: LinearLayout,
+        title: String,
+        description: String,
+        inputKey: String,
+        hint: String,
+        buttonTitle: String,
+        reportText: String,
+        compute: (String) -> String,
+        save: (String) -> Unit
+    ) {
+        val card = makeCard(15)
+        card.addView(label(title, 17f, true, forestDeep))
+        addGap(card, 4)
+        card.addView(label(description, 11.5f, false, muted))
+        economicTextField(card, inputKey, hint)
+        addGap(card, 3)
+        card.addView(primaryButton(buttonTitle) {
+            val result = try {
+                compute(economicInputs[inputKey].orEmpty())
+            } catch (e: IllegalArgumentException) {
+                "Não foi possível analisar: ${e.message ?: "confirma os valores e unidades"}"
+            }
+            save(result)
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(44)))
+        if (reportText.isNotBlank()) {
+            addGap(card, 8)
+            card.addView(label(reportText, 12f, false, ink))
+        }
+        parent.addView(card, cardParams())
     }
 
     private fun economicRequiredAmount(key: String, fieldName: String): BigDecimal =
