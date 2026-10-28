@@ -265,11 +265,17 @@ internal object StudioMesaAdvisor {
         lowestContribution: Boolean = false
     ): StudioMesaAssistantAnswer {
         val eligible = snapshot.menuItems.filter {
-            it.name.isNotBlank() && it.sellingPrice > zero && it.unitCost > zero
+            it.name.isNotBlank() && it.sellingPrice > zero && it.unitCost > zero &&
+                (!lowestContribution || it.unitCost > it.sellingPrice)
         }
         if (eligible.isEmpty()) return StudioMesaAssistantAnswer(
-            "Faltam custos para comparar a carta",
-            "Não encontrei artigos com preço de venda e custo interno válidos. Confirma esses valores na Carta antes de comparar contribuições; não vou inventar lucro."
+            if (lowestContribution) "Não há contribuição unitária negativa registada"
+            else "Faltam custos para comparar a carta",
+            if (lowestContribution) {
+                "Nos valores válidos registados, não encontrei artigos cujo custo interno unitário ultrapasse o preço de venda. Isto não prova que sejam lucrativos: mão de obra, renda, energia, desperdício, IVA e outros encargos podem alterar o resultado."
+            } else {
+                "Não encontrei artigos com preço de venda e custo interno válidos. Confirma esses valores na Carta antes de comparar contribuições; não vou inventar lucro."
+            }
         )
 
         val comparator = if (lowestContribution) {
