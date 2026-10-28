@@ -176,6 +176,7 @@ class RestaurantAssistantIntentClassifierTest {
             "Quanto vendi no domingo passado?",
             "Quanto vendi ontem?",
             "Qual foi a faturação nos últimos 30 dias?",
+            "Qual foi a faturação nos últimos seis meses?",
             "Quanto vendemos em março?",
             "Quais pratos venderam mais na semana passada?"
         )
@@ -211,6 +212,7 @@ class RestaurantAssistantIntentClassifierTest {
             "Quais foram os artigos mais vendidos no último mês?" to RestaurantAssistantIntent.MENU_ENGINEERING,
             "Que artigos venderam mais em março?" to RestaurantAssistantIntent.MENU_ENGINEERING,
             "Quais pratos foram mais rentáveis no mês passado?" to RestaurantAssistantIntent.MENU_ENGINEERING,
+            "Quais pratos foram mais rentáveis do mês de setembro?" to RestaurantAssistantIntent.MENU_ENGINEERING,
             "Quais artigos tiveram a margem mais alta na semana passada?" to RestaurantAssistantIntent.MENU_ENGINEERING,
             "Qual foi a margem média em março?" to RestaurantAssistantIntent.ECONOMIC_MANAGER
         )
