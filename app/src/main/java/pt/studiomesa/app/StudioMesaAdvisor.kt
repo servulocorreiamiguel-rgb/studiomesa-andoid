@@ -267,7 +267,7 @@ internal object StudioMesaAdvisor {
         }
         return StudioMesaAssistantAnswer(
             "Contribuição estimada por artigo",
-            "Ordenei os artigos pela diferença entre o preço e o custo interno registados. Isto compara contribuição unitária, não lucro líquido, popularidade nem vendas históricas; não inclui automaticamente IVA, pessoal, renda, energia, desperdício ou taxas.\n$details",
+            "Ordenei os artigos pela diferença entre o preço e o custo interno registados. Isto apresenta contribuição unitária estimada; não é lucro líquido, não indica popularidade nem substitui vendas históricas. Não inclui automaticamente IVA, pessoal, renda, energia, desperdício ou taxas.\n$details",
             "Carta"
         )
     }
@@ -380,7 +380,7 @@ internal object StudioMesaAdvisor {
 
         return StudioMesaAssistantAnswer(
             "Gestor económico (opcional)",
-            "Ativa o Gestor económico nesta página para analisar ponto de equilíbrio, tesouraria a 30 dias, custo de receitas, desperdício, comparação de fornecedores, orçamento versus realizado, consumo teórico versus real e cenários de custo de pessoal. Estes cálculos usam os valores que o proprietário introduz nesta sessão; não consultam bancos/fornecedores, não alteram preços, não movimentam stock nem enviam encomendas.",
+            "Ativa o Gestor económico nesta página para analisar ponto de equilíbrio, tesouraria a 30 dias, custo de receitas, desperdício, comparação de fornecedores, orçamento versus realizado, consumo teórico versus real e cenários de custo de pessoal. Estes cálculos usam os valores que o proprietário introduz nesta sessão; não consultam bancos ou fornecedores, não alteram preços, não movimentam stock nem enviam encomendas.",
             "Assistente"
         )
     }
