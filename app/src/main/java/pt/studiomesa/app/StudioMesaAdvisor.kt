@@ -229,7 +229,7 @@ internal object StudioMesaAdvisor {
         val report = menuEngineering(snapshot)
         if (!report.hasEnoughSales) return StudioMesaAssistantAnswer(
             "Engenharia da carta",
-            "Só encontrei ${report.completedUnits} unidade(s) concluídas que correspondem aos artigos atuais. Preciso de pelo menos ${report.requiredUnits} para analisar popularidade; não vou inventar vendas. Posso comparar contribuição unitária se os custos e preços estiverem registados.",
+            "Só encontrei ${report.completedUnits} unidade(s) concluídas que correspondem aos artigos atuais. Preciso de pelo menos ${report.requiredUnits} para analisar popularidade; não vou inventar popularidade nem vendas. Posso comparar contribuição unitária se os custos e preços estiverem registados.",
             "Pedidos"
         )
         if (!report.hasMarginData) return StudioMesaAssistantAnswer(
@@ -356,10 +356,17 @@ internal object StudioMesaAdvisor {
     private fun answerEconomicQuestion(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
         val q = normalizeLookupText(rawQuestion)
         if (containsAny(
-                q, "custo do prato", "custo deste prato", "custo dos ingredientes", "custo de ingredientes",
-                "custo por dose", "custo por porcao", "custo da receita", "ficha tecnica",
-                "custo de producao", "quanto custa produzir", "calcular custo do prato"
+                q, "custo dos ingredientes", "custo de ingredientes", "custo da receita",
+                "ficha tecnica", "custo de producao", "quanto custa produzir"
             )) {
+            return StudioMesaAssistantAnswer(
+                "Custo por receita e ingredientes",
+                "A Carta guarda um custo agregado por artigo, não uma lista fiável de ingredientes por dose. Para calcular o custo detalhado, ativa o Gestor económico e usa «Custo por receita e dose»: introduz cada ingrediente, quantidade por dose, preço por unidade de compra e desperdício %. As unidades têm de coincidir (por exemplo, kg e €/kg). Não vou inventar ingredientes nem quantidades.",
+                "Assistente"
+            )
+        }
+
+        if (containsAny(q, "custo do prato", "custo deste prato", "custo por dose", "custo por porcao", "calcular custo do prato")) {
             return answerRegisteredItemCost(rawQuestion, snapshot)
         }
 
@@ -367,14 +374,14 @@ internal object StudioMesaAdvisor {
             return StudioMesaAssistantAnswer(
                 "Estimativa de resultado mensal",
                 "Não consigo confirmar o lucro de um mês apenas com os preços atuais da Carta: preciso de vendas líquidas e custos do mesmo período, incluindo pessoal, outros custos fixos e variáveis. Os pedidos carregados não são, por si só, contabilidade mensal completa. Ativa o Gestor económico e introduz os valores do mês sem IVA para calcular uma estimativa; não vou inventar um lucro.",
-                "Assistente StudioMesa"
+                "Assistente"
             )
         }
 
         return StudioMesaAssistantAnswer(
             "Gestor económico (opcional)",
             "Ativa o Gestor económico nesta página para analisar ponto de equilíbrio, tesouraria a 30 dias, custo de receitas, desperdício, comparação de fornecedores, orçamento versus realizado, consumo teórico versus real e cenários de custo de pessoal. Estes cálculos usam os valores que o proprietário introduz nesta sessão; não consultam bancos/fornecedores, não alteram preços, não movimentam stock nem enviam encomendas.",
-            "Assistente StudioMesa"
+            "Assistente"
         )
     }
 
