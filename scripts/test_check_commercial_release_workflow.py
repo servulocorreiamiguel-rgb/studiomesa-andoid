@@ -83,6 +83,12 @@ SAFE_ANDROID_WORKFLOW = """      - name: Verify temporary CI AAB and APK
           fi
           assembleEssencialRestauranteRelease
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$APK_PATH"
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@0000000000000000000000000000000000000000
+        with:
+          name: StudioMesa-1.5.0-Demo-APKs
+          path: app/build/outputs/apk/**/debug/*.apk
 """
 
 
@@ -167,6 +173,17 @@ class CommercialReleaseWorkflowAuditTests(unittest.TestCase):
         )
         self.assertTrue(
             any("apksigner" in error for error in audit_workflow(changed))
+        )
+
+    def test_android_ci_demo_artifact_excludes_temporary_release_apk(self) -> None:
+        self.assertEqual([], audit_ci_test_bundle(SAFE_ANDROID_WORKFLOW))
+        changed = SAFE_ANDROID_WORKFLOW.replace(
+            "path: app/build/outputs/apk/**/debug/*.apk",
+            "path: app/build/outputs/apk/**/*.apk",
+        )
+        self.assertTrue(
+            any("only debug APKs" in error or "exclude release APKs" in error
+                for error in audit_ci_test_bundle(changed))
         )
 
     def test_android_ci_must_verify_its_temporary_aab_signature(self) -> None:

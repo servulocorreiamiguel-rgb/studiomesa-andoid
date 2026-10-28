@@ -110,6 +110,12 @@ def audit_ci_test_bundle(text: str) -> list[str]:
         errors.append("Android CI must build a temporary signed release APK.")
     if 'apksigner" verify --verbose "$APK_PATH"' not in text:
         errors.append("Android CI must verify the temporary signed APK with apksigner.")
+    if "name: StudioMesa-1.5.0-Demo-APKs" not in text:
+        errors.append("Android CI must upload the named demo APK artifact.")
+    if "path: app/build/outputs/apk/**/debug/*.apk" not in text:
+        errors.append("Android CI must upload only debug APKs to the demo artifact.")
+    if "path: app/build/outputs/apk/**/*.apk" in text:
+        errors.append("The demo artifact must exclude release APKs signed with the temporary CI key.")
     return errors
 
 
