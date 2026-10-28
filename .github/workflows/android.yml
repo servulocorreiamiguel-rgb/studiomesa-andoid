@@ -135,7 +135,8 @@ jobs:
           gradle --no-daemon \
             -PstudiomesaCommercialRelease=true \
             -PstudiomesaReleaseApplicationId=pt.studiomesa.ci \
-            bundleEssencialRestauranteRelease
+            bundleEssencialRestauranteRelease \
+            assembleEssencialRestauranteRelease
           AAB_PATH="$(find app/build/outputs/bundle -type f -name '*.aab' -print -quit)"
           test -n "$AAB_PATH"
           verification_output="$(jarsigner -verify "$AAB_PATH" 2>&1)" || {
@@ -148,6 +149,9 @@ jobs:
             echo "CI AAB is not confirmed as correctly signed."
             exit 1
           fi
+          APK_PATH="$(find app/build/outputs/apk/essencialRestaurante/release -type f -name '*.apk' -print -quit)"
+          test -n "$APK_PATH"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$APK_PATH"
           rm -f "$KEYSTORE_PATH"
 
       - name: Upload debug APK
