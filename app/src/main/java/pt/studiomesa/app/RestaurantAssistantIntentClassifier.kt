@@ -50,7 +50,9 @@ internal object RestaurantAssistantIntentClassifier {
             "prejuizo mensal", "prejuizo", "perder dinheiro", "perco dinheiro", "onde perco dinheiro",
             "estou a perder dinheiro", "quanto lucro tive este mes", "lucro tive este mes", "lucro este mes",
             "lucro deste mes", "resultado deste mes", "qual foi o meu lucro", "reduzir custos",
-            "poupar dinheiro", "custos dos ingredientes",
+            "poupar dinheiro", "quanto gastei em salarios", "gasto com salarios", "custos salariais",
+            "quanto gastei em pessoal", "quanto resta em caixa", "quanto resta no caixa",
+            "quanto tenho em caixa", "saldo de caixa", "poupar nas compras", "custos dos ingredientes",
             "custos de ingredientes", "cash flow", "cashflow",
             "custo alimentar", "despesas mensais", "orcamento versus real", "orcamento e realizado",
             "consumo real", "custo da receita", "variacao de stock", "rentabilidade do negocio",
@@ -82,12 +84,15 @@ internal object RestaurantAssistantIntentClassifier {
 
         rule(RestaurantAssistantIntent.MARKETING, 9, "redes sociais", "texto promocional", "ideias de publicacao"),
         rule(RestaurantAssistantIntent.MARKETING, 8,
-            "instagram", "marketing", "publicacao", "divulgacao", "post para", "campanha"),
+            "instagram", "marketing", "publicacao", "divulgacao", "post para", "campanha",
+            "o que devo publicar", "o que publicar", "story", "stories", "legenda para",
+            "publicar nas redes", "cria um post"),
         rule(RestaurantAssistantIntent.MARKETING, 7, "conteudo", "anuncio"),
 
         rule(RestaurantAssistantIntent.PRICING, 9,
             "quanto devo cobrar", "que preco devo cobrar", "calcular preco", "analise de preco"),
-        rule(RestaurantAssistantIntent.PRICING, 8, "preco de venda", "preco justo", "definir o preco"),
+        rule(RestaurantAssistantIntent.PRICING, 8, "preco de venda", "preco justo", "definir o preco",
+            "custo dos pratos", "custos dos pratos", "custo dos artigos", "custos dos artigos"),
         rule(RestaurantAssistantIntent.PRICING, 6, "preco", "margem", "lucro", "custo por artigo"),
 
         rule(RestaurantAssistantIntent.STOCK, 9, "quantidade em stock", "quanto tenho de stock"),
@@ -101,7 +106,7 @@ internal object RestaurantAssistantIntentClassifier {
 
         rule(RestaurantAssistantIntent.RESERVATIONS, 9,
             "confirmar reserva", "reservas pendentes", "marcar mesa", "mesas reservadas",
-            "reservas de hoje", "reservas para hoje", "disponibilidade de mesa"),
+            "reservas de hoje", "reservas para hoje", "disponibilidade de mesa", "mesas estao reservadas"),
         rule(RestaurantAssistantIntent.RESERVATIONS, 7, "mesa para", "reservar mesa"),
         rule(RestaurantAssistantIntent.RESERVATIONS, 5, "reserva", "reservas"),
 
