@@ -277,4 +277,67 @@ class StudioMesaAdvisorTest {
         assertFalse(drafts[0].caption.contains("desconto"))
         assertTrue(StudioMesaAdvisor.answerQuestion("Escreve um post para Instagram", snapshot(menu = listOf(menuItem))).response.contains("Revê e aprova"))
     }
+
+    @Test fun lowContributionQuestionRanksWeakestItemsWithoutClaimingNetLoss() {
+        val data = snapshot(menu = listOf(
+            item("Sopa", "5.00", "2.00"),
+            item("Bitoque", "14.00", "16.00"),
+            item("Salada", "8.00", "2.00")
+        ))
+        val answer = StudioMesaAdvisor.answerQuestion("Quais pratos estão a dar prejuízo?", data)
+        assertEquals("Contribuição estimada por artigo", answer.title)
+        assertTrue(answer.response.indexOf("Bitoque") < answer.response.indexOf("Sopa"))
+        assertTrue(answer.response.contains("não prova prejuízo líquido"))
+        assertTrue(answer.response.contains("custo interno registado ultrapassa o preço"))
+    }
+
+    @Test fun marginQuestionsRankByContributionMarginPercentageNotEuroContribution() {
+        val data = snapshot(menu = listOf(
+            item("Sopa", "5.00", "1.00"),
+            item("Bitoque", "14.00", "7.00"),
+            item("Salada", "8.00", "2.00")
+        ))
+        val best = StudioMesaAdvisor.answerQuestion("Quais os artigos com melhor margem?", data)
+        assertEquals("Margem estimada por artigo", best.title)
+        assertTrue(best.response.indexOf("Sopa") < best.response.indexOf("Salada"))
+        assertTrue(best.response.indexOf("Salada") < best.response.indexOf("Bitoque"))
+        assertTrue(best.response.contains("80,0%"))
+        val weakest = StudioMesaAdvisor.answerQuestion("Quais pratos são menos rentáveis?", data)
+        assertEquals("Margem estimada por artigo", weakest.title)
+        assertTrue(weakest.response.indexOf("Bitoque") < weakest.response.indexOf("Salada"))
+    }
+
+    @Test fun doesNotUseUnfilteredSalesToAnswerQuestionAboutYesterday() {
+        val data = snapshot(
+            menu = listOf(item("Bitoque", "14.00", "4.00")),
+            salesLines = listOf(AssistantSaleLine("Bitoque", 10, "Concluído"))
+        )
+        val answer = StudioMesaAdvisor.answerQuestion("Qual foi o prato mais vendido ontem?", data)
+        assertEquals("Período de vendas não confirmado", answer.title)
+        assertTrue(answer.response.contains("não incluem um filtro temporal fiável"))
+        assertFalse(answer.response.contains("10 unidades"))
+    }
+
+    @Test fun doesNotInferReservedTablesOrDailyAvailabilityFromPendingCount() {
+        val data = snapshot(reservationsAvailable = true, reservationsLoaded = true, pendingReservations = 3)
+        val answer = StudioMesaAdvisor.answerQuestion("Quantas mesas estão reservadas hoje?", data)
+        assertEquals("Disponibilidade de reservas não confirmada", answer.title)
+        assertTrue(answer.response.contains("não um mapa confirmado de mesas"))
+        assertFalse(answer.response.contains("Há 3 reserva"))
+    }
+
+    @Test fun naturalLanguageRecipeCostQuestionExplainsRequiredInputs() {
+        val answer = StudioMesaAdvisor.answerQuestion("Quanto custa cada receita?", snapshot())
+        assertEquals("Custo por receita e ingredientes", answer.title)
+        assertTrue(answer.response.contains("introduz cada ingrediente"))
+        assertTrue(answer.response.contains("Não vou inventar ingredientes"))
+    }
+
+    @Test fun crashQuestionGetsSpecificSafeTroubleshootingInsteadOfGenericNetworkAdvice() {
+        val answer = StudioMesaAdvisor.answerQuestion("A app fecha quando tento guardar", snapshot())
+        assertEquals("Diagnóstico inicial", answer.title)
+        assertTrue(answer.response.contains("registos de falha"))
+        assertFalse(answer.response.contains("verifica a conta e o restaurante"))
+    }
+
 }
