@@ -107,4 +107,26 @@ class RestaurantAssistantIntentClassifierTest {
         assertTrue(match.confidence in 0..100)
         assertTrue(match.matchedPhrases.isNotEmpty())
     }
+
+    @Test fun routesAdversarialNaturalLanguageVariantsWithoutGuessingTheWrongDomain() {
+        val cases = listOf(
+            "Quanto custa cada receita?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,
+            "Quais pratos estão a dar prejuízo?" to RestaurantAssistantIntent.MENU_ENGINEERING,
+            "Quais pratos são menos rentáveis?" to RestaurantAssistantIntent.MENU_ENGINEERING,
+            "Quantas mesas estão reservadas hoje?" to RestaurantAssistantIntent.RESERVATIONS,
+            "Acabou o arroz, quanto devo encomendar?" to RestaurantAssistantIntent.STOCK,
+            "Quanto resta de frango?" to RestaurantAssistantIntent.STOCK,
+            "Cria uma promoção para Instagram" to RestaurantAssistantIntent.MARKETING,
+            "A app fecha quando tento guardar" to RestaurantAssistantIntent.TROUBLESHOOTING,
+            "Não aparece a resposta da IA" to RestaurantAssistantIntent.TROUBLESHOOTING,
+            "Qual foi o prato mais vendido ontem?" to RestaurantAssistantIntent.MENU_ENGINEERING,
+            "Faz um resumo das reservas e da cozinha" to RestaurantAssistantIntent.DAILY_BRIEFING,
+            "Quais os artigos com melhor margem?" to RestaurantAssistantIntent.MENU_ENGINEERING
+        )
+        cases.forEach { (question, expected) ->
+            assertEquals("$question -> ${RestaurantAssistantIntentClassifier.classify(question)}",
+                expected, RestaurantAssistantIntentClassifier.classify(question).intent)
+        }
+    }
+
 }
