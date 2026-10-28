@@ -254,42 +254,25 @@ internal object StudioMesaAdvisor {
     }
 
     fun answerQuestion(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
-        val q = normalize(rawQuestion)
-        return when {
-            containsAny(
-                q, "gestao economica", "gestor economico", "gestao financeira", "gestor financeiro",
-                "financeiro", "financas", "ponto de equilibrio", "break even", "resultado operacional",
-                "tesouraria", "fluxo de caixa", "desperdicio", "desperdicio por motivo", "custo alimentar",
-                "custo da receita", "custo dos ingredientes", "custo de ingredientes", "custo por ingrediente",
-                "custo por dose", "custo por porcao", "ficha tecnica", "ponto de encomenda",
-                "quantidade a encomendar", "repor stock", "reabastecer", "planeamento de compras",
-                "fornecedor", "preco fornecedor", "preco de compra", "precos de compra", "orcamento",
-                "custos fixos", "custos variaveis", "despesas mensais", "consumo teorico", "consumo real",
-                "custo de pessoal", "horas de equipa", "custo de horas", "variacao de stock",
-                "previsao", "prever vendas", "vendas da proxima semana"
-            ) -> StudioMesaAssistantAnswer(
+        return when (RestaurantAssistantIntentClassifier.classify(rawQuestion).intent) {
+            RestaurantAssistantIntent.ECONOMIC_MANAGER -> StudioMesaAssistantAnswer(
                 "Gestor económico (opcional)",
                 "Nesta página, ativa o Gestor económico se o proprietário quiser fazer estas análises. Inclui indicadores mensais, ponto de equilíbrio, projeção manual de tesouraria, média simples de vendas semanais, custo por receita/dose e quantidade teórica de reposição. Usa apenas os valores introduzidos nesta sessão; não consulta bancos ou fornecedores, não altera preços nem envia encomendas."
             )
-            containsAny(q, "resumo", "briefing", "prioridades de hoje", "estado da operacao") -> dailyBriefing(snapshot)
-            containsAny(
-                q, "engenharia da carta", "popularidade", "mais vendidos", "rentabilidade da carta",
-                "artigos que vendem", "menu engineering", "vendas", "vender mais", "aumentar as vendas",
-                "aumentar vendas", "melhorar as vendas", "melhorar vendas", "o que vende melhor",
-                "quais pratos vendem"
-            ) -> answerMenuEngineering(snapshot)
-            containsAny(q, "instagram", "publicacao", "marketing", "redes sociais", "divulgacao", "post para") -> answerMarketing(snapshot)
-            containsAny(q, "preco", "custo", "margem", "lucro") -> answerPricing(snapshot)
-            containsAny(q, "stock", "inventario", "ingrediente", "esgotado", "quantidade") -> answerStock(snapshot)
-            containsAny(q, "reserva", "reservar", "mesa para") -> answerReservations(snapshot)
-            containsAny(q, "pedido", "cozinha", "fila", "atraso", "preparacao") -> answerOrders(snapshot)
-            containsAny(q, "app", "erro", "internet", "ligacao", "sincron", "servidor", "problema") -> answerProblem(snapshot)
-            containsAny(q, "equipa", "funcionario", "permiss", "acesso") -> StudioMesaAssistantAnswer(
+            RestaurantAssistantIntent.DAILY_BRIEFING -> dailyBriefing(snapshot)
+            RestaurantAssistantIntent.MENU_ENGINEERING -> answerMenuEngineering(snapshot)
+            RestaurantAssistantIntent.MARKETING -> answerMarketing(snapshot)
+            RestaurantAssistantIntent.PRICING -> answerPricing(snapshot)
+            RestaurantAssistantIntent.STOCK -> answerStock(snapshot)
+            RestaurantAssistantIntent.RESERVATIONS -> answerReservations(snapshot)
+            RestaurantAssistantIntent.ORDERS -> answerOrders(snapshot)
+            RestaurantAssistantIntent.TROUBLESHOOTING -> answerProblem(snapshot)
+            RestaurantAssistantIntent.ACCESS -> StudioMesaAssistantAnswer(
                 "Acesso e equipa",
                 "Confirma em Conta quem tem acesso ao restaurante. Esta versão não altera permissões nem verifica revogações em tempo real. Antes de remover ou convidar alguém, confirma a identidade e o restaurante selecionado.",
                 "Conta"
             )
-            else -> answerGeneral(snapshot)
+            RestaurantAssistantIntent.GENERAL -> answerGeneral(snapshot)
         }
     }
 
