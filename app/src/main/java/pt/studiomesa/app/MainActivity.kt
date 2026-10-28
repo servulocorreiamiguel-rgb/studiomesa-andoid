@@ -3808,6 +3808,7 @@ class MainActivity : Activity() {
                             .append(money(difference.abs())).append('\n')
                     }
                     analysis.recordedWasteAsPercentOfSales?.let { append("Desperdício / vendas: ").append(economicPercent(it)).append('\n') }
+                    analysis.recordedWasteAsPercentOfFoodCost?.let { append("Desperdício / custo alimentar: ").append(economicPercent(it)).append('\n') }
                     analysis.projectedCashIn30Days?.let { append("Tesouraria estimada a 30 dias: ").append(money(it)).append('\n') }
                     analysis.forecastNextWeekSales?.let { append("Referência semanal (média das últimas 4 semanas): ").append(money(it)).append('\n') }
                     analysis.warnings.forEach { append("• ").append(it).append('\n') }
