@@ -216,11 +216,20 @@ internal object StudioMesaAdvisor {
             }
     }
 
-    private fun answerMenuEngineering(snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
+    private fun answerMenuEngineering(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
+        val q = normalizeLookupText(rawQuestion)
+        if (containsAny(
+                q, "mais lucro", "pratos mais lucrativos", "mais rentaveis", "rentabilidade do menu",
+                "maior margem", "mais margem", "margem mais alta", "maior contribuicao",
+                "contribuicao por unidade", "quais pratos dao mais lucro", "pratos dao mais lucro"
+            )) {
+            return answerContributionRanking(snapshot)
+        }
+
         val report = menuEngineering(snapshot)
         if (!report.hasEnoughSales) return StudioMesaAssistantAnswer(
             "Engenharia da carta",
-            "Só encontrei ${report.completedUnits} unidade(s) concluídas que correspondem aos artigos atuais. Preciso de pelo menos ${report.requiredUnits} para iniciar a triagem. Não vou inventar popularidade.",
+            "Só encontrei ${report.completedUnits} unidade(s) concluídas que correspondem aos artigos atuais. Preciso de pelo menos ${report.requiredUnits} para analisar popularidade; não vou inventar vendas. Posso comparar contribuição unitária se os custos e preços estiverem registados.",
             "Pedidos"
         )
         if (!report.hasMarginData) return StudioMesaAssistantAnswer(
@@ -234,6 +243,33 @@ internal object StudioMesaAdvisor {
         return StudioMesaAssistantAnswer("Engenharia da carta",
             "Triagem indicativa com ${report.completedUnits} unidades concluídas e custos/preços atuais. Não é lucro contabilístico nem custo histórico; não inclui IVA, mão de obra, desperdício ou encargos.\n$details",
             "Pedidos")
+    }
+
+    private fun answerContributionRanking(snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
+        val eligible = snapshot.menuItems.filter {
+            it.name.isNotBlank() && it.sellingPrice > zero && it.unitCost > zero
+        }
+        if (eligible.isEmpty()) return StudioMesaAssistantAnswer(
+            "Faltam custos para comparar a carta",
+            "Não encontrei artigos com preço de venda e custo interno válidos. Confirma esses valores na Carta antes de comparar contribuições; não vou inventar lucro."
+        )
+
+        val ranking = eligible.map { item ->
+            val contribution = item.sellingPrice.subtract(item.unitCost)
+            val costShare = item.unitCost.multiply(hundred)
+                .divide(item.sellingPrice, 4, RoundingMode.HALF_UP)
+            Triple(item, contribution, costShare)
+        }.sortedWith(compareByDescending<Triple<AssistantMenuItem, BigDecimal, BigDecimal>> { it.second }
+            .thenBy { it.first.name.lowercase(Locale.ROOT) })
+
+        val details = ranking.take(5).joinToString("\n") { (item, contribution, costShare) ->
+            "• ${item.name}: contribuição unitária estimada ${euro(contribution)}; custo ${euro(item.unitCost)} de ${euro(item.sellingPrice)} (${percent(costShare)} do preço)."
+        }
+        return StudioMesaAssistantAnswer(
+            "Contribuição estimada por artigo",
+            "Ordenei os artigos pela diferença entre o preço e o custo interno registados. Isto compara contribuição unitária, não lucro líquido, popularidade nem vendas históricas; não inclui automaticamente IVA, pessoal, renda, energia, desperdício ou taxas.\n$details",
+            "Carta"
+        )
     }
 
     private fun answerMarketing(snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
@@ -256,12 +292,9 @@ internal object StudioMesaAdvisor {
     fun answerQuestion(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
         val intentMatch = RestaurantAssistantIntentClassifier.classify(rawQuestion)
         return when (intentMatch.intent) {
-            RestaurantAssistantIntent.ECONOMIC_MANAGER -> StudioMesaAssistantAnswer(
-                "Gestor económico (opcional)",
-                "Nesta página, ativa o Gestor económico se o proprietário quiser fazer estas análises. Inclui indicadores mensais, ponto de equilíbrio, projeção manual de tesouraria, média simples de vendas semanais, custo por receita/dose e quantidade teórica de reposição. Usa apenas os valores introduzidos nesta sessão; não consulta bancos ou fornecedores, não altera preços nem envia encomendas."
-            )
+            RestaurantAssistantIntent.ECONOMIC_MANAGER -> answerEconomicQuestion(rawQuestion, snapshot)
             RestaurantAssistantIntent.DAILY_BRIEFING -> dailyBriefing(snapshot)
-            RestaurantAssistantIntent.MENU_ENGINEERING -> answerMenuEngineering(snapshot)
+            RestaurantAssistantIntent.MENU_ENGINEERING -> answerMenuEngineering(rawQuestion, snapshot)
             RestaurantAssistantIntent.MARKETING -> answerMarketing(snapshot)
             RestaurantAssistantIntent.PRICING -> answerPricing(rawQuestion, snapshot)
             RestaurantAssistantIntent.STOCK -> answerStock(snapshot)
@@ -278,6 +311,21 @@ internal object StudioMesaAdvisor {
     }
 
     private fun answerPricing(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
+        val candidates = findMenuItemCandidates(rawQuestion, snapshot.menuItems)
+        if (candidates.size > 1) return clarificationForMenuItems(candidates, "analisar o preço")
+        val selected = candidates.singleOrNull()
+        if (selected != null && (selected.unitCost <= zero || selected.sellingPrice <= zero)) {
+            val missing = buildList {
+                if (selected.sellingPrice <= zero) add("preço de venda")
+                if (selected.unitCost <= zero) add("custo interno")
+            }.joinToString(" e ")
+            return StudioMesaAssistantAnswer(
+                "Faltam dados para ${selected.name}",
+                "O artigo ${selected.name} não tem ${missing} válido(s) registado(s). Confirma os valores na Carta; não vou sugerir um preço com dados incompletos.",
+                "Carta"
+            )
+        }
+
         val priced = snapshot.menuItems.filter { it.sellingPrice > zero && it.unitCost > zero }
         if (priced.isEmpty()) return StudioMesaAssistantAnswer(
             "Análise de preços",
@@ -285,33 +333,7 @@ internal object StudioMesaAdvisor {
             "Carta"
         )
 
-        // Prefer the exact menu item named by the owner. If the question only names
-        // a shared word such as "hambúrguer", ask for clarification instead of
-        // silently analysing the wrong dish.
-        val normalizedQuestion = normalizeLookupText(rawQuestion)
-        val paddedQuestion = " $normalizedQuestion "
-        val exactMentions = priced.filter { item ->
-            val normalizedName = normalizeLookupText(item.name)
-            normalizedName.isNotBlank() && paddedQuestion.contains(" $normalizedName ")
-        }
-        val longestExactLength = exactMentions.maxOfOrNull { normalizeLookupText(it.name).length } ?: 0
-        val longestExactMentions = exactMentions.filter { normalizeLookupText(it.name).length == longestExactLength }
-        val stopWords = setOf("da", "de", "do", "das", "dos", "a", "o", "as", "os", "com", "e", "em")
-        val questionWords = normalizedQuestion.split(" ").filter { it.length > 2 && it !in stopWords }.toSet()
-        val tokenMatches = if (longestExactMentions.isEmpty()) {
-            priced.filter { item ->
-                normalizeLookupText(item.name).split(" ")
-                    .filter { it.length > 2 && it !in stopWords }
-                    .any { it in questionWords }
-            }
-        } else emptyList()
-        val candidates = if (longestExactMentions.isNotEmpty()) longestExactMentions else tokenMatches
-        if (candidates.size > 1) return StudioMesaAssistantAnswer(
-            "Qual artigo da carta?",
-            "Encontrei vários artigos que podem corresponder: ${candidates.joinToString(", ") { it.name }}. Indica o nome completo do artigo para eu analisar o preço certo. Não alterei nenhum valor.",
-            "Carta"
-        )
-        val analysisItems = candidates.singleOrNull()?.let(::listOf) ?: priced
+        val analysisItems = selected?.let(::listOf) ?: priced
         val top = analysisItems.map { item ->
             val share = item.unitCost.multiply(hundred).divide(item.sellingPrice, 4, RoundingMode.HALF_UP)
             Triple(item, share, recommendedSellingPrice(item.unitCost))
@@ -323,12 +345,127 @@ internal object StudioMesaAdvisor {
         val over = analysisItems.count {
             it.unitCost.multiply(hundred).divide(it.sellingPrice, 4, RoundingMode.HALF_UP) > referenceCostShare
         }
-        val scope = if (candidates.size == 1) "o artigo selecionado" else "${analysisItems.size} artigo(s)"
+        val scope = if (selected != null) "o artigo selecionado" else "${analysisItems.size} artigo(s)"
         return StudioMesaAssistantAnswer(
             "Análise de preços",
             "Analisei $scope com custo válido; $over ultrapassam a referência inicial de triagem de 30%.\n$details\n\n30% é apenas um ponto de partida, não uma regra para todos os restaurantes. O cálculo não inclui automaticamente mão de obra, renda, energia, IVA, desperdício, taxas ou concorrência. Não alterei nenhum preço.",
             "Preço Justo"
         )
+    }
+
+    private fun answerEconomicQuestion(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
+        val q = normalizeLookupText(rawQuestion)
+        if (containsAny(
+                q, "custo do prato", "custo deste prato", "custo dos ingredientes", "custo de ingredientes",
+                "custo por dose", "custo por porcao", "custo da receita", "ficha tecnica",
+                "custo de producao", "quanto custa produzir", "calcular custo do prato"
+            )) {
+            return answerRegisteredItemCost(rawQuestion, snapshot)
+        }
+
+        if (containsAny(q, "quanto lucro", "lucro", "prejuizo", "resultado operacional", "resultado deste mes", "lucro deste mes")) {
+            return StudioMesaAssistantAnswer(
+                "Estimativa de resultado mensal",
+                "Não consigo confirmar o lucro de um mês apenas com os preços atuais da Carta: preciso de vendas líquidas e custos do mesmo período, incluindo pessoal, outros custos fixos e variáveis. Os pedidos carregados não são, por si só, contabilidade mensal completa. Ativa o Gestor económico e introduz os valores do mês sem IVA para calcular uma estimativa; não vou inventar um lucro.",
+                "Assistente StudioMesa"
+            )
+        }
+
+        return StudioMesaAssistantAnswer(
+            "Gestor económico (opcional)",
+            "Ativa o Gestor económico nesta página para analisar ponto de equilíbrio, tesouraria a 30 dias, custo de receitas, desperdício, comparação de fornecedores, orçamento versus realizado, consumo teórico versus real e cenários de custo de pessoal. Estes cálculos usam os valores que o proprietário introduz nesta sessão; não consultam bancos/fornecedores, não alteram preços, não movimentam stock nem enviam encomendas.",
+            "Assistente StudioMesa"
+        )
+    }
+
+    private fun answerRegisteredItemCost(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
+        val candidates = findMenuItemCandidates(rawQuestion, snapshot.menuItems)
+        if (candidates.size > 1) return clarificationForMenuItems(candidates, "analisar o custo")
+        val selected = candidates.singleOrNull()
+        if (selected != null) {
+            if (selected.unitCost <= zero) return StudioMesaAssistantAnswer(
+                "Custo em falta: ${selected.name}",
+                "A Carta não tem um custo interno válido registado para ${selected.name}. Confirma o custo por artigo/porção ou ativa o Gestor económico para calcular a receita por ingredientes. Não vou inventar um valor.",
+                "Carta"
+            )
+            val details = buildString {
+                append("Custo interno registado para ${selected.name}: ").append(euro(selected.unitCost)).append(" por artigo/porção, conforme registado na Carta.")
+                if (selected.sellingPrice > zero) {
+                    val contribution = selected.sellingPrice.subtract(selected.unitCost)
+                    val costShare = selected.unitCost.multiply(hundred).divide(selected.sellingPrice, 4, RoundingMode.HALF_UP)
+                    append("\nPreço de venda registado: ").append(euro(selected.sellingPrice))
+                    append("; contribuição unitária estimada: ").append(euro(contribution))
+                    append("; custo/preço: ").append(percent(costShare)).append(".")
+                } else {
+                    append("\nO preço de venda ainda não é válido, por isso não calculo a contribuição.")
+                }
+                append("\nEste custo é o valor agregado guardado na Carta; não é uma ficha técnica de ingredientes nem lucro líquido.")
+            }
+            return StudioMesaAssistantAnswer("Custo registado do artigo", details, "Carta")
+        }
+
+        val knownCosts = snapshot.menuItems.filter { it.unitCost > zero }
+        if (knownCosts.isEmpty()) return StudioMesaAssistantAnswer(
+            "Não há custos registados",
+            "Não encontrei custos internos válidos na Carta. Regista o custo por artigo/porção ou usa o Gestor económico para calcular uma receita por ingredientes antes de tirar conclusões.",
+            "Carta"
+        )
+        val list = knownCosts.take(6).joinToString("\n") { "• ${it.name}: ${euro(it.unitCost)} por artigo/porção." }
+        return StudioMesaAssistantAnswer(
+            "Qual artigo da carta?",
+            "Não identifiquei o prato pelo nome. Estes são alguns custos internos registados:\n$list\nIndica o nome completo para eu analisar o artigo certo. Para decompor o custo por ingrediente, usa o cálculo de receita do Gestor económico.",
+            "Carta"
+        )
+    }
+
+    private fun clarificationForMenuItems(candidates: List<AssistantMenuItem>, action: String): StudioMesaAssistantAnswer =
+        StudioMesaAssistantAnswer(
+            "Qual artigo da carta?",
+            "Encontrei vários artigos que podem corresponder: ${candidates.joinToString(", ") { it.name }}. Indica o nome completo para ${action} corretamente. Não alterei nenhum valor.",
+            "Carta"
+        )
+
+    private fun findMenuItemCandidates(rawQuestion: String, menuItems: List<AssistantMenuItem>): List<AssistantMenuItem> {
+        val normalizedQuestion = normalizeLookupText(rawQuestion)
+        if (normalizedQuestion.isBlank()) return emptyList()
+        val paddedQuestion = " $normalizedQuestion "
+        val genericNames = setOf("prato", "artigo", "item", "produto")
+        val exactMentions = menuItems.filter { item ->
+            val normalizedName = normalizeLookupText(item.name)
+            normalizedName.isNotBlank() && normalizedName !in genericNames &&
+                paddedQuestion.contains(" $normalizedName ")
+        }
+        val mostSpecific = exactMentions.filter { candidate ->
+            val name = normalizeLookupText(candidate.name)
+            exactMentions.none { other ->
+                if (other.name == candidate.name) false
+                else {
+                    val otherName = normalizeLookupText(other.name)
+                    otherName.length > name.length && otherName.contains(" $name ")
+                }
+            }
+        }.distinctBy { normalizeLookupText(it.name) }
+        if (mostSpecific.isNotEmpty()) return mostSpecific
+
+        val stopWords = setOf(
+            "da", "de", "do", "das", "dos", "a", "o", "as", "os", "com", "e", "em", "no", "na",
+            "nos", "nas", "num", "numa", "por", "para", "pelo", "pela", "pelos", "pelas",
+            "quanto", "qual", "quais", "devo", "deve", "deveria", "posso", "pode", "cobrar",
+            "preco", "precos", "venda", "vendas", "custo", "custos", "margem", "lucro",
+            "calcular", "calculo", "calcula", "analisa", "analisar", "deste", "desta", "este", "esta",
+            "estes", "estas", "prato", "pratos", "artigo", "artigos", "item", "itens", "produto",
+            "produtos", "melhor", "melhores", "mais", "rentabilidade", "rentavel", "rentaveis",
+            "contribuicao", "operacao", "meu", "minha", "meus", "minhas", "fazer", "faz", "faca",
+            "sugere", "sugerir", "recomendar", "recomendacao", "como", "ser", "para", "tive", "este",
+            "mes", "do", "da", "desta", "deste"
+        )
+        val questionWords = normalizedQuestion.split(" ").filter { it.length > 2 && it !in stopWords }.toSet()
+        if (questionWords.isEmpty()) return emptyList()
+        return menuItems.filter { item ->
+            normalizeLookupText(item.name).split(" ")
+                .filter { it.length > 2 && it !in stopWords }
+                .any { it in questionWords }
+        }.distinctBy { normalizeLookupText(it.name) }
     }
 
     private fun normalizeLookupText(value: String): String =
