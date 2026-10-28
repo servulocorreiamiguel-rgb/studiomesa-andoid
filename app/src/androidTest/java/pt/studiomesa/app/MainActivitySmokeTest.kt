@@ -389,4 +389,41 @@ class MainActivitySmokeTest {
         }
     }
 
+
+    @Test
+    fun restaurantEconomicManagerIsOptionalAndCalculatesMonthlyIndicators() {
+        assumeFalse("Customer variant has its own customer navigation.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withContentDescription("Abrir menu de navegação")).perform(click())
+            onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+
+            onView(withText("Gestor económico · opcional"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+            onView(withText("Gestor desativado"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+
+            onView(withText("Ativar gestão económica"))
+                .perform(scrollTo(), click())
+
+            onView(withHint("Ex.: 18000")).perform(scrollTo(), replaceText("10000"))
+            onView(withHint("Ex.: 5400")).perform(scrollTo(), replaceText("3000"))
+            onView(withHint("Ex.: 6200")).perform(scrollTo(), replaceText("2500"))
+            onView(withHint("Renda, seguros, software…")).perform(scrollTo(), replaceText("2000"))
+            onView(withHint("Sem comida e pessoal")).perform(scrollTo(), replaceText("500"))
+
+            onView(withText("Calcular indicadores e alertas"))
+                .perform(scrollTo(), click())
+
+            onView(withText(containsString("Resultado operacional estimado")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+            onView(withText(containsString("Ponto de equilíbrio mensal estimado")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+        }
+    }
+
 }
