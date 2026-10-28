@@ -68,16 +68,17 @@ class StudioMesaAdvisorTest {
     }
     @Test fun newEconomicQuestionsRouteToTheOptInManager() {
         listOf(
-            "Como comparo fornecedores?",
-            "Como controlo desperdício por motivo?",
-            "Como comparo orçamento com o consumo real?",
-            "Como calculo o custo de pessoal?",
-            "Faz um resumo da tesouraria e do custo alimentar",
-            "Que quantidade devo encomendar ao fornecedor?",
-            "Como analiso os custos fixos e variáveis?",
-            "Como faço uma previsão financeira?"
-        ).forEach { question ->
-            assertEquals("Gestor económico (opcional)", StudioMesaAdvisor.answerQuestion(question, snapshot()).title)
+            "Como comparo fornecedores?" to "Comparar fornecedores",
+            "Como controlo desperdício por motivo?" to "Analisar desperdício",
+            "Como comparo orçamento com o consumo real?" to "Consumo teórico vs. real",
+            "Como calculo o custo de pessoal?" to "Cenário de custo de pessoal",
+            "Faz um resumo da tesouraria e do custo alimentar" to "Gestor económico (opcional)",
+            "Que quantidade devo encomendar ao fornecedor?" to "Quantidade indicativa de reposição",
+            "Como analiso os custos fixos e variáveis?" to "Gestor económico (opcional)",
+            "Como faço uma previsão financeira?" to "Referência simples de vendas"
+        ).forEach { (question, expectedTitle) ->
+            assertEquals("$question -> ${StudioMesaAdvisor.answerQuestion(question, snapshot()).title}",
+                expectedTitle, StudioMesaAdvisor.answerQuestion(question, snapshot()).title)
         }
         listOf(
             "Como calculo o custo dos ingredientes por dose?",
@@ -214,7 +215,7 @@ class StudioMesaAdvisorTest {
 
     @Test fun unknownQuestionsReceiveAnHonestClarificationInsteadOfUnrelatedAdvice() {
         val answer = StudioMesaAdvisor.answerQuestion(
-            "Compara o custo da energia e a concorrência na minha zona",
+            "Que nome artístico devo dar ao robô mascote?",
             snapshot()
         )
         assertEquals("Preciso de uma pergunta mais específica", answer.title)
