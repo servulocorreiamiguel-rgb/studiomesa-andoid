@@ -45,6 +45,15 @@ class MainActivity : Activity() {
     private var activeCustomerPage = "Cartão"
     private var assistantQuestion = ""
     private var assistantAnswer: StudioMesaAssistantAnswer? = null
+
+    // Optional economic tools are opt-in and session-only until secure, owner-scoped
+    // persistence and multi-device authorization are designed and tested.
+    private var economicManagerEnabled = false
+    private val economicInputs = mutableMapOf<String, String>()
+    private var economicReportText = ""
+    private var recipeReportText = ""
+    private var reorderReportText = ""
+
     private val backendPrefs by lazy { getSharedPreferences("studiomesa_backend", MODE_PRIVATE) }
     private val secureSession by lazy { SecureSessionStore(this) }
     private val pendingRequestIds by lazy { PendingRequestIds(this) }
@@ -3545,6 +3554,9 @@ class MainActivity : Activity() {
         ))
         container.addView(privacyCard, cardParams())
 
+        addGap(container, 9)
+        renderEconomicManager(container)
+
         addGap(container, 5)
         sectionHeading(container, "Pergunta ao assistente", "Experimenta perguntar sobre custos, preços, pedidos, stock, reservas ou um problema de sincronização.")
         val questionField = multilineInputField("Ex.: Como posso melhorar o preço dos pratos?")
@@ -3676,6 +3688,257 @@ class MainActivity : Activity() {
             11f, false, muted
         ))
     }
+
+
+    private fun renderEconomicManager(container: LinearLayout) {
+        sectionHeading(
+            container,
+            "Gestor económico · opcional",
+            "Para o proprietário que quer analisar custos, receitas, desperdício, tesouraria e compras. Só funciona quando é ativado."
+        )
+        val toggleCard = makeCard(14)
+        toggleCard.addView(label(
+            if (economicManagerEnabled) "Gestor económico ativo nesta sessão" else "Gestor económico desativado",
+            15f, true, forestDeep
+        ))
+        addGap(toggleCard, 5)
+        toggleCard.addView(label(
+            "Os valores introduzidos ficam apenas em memória durante esta sessão. Não são guardados, sincronizados nem enviados para a Internet.",
+            11.5f, false, muted
+        ))
+        addGap(toggleCard, 8)
+        toggleCard.addView(secondaryButton(
+            if (economicManagerEnabled) "Desativar e limpar os valores" else "Ativar gestão económica"
+        ) {
+            economicManagerEnabled = !economicManagerEnabled
+            economicInputs.clear()
+            economicReportText = ""
+            recipeReportText = ""
+            reorderReportText = ""
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(44)))
+        container.addView(toggleCard, cardParams())
+        if (!economicManagerEnabled) return
+
+        addGap(container, 6)
+        val financialCard = makeCard(15)
+        financialCard.addView(label("1 · Indicadores económicos mensais", 17f, true, forestDeep))
+        addGap(financialCard, 4)
+        financialCard.addView(label(
+            "Introduz valores do mesmo mês. Usa vendas sem IVA e custos reais do período; o resultado é uma estimativa de gestão, não contabilidade oficial.",
+            11.5f, false, muted
+        ))
+        addGap(financialCard, 8)
+        economicNumberField(financialCard, "sales", "Vendas mensais sem IVA (€)", "Ex.: 18000")
+        economicNumberField(financialCard, "food", "Custo alimentar realmente consumido, incluindo desperdício (€)", "Ex.: 5400")
+        economicNumberField(financialCard, "payroll", "Custo total mensal de pessoal, incluindo encargos (€)", "Ex.: 6200")
+        economicNumberField(financialCard, "fixed", "Outros custos fixos mensais (€)", "Renda, seguros, subscrições…")
+        economicNumberField(financialCard, "variable", "Outros custos variáveis mensais, sem comida e pessoal (€)", "Ex.: 450")
+        economicNumberField(
+            financialCard,
+            "foodTarget",
+            "Objetivo de custo alimentar (%) — 30% é apenas um valor de exemplo",
+            "Escolhe o objetivo adequado",
+            "30"
+        )
+        economicNumberField(financialCard, "waste", "Desperdício medido no período (€) — opcional", "Indicador; não será somado outra vez")
+        addGap(financialCard, 5)
+        financialCard.addView(label("Tesouraria para os próximos 30 dias · opcional", 14f, true, forestDeep))
+        financialCard.addView(label(
+            "Preenche os três campos para estimar saldo + recebimentos previstos − pagamentos a vencer. Não existe ligação bancária.",
+            11f, false, muted
+        ))
+        economicNumberField(financialCard, "cash", "Saldo de caixa/banco disponível (€)", "Ex.: 2500")
+        economicNumberField(financialCard, "receipts", "Recebimentos esperados nos próximos 30 dias (€)", "Ex.: 12000")
+        economicNumberField(financialCard, "due", "Pagamentos a vencer nos próximos 30 dias (€)", "Ex.: 10500")
+        addGap(financialCard, 5)
+        financialCard.addView(label("Histórico de vendas semanais · opcional", 14f, true, forestDeep))
+        financialCard.addView(label(
+            "Introduz 4 a 8 semanas comparáveis, da mais antiga para a mais recente, separadas por ponto e vírgula. Ex.: 4200; 4600; 4400; 5100. É apenas uma média simples.",
+            11f, false, muted
+        ))
+        economicTextField(financialCard, "weeks", "Vendas sem IVA por semana; separa os valores com ;")
+        addGap(financialCard, 8)
+        financialCard.addView(primaryButton("Calcular indicadores e alertas") {
+            economicReportText = try {
+                val sales = economicRequiredAmount("sales", "vendas mensais")
+                val food = economicRequiredAmount("food", "custo alimentar")
+                val payroll = economicRequiredAmount("payroll", "custo de pessoal")
+                val fixed = economicRequiredAmount("fixed", "custos fixos")
+                val variable = economicRequiredAmount("variable", "outros custos variáveis")
+                val target = economicRequiredAmount("foodTarget", "objetivo de custo alimentar")
+                val waste = economicInputs["waste"].orEmpty().trim().takeIf { it.isNotEmpty() }
+                    ?.let { RestaurantEconomicManager.parseNonNegative(it, "desperdício") }
+                val cashValues = listOf("cash", "receipts", "due").map { economicInputs[it].orEmpty().trim() }
+                if (cashValues.any { it.isNotEmpty() } && cashValues.any { it.isEmpty() }) {
+                    throw IllegalArgumentException("Para a tesouraria, preenche os três campos: saldo, recebimentos e pagamentos.")
+                }
+                val weeks = RestaurantEconomicManager.parseWeeklySales(economicInputs["weeks"].orEmpty())
+                val analysis = RestaurantEconomicManager.analyze(EconomicManagerInput(
+                    monthlyNetSales = sales,
+                    foodCostConsumedIncludingWaste = food,
+                    monthlyPayroll = payroll,
+                    otherFixedCosts = fixed,
+                    otherVariableCosts = variable,
+                    targetFoodCostPercent = target,
+                    recordedWasteCost = waste,
+                    cashAvailableNow = cashValues[0].takeIf { it.isNotEmpty() }?.let { RestaurantEconomicManager.parseNonNegative(it, "saldo disponível") },
+                    expectedReceiptsNext30Days = cashValues[1].takeIf { it.isNotEmpty() }?.let { RestaurantEconomicManager.parseNonNegative(it, "recebimentos previstos") },
+                    paymentsDueNext30Days = cashValues[2].takeIf { it.isNotEmpty() }?.let { RestaurantEconomicManager.parseNonNegative(it, "pagamentos a vencer") },
+                    weeklyNetSalesHistory = weeks
+                ))
+                buildString {
+                    append("Custo alimentar / vendas: ").append(economicPercent(analysis.foodCostPercent)).append("\\n")
+                    append("Pessoal / vendas: ").append(economicPercent(analysis.payrollPercent)).append("\\n")
+                    append("Custo alimentar + pessoal / vendas: ").append(economicPercent(analysis.primeCostPercent)).append("\\n")
+                    append("Resultado operacional estimado: ").append(money(analysis.estimatedOperatingResult)).append("\\n")
+                    if (analysis.estimatedBreakEvenSales != null) {
+                        append("Ponto de equilíbrio mensal estimado: ").append(money(analysis.estimatedBreakEvenSales)).append("\\n")
+                        if (sales >= analysis.estimatedBreakEvenSales) {
+                            append("As vendas introduzidas estão acima do ponto de equilíbrio por cerca de ")
+                                .append(money(sales.subtract(analysis.estimatedBreakEvenSales))).append(".\\n")
+                        } else {
+                            append("Vendas adicionais estimadas para atingir o ponto de equilíbrio: ")
+                                .append(money(analysis.estimatedBreakEvenSales.subtract(sales))).append(".\\n")
+                        }
+                    }
+                    if (analysis.recordedWasteAsPercentOfSales != null) {
+                        append("Desperdício registado / vendas: ").append(economicPercent(analysis.recordedWasteAsPercentOfSales))
+                        analysis.recordedWasteAsPercentOfFoodCost?.let {
+                            append(" (").append(economicPercent(it)).append(" do custo alimentar)")
+                        }
+                        append(".\\n")
+                    }
+                    analysis.projectedCashIn30Days?.let {
+                        append("Tesouraria estimada a 30 dias: ").append(money(it)).append(".\\n")
+                    }
+                    analysis.forecastNextWeekSales?.let {
+                        append("Referência para a próxima semana (média simples das últimas 4 semanas): ")
+                            .append(money(it)).append(".\\n")
+                    }
+                    analysis.warnings.forEach { append("• ").append(it).append("\\n") }
+                }.trim()
+            } catch (e: IllegalArgumentException) {
+                "Não foi possível calcular: ${e.message ?: "confirma os valores introduzidos"}"
+            }
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(46)))
+        if (economicReportText.isNotBlank()) {
+            addGap(financialCard, 9)
+            financialCard.addView(label(economicReportText, 12f, false, ink))
+        }
+        container.addView(financialCard, cardParams())
+
+        addGap(container, 6)
+        val recipeCard = makeCard(15)
+        recipeCard.addView(label("2 · Custo por receita e dose", 17f, true, forestDeep))
+        addGap(recipeCard, 5)
+        recipeCard.addView(label(
+            "Cada linha segue o formato ingrediente | quantidade por dose | preço por unidade | desperdício %. Usa unidades compatíveis (ex.: kg e €/kg). O preço indicativo divide o custo estimado pelo objetivo de custo alimentar.",
+            11.5f, false, muted
+        ))
+        economicTextField(recipeCard, "recipe", "Exemplo:\\nFarinha | 0,2 | 2,50 | 5\\nMolho | 0,1 | 4,00 | 0")
+        addGap(recipeCard, 4)
+        recipeCard.addView(primaryButton("Calcular custo da receita") {
+            recipeReportText = try {
+                val target = economicRequiredAmount("foodTarget", "objetivo de custo alimentar")
+                val result = RestaurantEconomicManager.costRecipe(economicInputs["recipe"].orEmpty(), target)
+                buildString {
+                    append("Custo estimado por dose: ").append(money(result.totalCostPerPortion)).append("\\n")
+                    append("Preço indicativo a ").append(economicPercent(result.targetFoodCostPercent))
+                        .append(" de custo alimentar: ").append(money(result.suggestedPriceAtTarget)).append("\\n")
+                    result.ingredients.forEach { append("• ").append(it.name).append(": ")
+                        .append(money(it.costPerPortion)).append(" por dose.\\n") }
+                    append("Confirma quantidades, unidades de compra, rendimento, IVA e outros custos antes de usar o preço.")
+                }
+            } catch (e: IllegalArgumentException) {
+                "Não foi possível calcular a receita: ${e.message ?: "confirma as linhas introduzidas"}"
+            }
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(46)))
+        if (recipeReportText.isNotBlank()) {
+            addGap(recipeCard, 8)
+            recipeCard.addView(label(recipeReportText, 12f, false, ink))
+        }
+        container.addView(recipeCard, cardParams())
+
+        addGap(container, 6)
+        val purchasingCard = makeCard(15)
+        purchasingCard.addView(label("3 · Planeamento de reposição", 17f, true, forestDeep))
+        addGap(purchasingCard, 5)
+        purchasingCard.addView(label(
+            "Formato: stock atual | consumo médio por dia | prazo do fornecedor em dias | dias de segurança. A indicação é uma quantidade teórica; não cria encomendas nem altera o stock.",
+            11.5f, false, muted
+        ))
+        economicTextField(purchasingCard, "reorder", "Ex.: 5 | 3 | 4 | 2")
+        addGap(purchasingCard, 5)
+        purchasingCard.addView(primaryButton("Calcular reposição sugerida") {
+            reorderReportText = try {
+                val result = RestaurantEconomicManager.recommendReorder(economicInputs["reorder"].orEmpty())
+                if (result.suggestedOrderQuantity.signum() == 0) {
+                    "O stock introduzido cobre os dias de prazo e segurança definidos. Confirma a contagem física antes de decidir."
+                } else {
+                    "Stock de cobertura recomendado: ${result.targetStockForLeadAndSafetyDays.stripTrailingZeros().toPlainString()}.\\n" +
+                        "Quantidade indicativa a repor: ${result.suggestedOrderQuantity.stripTrailingZeros().toPlainString()} unidades para ${result.totalCoverageDays} dias. Confirma unidades, validade, consumo e prazo real do fornecedor."
+                }
+            } catch (e: IllegalArgumentException) {
+                "Não foi possível calcular a reposição: ${e.message ?: "confirma os quatro valores"}"
+            }
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(46)))
+        if (reorderReportText.isNotBlank()) {
+            addGap(purchasingCard, 8)
+            purchasingCard.addView(label(reorderReportText, 12f, false, ink))
+        }
+        container.addView(purchasingCard, cardParams())
+
+        addGap(container, 5)
+        container.addView(label(
+            "Limites: as estimativas não são contabilidade certificada, não consultam o banco, fornecedores, meteorologia ou avaliações, e não enviam encomendas nem mudam preços. Para previsão com sazonalidade, comparação real de stock e vários dispositivos, é necessário ligar dados históricos e desenhar permissões do proprietário.",
+            10.5f, false, muted
+        ))
+    }
+
+    private fun economicNumberField(
+        parent: LinearLayout,
+        key: String,
+        title: String,
+        hint: String,
+        defaultValue: String = ""
+    ) {
+        parent.addView(label(title, 11.5f, true, forestDeep))
+        val field = inputField(hint, InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+        field.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                economicInputs[key] = s?.toString().orEmpty()
+            }
+            override fun afterTextChanged(s: android.text.Editable?) = Unit
+        })
+        field.setText(economicInputs[key] ?: defaultValue)
+        parent.addView(field, LinearLayout.LayoutParams(-1, dp(45)).apply {
+            setMargins(0, dp(3), 0, dp(7))
+        })
+    }
+
+    private fun economicTextField(parent: LinearLayout, key: String, hint: String) {
+        val field = multilineInputField(hint)
+        field.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                economicInputs[key] = s?.toString().orEmpty()
+            }
+            override fun afterTextChanged(s: android.text.Editable?) = Unit
+        })
+        field.setText(economicInputs[key].orEmpty())
+        parent.addView(field, multilineFieldParams())
+    }
+
+    private fun economicRequiredAmount(key: String, labelText: String): BigDecimal =
+        RestaurantEconomicManager.parseNonNegative(economicInputs[key].orEmpty(), labelText)
+
+    private fun economicPercent(value: BigDecimal): String =
+        value.setScale(1, java.math.RoundingMode.HALF_UP).toPlainString().replace('.', ',') + "%"
 
     private fun copyAssistantText(value: String) {
         val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
