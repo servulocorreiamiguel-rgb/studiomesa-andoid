@@ -3788,18 +3788,18 @@ class MainActivity : Activity() {
                     weeklyNetSalesHistory = weeks
                 ))
                 buildString {
-                    append("Custo alimentar / vendas: ").append(economicPercent(analysis.foodCostPercent)).append("\\n")
-                    append("Pessoal / vendas: ").append(economicPercent(analysis.payrollPercent)).append("\\n")
-                    append("Custo alimentar + pessoal / vendas: ").append(economicPercent(analysis.primeCostPercent)).append("\\n")
-                    append("Resultado operacional estimado: ").append(money(analysis.estimatedOperatingResult)).append("\\n")
+                    append("Custo alimentar / vendas: ").append(economicPercent(analysis.foodCostPercent)).append("\n")
+                    append("Pessoal / vendas: ").append(economicPercent(analysis.payrollPercent)).append("\n")
+                    append("Custo alimentar + pessoal / vendas: ").append(economicPercent(analysis.primeCostPercent)).append("\n")
+                    append("Resultado operacional estimado: ").append(money(analysis.estimatedOperatingResult)).append("\n")
                     if (analysis.estimatedBreakEvenSales != null) {
-                        append("Ponto de equilíbrio mensal estimado: ").append(money(analysis.estimatedBreakEvenSales)).append("\\n")
+                        append("Ponto de equilíbrio mensal estimado: ").append(money(analysis.estimatedBreakEvenSales)).append("\n")
                         if (sales >= analysis.estimatedBreakEvenSales) {
                             append("As vendas introduzidas estão acima do ponto de equilíbrio por cerca de ")
-                                .append(money(sales.subtract(analysis.estimatedBreakEvenSales))).append(".\\n")
+                                .append(money(sales.subtract(analysis.estimatedBreakEvenSales))).append(".\n")
                         } else {
                             append("Vendas adicionais estimadas para atingir o ponto de equilíbrio: ")
-                                .append(money(analysis.estimatedBreakEvenSales.subtract(sales))).append(".\\n")
+                                .append(money(analysis.estimatedBreakEvenSales.subtract(sales))).append(".\n")
                         }
                     }
                     if (analysis.recordedWasteAsPercentOfSales != null) {
@@ -3807,16 +3807,16 @@ class MainActivity : Activity() {
                         analysis.recordedWasteAsPercentOfFoodCost?.let {
                             append(" (").append(economicPercent(it)).append(" do custo alimentar)")
                         }
-                        append(".\\n")
+                        append(".\n")
                     }
                     analysis.projectedCashIn30Days?.let {
-                        append("Tesouraria estimada a 30 dias: ").append(money(it)).append(".\\n")
+                        append("Tesouraria estimada a 30 dias: ").append(money(it)).append(".\n")
                     }
                     analysis.forecastNextWeekSales?.let {
                         append("Referência para a próxima semana (média simples das últimas 4 semanas): ")
-                            .append(money(it)).append(".\\n")
+                            .append(money(it)).append(".\n")
                     }
-                    analysis.warnings.forEach { append("• ").append(it).append("\\n") }
+                    analysis.warnings.forEach { append("• ").append(it).append("\n") }
                 }.trim()
             } catch (e: IllegalArgumentException) {
                 "Não foi possível calcular: ${e.message ?: "confirma os valores introduzidos"}"
@@ -3837,18 +3837,18 @@ class MainActivity : Activity() {
             "Cada linha segue o formato ingrediente | quantidade por dose | preço por unidade | desperdício %. Usa unidades compatíveis (ex.: kg e €/kg). O preço indicativo divide o custo estimado pelo objetivo de custo alimentar.",
             11.5f, false, muted
         ))
-        economicTextField(recipeCard, "recipe", "Exemplo:\\nFarinha | 0,2 | 2,50 | 5\\nMolho | 0,1 | 4,00 | 0")
+        economicTextField(recipeCard, "recipe", "Exemplo:\nFarinha | 0,2 | 2,50 | 5\nMolho | 0,1 | 4,00 | 0")
         addGap(recipeCard, 4)
         recipeCard.addView(primaryButton("Calcular custo da receita") {
             recipeReportText = try {
                 val target = economicRequiredAmount("foodTarget", "objetivo de custo alimentar")
                 val result = RestaurantEconomicManager.costRecipe(economicInputs["recipe"].orEmpty(), target)
                 buildString {
-                    append("Custo estimado por dose: ").append(money(result.totalCostPerPortion)).append("\\n")
+                    append("Custo estimado por dose: ").append(money(result.totalCostPerPortion)).append("\n")
                     append("Preço indicativo a ").append(economicPercent(result.targetFoodCostPercent))
-                        .append(" de custo alimentar: ").append(money(result.suggestedPriceAtTarget)).append("\\n")
+                        .append(" de custo alimentar: ").append(money(result.suggestedPriceAtTarget)).append("\n")
                     result.ingredients.forEach { append("• ").append(it.name).append(": ")
-                        .append(money(it.costPerPortion)).append(" por dose.\\n") }
+                        .append(money(it.costPerPortion)).append(" por dose.\n") }
                     append("Confirma quantidades, unidades de compra, rendimento, IVA e outros custos antes de usar o preço.")
                 }
             } catch (e: IllegalArgumentException) {
@@ -3878,7 +3878,7 @@ class MainActivity : Activity() {
                 if (result.suggestedOrderQuantity.signum() == 0) {
                     "O stock introduzido cobre os dias de prazo e segurança definidos. Confirma a contagem física antes de decidir."
                 } else {
-                    "Stock de cobertura recomendado: ${result.targetStockForLeadAndSafetyDays.stripTrailingZeros().toPlainString()}.\\n" +
+                    "Stock de cobertura recomendado: ${result.targetStockForLeadAndSafetyDays.stripTrailingZeros().toPlainString()}.\n" +
                         "Quantidade indicativa a repor: ${result.suggestedOrderQuantity.stripTrailingZeros().toPlainString()} unidades para ${result.totalCoverageDays} dias. Confirma unidades, validade, consumo e prazo real do fornecedor."
                 }
             } catch (e: IllegalArgumentException) {
