@@ -64,8 +64,9 @@ jobs:
             echo "Expected exactly five release APKs, found ${#apks[@]}."
             exit 1
           fi
+          APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
           for apk in "${apks[@]}"; do
-            apksigner verify --verbose "$apk"
+            "$APKSIGNER" verify --verbose "$apk"
           done
 """
 
@@ -156,7 +157,7 @@ class CommercialReleaseWorkflowAuditTests(unittest.TestCase):
 
     def test_rejects_release_workflow_without_apk_signature_verification(self) -> None:
         changed = SAFE_WORKFLOW.replace(
-            'apksigner verify --verbose "$apk"',
+            '"$APKSIGNER" verify --verbose "$apk"',
             'echo "APK verification removed"',
         )
         self.assertTrue(
