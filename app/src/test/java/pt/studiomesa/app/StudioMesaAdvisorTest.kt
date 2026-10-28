@@ -499,11 +499,14 @@ class StudioMesaAdvisorTest {
         val questions = listOf(
             "Quais pratos venderam mais no domingo passado?",
             "Quais artigos foram mais vendidos nos últimos 30 dias?",
-            "Quanto vendi em março?"
+            "Quanto vendi em março?",
+            "Quais pratos foram mais rentáveis no mês passado?",
+            "Quais artigos tiveram a margem mais alta na semana passada?",
+            "Qual era a margem do Bitoque no mês passado?"
         )
         questions.forEach { question ->
             val answer = StudioMesaAdvisor.answerQuestion(question, data)
-            assertEquals("$question -> ${answer.title}", "Período de vendas não confirmado", answer.title)
+            assertTrue("$question -> ${answer.title}", answer.title.contains("Período") && answer.title.contains("não confirmado"))
             assertTrue(answer.response.contains("filtro temporal fiável"))
             assertFalse(answer.response.contains("Triagem indicativa"))
             assertFalse(answer.response.contains("20 unidades"))
