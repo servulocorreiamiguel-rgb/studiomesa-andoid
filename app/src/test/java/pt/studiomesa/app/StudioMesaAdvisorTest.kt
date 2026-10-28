@@ -71,10 +71,12 @@ class StudioMesaAdvisorTest {
             "Como comparo fornecedores?",
             "Como controlo desperdício por motivo?",
             "Como comparo orçamento com o consumo real?",
-            "Como calculo o custo de pessoal?"
+            "Como calculo o custo de pessoal?",
+            "Faz um resumo da tesouraria e do custo alimentar"
         ).forEach { question ->
             assertEquals("Gestor económico (opcional)", StudioMesaAdvisor.answerQuestion(question, snapshot()).title)
         }
+        assertEquals("Resumo da operação", StudioMesaAdvisor.answerQuestion("Faz um resumo da operação", snapshot()).title)
     }
 
     @Test fun specificPriceQuestionsStillUsePriceAnalysis() {
