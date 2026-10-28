@@ -214,6 +214,9 @@ internal object RestaurantEconomicManager {
         if (estimatedBreakEven == null) {
             warnings += "Não é possível calcular o ponto de equilíbrio com esta estrutura: os custos alimentares e variáveis igualam ou ultrapassam as vendas."
         }
+        if (projectedCash != null && projectedCash <= zero) {
+            warnings += "Com os valores introduzidos, a tesouraria projetada a 30 dias fica a zero ou negativa. Confirma datas, recebimentos e pagamentos a vencer e prepara um plano de liquidez; esta estimativa não substitui uma previsão de tesouraria."
+        }
         if (input.recordedWasteCost != null && input.recordedWasteCost > zero) {
             warnings += "O desperdício é mostrado como indicador separado e não é subtraído novamente ao resultado, porque o custo alimentar introduzido deve já incluir os consumos desperdiçados."
         }
