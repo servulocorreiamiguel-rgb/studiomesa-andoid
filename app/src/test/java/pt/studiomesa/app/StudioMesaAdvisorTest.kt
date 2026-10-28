@@ -64,7 +64,7 @@ class StudioMesaAdvisorTest {
     @Test fun economicManagementQuestionsPointToTheOptInManager() {
         val answer = StudioMesaAdvisor.answerQuestion("Como calculo o ponto de equilíbrio e a tesouraria?", snapshot())
         assertEquals("Gestor económico (opcional)", answer.title)
-        assertTrue(answer.response.contains("não consulta bancos ou fornecedores"))
+        assertTrue(answer.response.contains("não consultam bancos ou fornecedores"))
     }
     @Test fun newEconomicQuestionsRouteToTheOptInManager() {
         listOf(
@@ -73,13 +73,17 @@ class StudioMesaAdvisorTest {
             "Como comparo orçamento com o consumo real?",
             "Como calculo o custo de pessoal?",
             "Faz um resumo da tesouraria e do custo alimentar",
-            "Como calculo o custo dos ingredientes por dose?",
-            "Como preparo a ficha técnica do prato?",
             "Que quantidade devo encomendar ao fornecedor?",
             "Como analiso os custos fixos e variáveis?",
             "Como faço uma previsão financeira?"
         ).forEach { question ->
             assertEquals("Gestor económico (opcional)", StudioMesaAdvisor.answerQuestion(question, snapshot()).title)
+        }
+        listOf(
+            "Como calculo o custo dos ingredientes por dose?",
+            "Como preparo a ficha técnica do prato?"
+        ).forEach { question ->
+            assertEquals("Custo por receita e ingredientes", StudioMesaAdvisor.answerQuestion(question, snapshot()).title)
         }
         assertEquals("Resumo da operação", StudioMesaAdvisor.answerQuestion("Faz um resumo da operação", snapshot()).title)
     }
@@ -152,7 +156,7 @@ class StudioMesaAdvisorTest {
         val data = snapshot(menu = listOf(item("Bitoque", "14.00", "0")))
         val answer = StudioMesaAdvisor.answerQuestion("Como calculo o custo do prato Bitoque?", data)
         assertEquals("Custo em falta: Bitoque", answer.title)
-        assertTrue(answer.response.contains("não vou inventar um valor"))
+        assertTrue(answer.response.contains("Não vou inventar um valor"))
     }
 
     @Test fun ingredientCostQuestionExplainsNeedForRecipeDetails() {
