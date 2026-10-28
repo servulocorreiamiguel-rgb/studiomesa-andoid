@@ -447,4 +447,21 @@ class StudioMesaAdvisorTest {
         }
     }
 
+
+    @Test fun reservationStatusQuestionsDoNotReusePendingCountAsConfirmedOrCancelled() {
+        val data = snapshot(reservationsAvailable = true, reservationsLoaded = true, pendingReservations = 4)
+        val answer = StudioMesaAdvisor.answerQuestion("Quantas reservas canceladas temos?", data)
+        assertEquals("Disponibilidade de reservas não confirmada", answer.title)
+        assertTrue(answer.response.contains("não um mapa confirmado"))
+        assertFalse(answer.response.contains("Há 4 reserva"))
+    }
+
+    @Test fun orderDelayQuestionDoesNotInventDelayedOrderDetails() {
+        val data = snapshot(activeOrders = 5)
+        val answer = StudioMesaAdvisor.answerQuestion("Quais pedidos estão atrasados?", data)
+        assertEquals("Detalhes dos pedidos não confirmados", answer.title)
+        assertTrue(answer.response.contains("não inclui a lista de cada pedido"))
+        assertFalse(answer.response.contains("Há 5 pedido"))
+    }
+
 }
