@@ -441,6 +441,23 @@ internal object StudioMesaAdvisor {
             )
         }
 
+        if (containsAny(q, "ponto de equilibrio", "break even") &&
+            containsAny(q, "tesouraria", "fluxo de caixa", "cash flow", "cashflow")) {
+            return StudioMesaAssistantAnswer(
+                "Gestor económico (opcional)",
+                "A pergunta combina duas análises diferentes. Para o ponto de equilíbrio, introduz vendas e custos do mesmo mês; para a tesouraria a 30 dias, introduz saldo atual, recebimentos e pagamentos com datas compatíveis. Calcula cada uma na respetiva secção. Estes cálculos usam valores manuais e não consultam bancos ou fornecedores.",
+                "Assistente"
+            )
+        }
+        if (containsAny(q, "resumo da tesouraria", "tesouraria e custo alimentar", "resumo financeiro") &&
+            containsAny(q, "tesouraria", "fluxo de caixa") && containsAny(q, "custo alimentar", "custos alimentares")) {
+            return StudioMesaAssistantAnswer(
+                "Gestor económico (opcional)",
+                "Para resumir a tesouraria e o custo alimentar, faz duas análises na área económica: o custo alimentar usa vendas líquidas e consumo alimentar do mesmo período; a tesouraria usa saldo atual, recebimentos e pagamentos previstos a 30 dias. Os valores são introduzidos manualmente; não consultam bancos ou fornecedores.",
+                "Assistente"
+            )
+        }
+
         if (containsAny(q, "prejuizo", "a perder dinheiro", "perde dinheiro", "perde dinheiro neste prato")) {
             val candidates = findMenuItemCandidates(rawQuestion, snapshot.menuItems)
             if (candidates.size > 1) return clarificationForMenuItems(candidates, "verificar o custo e a contribuição")
@@ -474,6 +491,22 @@ internal object StudioMesaAdvisor {
             )
         }
 
+        if (containsAny(q, "concorrencia", "concorrente", "concorrentes")) {
+            val energyMentioned = containsAny(q, "energia", "eletricidade", "conta de luz", "conta da luz", "gas")
+            val detail = if (energyMentioned) {
+                "Não tenho faturas de energia nem dados de concorrentes. Regista a fatura no custo fixo mensal para comparar períodos equivalentes e recolhe preços públicos dos concorrentes manualmente. Esta IA local não pesquisa a Internet nem assume que os preços de outras empresas são comparáveis."
+            } else {
+                "Esta IA local não pesquisa a Internet nem dispõe de preços atuais dos concorrentes. Para uma comparação fiável, introduz dados públicos verificáveis, o mesmo período, zona e tipo de oferta; não vou inventar preços ou posicionamento da concorrência."
+            }
+            return StudioMesaAssistantAnswer("Comparação com a concorrência não disponível", detail, "Assistente")
+        }
+        if (containsAny(q, "energia", "eletricidade", "conta de luz", "conta da luz", "gas")) {
+            return StudioMesaAssistantAnswer(
+                "Análise do custo de energia",
+                "Esta sessão não tem faturas de eletricidade ou gás nem leituras automáticas. Introduz a fatura no campo de outros custos fixos do gestor económico e compara montantes de períodos equivalentes, tendo em conta alterações de tarifa e consumo. Não vou prometer uma poupança sem esses dados.",
+                "Assistente"
+            )
+        }
         if (containsAny(q, "fornecedor", "fornecedores", "comparar propostas", "preco de compra")) {
             return StudioMesaAssistantAnswer(
                 "Comparar fornecedores",
@@ -509,7 +542,7 @@ internal object StudioMesaAdvisor {
                 "Assistente"
             )
         }
-        if (containsAny(q, "quantidade a encomendar", "quanto devo encomendar", "quanto encomendar", "repor stock", "reabastecer", "ponto de encomenda")) {
+        if (containsAny(q, "quantidade a encomendar", "quantidade devo encomendar", "que quantidade devo encomendar", "quanto devo encomendar", "quanto encomendar", "repor stock", "reabastecer", "ponto de encomenda")) {
             return StudioMesaAssistantAnswer(
                 "Quantidade indicativa de reposição",
                 "Ativa o Gestor económico e usa «Quantidade de reposição». Introduz stock atual | consumo médio por dia | prazo do fornecedor em dias | dias de segurança. A quantidade sugerida cobre o prazo e a margem de segurança indicados, não prevê procura futura nem verifica encomendas já feitas. Confirma unidades, validade, capacidade e contagem física; o sistema não encomenda automaticamente.",
