@@ -444,6 +444,7 @@ internal object StudioMesaAdvisor {
         if (containsAny(
                 q, "custo dos ingredientes", "custo de ingredientes", "custo da receita",
                 "quanto custa cada receita", "quanto custa uma receita", "custo de uma receita",
+                "quanto custa uma dose", "quanto custa a dose", "custo da dose",
                 "ficha tecnica", "custo de producao", "quanto custa produzir"
             )) {
             return StudioMesaAssistantAnswer(
@@ -695,7 +696,9 @@ internal object StudioMesaAdvisor {
 
     private fun requestedStockItemName(normalizedQuestion: String): String? {
         val patterns = listOf(
-            Regex("\\b(?:quanto tenho de|quanto tem de|quanto resta de|quanto sobrou de|quantidade de|stock de|estoque de|tenho stock de|acabou (?:o|a|os|as)|ficou sem)\\s+(.+)$")
+            Regex("\\b(?:quanto tenho de|quanto tem de|quanto resta de|quanto sobra de|quanto sobrou de|stock de|estoque de|tenho stock de|acabou (?:o|a|os|as)|ficou sem)\\s+(.+)$"),
+            Regex("\\b(?:o|a|os|as)\\s+([a-z0-9]+)\\s+(?:acabou|acabaram|esgotou|esgotaram|esta a acabar|esta esgotado)\\b"),
+            Regex("\\b(?:ha|tenho|temos|tem)\\s+(?:(?:o|a|os|as)\\s+)?([a-z0-9]+)\\s+(?:suficiente|suficientes|bastante|bastantes)\\b")
         )
         val rawCandidate = patterns.firstNotNullOfOrNull { pattern ->
             pattern.find(normalizedQuestion)?.groupValues?.getOrNull(1)
