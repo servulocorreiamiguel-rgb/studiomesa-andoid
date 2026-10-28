@@ -448,7 +448,7 @@ internal object StudioMesaAdvisor {
                 if (other.name == candidate.name) false
                 else {
                     val otherName = normalizeLookupText(other.name)
-                    otherName.length > name.length && otherName.contains(" $name ")
+                    otherName.length > name.length && " $otherName ".contains(" $name ")
                 }
             }
         }.distinctBy { normalizeLookupText(it.name) }
