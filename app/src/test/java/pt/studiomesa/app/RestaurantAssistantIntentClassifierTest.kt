@@ -184,6 +184,11 @@ class RestaurantAssistantIntentClassifierTest {
         }
         assertTrue(RestaurantAssistantIntentClassifier.requestsDatedSales("Quanto foi a receita em 2025?"))
         assertTrue(!RestaurantAssistantIntentClassifier.requestsDatedSales("Como posso aumentar as vendas?"))
+        assertTrue(!RestaurantAssistantIntentClassifier.requestsDatedSales("Como posso aumentar as vendas no próximo domingo?"))
+        assertEquals(
+            RestaurantAssistantIntent.MENU_ENGINEERING,
+            RestaurantAssistantIntentClassifier.classify("Como posso aumentar as vendas no próximo domingo?").intent
+        )
     }
 
     @Test fun routesDatedSpecificDishSalesToMenuEngineeringWithoutGuessingThePeriod() {
