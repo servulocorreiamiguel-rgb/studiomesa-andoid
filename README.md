@@ -35,6 +35,8 @@ Estes valores são propostas de referência para avaliação comercial, não pag
 
 A primeira versão está documentada em `AI-ASSISTANT-2026-10-27.md`. Funciona sem chave de API e sem chamadas externas. O cálculo de preço usa uma referência ilustrativa de percentagem de custo, não uma recomendação comercial universal. Não ativar alterações automáticas de dados sem desenho de autorização, confirmação e auditoria.
 
+A revisão de 28/10/2026 acrescenta uma área **Gestor económico · opcional**: estimativa de resultado e ponto de equilíbrio, indicadores de custo alimentar/pessoal, projeção manual de tesouraria, média simples de vendas semanais, custo de receitas por dose e quantidade teórica de reposição. Começa desativada; todos os valores são introduzidos manualmente e ficam apenas em memória durante a sessão, sem persistência ou sincronização. Não é contabilidade certificada, não faz previsão avançada nem emite encomendas. Fórmulas, hipóteses e próximos passos estão em `ECONOMIC-MANAGER-2026-10-28.md`. As novas funcionalidades só devem ser consideradas integradas após a revisão e validação da CI.
+
 ## O que ainda falta antes da venda ou utilização em serviço real
 
 - Testes ponta a ponta em telemóveis reais, incluindo vários dispositivos, utilizadores, perda de internet, sessões expiradas e erros de servidor. A compilação de um APK não substitui esses testes.
