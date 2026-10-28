@@ -3691,6 +3691,13 @@ class MainActivity : Activity() {
 
 
     private fun renderEconomicManager(container: LinearLayout) {
+        if (hasRemoteRestaurant() && backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") {
+            sectionHeading(container, "Gestor económico · opcional", "Área de gestão financeira reservada ao proprietário.")
+            container.addView(emptyCard(
+                "Nesta conta, o gestor económico está disponível apenas para o proprietário do restaurante. Não são recolhidos nem guardados dados financeiros nesta secção."
+            ), cardParams())
+            return
+        }
         sectionHeading(
             container,
             "Gestor económico · opcional",
