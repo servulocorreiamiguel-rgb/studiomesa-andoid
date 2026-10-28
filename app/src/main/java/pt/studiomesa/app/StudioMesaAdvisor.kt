@@ -357,7 +357,7 @@ internal object StudioMesaAdvisor {
             RestaurantAssistantIntent.MENU_ENGINEERING -> answerMenuEngineering(rawQuestion, snapshot)
             RestaurantAssistantIntent.MARKETING -> answerMarketing(snapshot)
             RestaurantAssistantIntent.PRICING -> answerPricing(rawQuestion, snapshot)
-            RestaurantAssistantIntent.STOCK -> answerStock(snapshot)
+            RestaurantAssistantIntent.STOCK -> answerStock(rawQuestion, snapshot)
             RestaurantAssistantIntent.RESERVATIONS -> answerReservations(rawQuestion, snapshot)
             RestaurantAssistantIntent.ORDERS -> answerOrders(snapshot)
             RestaurantAssistantIntent.TROUBLESHOOTING -> answerProblem(rawQuestion, snapshot)
@@ -545,17 +545,67 @@ internal object StudioMesaAdvisor {
             .trim()
             .replace(Regex("\\s+"), " ")
 
-    private fun answerStock(s: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
+    private fun answerStock(rawQuestion: String, s: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
         if (!s.stockFeatureAvailable) return StudioMesaAssistantAnswer("Análise de stock", "A gestão de stock está disponível no plano Premium desta versão. Não tenho dados de stock neste plano e não vou inferir quantidades.")
         if (!s.restaurantConfigured || !s.stockLoaded) return StudioMesaAssistantAnswer(
             "Análise de stock",
             "Os dados de stock ainda não foram carregados de forma confirmada. Abre Stock, configura o restaurante se necessário e atualiza os dados. Não assumo que uma cache antiga representa a quantidade física atual.",
             "Stock"
         )
+
+        val normalizedQuestion = normalizeLookupText(rawQuestion)
+        val paddedQuestion = " $normalizedQuestion "
+        val mentioned = s.stockItems.filter { item ->
+            val name = normalizeLookupText(item.name)
+            name.isNotBlank() && paddedQuestion.contains(" $name ")
+        }.distinctBy { normalizeLookupText(it.name) }
+        val specificItems = mentioned.filter { candidate ->
+            val name = normalizeLookupText(candidate.name)
+            mentioned.none { other ->
+                if (normalizeLookupText(other.name) == name) false
+                else {
+                    val otherName = normalizeLookupText(other.name)
+                    otherName.length > name.length && " $otherName ".contains(" $name ")
+                }
+            }
+        }
+        if (specificItems.size > 1) return StudioMesaAssistantAnswer(
+            "Qual artigo de stock?",
+            "A pergunta menciona mais do que um artigo: ${specificItems.joinToString(", ") { it.name }}. Indica qual queres consultar para evitar apresentar a quantidade errada.",
+            "Stock"
+        )
+        specificItems.singleOrNull()?.let { item ->
+            val status = when {
+                item.quantity <= zero -> "O registo indica quantidade zero ou negativa; confirma a contagem física antes de concluir que o artigo acabou."
+                item.quantity <= item.minimumQuantity -> "Está no limite mínimo ou abaixo dele. Confirma a contagem física e o prazo de entrega antes de decidir a encomenda."
+                else -> "Está acima do limite mínimo registado. Confirma a contagem física antes de tomar decisões de compra."
+            }
+            return StudioMesaAssistantAnswer(
+                "Stock de ${item.name}",
+                "${item.name}: ${decimal(item.quantity)} disponíveis no registo; limite mínimo ${decimal(item.minimumQuantity)}. $status",
+                "Stock"
+            )
+        }
+
+        val requestedName = requestedStockItemName(normalizedQuestion)
+        if (!requestedName.isNullOrBlank()) return StudioMesaAssistantAnswer(
+            "Artigo de stock não encontrado",
+            "Não encontrei «$requestedName» na lista de stock carregada. Isto não prova que não exista fisicamente; confirma a designação na secção Stock e atualiza os dados.",
+            "Stock"
+        )
+
         val low = s.stockItems.filter { it.quantity <= it.minimumQuantity }
         val detail = if (low.isEmpty()) "Não encontrei artigos abaixo do limite mínimo nos dados carregados. Confirma a contagem física: só consigo analisar o que foi registado."
         else low.take(5).joinToString("\n") { "• ${it.name}: ${decimal(it.quantity)} disponíveis; mínimo ${decimal(it.minimumQuantity)}." } + "\nConfirma a contagem física antes de encomendar ou alterar stock."
         return StudioMesaAssistantAnswer("Análise de stock", detail, "Stock")
+    }
+
+    private fun requestedStockItemName(normalizedQuestion: String): String? {
+        val withoutQuestion = normalizedQuestion
+            .replace(Regex("\\b(?:quanto|quantos|quantas|tenho|temos|tem|resta|sobrou|acabou|stock|estoque|disponivel|disponiveis|quantidade|em|no|na|de|do|da|dos|das|o|a|os|as|meu|minha|meus|minhas|por favor|para encomendar|devo encomendar|devo comprar|esta baixo|esta baixa|baixo|baixa|hoje)\\b"), " ")
+            .trim().replace(Regex("\\s+"), " ")
+        if (withoutQuestion.isBlank()) return null
+        return withoutQuestion.takeIf { it.split(" ").any { word -> word.length > 2 } }
     }
 
     private fun answerReservations(rawQuestion: String, s: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
