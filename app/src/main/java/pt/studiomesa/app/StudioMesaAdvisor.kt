@@ -263,7 +263,7 @@ internal object StudioMesaAdvisor {
             RestaurantAssistantIntent.DAILY_BRIEFING -> dailyBriefing(snapshot)
             RestaurantAssistantIntent.MENU_ENGINEERING -> answerMenuEngineering(snapshot)
             RestaurantAssistantIntent.MARKETING -> answerMarketing(snapshot)
-            RestaurantAssistantIntent.PRICING -> answerPricing(snapshot)
+            RestaurantAssistantIntent.PRICING -> answerPricing(rawQuestion, snapshot)
             RestaurantAssistantIntent.STOCK -> answerStock(snapshot)
             RestaurantAssistantIntent.RESERVATIONS -> answerReservations(snapshot)
             RestaurantAssistantIntent.ORDERS -> answerOrders(snapshot)
@@ -277,14 +277,42 @@ internal object StudioMesaAdvisor {
         }
     }
 
-    private fun answerPricing(snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
+    private fun answerPricing(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
         val priced = snapshot.menuItems.filter { it.sellingPrice > zero && it.unitCost > zero }
         if (priced.isEmpty()) return StudioMesaAssistantAnswer(
             "Análise de preços",
             "Ainda não tenho artigos com preço de venda e custo interno válidos. Abre Carta, confirma os dois valores por artigo e volta a perguntar. Não vou inventar um preço sem custo conhecido.",
             "Carta"
         )
-        val top = priced.map { item ->
+
+        // Prefer the exact menu item named by the owner. If the question only names
+        // a shared word such as "hambúrguer", ask for clarification instead of
+        // silently analysing the wrong dish.
+        val normalizedQuestion = normalizeLookupText(rawQuestion)
+        val paddedQuestion = " $normalizedQuestion "
+        val exactMentions = priced.filter { item ->
+            val normalizedName = normalizeLookupText(item.name)
+            normalizedName.isNotBlank() && paddedQuestion.contains(" $normalizedName ")
+        }
+        val longestExactLength = exactMentions.maxOfOrNull { normalizeLookupText(it.name).length } ?: 0
+        val longestExactMentions = exactMentions.filter { normalizeLookupText(it.name).length == longestExactLength }
+        val stopWords = setOf("da", "de", "do", "das", "dos", "a", "o", "as", "os", "com", "e", "em")
+        val questionWords = normalizedQuestion.split(" ").filter { it.length > 2 && it !in stopWords }.toSet()
+        val tokenMatches = if (longestExactMentions.isEmpty()) {
+            priced.filter { item ->
+                normalizeLookupText(item.name).split(" ")
+                    .filter { it.length > 2 && it !in stopWords }
+                    .any { it in questionWords }
+            }
+        } else emptyList()
+        val candidates = if (longestExactMentions.isNotEmpty()) longestExactMentions else tokenMatches
+        if (candidates.size > 1) return StudioMesaAssistantAnswer(
+            "Qual artigo da carta?",
+            "Encontrei vários artigos que podem corresponder: ${candidates.joinToString(", ") { it.name }}. Indica o nome completo do artigo para eu analisar o preço certo. Não alterei nenhum valor.",
+            "Carta"
+        )
+        val analysisItems = candidates.singleOrNull()?.let(::listOf) ?: priced
+        val top = analysisItems.map { item ->
             val share = item.unitCost.multiply(hundred).divide(item.sellingPrice, 4, RoundingMode.HALF_UP)
             Triple(item, share, recommendedSellingPrice(item.unitCost))
         }.sortedByDescending { it.second }.take(4)
@@ -292,13 +320,23 @@ internal object StudioMesaAdvisor {
             val targetText = target?.let { " Referência a 30%: ${euro(it)}." } ?: ""
             "• ${item.name}: custo ${euro(item.unitCost)}, venda ${euro(item.sellingPrice)}, custo/venda ${percent(share)}.$targetText"
         }
-        val over = priced.count { it.unitCost.multiply(hundred).divide(it.sellingPrice, 4, RoundingMode.HALF_UP) > referenceCostShare }
+        val over = analysisItems.count {
+            it.unitCost.multiply(hundred).divide(it.sellingPrice, 4, RoundingMode.HALF_UP) > referenceCostShare
+        }
+        val scope = if (candidates.size == 1) "o artigo selecionado" else "${analysisItems.size} artigo(s)"
         return StudioMesaAssistantAnswer(
             "Análise de preços",
-            "Analisei ${priced.size} artigo(s) com custos válidos; $over ultrapassam a referência inicial de triagem de 30%.\n$details\n\n30% é apenas um ponto de partida, não uma regra para todos os restaurantes. O cálculo não inclui automaticamente mão de obra, renda, energia, IVA, desperdício, taxas ou concorrência. Não alterei nenhum preço.",
+            "Analisei $scope com custo válido; $over ultrapassam a referência inicial de triagem de 30%.\n$details\n\n30% é apenas um ponto de partida, não uma regra para todos os restaurantes. O cálculo não inclui automaticamente mão de obra, renda, energia, IVA, desperdício, taxas ou concorrência. Não alterei nenhum preço.",
             "Preço Justo"
         )
     }
+
+    private fun normalizeLookupText(value: String): String =
+        Normalizer.normalize(value.lowercase(Locale.ROOT), Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+            .replace(Regex("[^a-z0-9]+"), " ")
+            .trim()
+            .replace(Regex("\\s+"), " ")
 
     private fun answerStock(s: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
         if (!s.stockFeatureAvailable) return StudioMesaAssistantAnswer("Análise de stock", "A gestão de stock está disponível no plano Premium desta versão. Não tenho dados de stock neste plano e não vou inferir quantidades.")
