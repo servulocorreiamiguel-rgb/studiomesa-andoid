@@ -258,6 +258,15 @@ internal object StudioMesaAdvisor {
         return when {
             containsAny(q, "resumo", "briefing", "prioridades de hoje", "estado da operacao") -> dailyBriefing(snapshot)
             containsAny(
+                q, "gestao economica", "gestor economico", "ponto de equilibrio", "break even",
+                "tesouraria", "fluxo de caixa", "desperdicio", "custo alimentar",
+                "custo da receita", "custo por dose", "ponto de encomenda", "planeamento de compras",
+                "previsao", "prever vendas", "vendas da proxima semana"
+            ) -> StudioMesaAssistantAnswer(
+                "Gestor económico (opcional)",
+                "Nesta página, ativa o Gestor económico se o proprietário quiser fazer estas análises. Inclui indicadores mensais, ponto de equilíbrio, projeção manual de tesouraria, média simples de vendas semanais, custo por receita/dose e quantidade teórica de reposição. Usa apenas os valores introduzidos nesta sessão; não consulta bancos ou fornecedores, não altera preços nem envia encomendas."
+            )
+            containsAny(
                 q, "engenharia da carta", "popularidade", "mais vendidos", "rentabilidade da carta",
                 "artigos que vendem", "menu engineering", "vendas", "vender mais", "aumentar as vendas",
                 "aumentar vendas", "melhorar as vendas", "melhorar vendas", "o que vende melhor",
