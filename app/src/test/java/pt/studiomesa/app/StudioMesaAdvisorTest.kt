@@ -464,4 +464,25 @@ class StudioMesaAdvisorTest {
         assertFalse(answer.response.contains("Há 5 pedido"))
     }
 
+
+    @Test fun specificDishLossQuestionChecksItsRegisteredContributionSafely() {
+        val data = snapshot(menu = listOf(
+            item("Bitoque", "10.00", "12.00"),
+            item("Sopa", "5.00", "1.00")
+        ))
+        val answer = StudioMesaAdvisor.answerQuestion("O Bitoque dá prejuízo?", data)
+        assertEquals("Custo registado do artigo", answer.title)
+        assertTrue(answer.response.contains("Bitoque"))
+        assertTrue(answer.response.contains("contribuição unitária estimada: -2,00"))
+        assertTrue(answer.response.contains("Isto não prova o prejuízo líquido"))
+        assertFalse(answer.response.contains("Sopa"))
+    }
+
+    @Test fun currentWeekSalesQuestionIsNotAnsweredWithHistoricalAverage() {
+        val answer = StudioMesaAdvisor.answerQuestion("Como está a faturação esta semana?", snapshot())
+        assertEquals("Período de vendas não confirmado", answer.title)
+        assertTrue(answer.response.contains("não incluem um filtro temporal fiável"))
+        assertFalse(answer.response.contains("média das últimas quatro semanas"))
+    }
+
 }
