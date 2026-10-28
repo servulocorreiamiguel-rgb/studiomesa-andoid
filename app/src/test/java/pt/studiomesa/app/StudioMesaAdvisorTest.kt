@@ -427,4 +427,24 @@ class StudioMesaAdvisorTest {
         assertFalse(answer.response.contains("Artigo de stock não encontrado"))
     }
 
+
+    @Test fun economicQuestionsExplainTheCorrectToolAndRequiredInputFormat() {
+        val cases = listOf(
+            "Como comparo fornecedores?" to ("Comparar fornecedores" to "artigo | fornecedor | unidade"),
+            "Como registo desperdício por motivo?" to ("Analisar desperdício" to "quantidade | custo por unidade | motivo"),
+            "Como comparo consumo teórico com real?" to ("Consumo teórico vs. real" to "consumo teórico | consumo real"),
+            "Como comparo orçamento e realizado?" to ("Orçamento vs. realizado" to "orçamento | valor real"),
+            "Como calculo custo de pessoal?" to ("Cenário de custo de pessoal" to "custo total por hora"),
+            "Quanto devo encomendar?" to ("Quantidade indicativa de reposição" to "consumo médio por dia"),
+            "Como calculo tesouraria a 30 dias?" to ("Previsão simples de tesouraria" to "recebimentos previstos"),
+            "Como calculo o ponto de equilíbrio?" to ("Ponto de equilíbrio" to "custo alimentar consumido"),
+            "Como faço uma previsão financeira?" to ("Referência simples de vendas" to "últimas quatro semanas")
+        )
+        cases.forEach { (question, expected) ->
+            val answer = StudioMesaAdvisor.answerQuestion(question, snapshot())
+            assertEquals("$question -> ${answer.title}", expected.first, answer.title)
+            assertTrue("$question -> ${answer.response}", answer.response.contains(expected.second))
+        }
+    }
+
 }
