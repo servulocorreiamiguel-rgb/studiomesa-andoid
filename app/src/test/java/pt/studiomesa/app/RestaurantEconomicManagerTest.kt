@@ -200,4 +200,24 @@ class RestaurantEconomicManagerTest {
         assertEquals(amount("-8.00"), rows[1].varianceCost)
     }
 
+
+    @Test fun labourPlanCalculatesEstimatedCostAndHoursAtTarget() {
+        val result = RestaurantEconomicManager.analyzeLabourPlan("120 | 12,50 | 8000 | 25")
+        assertEquals(amount("1500.00"), result.estimatedPayrollCost)
+        assertEquals(amount("18.8"), result.estimatedPayrollPercent)
+        assertEquals(amount("160.00"), result.hoursAtTarget)
+        assertEquals(amount("0.00"), result.hoursAboveTarget)
+    }
+
+    @Test fun labourPlanRejectsMissingOrInvalidSalesAndTarget() {
+        listOf("120 | 12,50 | 0 | 25", "120 | 12,50 | 8000 | 101").forEach { raw ->
+            try {
+                RestaurantEconomicManager.analyzeLabourPlan(raw)
+                fail("Invalid labour plan was accepted.")
+            } catch (_: IllegalArgumentException) {
+                // Expected validation failure.
+            }
+        }
+    }
+
 }
