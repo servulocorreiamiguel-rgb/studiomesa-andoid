@@ -384,4 +384,31 @@ class StudioMesaAdvisorTest {
         assertTrue(answer.response.contains("Frango"))
     }
 
+
+    @Test fun marketingQuestionForNamedDishDoesNotReturnOtherDishDrafts() {
+        val data = snapshot(menu = listOf(
+            AssistantMenuItem("Bolo da casa", BigDecimal("3.50"), BigDecimal("1.00"), description = "Bolo de chocolate"),
+            AssistantMenuItem("Bitoque", BigDecimal("14.00"), BigDecimal("4.50")),
+            AssistantMenuItem("Sopa", BigDecimal("5.00"), BigDecimal("1.50"))
+        ))
+        val answer = StudioMesaAdvisor.answerQuestion("Escreve um post para o Bitoque", data)
+        assertEquals("Rascunhos para rever", answer.title)
+        assertTrue(answer.response.contains("Bitoque"))
+        assertFalse(answer.response.contains("Bolo da casa"))
+        assertFalse(answer.response.contains("Sopa"))
+        assertTrue(answer.response.contains("Revê e aprova"))
+    }
+
+    @Test fun marketingQuestionAsksForClarificationWhenSeveralDishesAreNamed() {
+        val data = snapshot(menu = listOf(
+            item("Hambúrguer Clássico", "14.00", "5.00"),
+            item("Hambúrguer Vegetariano", "13.00", "5.00"),
+            item("Sopa", "5.00", "1.50")
+        ))
+        val answer = StudioMesaAdvisor.answerQuestion("Faz uma publicação para o hambúrguer", data)
+        assertEquals("Qual artigo da carta?", answer.title)
+        assertTrue(answer.response.contains("Hambúrguer Clássico"))
+        assertTrue(answer.response.contains("Hambúrguer Vegetariano"))
+    }
+
 }
