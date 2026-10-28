@@ -332,8 +332,19 @@ internal object StudioMesaAdvisor {
         )
     }
 
-    private fun answerMarketing(snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
-        val drafts = marketingDrafts(snapshot)
+    private fun answerMarketing(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
+        val candidates = findMenuItemCandidates(rawQuestion, snapshot.menuItems)
+        if (candidates.size > 1) return clarificationForMenuItems(candidates, "criar o rascunho de publicação")
+        val selected = candidates.singleOrNull()
+        if (selected != null && (selected.name.isBlank() || selected.sellingPrice <= zero)) {
+            return StudioMesaAssistantAnswer(
+                "Faltam dados para a publicação",
+                "O artigo ${selected.name} não tem nome ou preço de venda válido na Carta. Confirma os dados antes de criar o rascunho.",
+                "Carta"
+            )
+        }
+        val drafts = if (selected != null) marketingDrafts(snapshot.copy(menuItems = listOf(selected)), limit = 1)
+            else marketingDrafts(snapshot)
         if (drafts.isEmpty()) return StudioMesaAssistantAnswer("Conteúdo para redes sociais", "Não há artigos com nome e preço válidos para criar rascunhos. Confirma a carta primeiro.", "Carta")
         return StudioMesaAssistantAnswer("Rascunhos para rever",
             drafts.joinToString("\n\n") { "• ${it.itemName}\n${it.caption}\n${it.basis}" } +
@@ -355,7 +366,7 @@ internal object StudioMesaAdvisor {
             RestaurantAssistantIntent.ECONOMIC_MANAGER -> answerEconomicQuestion(rawQuestion, snapshot)
             RestaurantAssistantIntent.DAILY_BRIEFING -> dailyBriefing(snapshot)
             RestaurantAssistantIntent.MENU_ENGINEERING -> answerMenuEngineering(rawQuestion, snapshot)
-            RestaurantAssistantIntent.MARKETING -> answerMarketing(snapshot)
+            RestaurantAssistantIntent.MARKETING -> answerMarketing(rawQuestion, snapshot)
             RestaurantAssistantIntent.PRICING -> answerPricing(rawQuestion, snapshot)
             RestaurantAssistantIntent.STOCK -> answerStock(rawQuestion, snapshot)
             RestaurantAssistantIntent.RESERVATIONS -> answerReservations(rawQuestion, snapshot)
