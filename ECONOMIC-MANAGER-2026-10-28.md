@@ -11,6 +11,10 @@ Dar ao proprietário uma área opcional de apoio à decisão, com cálculos dete
 - Estimativa de vendas da semana seguinte através da média simples das quatro últimas semanas comparáveis. Não modela sazonalidade, feriados, meteorologia, eventos ou tendências; exige pelo menos quatro valores.
 - Custo da receita por dose: linhas de ingrediente, quantidade por dose, custo por unidade de compra e percentagem de desperdício; calcula custo e preço indicativo para o objetivo de custo alimentar escolhido.
 - Quantidade de reposição: stock atual, consumo médio diário, prazo do fornecedor e dias de segurança. Apenas recomenda quantidade; não emite encomendas nem altera stock.
+- Comparação manual de preços entre fornecedores, normalizada por unidade de compra, apenas quando artigo e unidade coincidem.
+- Comparação orçamento-versus-realizado por categoria, mostrando a diferença absoluta e percentual sem presumir que uma variação é favorável.
+- Consumo teórico-versus-real por ingrediente, com estimativa do impacto em euros; requer unidades e período comparáveis.
+- Cenário de custo de horas de equipa face às vendas e a um objetivo de custo de pessoal. Não cria horários nem recomenda cortes de pessoal.
 - A secção é voluntária, começa desativada e pode ser limpa/desativada pelo utilizador.
 
 ## Fórmulas e hipóteses
@@ -40,8 +44,11 @@ Os campos do gestor económico e os relatórios não são persistidos em SharedP
 2. Ligar vendas a preço/custo histórico por identificador estável, evitando reconstruir resultados antigos com preços atuais.
 3. Registar faturas e alterações de preços de fornecedores com validação humana.
 4. Adicionar histórico datado de vendas e calendário para previsão por dia da semana/sazonalidade e comparação entre previsão e realizado.
-5. Criar livro de caixa manual auditável e depois avaliar integrações externas seguras; não afirmar que existe acesso bancário até existir integração.
-6. Validar o módulo com restaurantes reais e contabilista certificado antes de o usar como aconselhamento fiscal/contabilístico.
+5. Criar livro de caixa manual auditável e comparação real entre valores previstos e executados; depois avaliar integrações externas seguras. Não afirmar que existe acesso bancário até existir integração.
+6. Acrescentar consumo automático de ingredientes a partir de receitas e vendas, registos persistentes de desperdício, receção de compras/faturas, histórico de preços por fornecedor e controlos de validade; estas ligações ainda não existem.
+7. Construir previsão com vendas datadas por dia/turno, sazonalidade, feriados/eventos e comparação forecast-versus-real; a média simples de quatro semanas é apenas uma referência preliminar.
+8. Integrar horas trabalhadas reais, escalas e custo de pessoal por turno apenas após desenho de permissões e testes laborais/operacionais.
+9. Validar o módulo com restaurantes reais e contabilista certificado antes de o usar como aconselhamento fiscal/contabilístico.
 
 ## Pesquisa de referência
 - National Restaurant Association, “AI on the menu: Using AI for restaurant operations” (inventário, produção, previsão e análise de feedback): https://restaurant.org/education-and-resources/resource-library/ai-on-the-menu-using-ai-for-restaurant-operations/
