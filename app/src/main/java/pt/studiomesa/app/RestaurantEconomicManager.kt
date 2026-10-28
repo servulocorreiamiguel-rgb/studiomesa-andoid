@@ -49,6 +49,50 @@ internal data class ReorderAnalysis(
     val totalCoverageDays: Int
 )
 
+internal data class WasteLogEntry(
+    val itemName: String,
+    val quantity: BigDecimal,
+    val unitCost: BigDecimal,
+    val reason: String,
+    val totalCost: BigDecimal
+)
+
+internal data class WasteLogReport(
+    val entries: List<WasteLogEntry>,
+    val totalCost: BigDecimal,
+    val costByReason: List<Pair<String, BigDecimal>>
+)
+
+internal data class SupplierQuoteOption(
+    val supplierName: String,
+    val packQuantity: BigDecimal,
+    val packPrice: BigDecimal,
+    val pricePerUnit: BigDecimal
+)
+
+internal data class SupplierQuoteComparison(
+    val itemName: String,
+    val unit: String,
+    val options: List<SupplierQuoteOption>
+)
+
+internal data class BudgetVariance(
+    val category: String,
+    val budget: BigDecimal,
+    val actual: BigDecimal,
+    val variance: BigDecimal,
+    val variancePercent: BigDecimal?
+)
+
+internal data class UsageVariance(
+    val itemName: String,
+    val expectedUse: BigDecimal,
+    val actualUse: BigDecimal,
+    val varianceQuantity: BigDecimal,
+    val unitCost: BigDecimal,
+    val varianceCost: BigDecimal
+)
+
 /**
  * Deterministic restaurant economics tools. All outputs are estimates from figures
  * entered by the operator, not an accounting record or autonomous business decision.
@@ -244,6 +288,126 @@ internal object RestaurantEconomicManager {
         val targetStock = dailyUse.multiply(BigDecimal(coverage)).setScale(3, RoundingMode.CEILING)
         val suggested = targetStock.subtract(onHand).max(zero).setScale(3, RoundingMode.CEILING)
         return ReorderAnalysis(targetStock, suggested, coverage)
+    }
+
+
+    /**
+     * Lines: item | quantity wasted | cost per unit | reason.
+     * This calculates manual records only; it does not subtract them from inventory.
+     */
+    fun analyzeWasteLog(rawLines: String): WasteLogReport {
+        val lines = rawLines.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        require(lines.isNotEmpty()) { "Introduz pelo menos um registo de desperdício." }
+        require(lines.size <= 200) { "O registo tem demasiadas linhas para uma única análise." }
+        val entries = lines.mapIndexed { index, line ->
+            val parts = line.split('|').map { it.trim() }
+            require(parts.size == 4 && parts[0].isNotBlank() && parts[3].isNotBlank()) {
+                "Linha ${index + 1}: usa artigo | quantidade | custo por unidade | motivo."
+            }
+            val quantity = parseNonNegative(parts[1], "quantidade desperdiçada na linha ${index + 1}")
+            val unitCost = parseNonNegative(parts[2], "custo unitário na linha ${index + 1}")
+            require(quantity > zero) { "Linha ${index + 1}: a quantidade tem de ser superior a zero." }
+            require(unitCost > zero) { "Linha ${index + 1}: o custo unitário tem de ser superior a zero." }
+            WasteLogEntry(parts[0], quantity, unitCost, parts[3], quantity.multiply(unitCost).setScale(2, RoundingMode.HALF_UP))
+        }
+        val totals = entries.groupBy { it.reason.trim().lowercase(java.util.Locale.ROOT) }
+            .map { (_, group) ->
+                group.first().reason.trim() to group.fold(zero) { sum, entry -> sum.add(entry.totalCost) }
+                    .setScale(2, RoundingMode.HALF_UP)
+            }
+            .sortedByDescending { it.second }
+        return WasteLogReport(
+            entries,
+            entries.fold(zero) { sum, entry -> sum.add(entry.totalCost) }.setScale(2, RoundingMode.HALF_UP),
+            totals
+        )
+    }
+
+    /**
+     * Lines: item | supplier | unit | quantity in pack | price per pack.
+     * Quotes are comparable only for the same item and same usage/purchase unit.
+     */
+    fun compareSupplierQuotes(rawLines: String): List<SupplierQuoteComparison> {
+        val lines = rawLines.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        require(lines.isNotEmpty()) { "Introduz pelo menos uma proposta para comparar preços." }
+        require(lines.size <= 200) { "Existem demasiadas propostas para uma única comparação." }
+        val quotes = lines.mapIndexed { index, line ->
+            val parts = line.split('|').map { it.trim() }
+            require(parts.size == 5 && parts[0].isNotBlank() && parts[1].isNotBlank() && parts[2].isNotBlank()) {
+                "Linha ${index + 1}: usa artigo | fornecedor | unidade | quantidade na embalagem | preço da embalagem."
+            }
+            val packQuantity = parseNonNegative(parts[3], "quantidade da embalagem na linha ${index + 1}")
+            val packPrice = parseNonNegative(parts[4], "preço da embalagem na linha ${index + 1}")
+            require(packQuantity > zero && packPrice > zero) {
+                "Linha ${index + 1}: quantidade e preço da embalagem têm de ser superiores a zero."
+            }
+            listOf(parts[0], parts[1], parts[2], packQuantity.toPlainString(), packPrice.toPlainString())
+        }
+        val grouped = quotes.groupBy {
+            it[0].trim().lowercase(java.util.Locale.ROOT) + "|" + it[2].trim().lowercase(java.util.Locale.ROOT)
+        }
+        return grouped.values.map { group ->
+            val first = group.first()
+            val suppliers = group.map { it[1].trim().lowercase(java.util.Locale.ROOT) }
+            require(suppliers.distinct().size == suppliers.size) {
+                "Há duas propostas do mesmo fornecedor para ${first[0]} na mesma unidade; deixa apenas a proposta atual."
+            }
+            val options = group.map { q ->
+                val quantity = BigDecimal(q[3])
+                val packPrice = BigDecimal(q[4])
+                SupplierQuoteOption(q[1], quantity, packPrice,
+                    packPrice.divide(quantity, 4, RoundingMode.HALF_UP).setScale(4, RoundingMode.HALF_UP))
+            }.sortedBy { it.pricePerUnit }
+            SupplierQuoteComparison(first[0], first[2], options)
+        }.sortedBy { it.itemName.lowercase(java.util.Locale.ROOT) }
+    }
+
+    /**
+     * Lines: category | budget for period | actual amount for the same period.
+     * Positive variance means actual is above budget; it is not automatically good or bad.
+     */
+    fun compareBudget(rawLines: String): List<BudgetVariance> {
+        val lines = rawLines.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        require(lines.isNotEmpty()) { "Introduz pelo menos uma categoria com orçamento e valor real." }
+        require(lines.size <= 100) { "Existem demasiadas categorias para uma única comparação." }
+        val rows = lines.mapIndexed { index, line ->
+            val parts = line.split('|').map { it.trim() }
+            require(parts.size == 3 && parts[0].isNotBlank()) {
+                "Linha ${index + 1}: usa categoria | orçamento | valor real."
+            }
+            val budget = parseNonNegative(parts[1], "orçamento da linha ${index + 1}")
+            val actual = parseNonNegative(parts[2], "valor real da linha ${index + 1}")
+            val variance = actual.subtract(budget).setScale(2, RoundingMode.HALF_UP)
+            val pct = if (budget > zero) variance.multiply(hundred)
+                .divide(budget, 4, RoundingMode.HALF_UP).setScale(1, RoundingMode.HALF_UP) else null
+            BudgetVariance(parts[0], budget, actual, variance, pct)
+        }
+        require(rows.map { it.category.trim().lowercase(java.util.Locale.ROOT) }.distinct().size == rows.size) {
+            "Não repitas categorias na mesma comparação de orçamento."
+        }
+        return rows
+    }
+
+    /**
+     * Lines: item | expected use | actual use | cost per unit.
+     * Positive variance means more product was used than expected from the recipe/sales baseline.
+     */
+    fun compareTheoreticalAndActualUsage(rawLines: String): List<UsageVariance> {
+        val lines = rawLines.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        require(lines.isNotEmpty()) { "Introduz pelo menos um artigo para comparar consumo teórico e real." }
+        require(lines.size <= 200) { "Existem demasiados artigos para uma única comparação." }
+        return lines.mapIndexed { index, line ->
+            val parts = line.split('|').map { it.trim() }
+            require(parts.size == 4 && parts[0].isNotBlank()) {
+                "Linha ${index + 1}: usa artigo | consumo teórico | consumo real | custo por unidade."
+            }
+            val expected = parseNonNegative(parts[1], "consumo teórico da linha ${index + 1}")
+            val actual = parseNonNegative(parts[2], "consumo real da linha ${index + 1}")
+            val cost = parseNonNegative(parts[3], "custo unitário da linha ${index + 1}")
+            require(cost > zero) { "Linha ${index + 1}: o custo unitário tem de ser superior a zero." }
+            val variance = actual.subtract(expected).setScale(3, RoundingMode.HALF_UP)
+            UsageVariance(parts[0], expected, actual, variance, cost, variance.multiply(cost).setScale(2, RoundingMode.HALF_UP))
+        }
     }
 
     fun parseWeeklySales(raw: String): List<BigDecimal> {
