@@ -370,7 +370,7 @@ internal object StudioMesaAdvisor {
             RestaurantAssistantIntent.PRICING -> answerPricing(rawQuestion, snapshot)
             RestaurantAssistantIntent.STOCK -> answerStock(rawQuestion, snapshot)
             RestaurantAssistantIntent.RESERVATIONS -> answerReservations(rawQuestion, snapshot)
-            RestaurantAssistantIntent.ORDERS -> answerOrders(snapshot)
+            RestaurantAssistantIntent.ORDERS -> answerOrders(rawQuestion, snapshot)
             RestaurantAssistantIntent.TROUBLESHOOTING -> answerProblem(rawQuestion, snapshot)
             RestaurantAssistantIntent.ACCESS -> StudioMesaAssistantAnswer(
                 "Acesso e equipa",
@@ -700,7 +700,9 @@ internal object StudioMesaAdvisor {
             "Reservas"
         )
         val q = normalizeLookupText(rawQuestion)
-        if (containsAny(q, "hoje", "ontem", "amanha", "mesas reservadas", "quantas mesas", "disponibilidade de mesa", "mesas livres")) {
+        if (containsAny(q, "hoje", "ontem", "amanha", "mesas reservadas", "quantas mesas", "disponibilidade de mesa", "mesas livres",
+                "reservas confirmadas", "reserva confirmada", "reservas canceladas", "reserva cancelada",
+                "total de reservas", "quantas reservas no total", "por horario", "por hora", "quantas pessoas reservaram")) {
             return StudioMesaAssistantAnswer(
                 "Disponibilidade de reservas não confirmada",
                 "Os dados que a IA recebe só incluem o número de reservas pendentes, não um mapa confirmado de mesas nem um total filtrado por dia. Não vou afirmar quantas mesas estão ocupadas ou livres. Confirma a lista e o horário na vista Reservas.",
@@ -715,7 +717,17 @@ internal object StudioMesaAdvisor {
         )
     }
 
-    private fun answerOrders(s: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
+    private fun answerOrders(rawQuestion: String, s: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
+        val q = normalizeLookupText(rawQuestion)
+        if (containsAny(q, "ontem", "hoje", "amanha", "cancelado", "cancelados", "cancelada", "canceladas",
+                "concluido", "concluidos", "entregue", "entregues", "atrasado", "atrasados", "atrasada", "atrasadas",
+                "quanto tempo", "tempo de espera", "tempo de entrega", "quais pedidos", "qual pedido")) {
+            return StudioMesaAssistantAnswer(
+                "Detalhes dos pedidos não confirmados",
+                "A análise que recebi só contém contagens de pedidos ativos e em preparação; não inclui a lista de cada pedido, horários nem histórico de estados. Não vou inventar atrasos, tempos ou pedidos concluídos/cancelados. Confirma a vista Cozinha e os dados atualizados antes de agir.",
+                "Pedidos"
+            )
+        }
         val source = if (s.isDemo) "dados de demonstração locais" else "dados que a aplicação tem carregados"
         val response = if (s.activeOrderCount == 0) "Não encontrei pedidos ativos nos $source. Isto não confirma que o servidor esteja atualizado; atualiza os pedidos antes de concluir que a fila está vazia."
         else "Há ${s.activeOrderCount} pedido(s) ativo(s), dos quais ${s.preparationOrderCount} estão em preparação, nos $source. Confirma os estados e prioriza os pedidos mais antigos na vista Cozinha. Não tenho dados suficientes para estimar tempos de entrega."
