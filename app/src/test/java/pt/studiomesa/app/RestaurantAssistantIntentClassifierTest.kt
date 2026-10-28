@@ -174,6 +174,7 @@ class RestaurantAssistantIntentClassifierTest {
     @Test fun identifiesDatedSalesAcrossDaysWeeksMonthsAndYears() {
         val datedQuestions = listOf(
             "Quanto vendi no domingo passado?",
+            "Quanto vendi ontem?",
             "Qual foi a faturação nos últimos 30 dias?",
             "Quanto vendemos em março?",
             "Quais pratos venderam mais na semana passada?"
