@@ -31,7 +31,7 @@ internal object RestaurantAssistantIntentClassifier {
     // A request for a specific time range must never be answered with all-time
     // totals. All inputs are normalized first, including Portuguese accents.
     private val datedPeriodPattern = Regex(
-        """\b(?:hoje|ontem|amanha|esta semana|nesta semana|na semana|semana passada|ultima semana|proxima semana|na proxima semana|este mes|neste mes|mes passado|no mes passado|ultimo mes|proximo mes|no proximo mes|(?:ultimos?|ultimas?) \d{1,3} dias|ultimas? \d{1,2} semanas|fim de semana(?: passado)?|(?:no )?inicio do mes|(?:no )?final do mes|este ano|neste ano|ano atual|ano passado|este trimestre|ultimo trimestre|domingo(?: passado)?|segunda(?: feira)?(?: passada)?|terca(?: feira)?(?: passada)?|quarta(?: feira)?(?: passada)?|quinta(?: feira)?(?: passada)?|sexta(?: feira)?(?: passada)?|sabado(?: passado)?|em janeiro|em fevereiro|em marco|em abril|em maio|em junho|em julho|em agosto|em setembro|em outubro|em novembro|em dezembro|dia \d{1,2}|em \d{4})\b"""
+        """\b(?:hoje|esta semana|semana atual|semana corrente|nesta semana|na semana|semana passada|semana anterior|ultima semana|este mes|mes atual|mes corrente|neste mes|mes passado|mes anterior|no mes passado|no mes anterior|ultimo mes|este ano|ano atual|ano corrente|neste ano|ano passado|ano anterior|este trimestre|trimestre atual|trimestre corrente|trimestre passado|trimestre anterior|ultimo trimestre|(?:ultimos?|ultimas?) \d{1,3} dias|(?:ultimos?|ultimas?) \d{1,2} semanas|(?:ultimos?|ultimas?) \d{1,2} meses|(?:ultimos?|ultimas?) \d{1,2} anos|fim de semana(?: passado)?|(?:no )?inicio do mes|(?:no )?final do mes|domingo(?: passado)?|segunda(?: feira)?(?: passada)?|terca(?: feira)?(?: passada)?|quarta(?: feira)?(?: passada)?|quinta(?: feira)?(?: passada)?|sexta(?: feira)?(?: passada)?|sabado(?: passado)?|em janeiro|em fevereiro|em marco|em abril|em maio|em junho|em julho|em agosto|em setembro|em outubro|em novembro|em dezembro|dia \d{1,2}|em \d{4})\b"""
     )
     private val salesLanguagePattern = Regex(
         """\b(?:vendas?|vendi|vendemos|venderam|vendeu|vendido|vendidos|vendida|vendidas|faturacao|faturamos|faturou|receita|receitas)\b"""
@@ -75,6 +75,10 @@ internal object RestaurantAssistantIntentClassifier {
             "conta de luz", "conta da luz", "custo da energia", "custo de eletricidade",
             "vendas desta semana", "vendas esta semana", "faturacao esta semana", "faturacao diaria",
             "como esta a faturacao", "custos operacionais", "custo operacional"),
+        rule(RestaurantAssistantIntent.ECONOMIC_MANAGER, 10,
+            "previsao de vendas", "prever vendas", "quanto vou vender", "quanto vamos vender",
+            "quanto venderei", "quanto venderemos", "vendas previstas", "estimativa de vendas",
+            "projecao de vendas", "estimativa da faturacao", "projecao da faturacao"),
         rule(RestaurantAssistantIntent.ECONOMIC_MANAGER, 9,
             "fluxo de caixa", "custos fixos", "custo fixo", "custos variaveis", "custo variavel",
             "custo de pessoal", "horas de equipa", "prever vendas", "repor stock", "reabastecer",
