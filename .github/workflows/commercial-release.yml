@@ -31,8 +31,24 @@ jobs:
             exit 1
           fi
 
+      - name: Require the reviewed main branch
+        shell: bash
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "Stopped: signed commercial releases must be built from the reviewed main branch."
+            exit 1
+          fi
+
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Test commercial release workflow safeguards
+        run: |
+          python3 scripts/test_check_commercial_release_workflow.py
+          python3 scripts/check_commercial_release_workflow.py
 
       # Fail closed: only sign a release from a commit whose full Android CI
       # (build, migration/auth checks, lint, and Android 8/16 UI tests) passed.
@@ -157,7 +173,16 @@ jobs:
             exit 1
           fi
           for bundle in "${bundles[@]}"; do
-            jarsigner -verify "$bundle"
+            verification_output="$(jarsigner -verify "$bundle" 2>&1)" || {
+              printf '%s\n' "$verification_output"
+              echo "Signature verification command failed for: $bundle"
+              exit 1
+            }
+            printf '%s\n' "$verification_output"
+            if ! grep -Fq "jar verified." <<< "$verification_output"; then
+              echo "AAB is not confirmed as correctly signed: $bundle"
+              exit 1
+            fi
           done
           sha256sum "${bundles[@]}" > release-checksums.txt
 
