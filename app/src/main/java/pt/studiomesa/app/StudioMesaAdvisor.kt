@@ -217,12 +217,10 @@ internal object StudioMesaAdvisor {
     }
 
     private fun answerMenuEngineering(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
-        val q = normalizeLookupText(rawQuestion)
-        if (containsAny(q, "ontem", "hoje", "esta semana", "nesta semana", "semana passada", "mes passado", "no mes passado", "ultimos 7 dias") &&
-            containsAny(q, "vendas", "vendido", "vendeu", "faturacao", "receita")) {
+        if (RestaurantAssistantIntentClassifier.requestsDatedSales(rawQuestion)) {
             return StudioMesaAssistantAnswer(
                 "Período de vendas não confirmado",
-                "Os dados de vendas disponíveis nesta análise não incluem um filtro temporal fiável para o período pedido. Não vou apresentar vendas de outros dias como se fossem de hoje ou de ontem. Abre a vista de vendas e seleciona o período pretendido antes de comparar artigos.",
+                "Os dados de vendas disponíveis nesta análise não incluem um filtro temporal fiável para o período pedido. Não vou apresentar vendas de outros dias, semanas ou meses como se pertencessem ao intervalo indicado. Abre a vista de vendas e seleciona o período pretendido antes de comparar artigos.",
                 "Pedidos"
             )
         }
@@ -432,11 +430,10 @@ internal object StudioMesaAdvisor {
 
     private fun answerEconomicQuestion(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
         val q = normalizeLookupText(rawQuestion)
-        if (containsAny(q, "hoje", "ontem", "esta semana", "nesta semana", "semana passada", "mes passado", "ultimos 7 dias") &&
-            containsAny(q, "vendas", "vendido", "vendemos", "vendeu", "faturacao", "faturamos", "receita")) {
+        if (RestaurantAssistantIntentClassifier.requestsDatedSales(rawQuestion)) {
             return StudioMesaAssistantAnswer(
                 "Período de vendas não confirmado",
-                "Os dados disponíveis nesta análise não incluem um filtro temporal fiável para o período pedido. Não vou apresentar totais de outros dias como se fossem de hoje ou desta semana. Abre a vista de vendas e seleciona o período pretendido antes de comparar resultados.",
+                "Os dados disponíveis nesta análise não incluem um filtro temporal fiável para o período pedido. Não vou apresentar totais de outros dias, semanas ou meses como se pertencessem ao intervalo indicado. Abre a vista de vendas e seleciona o período pretendido antes de comparar resultados.",
                 "Pedidos"
             )
         }
