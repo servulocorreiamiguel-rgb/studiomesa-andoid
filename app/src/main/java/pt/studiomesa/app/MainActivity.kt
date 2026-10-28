@@ -57,6 +57,7 @@ class MainActivity : Activity() {
     private var supplierReportText = ""
     private var budgetReportText = ""
     private var usageReportText = ""
+    private var labourReportText = ""
     private val backendPrefs by lazy { getSharedPreferences("studiomesa_backend", MODE_PRIVATE) }
     private val secureSession by lazy { SecureSessionStore(this) }
     private val pendingRequestIds by lazy { PendingRequestIds(this) }
@@ -3706,6 +3707,7 @@ class MainActivity : Activity() {
         supplierReportText = ""
         budgetReportText = ""
         usageReportText = ""
+        labourReportText = ""
     }
 
     private fun renderEconomicManager(container: LinearLayout) {
@@ -3966,6 +3968,30 @@ class MainActivity : Activity() {
                 }
             },
             save = { usageReportText = it }
+        )
+
+        addGap(container, 6)
+        economicLogCard(
+            container, "8 · Custo de horas de equipa",
+            "Formato: horas previstas | custo total por hora com encargos | vendas esperadas | objetivo de custo de pessoal %. É um cenário de custos, não um horário nem recomendação laboral.",
+            "labourPlan", "120 | 12,50 | 8000 | 25",
+            "Calcular custo de pessoal", labourReportText,
+            compute = { raw ->
+                val result = RestaurantEconomicManager.analyzeLabourPlan(raw)
+                buildString {
+                    append("Custo estimado das horas: ").append(money(result.estimatedPayrollCost)).append('\n')
+                    append("Peso nas vendas esperadas: ").append(economicPercent(result.estimatedPayrollPercent)).append('\n')
+                    append("Horas equivalentes ao objetivo de ").append(economicPercent(result.targetPayrollPercent)).append(": ")
+                        .append(result.hoursAtTarget.stripTrailingZeros().toPlainString()).append('\n')
+                    if (result.hoursAboveTarget > BigDecimal.ZERO) {
+                        append("Diferença acima desse cenário: ").append(result.hoursAboveTarget.stripTrailingZeros().toPlainString())
+                            .append(" horas. Revê turnos, procura e regras laborais; não reduzas pessoal automaticamente.")
+                    } else {
+                        append("As horas introduzidas não ultrapassam o custo definido pelo objetivo.")
+                    }
+                }
+            },
+            save = { labourReportText = it }
         )
 
         addGap(container, 4)
