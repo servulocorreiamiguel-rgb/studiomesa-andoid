@@ -431,8 +431,16 @@ internal object StudioMesaAdvisor {
 
     private fun answerEconomicQuestion(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
         val q = normalizeLookupText(rawQuestion)
+        val isDedicatedMonthlyProfitEstimate = containsAny(
+            q,
+            "quanto lucro tive este mes",
+            "quanto foi o lucro este mes",
+            "qual foi o lucro este mes",
+            "lucro deste mes"
+        )
         if (RestaurantAssistantIntentClassifier.requestsDatedMenuPerformance(rawQuestion) &&
-            !RestaurantAssistantIntentClassifier.requestsDatedSales(rawQuestion)) {
+            !RestaurantAssistantIntentClassifier.requestsDatedSales(rawQuestion) &&
+            !isDedicatedMonthlyProfitEstimate) {
             return StudioMesaAssistantAnswer(
                 "Período de desempenho não confirmado",
                 "Não tenho um filtro temporal fiável para consultar vendas, preços, custos, despesas, lucro ou margens históricas do intervalo pedido. Os valores de custo/preço carregados representam os valores atuais e não provam os valores históricos desse período. A página Análise mostra totais gerais sem filtro temporal; confirma os registos históricos antes de tomar decisões.",
