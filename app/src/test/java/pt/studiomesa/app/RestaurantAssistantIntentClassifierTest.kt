@@ -144,4 +144,17 @@ class RestaurantAssistantIntentClassifierTest {
         }
     }
 
+
+    @Test fun routesNaturalLanguageReorderQuestionsToEconomicManager() {
+        listOf(
+            "Quanto devo encomendar?",
+            "Quanto encomendar de arroz?",
+            "Qual é o ponto de encomenda do frango?"
+        ).forEach { question ->
+            assertEquals("$question -> ${RestaurantAssistantIntentClassifier.classify(question)}",
+                RestaurantAssistantIntent.ECONOMIC_MANAGER,
+                RestaurantAssistantIntentClassifier.classify(question).intent)
+        }
+    }
+
 }
