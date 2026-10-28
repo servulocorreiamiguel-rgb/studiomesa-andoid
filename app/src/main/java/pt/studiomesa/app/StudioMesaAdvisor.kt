@@ -261,7 +261,7 @@ internal object StudioMesaAdvisor {
                 q, "gestao economica", "gestor economico", "ponto de equilibrio", "break even",
                 "tesouraria", "fluxo de caixa", "desperdicio", "desperdicio por motivo", "custo alimentar",
                 "custo da receita", "custo por dose", "ponto de encomenda", "planeamento de compras",
-                "comparar fornecedores", "preco fornecedor", "orcamento", "consumo teorico", "consumo real",
+                "fornecedor", "preco fornecedor", "orcamento", "consumo teorico", "consumo real",
                 "custo de pessoal", "horas de equipa", "custo de horas", "variacao de stock",
                 "previsao", "prever vendas", "vendas da proxima semana"
             ) -> StudioMesaAssistantAnswer(
