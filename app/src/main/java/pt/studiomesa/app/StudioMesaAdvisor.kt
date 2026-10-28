@@ -273,7 +273,7 @@ internal object StudioMesaAdvisor {
                 "Confirma em Conta quem tem acesso ao restaurante. Esta versão não altera permissões nem verifica revogações em tempo real. Antes de remover ou convidar alguém, confirma a identidade e o restaurante selecionado.",
                 "Conta"
             )
-            RestaurantAssistantIntent.GENERAL -> answerGeneral(rawQuestion, snapshot, intentMatch)
+            RestaurantAssistantIntent.GENERAL -> answerGeneral(rawQuestion)
         }
     }
 
@@ -341,11 +341,7 @@ internal object StudioMesaAdvisor {
         return StudioMesaAssistantAnswer("Diagnóstico inicial", response, "Conta")
     }
 
-    private fun answerGeneral(
-        rawQuestion: String,
-        snapshot: StudioMesaAssistantSnapshot,
-        match: RestaurantAssistantIntentMatch
-    ): StudioMesaAssistantAnswer {
+    private fun answerGeneral(rawQuestion: String): StudioMesaAssistantAnswer {
         val response = if (rawQuestion.isBlank()) {
             "Escreve uma pergunta concreta sobre o restaurante para eu analisar os dados disponíveis."
         } else {
