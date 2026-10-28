@@ -129,4 +129,19 @@ class RestaurantAssistantIntentClassifierTest {
         }
     }
 
+
+    @Test fun handlesCommonCashCostAndMarketingPhrases() {
+        val cases = listOf(
+            "Quanto resta em caixa?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,
+            "Quanto gastei em salários?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,
+            "O custo dos pratos está alto?" to RestaurantAssistantIntent.PRICING,
+            "O que devo publicar amanhã?" to RestaurantAssistantIntent.MARKETING,
+            "Como poupar nas compras?" to RestaurantAssistantIntent.ECONOMIC_MANAGER
+        )
+        cases.forEach { (question, expected) ->
+            assertEquals("$question -> ${RestaurantAssistantIntentClassifier.classify(question)}",
+                expected, RestaurantAssistantIntentClassifier.classify(question).intent)
+        }
+    }
+
 }
