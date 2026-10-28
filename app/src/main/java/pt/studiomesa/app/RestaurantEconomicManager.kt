@@ -93,6 +93,17 @@ internal data class UsageVariance(
     val varianceCost: BigDecimal
 )
 
+internal data class LabourPlanAnalysis(
+    val scheduledHours: BigDecimal,
+    val fullyLoadedHourlyCost: BigDecimal,
+    val expectedSales: BigDecimal,
+    val targetPayrollPercent: BigDecimal,
+    val estimatedPayrollCost: BigDecimal,
+    val estimatedPayrollPercent: BigDecimal,
+    val hoursAtTarget: BigDecimal,
+    val hoursAboveTarget: BigDecimal
+)
+
 /**
  * Deterministic restaurant economics tools. All outputs are estimates from figures
  * entered by the operator, not an accounting record or autonomous business decision.
@@ -408,6 +419,41 @@ internal object RestaurantEconomicManager {
             val variance = actual.subtract(expected).setScale(3, RoundingMode.HALF_UP)
             UsageVariance(parts[0], expected, actual, variance, cost, variance.multiply(cost).setScale(2, RoundingMode.HALF_UP))
         }
+    }
+
+
+    /**
+     * Input: scheduled hours | fully loaded hourly cost | expected sales | target payroll %.
+     * This is a labour-cost scenario, not a roster optimizer or employment-law recommendation.
+     */
+    fun analyzeLabourPlan(raw: String): LabourPlanAnalysis {
+        val parts = raw.split('|').map { it.trim() }
+        require(parts.size == 4) {
+            "Usa horas previstas | custo total por hora | vendas esperadas | objetivo de pessoal %."
+        }
+        val hours = parseNonNegative(parts[0], "horas previstas")
+        val hourlyCost = parseNonNegative(parts[1], "custo por hora")
+        val sales = parseNonNegative(parts[2], "vendas esperadas")
+        val targetPercent = parseNonNegative(parts[3], "objetivo de custo de pessoal")
+        require(hourlyCost > zero) { "O custo total por hora tem de ser superior a zero." }
+        require(sales > zero) { "As vendas esperadas têm de ser superiores a zero." }
+        require(targetPercent > zero && targetPercent <= hundred) {
+            "O objetivo de pessoal tem de estar entre 0 e 100%."
+        }
+        val payrollCost = hours.multiply(hourlyCost).setScale(2, RoundingMode.HALF_UP)
+        val payrollPercent = percent(payrollCost, sales)
+        val budgetCost = sales.multiply(targetPercent).divide(hundred, 8, RoundingMode.HALF_UP)
+        val hoursAtTarget = budgetCost.divide(hourlyCost, 2, RoundingMode.HALF_UP)
+        return LabourPlanAnalysis(
+            scheduledHours = hours,
+            fullyLoadedHourlyCost = hourlyCost,
+            expectedSales = sales,
+            targetPayrollPercent = targetPercent,
+            estimatedPayrollCost = payrollCost,
+            estimatedPayrollPercent = payrollPercent,
+            hoursAtTarget = hoursAtTarget,
+            hoursAboveTarget = hours.subtract(hoursAtTarget).max(zero).setScale(2, RoundingMode.HALF_UP)
+        )
     }
 
     fun parseWeeklySales(raw: String): List<BigDecimal> {
