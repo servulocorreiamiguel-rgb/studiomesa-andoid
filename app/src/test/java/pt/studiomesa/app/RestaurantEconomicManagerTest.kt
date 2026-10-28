@@ -134,4 +134,70 @@ class RestaurantEconomicManagerTest {
             // Expected validation failure.
         }
     }
+
+    @Test fun wasteLogTotalsCostAndGroupsReasons() {
+        val report = RestaurantEconomicManager.analyzeWasteLog(
+            "Frango | 2 | 6,50 | Validade\nSopa | 1 | 4,00 | Produção"
+        )
+        assertEquals(amount("17.00"), report.totalCost)
+        assertEquals(2, report.entries.size)
+        assertEquals("Validade", report.costByReason.first().first)
+        assertEquals(amount("13.00"), report.costByReason.first().second)
+    }
+
+    @Test fun wasteLogRejectsMissingReasonAndZeroQuantity() {
+        listOf("Frango | 2 | 6,50 | ", "Frango | 0 | 6,50 | Validade").forEach { raw ->
+            try {
+                RestaurantEconomicManager.analyzeWasteLog(raw)
+                fail("Invalid waste entry was accepted.")
+            } catch (_: IllegalArgumentException) {
+                // Expected validation failure.
+            }
+        }
+    }
+
+    @Test fun supplierQuotesCompareSameItemAndUnitByCostPerUnit() {
+        val comparisons = RestaurantEconomicManager.compareSupplierQuotes(
+            "Tomate | Fornecedor A | kg | 10 | 16,00\nTomate | Fornecedor B | kg | 5 | 7,50"
+        )
+        assertEquals(1, comparisons.size)
+        assertEquals("Tomate", comparisons[0].itemName)
+        assertEquals("Fornecedor B", comparisons[0].options.first().supplierName)
+        assertEquals(amount("1.5000"), comparisons[0].options.first().pricePerUnit)
+    }
+
+    @Test fun supplierQuotesRejectDuplicateSupplierAndInvalidPackSize() {
+        listOf(
+            "Tomate | A | kg | 10 | 16\nTomate | A | kg | 5 | 7",
+            "Tomate | A | kg | 0 | 16"
+        ).forEach { raw ->
+            try {
+                RestaurantEconomicManager.compareSupplierQuotes(raw)
+                fail("Invalid supplier quote was accepted.")
+            } catch (_: IllegalArgumentException) {
+                // Expected validation failure.
+            }
+        }
+    }
+
+    @Test fun budgetComparisonLabelsVarianceWithoutAssumingItIsFavourable() {
+        val rows = RestaurantEconomicManager.compareBudget(
+            "Vendas | 10000 | 9500\nPessoal | 2000 | 2200"
+        )
+        assertEquals(amount("-500.00"), rows[0].variance)
+        assertEquals(amount("-5.0"), rows[0].variancePercent)
+        assertEquals(amount("200.00"), rows[1].variance)
+        assertEquals(amount("10.0"), rows[1].variancePercent)
+    }
+
+    @Test fun usageVarianceCalculatesExcessConsumptionCost() {
+        val rows = RestaurantEconomicManager.compareTheoreticalAndActualUsage(
+            "Frango | 20 | 23 | 6,50\nQueijo | 5 | 4 | 8,00"
+        )
+        assertEquals(amount("3.000"), rows[0].varianceQuantity)
+        assertEquals(amount("19.50"), rows[0].varianceCost)
+        assertEquals(amount("-1.000"), rows[1].varianceQuantity)
+        assertEquals(amount("-8.00"), rows[1].varianceCost)
+    }
+
 }
