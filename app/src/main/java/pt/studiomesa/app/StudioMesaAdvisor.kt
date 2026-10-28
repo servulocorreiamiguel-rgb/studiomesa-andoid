@@ -257,9 +257,14 @@ internal object StudioMesaAdvisor {
         val q = normalize(rawQuestion)
         return when {
             containsAny(q, "resumo", "briefing", "prioridades de hoje", "estado da operacao") -> dailyBriefing(snapshot)
-            containsAny(q, "engenharia da carta", "popularidade", "mais vendidos", "rentabilidade da carta", "artigos que vendem", "menu engineering") -> answerMenuEngineering(snapshot)
+            containsAny(
+                q, "engenharia da carta", "popularidade", "mais vendidos", "rentabilidade da carta",
+                "artigos que vendem", "menu engineering", "vendas", "vender mais", "aumentar as vendas",
+                "aumentar vendas", "melhorar as vendas", "melhorar vendas", "o que vende melhor",
+                "quais pratos vendem"
+            ) -> answerMenuEngineering(snapshot)
             containsAny(q, "instagram", "publicacao", "marketing", "redes sociais", "divulgacao", "post para") -> answerMarketing(snapshot)
-            containsAny(q, "preco", "custo", "margem", "lucro", "venda") -> answerPricing(snapshot)
+            containsAny(q, "preco", "custo", "margem", "lucro") -> answerPricing(snapshot)
             containsAny(q, "stock", "inventario", "ingrediente", "esgotado", "quantidade") -> answerStock(snapshot)
             containsAny(q, "reserva", "reservar", "mesa para") -> answerReservations(snapshot)
             containsAny(q, "pedido", "cozinha", "fila", "atraso", "preparacao") -> answerOrders(snapshot)
