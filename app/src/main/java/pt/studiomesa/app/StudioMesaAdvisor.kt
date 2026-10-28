@@ -257,10 +257,14 @@ internal object StudioMesaAdvisor {
         val q = normalize(rawQuestion)
         return when {
             containsAny(
-                q, "gestao economica", "gestor economico", "ponto de equilibrio", "break even",
+                q, "gestao economica", "gestor economico", "gestao financeira", "gestor financeiro",
+                "financeiro", "financas", "ponto de equilibrio", "break even", "resultado operacional",
                 "tesouraria", "fluxo de caixa", "desperdicio", "desperdicio por motivo", "custo alimentar",
-                "custo da receita", "custo por dose", "ponto de encomenda", "planeamento de compras",
-                "fornecedor", "preco fornecedor", "orcamento", "consumo teorico", "consumo real",
+                "custo da receita", "custo dos ingredientes", "custo de ingredientes", "custo por ingrediente",
+                "custo por dose", "custo por porcao", "ficha tecnica", "ponto de encomenda",
+                "quantidade a encomendar", "repor stock", "reabastecer", "planeamento de compras",
+                "fornecedor", "preco fornecedor", "preco de compra", "precos de compra", "orcamento",
+                "custos fixos", "custos variaveis", "despesas mensais", "consumo teorico", "consumo real",
                 "custo de pessoal", "horas de equipa", "custo de horas", "variacao de stock",
                 "previsao", "prever vendas", "vendas da proxima semana"
             ) -> StudioMesaAssistantAnswer(
