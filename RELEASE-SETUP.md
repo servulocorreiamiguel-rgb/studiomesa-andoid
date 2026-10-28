@@ -2,7 +2,7 @@
 
 ## Estado real
 
-O workflow `.github/workflows/commercial-release.yml` foi preparado para criar cinco Android App Bundles (AAB) assinados, mas **não publica automaticamente na Google Play**. Antes de correr esse workflow, é necessário definir o identificador de aplicação final e guardar a chave de assinatura nos GitHub Actions Secrets.
+O workflow `.github/workflows/commercial-release.yml` foi preparado para criar cinco Android App Bundles (AAB) e cinco APKs assinados para instalação direta. **Não publica automaticamente na Google Play**. Antes de correr esse workflow, é necessário definir o identificador de aplicação final e guardar a chave de assinatura nos GitHub Actions Secrets.
 
 Os APKs do workflow normal continuam a usar os identificadores `pt.studiomesa.preview.*`. A configuração comercial é opt-in e não altera a identidade dos APKs de demonstração.
 
@@ -53,10 +53,10 @@ No separador **Variables**, cria a variável `STUDIOMESA_RELEASE_APPLICATION_ID`
 
 1. Abre **Actions → Build signed StudioMesa commercial AABs → Run workflow**.
 2. No campo de confirmação, escreve exatamente `BUILD`.
-3. O workflow verifica os segredos, valida o keystore, executa os testes unitários para as cinco variantes de distribuição e Android Lint, compila cinco AABs com assinatura e verifica as assinaturas.
-4. Descarrega o artefacto `StudioMesa-Commercial-AABs` e guarda o ficheiro de checksums.
+3. O workflow verifica os segredos, valida o keystore, executa os testes unitários para as cinco variantes de distribuição e Android Lint, compila cinco AABs e cinco APKs com assinatura, verifica ambos os formatos e gera checksums.
+4. Descarrega o artefacto `StudioMesa-Commercial-AABs-and-APKs` e guarda o ficheiro de checksums.
 
-Se a variável de identificador ou qualquer segredo estiver em falta, a execução falha com uma mensagem explícita. O workflow **não** envia os AAB para a Google Play nem publica a aplicação.
+Se a variável de identificador ou qualquer segredo estiver em falta, a execução falha com uma mensagem explícita. O workflow **não** envia os AAB para a Google Play nem publica a aplicação. Os APKs assinados destinam-se a instalações diretas autorizadas; distribui-os apenas por canais controlados.
 
 ## Requisitos da Google Play e conta do programador
 
