@@ -80,6 +80,21 @@ def audit_workflow(text: str) -> list[str]:
         errors.append("The commercial workflow must capture jarsigner verification output.")
     if 'grep -Fq "jar verified."' not in text:
         errors.append("The commercial workflow must explicitly reject AABs without the 'jar verified.' result.")
+    release_apk_tasks = (
+        "assembleEssencialRestauranteRelease",
+        "assembleProfissionalRestauranteRelease",
+        "assembleProfissionalClienteRelease",
+        "assemblePremiumRestauranteRelease",
+        "assemblePremiumClienteRelease",
+    )
+    if not all(task in text for task in release_apk_tasks):
+        errors.append("The commercial workflow must build all five signed release APK variants.")
+    if "mapfile -d '' apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' -print0)" not in text:
+        errors.append("The commercial workflow must enumerate the release APKs before uploading them.")
+    if 'apksigner verify --verbose "$apk"' not in text:
+        errors.append("The commercial workflow must verify each release APK with apksigner.")
+    if "app/build/outputs/apk/**/release/*.apk" not in text:
+        errors.append("The commercial artifact must include the signed APKs for direct installation.")
 
     return errors
 
@@ -91,6 +106,10 @@ def audit_ci_test_bundle(text: str) -> list[str]:
         errors.append("Android CI must run jarsigner verification against its temporary release AAB.")
     if 'grep -Fq "jar verified."' not in text:
         errors.append("Android CI must require the explicit 'jar verified.' result for its test AAB.")
+    if "assembleEssencialRestauranteRelease" not in text:
+        errors.append("Android CI must build a temporary signed release APK.")
+    if 'apksigner" verify --verbose "$APK_PATH"' not in text:
+        errors.append("Android CI must verify the temporary signed APK with apksigner.")
     return errors
 
 
