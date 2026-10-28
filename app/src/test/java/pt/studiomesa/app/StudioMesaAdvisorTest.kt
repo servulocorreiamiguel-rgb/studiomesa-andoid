@@ -61,6 +61,12 @@ class StudioMesaAdvisorTest {
         assertTrue(answer.response.contains("Triagem indicativa"))
     }
 
+    @Test fun economicManagementQuestionsPointToTheOptInManager() {
+        val answer = StudioMesaAdvisor.answerQuestion("Como calculo o ponto de equilíbrio e a tesouraria?", snapshot())
+        assertEquals("Gestor económico (opcional)", answer.title)
+        assertTrue(answer.response.contains("não consulta bancos ou fornecedores"))
+    }
+
     @Test fun specificPriceQuestionsStillUsePriceAnalysis() {
         val answer = StudioMesaAdvisor.answerQuestion(
             "Qual deve ser o preço de venda deste prato?",
