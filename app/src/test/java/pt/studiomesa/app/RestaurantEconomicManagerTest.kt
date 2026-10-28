@@ -74,6 +74,26 @@ class RestaurantEconomicManagerTest {
         assertEquals(amount("1500.00"), result.projectedCashIn30Days)
     }
 
+    @Test fun warnsWhenProjectedCashIsZeroOrNegative() {
+        val negative = RestaurantEconomicManager.analyze(
+            input(cash = "500", receipts = "100", due = "900")
+        )
+        assertEquals(amount("-300.00"), negative.projectedCashIn30Days)
+        assertTrue(negative.warnings.any { it.contains("tesouraria projetada a 30 dias fica a zero ou negativa") })
+
+        val zero = RestaurantEconomicManager.analyze(
+            input(cash = "500", receipts = "100", due = "600")
+        )
+        assertEquals(amount("0.00"), zero.projectedCashIn30Days)
+        assertTrue(zero.warnings.any { it.contains("tesouraria projetada a 30 dias fica a zero ou negativa") })
+
+        val positive = RestaurantEconomicManager.analyze(
+            input(cash = "500", receipts = "1000", due = "600")
+        )
+        assertEquals(amount("900.00"), positive.projectedCashIn30Days)
+        assertFalse(positive.warnings.any { it.contains("tesouraria projetada a 30 dias fica a zero ou negativa") })
+    }
+
     @Test fun weeklyForecastRequiresFourComparableObservationsAndAveragesLastFour() {
         assertNull(RestaurantEconomicManager.analyze(input(weeks = listOf("1000", "2000", "3000"))).forecastNextWeekSales)
         val result = RestaurantEconomicManager.analyze(
