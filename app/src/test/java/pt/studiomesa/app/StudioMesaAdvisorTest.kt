@@ -118,6 +118,80 @@ class StudioMesaAdvisorTest {
         assertTrue(answer.response.contains("Hambúrguer Vegetariano"))
         assertTrue(answer.response.contains("Não alterei nenhum valor"))
     }
+    @Test fun economicQuestionShowsRegisteredCostForTheNamedDish() {
+        val data = snapshot(menu = listOf(
+            item("Bitoque", "14.00", "4.50"),
+            item("Sopa", "5.00", "2.00")
+        ))
+        val answer = StudioMesaAdvisor.answerQuestion("Como calculo o custo do prato Bitoque?", data)
+        assertEquals("Custo registado do artigo", answer.title)
+        assertTrue(answer.response.contains("Bitoque"))
+        assertTrue(answer.response.contains("4,50"))
+        assertTrue(answer.response.contains("contribuição unitária estimada"))
+        assertFalse(answer.response.contains("Sopa"))
+        assertTrue(answer.response.contains("não é uma ficha técnica de ingredientes"))
+    }
+
+    @Test fun economicQuestionDoesNotInventMissingDishCost() {
+        val data = snapshot(menu = listOf(item("Bitoque", "14.00", "0")))
+        val answer = StudioMesaAdvisor.answerQuestion("Como calculo o custo do prato Bitoque?", data)
+        assertEquals("Custo em falta: Bitoque", answer.title)
+        assertTrue(answer.response.contains("não vou inventar um valor"))
+    }
+
+    @Test fun ingredientCostQuestionExplainsNeedForRecipeDetails() {
+        val answer = StudioMesaAdvisor.answerQuestion(
+            "Como calculo o custo dos ingredientes por dose?",
+            snapshot(menu = listOf(item("Bitoque", "14.00", "4.50")))
+        )
+        assertEquals("Custo por receita e ingredientes", answer.title)
+        assertTrue(answer.response.contains("quantidade por dose"))
+        assertTrue(answer.response.contains("Não vou inventar ingredientes"))
+    }
+
+    @Test fun monthlyProfitQuestionDoesNotInventHistoricalProfit() {
+        val answer = StudioMesaAdvisor.answerQuestion("Quanto lucro tive este mês?", snapshot())
+        assertEquals("Estimativa de resultado mensal", answer.title)
+        assertTrue(answer.response.contains("Não consigo confirmar o lucro de um mês"))
+        assertTrue(answer.response.contains("não vou inventar um lucro"))
+    }
+
+    @Test fun contributionRankingIsNotMislabelledAsNetProfit() {
+        val data = snapshot(menu = listOf(
+            item("Sopa", "5.00", "1.00"),
+            item("Bitoque", "14.00", "4.50"),
+            item("Salada", "8.00", "2.00")
+        ))
+        val answer = StudioMesaAdvisor.answerQuestion("Quais pratos dão mais lucro?", data)
+        assertEquals("Contribuição estimada por artigo", answer.title)
+        assertTrue(answer.response.contains("Bitoque"))
+        assertTrue(answer.response.contains("não é lucro líquido"))
+        assertTrue(answer.response.indexOf("Bitoque") < answer.response.indexOf("Salada"))
+        assertTrue(answer.response.indexOf("Salada") < answer.response.indexOf("Sopa"))
+    }
+
+    @Test fun pricingQuestionClarifiesWhenTwoNamedDishesAreRequested() {
+        val data = snapshot(menu = listOf(
+            item("Sopa", "5.00", "2.00"),
+            item("Hambúrguer", "12.00", "5.00")
+        ))
+        val answer = StudioMesaAdvisor.answerQuestion(
+            "Qual deve ser o preço de venda da Sopa e do Hambúrguer?",
+            data
+        )
+        assertEquals("Qual artigo da carta?", answer.title)
+        assertTrue(answer.response.contains("Sopa"))
+        assertTrue(answer.response.contains("Hambúrguer"))
+    }
+
+    @Test fun genericWordPratoDoesNotCountAsASelectedDishName() {
+        val data = snapshot(menu = listOf(item("Prato", "10.00", "4.00")))
+        val answer = StudioMesaAdvisor.answerQuestion("Qual deve ser o preço de venda deste prato?", data)
+        assertEquals("Análise de preços", answer.title)
+        assertTrue(answer.response.contains("1 artigo(s)"))
+        assertFalse(answer.response.contains("o artigo selecionado"))
+    }
+
     @Test fun unknownQuestionsReceiveAnHonestClarificationInsteadOfUnrelatedAdvice() {
         val answer = StudioMesaAdvisor.answerQuestion(
             "Compara o custo da energia e a concorrência na minha zona",
