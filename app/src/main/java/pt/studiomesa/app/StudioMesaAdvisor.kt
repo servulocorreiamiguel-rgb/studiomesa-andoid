@@ -221,7 +221,7 @@ internal object StudioMesaAdvisor {
         if (RestaurantAssistantIntentClassifier.requestsDatedMenuPerformance(rawQuestion)) {
             return StudioMesaAssistantAnswer(
                 "Período de desempenho não confirmado",
-                "Os dados disponíveis nesta análise não incluem um filtro temporal fiável para vendas, popularidade ou margem por período. Não vou apresentar resultados atuais ou acumulados como se pertencessem ao intervalo indicado. Abre a vista de vendas, seleciona o período pretendido e confirma os custos aplicáveis antes de comparar artigos.",
+                "Os dados disponíveis nesta análise não incluem um filtro temporal fiável para vendas, popularidade, preços, custos ou margens por período. Não vou apresentar valores atuais ou acumulados como se pertencessem ao intervalo indicado. Abre a vista correspondente, seleciona o período pretendido e confirma os registos históricos antes de comparar artigos.",
                 "Pedidos"
             )
         }
@@ -432,10 +432,10 @@ internal object StudioMesaAdvisor {
     private fun answerEconomicQuestion(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
         val q = normalizeLookupText(rawQuestion)
         if (RestaurantAssistantIntentClassifier.requestsDatedMenuPerformance(rawQuestion) &&
-            containsAny(q, "margem", "margens", "rentabilidade", "rentavel", "rentaveis", "contribuicao", "prejuizo", "prejuizos")) {
+            containsAny(q, "margem", "margens", "rentabilidade", "rentavel", "rentaveis", "contribuicao", "prejuizo", "prejuizos", "preco", "precos", "custo", "custos", "despesa", "despesas", "gasto", "gastos", "salario", "salarios")) {
             return StudioMesaAssistantAnswer(
                 "Período de desempenho não confirmado",
-                "Não tenho um filtro temporal fiável para calcular a margem ou contribuição do intervalo pedido. O custo/preço atual na Carta não prova a margem histórica desse mês ou dia. Confirma as vendas e os custos aplicáveis ao mesmo período antes de tomar decisões.",
+                "Não tenho um filtro temporal fiável para consultar preços, custos, despesas ou margens do intervalo pedido. Os valores de custo/preço carregados representam os valores atuais e não provam os valores históricos desse período. Confirma os registos datados antes de tomar decisões.",
                 "Pedidos"
             )
         }
