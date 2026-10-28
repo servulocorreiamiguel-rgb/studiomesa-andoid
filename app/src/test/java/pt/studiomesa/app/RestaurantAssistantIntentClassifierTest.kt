@@ -157,4 +157,36 @@ class RestaurantAssistantIntentClassifierTest {
         }
     }
 
+
+    @Test fun handlesNaturalStockAvailabilityPhrasing() {
+        val cases = listOf(
+            "Quanto tenho de leite?" to RestaurantAssistantIntent.STOCK,
+            "O arroz acabou" to RestaurantAssistantIntent.STOCK,
+            "Há arroz suficiente?" to RestaurantAssistantIntent.STOCK,
+            "Quanto resta de frango?" to RestaurantAssistantIntent.STOCK
+        )
+        cases.forEach { (question, expected) ->
+            assertEquals("$question -> ${RestaurantAssistantIntentClassifier.classify(question)}",
+                expected, RestaurantAssistantIntentClassifier.classify(question).intent)
+        }
+    }
+
+    @Test fun routesDatedSalesPromotionsEnergyAndDishProfitQuestions() {
+        val cases = listOf(
+            "Quanto vendemos hoje?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,
+            "Quais foram as vendas de ontem?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,
+            "Tens ideias de promoção?" to RestaurantAssistantIntent.MARKETING,
+            "O que comprar esta semana?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,
+            "Como reduzo a conta de luz?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,
+            "Quais pratos deram prejuízo?" to RestaurantAssistantIntent.MENU_ENGINEERING,
+            "O bitoque é rentável?" to RestaurantAssistantIntent.PRICING,
+            "Como analiso os custos mensais?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,
+            "Faz um resumo do dinheiro" to RestaurantAssistantIntent.ECONOMIC_MANAGER
+        )
+        cases.forEach { (question, expected) ->
+            assertEquals("$question -> ${RestaurantAssistantIntentClassifier.classify(question)}",
+                expected, RestaurantAssistantIntentClassifier.classify(question).intent)
+        }
+    }
+
 }
