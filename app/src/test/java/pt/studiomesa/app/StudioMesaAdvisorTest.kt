@@ -72,7 +72,12 @@ class StudioMesaAdvisorTest {
             "Como controlo desperdício por motivo?",
             "Como comparo orçamento com o consumo real?",
             "Como calculo o custo de pessoal?",
-            "Faz um resumo da tesouraria e do custo alimentar"
+            "Faz um resumo da tesouraria e do custo alimentar",
+            "Como calculo o custo dos ingredientes por dose?",
+            "Como preparo a ficha técnica do prato?",
+            "Que quantidade devo encomendar ao fornecedor?",
+            "Como analiso os custos fixos e variáveis?",
+            "Como faço uma previsão financeira?"
         ).forEach { question ->
             assertEquals("Gestor económico (opcional)", StudioMesaAdvisor.answerQuestion(question, snapshot()).title)
         }
