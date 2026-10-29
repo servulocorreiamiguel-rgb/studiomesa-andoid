@@ -66,7 +66,8 @@ def security_definer_definitions(sql: str) -> list[tuple[str, str, str]]:
 def body_references_auth_uid(body: str) -> bool:
     """Require auth.uid() in SECURITY DEFINER bodies; SQL comments do not count."""
     without_comments = re.sub(r"--[^\n]*|/\*[\s\S]*?\*/", "", body)
-    return bool(re.search(r"\bauth\s*\.\s*uid\s*\(\s*\)", without_comments, re.IGNORECASE))
+    without_literals = re.sub(r"\'(?:\'\'|[^\'])*\'|\"(?:\"\"|[^\"])*\"", "", without_comments)
+    return bool(re.search(r"\bauth\s*\.\s*uid\s*\(\s*\)", without_literals, re.IGNORECASE))
 
 def revoked_roles(sql: str, function_name: str) -> set[str]:
     roles: set[str] = set()
