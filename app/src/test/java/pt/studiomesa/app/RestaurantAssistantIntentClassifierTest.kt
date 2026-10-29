@@ -260,4 +260,22 @@ class RestaurantAssistantIntentClassifierTest {
         }
     }
 
+    @Test fun compoundHistoricalMetricAndAdviceKeepsTheHistoricalPeriodGuard() {
+        val historicProfitWithAdvice = "Qual foi o lucro em março e como posso reduzir custos?"
+        assertTrue(RestaurantAssistantIntentClassifier.requestsDatedMenuPerformance(historicProfitWithAdvice))
+        assertTrue(!RestaurantAssistantIntentClassifier.requestsDatedSales(historicProfitWithAdvice))
+
+        val historicSalesWithAdvice = "Quanto vendi em março e como posso aumentar as vendas?"
+        assertTrue(RestaurantAssistantIntentClassifier.requestsDatedSales(historicSalesWithAdvice))
+        assertTrue(RestaurantAssistantIntentClassifier.requestsDatedMenuPerformance(historicSalesWithAdvice))
+
+        // Purely forward-looking advice must not be mistaken for an actual historical metric.
+        assertTrue(!RestaurantAssistantIntentClassifier.requestsDatedSales(
+            "Como posso aumentar as vendas no próximo domingo?"
+        ))
+        assertTrue(!RestaurantAssistantIntentClassifier.requestsDatedMenuPerformance(
+            "Como posso reduzir custos esta semana?"
+        ))
+    }
+
 }
