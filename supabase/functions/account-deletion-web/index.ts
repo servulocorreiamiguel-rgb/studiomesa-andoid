@@ -23,7 +23,7 @@ button:disabled{opacity:.55;cursor:wait}button.danger{background:var(--danger)}[
 <body><main>
 <header><h1>StudioMesa</h1><p>Pedido de eliminação de conta e dados associados</p></header>
 <section><h2>1. Confirmar que controlas a conta</h2>
-<p>Introduz o email da conta StudioMesa. Enviaremos uma ligação de autenticação única. Abre-a no mesmo navegador para continuar. Por segurança, esta página não confirma se um email está registado.</p>
+<p>Introduz o email da conta StudioMesa. Se o pedido puder ser processado, enviaremos uma ligação de autenticação única. Abre-a no mesmo navegador para continuar. A mensagem apresentada não confirma que uma ligação foi enviada.</p>
 <form id="email-form"><label for="email">Email da conta</label><input id="email" name="email" type="email" autocomplete="email" required maxlength="254"><button id="send-link" type="submit">Enviar ligação segura</button></form>
 </section>
 <section id="signed-in" hidden><h2>2. Escolher o âmbito da eliminação</h2><p id="account-label"></p>
