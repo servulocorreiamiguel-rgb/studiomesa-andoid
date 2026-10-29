@@ -51,6 +51,10 @@ class SupabaseSecurityAuditTests(unittest.TestCase):
 
     def test_accepts_explicit_revocation_for_rpc_only_public_table(self):
         sql = """
+        CREATE FUNCTION public.rpc_item_count() RETURNS integer
+          LANGUAGE sql SECURITY DEFINER SET search_path = ''
+          AS $function$ SELECT 1; $function$;
+        REVOKE ALL ON FUNCTION public.rpc_item_count() FROM PUBLIC, anon;
         CREATE TABLE public.rpc_only_items (id uuid PRIMARY KEY);
         ALTER TABLE public.rpc_only_items ENABLE ROW LEVEL SECURITY;
         REVOKE ALL PRIVILEGES ON TABLE public.rpc_only_items FROM PUBLIC, anon, authenticated;
