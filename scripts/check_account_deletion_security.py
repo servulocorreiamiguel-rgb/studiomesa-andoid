@@ -85,6 +85,9 @@ def audit_function_sources(delete_source: str, web_source: str) -> list[str]:
         if part not in web_source:
             errors.append(f"The public page is missing a required security directive/header: {part}")
 
+    if re.search(r"não confirma se um email está registado|does not confirm (?:whether|if) an email exists", web_source, re.IGNORECASE):
+        errors.append("The page must not claim that its UI prevents email enumeration; the underlying Auth API must be assessed separately.")
+
     if "const linkRequestResultMessage=" not in web_source or web_source.count("showStatus(linkRequestResultMessage)") < 2:
         errors.append("Account-deletion email requests must use the same generic status on success and failure; this only checks visible UI feedback and does not prove the Auth API resists enumeration.")
 
