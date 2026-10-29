@@ -216,7 +216,7 @@ class RestaurantEconomicManagerTest {
     @Test fun wasteLogRejectsDerivedCostsAboveTheSupportedMoneyRange() {
         val invalidLogs = listOf(
             "A | 999999999,99 | 999999999,99 | Validade",
-            "A | 600000000 | 1 | Validade\\nB | 500000000 | 1 | Produção"
+            "A | 600000000 | 1 | Validade\nB | 500000000 | 1 | Produção"
         )
         invalidLogs.forEach { raw ->
             try {
@@ -296,7 +296,7 @@ class RestaurantEconomicManagerTest {
         val result = RestaurantEconomicManager.analyze(
             input(
                 sales = "999999999,99",
-                food = "999999998,99",
+                food = "999999989,99",
                 payroll = "0",
                 fixed = "999999999,99",
                 variable = "0"
