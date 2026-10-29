@@ -53,6 +53,12 @@ jobs:
       - name: Audit Supabase Edge Function dependency pins
         run: python3 scripts/check_supabase_edge_dependency_pins.py
 
+      - name: Test account deletion Edge Function security audit
+        run: python3 scripts/test_check_account_deletion_security.py
+
+      - name: Audit account deletion Edge Function security
+        run: python3 scripts/check_account_deletion_security.py
+
       - name: Set up Java 17
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
         with:
