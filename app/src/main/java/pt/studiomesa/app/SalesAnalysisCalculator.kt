@@ -35,6 +35,7 @@ internal data class SalesAnalysisSummary(
  */
 internal object SalesAnalysisCalculator {
     private val activeStatuses = setOf("Aberto", "Em preparação", "Pronto")
+    private const val maximumUnitAmount = 99_999_999.99
 
     fun startInclusiveMillis(
         period: SalesAnalysisPeriod,
@@ -79,7 +80,7 @@ internal object SalesAnalysisCalculator {
         timeZone: TimeZone = TimeZone.getDefault()
     ): SalesAnalysisSummary {
         val undated = if (period == SalesAnalysisPeriod.ALL_TIME) 0
-            else orders.count { it.createdAtMillis <= 0L }
+            else orders.count { it.createdAtMillis <= 0L || it.createdAtMillis > nowMillis }
         val filtered = orders.filter {
             includes(period, it.createdAtMillis, nowMillis, timeZone)
         }
@@ -87,10 +88,19 @@ internal object SalesAnalysisCalculator {
         val active = orders.count { it.status in activeStatuses }
         val completed = filtered.filter { it.status == "Concluído" }
         val invalidAmounts = completed.count {
-            !it.unitAmount.isFinite() || it.unitAmount < 0.0 || it.quantity !in 1..99
+            !it.unitAmount.isFinite() ||
+                it.unitAmount < 0.0 ||
+                it.unitAmount > maximumUnitAmount ||
+                it.quantity !in 1..99 ||
+                !(it.unitAmount * it.quantity).isFinite()
         }
         val value = completed.sumOf { order ->
-            if (order.unitAmount.isFinite() && order.unitAmount >= 0.0 && order.quantity in 1..99) {
+            if (
+                order.unitAmount.isFinite() &&
+                order.unitAmount in 0.0..maximumUnitAmount &&
+                order.quantity in 1..99 &&
+                (order.unitAmount * order.quantity).isFinite()
+            ) {
                 order.unitAmount * order.quantity
             } else {
                 0.0
