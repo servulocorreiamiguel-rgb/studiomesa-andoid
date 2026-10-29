@@ -452,12 +452,31 @@ object SupabaseApi {
 
     fun listOrders(token: String, restaurantId: String): JSONArray {
         val encoded = URLEncoder.encode(restaurantId, "UTF-8")
-        return JSONArray(call(
-            "GET",
-            "/rest/v1/restaurant_orders?select=id,table_number,item_name,amount,quantity,service_course,notes,status,created_at&restaurant_id=eq.$encoded&order=created_at.desc",
-            null,
-            token
-        ))
+        val loadedRows = OrderHistoryPagination.collect { offset, limit ->
+            val page = JSONArray(call(
+                "GET",
+                "/rest/v1/restaurant_orders?select=id,table_number,item_name,amount,quantity,service_course,notes,status,created_at&restaurant_id=eq.$encoded&order=created_at.desc,id.desc&limit=$limit&offset=$offset",
+                null,
+                token
+            ))
+            (0 until page.length()).map { index ->
+                page.optJSONObject(index)
+                    ?: throw IllegalStateException("O servidor devolveu um pedido com formato inválido.")
+            }
+        }
+
+        // Inserts can happen while offset pages are fetched. Keep the first copy of
+        // each ID so a shifted page boundary never duplicates a ticket in the cache.
+        val result = JSONArray()
+        val seenIds = HashSet<String>()
+        loadedRows.forEach { order ->
+            val id = order.optString("id").trim()
+            if (id.isBlank()) {
+                throw IllegalStateException("O servidor devolveu um pedido sem identificador.")
+            }
+            if (seenIds.add(id)) result.put(order)
+        }
+        return result
     }
 
     fun createOrder(
