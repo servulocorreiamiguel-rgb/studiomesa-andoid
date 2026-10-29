@@ -635,4 +635,14 @@ class StudioMesaAdvisorTest {
         assertFalse(answer.response.contains("Estimativa de resultado mensal"))
     }
 
+    @Test fun datedSalesAnalysisWithFollowUpAdviceDoesNotUseAllTimeMenuPopularity() {
+        val answer = StudioMesaAdvisor.answerQuestion(
+            "Analisa as vendas em março e sugere como melhorar.",
+            snapshot()
+        )
+        assertEquals("Período de desempenho não confirmado", answer.title)
+        assertTrue(answer.response.contains("não inclui datas por pedido"))
+        assertFalse(answer.response.contains("Triagem indicativa"))
+    }
+
 }
