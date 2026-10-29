@@ -4169,7 +4169,7 @@ class MainActivity : Activity() {
         if (summary.ordersWithInvalidTimestampsExcluded > 0 && selectedAnalysisPeriod != SalesAnalysisPeriod.ALL_TIME) {
             addGap(container, 4)
             container.addView(emptyCard(
-                "${summary.undatedOrdersExcluded} pedido(s) com data ausente ou inválida ficam de fora deste período. Seleciona «Todo o histórico» para incluir todos os registos disponíveis."
+                "${summary.ordersWithInvalidTimestampsExcluded} pedido(s) com data ausente ou inválida ficam de fora deste período. Seleciona «Todo o histórico» para incluir todos os registos disponíveis."
             ), cardParams())
         }
         if (summary.completedOrdersWithInvalidAmount > 0) {
