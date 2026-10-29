@@ -16,6 +16,7 @@ class SupabaseSecurityAuditTests(unittest.TestCase):
         REVOKE ALL ON FUNCTION public.safe_read(uuid) FROM PUBLIC, anon;
         CREATE TABLE public.safe_items (id uuid PRIMARY KEY);
         ALTER TABLE public.safe_items ENABLE ROW LEVEL SECURITY;
+        GRANT SELECT ON TABLE public.safe_items TO authenticated;
         """
         errors, function_count, table_count = audit_migration_sql(sql)
         self.assertEqual([], errors)
@@ -39,6 +40,23 @@ class SupabaseSecurityAuditTests(unittest.TestCase):
         """
         errors, _, _ = audit_migration_sql(sql)
         self.assertTrue(any("anon" in error for error in errors))
+
+    def test_rejects_public_table_that_relies_on_default_data_api_privileges(self):
+        sql = """
+        CREATE TABLE public.new_items (id uuid PRIMARY KEY);
+        ALTER TABLE public.new_items ENABLE ROW LEVEL SECURITY;
+        """
+        errors, _, _ = audit_migration_sql(sql)
+        self.assertTrue(any("GRANT/REVOKE explícito" in error for error in errors))
+
+    def test_accepts_explicit_revocation_for_rpc_only_public_table(self):
+        sql = """
+        CREATE TABLE public.rpc_only_items (id uuid PRIMARY KEY);
+        ALTER TABLE public.rpc_only_items ENABLE ROW LEVEL SECURITY;
+        REVOKE ALL PRIVILEGES ON TABLE public.rpc_only_items FROM PUBLIC, anon, authenticated;
+        """
+        errors, _, _ = audit_migration_sql(sql)
+        self.assertEqual([], errors)
 
     def test_rejects_new_public_table_without_rls(self):
         sql = "CREATE TABLE public.open_data (id uuid PRIMARY KEY);"
