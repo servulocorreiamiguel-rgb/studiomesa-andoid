@@ -97,6 +97,8 @@ internal object RestaurantAssistantIntentClassifier {
         rule(RestaurantAssistantIntent.ECONOMIC_MANAGER, 8,
             "tesouraria", "fornecedor", "fornecedores", "orcamento", "desperdicio", "previsao", "financas",
             "financeiro", "financeira", "planeamento de compras", "despesas", "rentabilidade"),
+        rule(RestaurantAssistantIntent.ECONOMIC_MANAGER, 10,
+            "quanto me custou", "quanto me custa"),
 
         rule(RestaurantAssistantIntent.DAILY_BRIEFING, 10,
             "resumo da operacao", "estado da operacao", "prioridades de hoje", "resumo do dia",

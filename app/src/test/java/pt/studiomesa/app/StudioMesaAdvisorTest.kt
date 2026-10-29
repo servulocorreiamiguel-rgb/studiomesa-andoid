@@ -153,6 +153,43 @@ class StudioMesaAdvisorTest {
         assertTrue(answer.response.contains("não é uma ficha técnica de ingredientes"))
     }
 
+    @Test fun naturalPastTenseDishCostQuestionReturnsTheRegisteredCost() {
+        val data = snapshot(menu = listOf(
+            item("Bitoque", "14.00", "4.50"),
+            item("Sopa", "5.00", "2.00")
+        ))
+
+        val answer = StudioMesaAdvisor.answerQuestion("Quanto me custou o Bitoque?", data)
+
+        assertEquals("Custo registado do artigo", answer.title)
+        assertTrue(answer.response.contains("Bitoque"))
+        assertTrue(answer.response.contains("4,50"))
+        assertFalse(answer.response.contains("Sopa"))
+    }
+
+    @Test fun ambiguousNaturalDishCostQuestionAsksWhichDishInsteadOfChoosing() {
+        val data = snapshot(menu = listOf(
+            item("Hambúrguer Clássico", "14.00", "5.00"),
+            item("Hambúrguer Vegetariano", "13.00", "5.00")
+        ))
+
+        val answer = StudioMesaAdvisor.answerQuestion("Quanto me custou o hambúrguer?", data)
+
+        assertEquals("Qual artigo da carta?", answer.title)
+        assertTrue(answer.response.contains("Hambúrguer Clássico"))
+        assertTrue(answer.response.contains("Hambúrguer Vegetariano"))
+    }
+
+    @Test fun unknownNaturalDishCostQuestionDoesNotListUnrelatedCostsAsItsAnswer() {
+        val data = snapshot(menu = listOf(item("Bitoque", "14.00", "4.50")))
+
+        val answer = StudioMesaAdvisor.answerQuestion("Quanto me custou o custo de entrega?", data)
+
+        assertEquals("Custo do artigo não identificado", answer.title)
+        assertTrue(answer.response.contains("nome exato de um artigo"))
+        assertFalse(answer.response.contains("Bitoque:"))
+    }
+
     @Test fun economicQuestionDoesNotInventMissingDishCost() {
         val data = snapshot(menu = listOf(item("Bitoque", "14.00", "0")))
         val answer = StudioMesaAdvisor.answerQuestion("Como calculo o custo do prato Bitoque?", data)
