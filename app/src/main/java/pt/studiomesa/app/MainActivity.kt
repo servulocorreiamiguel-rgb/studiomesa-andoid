@@ -13,6 +13,7 @@ import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.os.Build
 import android.os.Bundle
+import android.text.InputFilter
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
@@ -1667,6 +1668,7 @@ class MainActivity : Activity() {
     private fun runBackend(
         task: () -> String,
         refreshSession: Boolean = true,
+        onError: ((Exception) -> Unit)? = null,
         onSuccess: (String) -> Unit
     ) {
         val progress = AlertDialog.Builder(this)
@@ -1689,11 +1691,15 @@ class MainActivity : Activity() {
                 runOnUiThread {
                     if (!isFinishing) {
                         progress.dismiss()
-                        AlertDialog.Builder(this)
-                            .setTitle("Não foi possível concluir")
-                            .setMessage(friendlyBackendError(error.message))
-                            .setPositiveButton("OK", null)
-                            .show()
+                        if (onError != null) {
+                            onError(error)
+                        } else {
+                            AlertDialog.Builder(this)
+                                .setTitle("Não foi possível concluir")
+                                .setMessage(friendlyBackendError(error.message))
+                                .setPositiveButton("OK", null)
+                                .show()
+                        }
                     }
                 }
             }
