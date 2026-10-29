@@ -66,7 +66,7 @@ Os casos ACCT-01 a ACCT-06 são **pendentes de teste ponta a ponta com contas de
 
 ## Execução automatizada disponível
 
-O workflow `.github/workflows/android.yml` compila as cinco variantes debug, executa os testes unitários das cinco variantes de distribuição e Android Lint. Os testes unitários cobrem a descodificação de parâmetros de autenticação (incluindo componentes malformados) e a regra de até três casas decimais para os valores de stock. Não existem testes instrumentados identificados; os fluxos de autenticação contra o servidor, reservas, pedidos, stock, permissões e sincronização continuam a exigir testes manuais em Android.
+O workflow `.github/workflows/android.yml` compila as cinco variantes debug, executa os testes unitários das cinco variantes de distribuição, Android Lint, a configuração de release com uma chave descartável de CI, a reprodução de migrações/testes de autorização PostgreSQL e testes instrumentados de interface em Android 8 (API 26) e Android 16 (API 36). A suite inclui testes de `PriceCalculator`, `RestaurantEconomicManager`, `AuthCallbackParser` e `StockDecimalValidator`, além de regressões de interface para a calculadora, formulário de login do cliente, gestor económico e callback PKCE. Estes testes não validam credenciais reais, OAuth/SMTP alojado, recuperação de conta por email, rede intermitente real, restauração de backups ou todos os fluxos de negócio ponta a ponta. Confirmar a execução CI do commit exato candidato à distribuição antes de considerar a versão validada.
 
 Comando de compilação usado pelo workflow:
 
@@ -80,8 +80,8 @@ gradle --no-daemon assembleEssencialRestauranteDebug assembleProfissionalRestaur
 |---|---|
 | Revisão das restrições SQL de quantidade/fase/nota | Inspecionada na estrutura da base de dados; não equivale a teste funcional |
 | Testes manuais em Android | Não executados nesta sessão |
-| Testes unitários de autenticação e precisão de stock | `AuthCallbackParserTest` e `StockDecimalValidatorTest`; o resultado final é registado pelo CI. Cobertura limitada a estes componentes puros. |
-| Testes instrumentados/funcionais em Android | CI aprovada no emulador Android 16; inclui smoke tests de interface e validação local do formulário de login. Não testa credenciais reais, OAuth, email nem operações completas ponta a ponta. |
+| Testes unitários de lógica | Existem testes para calculadora de preços, gestor económico, parser PKCE e precisão de stock, executados nas cinco variantes. As alterações recentes de precisão económica no PR #58 ainda aguardam CI completo. |
+| Testes instrumentados/funcionais em Android | O workflow executa smoke tests de interface nos emuladores Android 8 e Android 16 para as cinco variantes; inclui formulário de login, calculadora, gestor económico e callback de autenticação. A execução integrada do commit atual tem de terminar com sucesso antes de distribuir. Não valida credenciais reais, OAuth/SMTP por email, rede real ou operações completas ponta a ponta. |
 | Compilação CI, testes unitários do parser e Android Lint | Verificar sempre a execução GitHub Actions do commit candidato a distribuição; uma execução aprovada não substitui testes de negócio em Android. |
 | Testes de rede e concorrência | Não executados |
 | Teste de isolamento e papéis | Teste transacional live: duas contas viram apenas os dados do próprio restaurante nas cinco tabelas centrais; as RPCs de criação de stock/reserva para o restaurante alheio foram recusadas. Uma conta `staff` foi recusada ao consultar equipa, renovar códigos e remover membro. Dados temporários revertidos e ausência de resíduos confirmada. O E2E com Android/sessões reais e restantes RPCs continua pendente. |
@@ -157,3 +157,22 @@ Estes casos foram acrescentados após a revisão do código. **Estado inicial: p
 | REL-15 | Reutilização de chave / stock | Repetir o identificador de criação de stock com nome, unidade, quantidade, limite ou nota diferentes | A operação é rejeitada; o artigo e o movimento originais permanecem inalterados |
 | REL-16 | Regressão / processo terminado | Interromper o processo Android durante a gravação de pedido, reserva, ajuste de stock ou pontos e repetir o mesmo payload | A chave pendente é reutilizada; o servidor não regista operações duplicadas |
 | REL-17 | Carta / perda de resposta | Criar um artigo da carta, perder a resposta e reenviar os mesmos dados | A aplicação reconhece o artigo original através do mesmo UUID; não é criado um duplicado |
+
+## Regressão do gestor económico
+
+Os testes unitários executam-se em todas as cinco variantes. O gestor económico usa valores manuais e fórmulas determinísticas; não é contabilidade certificada nem previsão treinada.
+
+| ID | Categoria | Ação / dados | Resultado esperado / estado |
+|---|---|---|---|
+| ECON-01 | Normal | Vendas 10 000 €, custo alimentar 3 000 €, pessoal 2 500 €, custos fixos 2 000 €, outros variáveis 500 € | Resultado operacional estimado 2 000 €; ponto de equilíbrio aproximado 6 923,08 € |
+| ECON-02 | Desperdício / contabilidade | Introduzir custo alimentar que já inclui desperdício e registar 200 € de desperdício | Mostra o indicador de desperdício, mas não subtrai esse valor uma segunda vez ao resultado |
+| ECON-03 | Receita / arredondamento | Dois ingredientes de 0,014 € por dose, objetivo de custo alimentar 30% | Soma interna 0,028 €, total exibido 0,03 €, custos por ingrediente exibidos com precisão suficiente; teste unitário/UI está no PR #56 integrado |
+| ECON-04 | Tesouraria | Preencher apenas o saldo atual; depois preencher saldo, recebimentos e pagamentos | Entradas parciais rejeitadas; os três campos completos calculam saldo + recebimentos − pagamentos e alertam para zero/negativo |
+| ECON-05 | Reposição | Stock 5, consumo diário 3, prazo 4 dias, segurança 2 dias | Alvo 18 e reposição sugerida 13; não cria encomendas nem altera stock |
+| ECON-06 | Limites / robustez | Valor numérico com mais de 40 caracteres; texto estruturado com 50 001 caracteres | Rejeição controlada antes de normalizar/dividir a entrada; testes no PR #55 integrado |
+| ECON-07 | Ponto de equilíbrio / limite | Vendas 1 000 000 €, custo alimentar 999 999,9999 €, pessoal 1 €, fixos 1 €, outros variáveis 0 € | Não arredondar prematuramente uma contribuição positiva a zero; apresentar a limitação monetária quando o ponto calculado ultrapassa o limite. Em validação no PR #58 |
+| ECON-08 | Consumo teórico vs. real | Esperado 0,0004, real 0,0008, custo unitário 1 000 € | Diferença 0,0004 e impacto +0,40 €, sem arredondar a diferença a zero. Em validação no PR #58 |
+| ECON-09 | Dados inválidos | Vendas mensais zero, objetivos percentuais fora de 0–100%, quantidades negativas, desperdício de 100% ou prazo de reposição fora dos limites | Entrada rejeitada com mensagem clara; nenhum dado operativo alterado |
+| ECON-10 | Separação de responsabilidades | Executar cálculo de receita, previsão simples, cenário de pessoal ou registo de desperdício | Não modifica pedidos, stock, horários ou encomendas; todos os resultados são apresentados como estimativas manuais |
+
+Os casos ECON-07 e ECON-08 só passam a estado aprovado depois de o PR #58 e a CI do commit integrado terminarem com sucesso. A aprovação automatizada não substitui teste manual com dados fictícios num dispositivo real.
