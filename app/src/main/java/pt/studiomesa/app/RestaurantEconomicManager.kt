@@ -188,7 +188,7 @@ internal object RestaurantEconomicManager {
         val contributionRate = sales
             .subtract(input.foodCostConsumedIncludingWaste)
             .subtract(input.otherVariableCosts)
-            .divide(sales, 8, RoundingMode.HALF_UP)
+            .divide(sales, 16, RoundingMode.HALF_UP)
         val breakEvenCandidate = if (contributionRate > zero) {
             input.monthlyPayroll.add(input.otherFixedCosts)
                 .divide(contributionRate, 2, RoundingMode.HALF_UP)
