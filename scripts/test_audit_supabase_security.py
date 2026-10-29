@@ -52,6 +52,15 @@ class SupabaseSecurityAuditTests(unittest.TestCase):
         errors, _, _ = audit_migration_sql(sql)
         self.assertTrue(any("auth.uid()" in error for error in errors))
 
+    def test_string_literal_does_not_count_as_auth_uid_check(self):
+        sql = """
+        CREATE FUNCTION public.no_identity() RETURNS text LANGUAGE sql SECURITY DEFINER SET search_path = ''
+        AS $function$ SELECT 'auth.uid()'; $function$;
+        REVOKE ALL ON FUNCTION public.no_identity() FROM PUBLIC, anon;
+        """
+        errors, _, _ = audit_migration_sql(sql)
+        self.assertTrue(any("auth.uid()" in error for error in errors))
+
     def test_rejects_public_definer_when_anon_not_revoked(self):
         sql = """
         CREATE FUNCTION public.unsafe() RETURNS text LANGUAGE sql SECURITY DEFINER SET search_path = ''
