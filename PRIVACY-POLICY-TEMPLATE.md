@@ -2,7 +2,7 @@
 
 > **ESTADO: RASCUNHO — NÃO PUBLICAR AINDA.** Antes de usar esta política na Google Play, o responsável legal pela aplicação tem de preencher todos os campos `[A PREENCHER]`, confirmar os períodos de conservação e os fornecedores reais, e verificar que cada declaração corresponde ao comportamento publicado da aplicação. Não inventar identidade legal, morada, email de contacto, retenções ou certificações.
 
-**Última revisão técnica do código:** 22 de outubro de 2026.  
+**Última revisão técnica do código:** 29 de outubro de 2026.  
 **Nome da aplicação:** StudioMesa.
 
 ## 1. Responsável pelo tratamento
@@ -20,13 +20,19 @@ Conforme as funcionalidades utilizadas, o StudioMesa pode tratar:
 - **Operação:** mesas e zonas, artigos e categorias da carta, preços e custos internos, pedidos, quantidades, estados, notas de cozinha, reservas, números de pessoas, datas e horas, contactos fornecidos para reservas, inventário e movimentos de stock.
 - **Fidelização:** nome apresentado, código de cliente, associação ao restaurante, pontos e respetivo histórico.
 - **Dados locais de demonstração:** a versão local de demonstração guarda dados de exemplo no armazenamento do dispositivo. Os testes de produção devem confirmar que nenhuma cache de uma conta anterior é mostrada a outra conta.
+- **Assistente StudioMesa:** a implementação atual é determinística e funciona localmente; não usa um modelo generativo alojado nem envia perguntas ou dados para uma API externa de IA. Pode analisar, a partir dos dados já carregados na aplicação, artigos/preços/custos atuais, pedidos, stock e reservas. Os rascunhos de marketing usam os campos existentes dos artigos e as sugestões não alteram automaticamente os registos.
+- **Gestor económico opcional:** os valores financeiros introduzidos manualmente para estimativas, cenários de tesouraria, custos por receita ou comparações ficam apenas em memória durante a sessão; não são guardados nas preferências locais nem sincronizados com o Supabase. As conclusões dependem dos dados introduzidos pelo utilizador e são estimativas, não contabilidade certificada.
 - **Dados técnicos de segurança:** metadados da sessão e referências de auditoria de operações necessárias ao funcionamento e à prevenção de duplicações. Não foram identificadas integrações de publicidade, pagamentos ou analytics no código revisto.
 
 O proprietário do restaurante deve introduzir apenas os dados necessários à operação e informar os clientes/funcionários sobre o tratamento de dados que lhes diz respeito.
 
+## Nota técnica importante sobre assistente e dados financeiros
+
+A descrição acima foi atualizada em 29/10/2026 com base no código e na documentação do projeto. As operações de restaurante autenticado — por exemplo, artigos da carta, pedidos, reservas, stock e fidelização — são sincronizadas com o backend Supabase quando essa funcionalidade está configurada. A aplicação também mantém dados locais de demonstração. O assistente StudioMesa atual faz análise determinística local e não usa um modelo generativo externo. O Gestor económico opcional trabalha com valores introduzidos manualmente e não os persiste; se esta funcionalidade vier a guardar dados, sincronizá-los ou usar um fornecedor externo, esta política e a declaração Data safety terão de ser revistas antes da versão correspondente ser distribuída.
+
 ## 3. Finalidades e fundamento
 
-Os dados são usados para autenticar contas, permitir acesso por papel ao restaurante correto, sincronizar operações, gerir pedidos/reservas/inventário/fidelização, evitar gravações duplicadas, proteger sessões e processar pedidos de eliminação.
+Os dados são usados para autenticar contas, permitir acesso por papel ao restaurante correto, sincronizar operações, gerir pedidos/reservas/inventário/fidelização, evitar gravações duplicadas, proteger sessões e processar pedidos de eliminação. O assistente local pode fazer cálculos e preparar rascunhos a partir dos dados operacionais já disponíveis no dispositivo; não toma decisões automaticamente nem envia esses dados para um fornecedor externo de IA na implementação atual.
 
 **[A PREENCHER — o responsável deve confirmar os fundamentos jurídicos aplicáveis a cada finalidade, incluindo execução contratual, obrigação legal, interesse legítimo ou consentimento quando necessário.]**
 
