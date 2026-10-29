@@ -114,14 +114,15 @@ class SalesAnalysisCalculatorTest {
         val summary = SalesAnalysisCalculator.summarize(
             listOf(
                 SalesAnalysisOrder(instant(2026, Calendar.OCTOBER, 29, 10), "Concluído", Double.NaN),
-                SalesAnalysisOrder(instant(2026, Calendar.OCTOBER, 29, 11), "Concluído", -1.0)
+                SalesAnalysisOrder(instant(2026, Calendar.OCTOBER, 29, 11), "Concluído", -1.0),
+                SalesAnalysisOrder(instant(2026, Calendar.OCTOBER, 29, 11, 30), "Concluído", Double.MAX_VALUE)
             ),
             SalesAnalysisPeriod.TODAY,
             now,
             zone
         )
-        assertEquals(2, summary.completedOrderCount)
+        assertEquals(3, summary.completedOrderCount)
         assertEquals(0.0, summary.nominalCompletedValue, 0.001)
-        assertEquals(2, summary.completedOrdersWithInvalidAmount)
+        assertEquals(3, summary.completedOrdersWithInvalidAmount)
     }
 }
