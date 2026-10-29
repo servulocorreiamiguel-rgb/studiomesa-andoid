@@ -35,7 +35,7 @@ A tabela `public.restaurant_reservations` tem a coluna `client_request_id` e um 
 
 A migração `20261022093532_inventory_item_creation_idempotency.sql` foi aplicada ao projeto Supabase `svwvkfsyevuyabelrtjk` e a sua presença no catálogo foi confirmada. Acrescenta o identificador e o payload original da criação de artigos de inventário e a função `public.create_inventory_item_idempotent`. A função exige sessão e pertença ao restaurante, valida a precisão decimal, devolve o mesmo ID para um reenvio com a mesma chave e os mesmos dados e rejeita a reutilização da chave com dados diferentes. O registo do artigo e do movimento inicial é transacional; uma repetição válida não acrescenta um segundo movimento.
 
-A nova função tem `search_path` vazio, não pode ser executada por `anon` e concede execução a `authenticated` e `service_role`. A função é um endpoint privilegiado intencional e tem de continuar a ser revista como parte da auditoria de `SECURITY DEFINER`. A implementação Android foi preparada no ramo `prepare-commercial-release`; a verificação final depende de passar o CI e de executar o teste ponta a ponta com contas de teste.
+A nova função tem `search_path` vazio, não pode ser executada por `anon` e concede execução a `authenticated` e `service_role`. A função é um endpoint privilegiado intencional e tem de continuar a ser revista como parte da auditoria de `SECURITY DEFINER`. A implementação Android está integrada em `main`; a CI atual reproduz as migrações e testa autorização/idempotência numa base descartável. Os testes ponta a ponta de perda real de rede e repetição com contas de teste continuam pendentes.
 
 ## Eliminação de conta e dados associados (22/10/2026)
 
@@ -45,7 +45,9 @@ O endpoint exige uma sessão de utilizador validada por `withSupabase({ auth: "u
 
 Verificações efetuadas depois das migrações: fila sem pedidos pendentes, coluna `loyalty_transactions.created_by` nullable, chave estrangeira com `ON DELETE SET NULL` e um gatilho de eliminação presente. **Ainda falta testar a experiência completa com contas descartáveis dedicadas** (conta sem restaurante, funcionário e proprietário sem outros membros). Não uses contas reais nem dados de clientes nos testes.
 
-A página externa `https://svwvkfsyevuyabelrtjk.supabase.co/functions/v1/account-deletion-web` está ativa e foi verificada por carregamento público. O fluxo de email ainda exige que o URL exato seja adicionado a Authentication → URL Configuration → Redirect URLs. Antes de produção, configura SMTP próprio e confirma magic link/OTP com contas descartáveis; não considerar o recurso operacional até esses testes passarem.
+**Risco de enumeração por email pendente:** a função de página chama `signInWithOtp` com `shouldCreateUser=false`. O problema público [supabase/auth#1547](https://github.com/supabase/auth/issues/1547) descreve como o endpoint Auth pode responder de forma distinta para emails existentes e desconhecidos, incluindo diferenças temporais. A alteração recente da mensagem visual não corrige a API. Não tratar o fluxo como resistente a enumeração até realizar uma verificação com contas descartáveis, avaliar as proteções disponíveis e aprovar uma mitigação adequada.
+
+A página externa `https://svwvkfsyevuyabelrtjk.supabase.co/functions/v1/account-deletion-web` está ativa e foi verificada por carregamento público. A 29/10/2026, a função protegida `delete-account` foi atualizada no projeto ativo para a versão 3, com `verify_jwt=true` e dependência `npm:@supabase/server@1.9.2` fixada. Um pedido sem autenticação recebeu HTTP `401`; a página de eliminação continuou a carregar. Esta verificação não prova a entrega do email nem a eliminação efetiva. O fluxo de email ainda exige que o URL exato seja adicionado a Authentication → URL Configuration → Redirect URLs. Antes de produção, configura SMTP próprio e confirma magic link/OTP e eliminação com contas descartáveis; não considerar o recurso operacional até esses testes passarem.
 
 ## Correção de concorrência na adesão à equipa (26/10/2026)
 
@@ -81,7 +83,7 @@ A migração `20261026173330_fix_staff_join_concurrent_conflict_target` foi apli
 - O código Android passou a usar PKCE: o verificador é gerado aleatoriamente, guardado cifrado no Android Keystore e usado para trocar o código de retorno por uma sessão. O callback já não aceita tokens bearer diretamente na ligação.
 - Google e Microsoft só devem ser apresentados como métodos operacionais depois de configurares as credenciais OAuth reais no Supabase, autorizares o callback e testares o fluxo completo num telemóvel real.
 - Não partilhes palavras-passe entre proprietário e funcionários. Cada pessoa deve ter a sua própria conta.
-- Ativa proteção contra palavras-passe comprometidas e revê limites de pedidos e monitorização antes da utilização comercial.
+- A proteção contra palavras-passe comprometidas está desativada e, no plano Free atual, a documentação do Supabase indica que a opção exige Pro ou superior. Resolve esta limitação por decisão explícita antes de aceitar contas reais; revê também limites de pedidos e monitorização.
 
 ## Cópias de segurança e recuperação
 

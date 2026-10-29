@@ -63,6 +63,7 @@ Os casos ACCT-01 a ACCT-06 são **pendentes de teste ponta a ponta com contas de
 | ACCT-07 | Eliminação web / email | Pedir ligação na página externa, abrir a ligação no mesmo navegador, escolher eliminação de conta e confirmar | O utilizador autenticado consegue enviar um pedido; email inválido/sem conta não revela se a conta existe; a conta é eliminada apenas após confirmação e verificação do servidor |
 | ACCT-08 | Redirecionamento web | Tentar magic link antes e depois de permitir o URL da página em Supabase Auth Redirect URLs | Antes da configuração, a ligação falha de forma segura; depois de autorizado, regressa à página externa e estabelece uma sessão válida |
 | ACCT-09 | Concorrência / proprietário | Entre a confirmação inicial e a eliminação autenticada, associar um segundo membro ao restaurante de teste | O gatilho volta a verificar os membros e reverte a eliminação do Auth; não elimina o restaurante nem a nova equipa |
+| ACCT-10 | Segurança / enumeração de emails | Com duas contas descartáveis — uma existente e outra inexistente — comparar a resposta HTTP e o tempo do endpoint Auth chamado por `signInWithOtp` com `shouldCreateUser=false` | A página apresenta a mesma mensagem genérica em sucesso/erro, mas o teste deve também verificar a API diretamente. Não considerar a proteção suficiente se status/corpo/tempo revelarem a existência; este comportamento foi reportado na [issue pública Supabase Auth #1547](https://github.com/supabase/auth/issues/1547). Bloqueio aberto até validar mitigação suportada. |
 
 ## Execução automatizada disponível
 
@@ -112,6 +113,8 @@ Não marcar um caso como aprovado sem guardar a evidência do teste. Uma compila
 | AUTH-17 | Logout / regressão | Fechar sessão e voltar ao ecrã de conta | Não ficam dados da conta anterior ou verificador PKCE pendente acessíveis na interface |
 
 Estes casos foram acrescentados ao plano após a revisão do fluxo de autenticação. **Não foram executados num dispositivo real**; dependem de OAuth/email configurados e contas de teste. A compilação do APK só valida sintaxe/compilação, não prova os resultados de autenticação.
+
+**Bloqueio adicional verificado em 29/10/2026:** a página externa de eliminação usa `signInWithOtp` com `shouldCreateUser=false`. A alteração da mensagem da interface evita respostas visuais diferentes, mas não impede uma chamada direta ao endpoint Auth. A issue pública [supabase/auth#1547](https://github.com/supabase/auth/issues/1547) descreve diferenças de resposta e temporização para emails existentes/inexistentes. O caso ACCT-10 exige teste com contas descartáveis e uma mitigação avaliada antes da utilização comercial; ainda não está aprovado.
 
 
 ## Regressão do perfil local do cliente
