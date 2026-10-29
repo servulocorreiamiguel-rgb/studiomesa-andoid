@@ -43,6 +43,22 @@ class RestaurantEconomicManagerTest {
         assertEquals(amount("0.00"), result.gapToBreakEven)
     }
 
+    @Test fun tinyPositiveContributionIsReportedAsBreakEvenBeyondSupportedRange() {
+        val result = RestaurantEconomicManager.analyze(
+            input(
+                sales = "1000000",
+                food = "999999.9999",
+                payroll = "1",
+                fixed = "1",
+                variable = "0"
+            )
+        )
+
+        assertNull(result.estimatedBreakEvenSales)
+        assertTrue(result.warnings.any { it.contains("ponto de equilíbrio estimado ultrapassa o limite") })
+        assertFalse(result.warnings.any { it.contains("custos alimentares e variáveis igualam ou ultrapassam as vendas") })
+    }
+
     @Test fun flagsLossAndDoesNotUseRecordedWasteTwice() {
         val result = RestaurantEconomicManager.analyze(
             input(sales = "5000", food = "2200", payroll = "2000", fixed = "1000", variable = "300", waste = "200")
