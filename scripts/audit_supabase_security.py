@@ -65,7 +65,7 @@ def security_definer_definitions(sql: str) -> list[tuple[str, str, str]]:
 
 def strip_sql_comments_and_literals(sql: str) -> str:
     """Remove SQL dollar/single/double-quoted literals before stripping comments."""
-    without_dollar_quotes = re.sub(r"\$(\\w*)\$[\s\S]*?\$\\1\$", "", sql)
+    without_dollar_quotes = re.sub(r"\$(\w*)\$[\s\S]*?\$\1\$", "", sql)
     without_quoted_literals = re.sub(
         r"\'(?:\'\'|[^\'])*\'|\"(?:\"\"|[^\"])*\"",
         "",
