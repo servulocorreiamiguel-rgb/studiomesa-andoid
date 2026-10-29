@@ -89,6 +89,14 @@ class AccountDeletionSecurityTests(unittest.TestCase):
         errors = audit_function_sources(VALID_DELETE_SOURCE, source)
         self.assertTrue(any("same generic status" in e for e in errors))
 
+    def test_rejects_unqualified_claim_that_the_page_prevents_email_enumeration(self) -> None:
+        source = VALID_WEB_SOURCE.replace(
+            "const PAGE = `<script",
+            'const PAGE = `<p>Por segurança, esta página não confirma se um email está registado.</p><script',
+        )
+        errors = audit_function_sources(VALID_DELETE_SOURCE, source)
+        self.assertTrue(any("must not claim that its UI prevents email enumeration" in e for e in errors))
+
     def test_rejects_implicit_flow(self) -> None:
         source = VALID_WEB_SOURCE.replace('flowType: "pkce"', 'flowType: "implicit"')
         errors = audit_function_sources(VALID_DELETE_SOURCE, source)
