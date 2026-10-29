@@ -282,19 +282,18 @@ internal object RestaurantEconomicManager {
             require(wastePercent < hundred) { "Linha ${index + 1}: o desperdício tem de ser inferior a 100%." }
             Triple(parts[0], quantity, Pair(unitPrice, wastePercent))
         }
+        // Keep per-ingredient sub-cent precision for display; the total is rounded
+        // only after summing the same per-line costs used in the report.
         val ingredientCosts = parsed.map { (name, quantity, costAndWaste) ->
             val unitPrice = costAndWaste.first
             val wastePercent = costAndWaste.second
-            val usableRatio = hundred.subtract(wastePercent).divide(hundred, 8, RoundingMode.HALF_UP)
-            val cost = quantity.multiply(unitPrice).divide(usableRatio, 8, RoundingMode.HALF_UP)
-            RecipeIngredientCost(name, cost.setScale(2, RoundingMode.HALF_UP))
-        }
-        val exactTotal = parsed.map { (_, quantity, costAndWaste) ->
-            val unitPrice = costAndWaste.first
-            val wastePercent = costAndWaste.second
-            quantity.multiply(unitPrice).multiply(hundred)
+            val cost = quantity.multiply(unitPrice).multiply(hundred)
                 .divide(hundred.subtract(wastePercent), 8, RoundingMode.HALF_UP)
-        }.fold(zero, BigDecimal::add)
+            RecipeIngredientCost(name, cost)
+        }
+        val exactTotal = ingredientCosts
+            .map { it.costPerPortion }
+            .fold(zero, BigDecimal::add)
         require(exactTotal > zero) { "O custo total da receita tem de ser superior a zero." }
         val total = exactTotal.setScale(2, RoundingMode.HALF_UP)
         val suggested = exactTotal.multiply(hundred).divide(targetFoodCostPercent, 2, RoundingMode.HALF_UP)

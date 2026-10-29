@@ -3840,7 +3840,7 @@ class MainActivity : Activity() {
                     append("Custo estimado por dose: ").append(money(result.totalCostPerPortion)).append('\n')
                     append("Preço indicativo a ").append(economicPercent(result.targetFoodCostPercent)).append(": ")
                         .append(money(result.suggestedPriceAtTarget)).append('\n')
-                    result.ingredients.forEach { append("• ").append(it.name).append(": ").append(money(it.costPerPortion)).append('\n') }
+                    result.ingredients.forEach { append("• ").append(it.name).append(": ").append(preciseMoney(it.costPerPortion)).append('\n') }
                     append("Confirma rendimentos, unidades, IVA e outros custos antes de definir um preço.")
                 }
             } catch (e: IllegalArgumentException) {
@@ -4726,6 +4726,16 @@ class MainActivity : Activity() {
 
     private fun money(value: BigDecimal): String =
         NumberFormat.getCurrencyInstance(Locale("pt", "PT")).format(value)
+
+    // Ingredient-level recipe costs can be below one cent. Preserve enough precision
+    // to reconcile the rounded recipe total with the individual ingredient lines.
+    private fun preciseMoney(value: BigDecimal): String {
+        val format = NumberFormat.getCurrencyInstance(Locale("pt", "PT"))
+        format.minimumFractionDigits = 2
+        format.maximumFractionDigits = 8
+        format.setRoundingMode(java.math.RoundingMode.HALF_UP)
+        return format.format(value)
+    }
 
     // Keep one decimal for ordinary values but retain a second decimal when it is material (e.g. 0.01%).
     private fun formatPercentage(value: BigDecimal): String =

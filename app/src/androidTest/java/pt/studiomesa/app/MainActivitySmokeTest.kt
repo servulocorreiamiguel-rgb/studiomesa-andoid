@@ -510,6 +510,32 @@ class MainActivitySmokeTest {
     }
 
     @Test
+    fun economicRecipeReportShowsSubCentIngredientCostsPrecisely() {
+        assumeFalse("Customer variant has its own navigation.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withContentDescription("Abrir menu de navegação")).perform(click())
+            onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            onView(withText("Ativar gestão económica")).perform(scrollTo(), click())
+
+            onView(withHint("Farinha | 0,2 | 2,50 | 5\nMolho | 0,1 | 4,00 | 0"))
+                .perform(scrollTo(), replaceText("A | 0,002 | 7,00 | 0\nB | 0,002 | 7,00 | 0"))
+
+            onView(withText("Calcular custo da receita")).perform(scrollTo(), click())
+
+            onView(withText(containsString("Custo estimado por dose: 0,03")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+            onView(withText(containsString("A: 0,014")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+            onView(withText(containsString("B: 0,014")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
     fun premiumAnalysisCanSelectASevenDayPeriod() {
         assumeFalse("Customer variant has its own navigation.", isCustomerVariant())
         assumeTrue(
