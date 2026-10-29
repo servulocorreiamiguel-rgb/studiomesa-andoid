@@ -12,6 +12,8 @@ class RestaurantAssistantIntentClassifierTest {
             "Como calculo o custo dos ingredientes por dose?",
             "Como calculo o custo de produção deste prato?",
             "Como preparo a ficha técnica do prato?",
+            "Quanto me custou o Bitoque?",
+            "Quanto me custa o Bitoque?",
             "Que quantidade devo encomendar ao fornecedor?",
             "Como analiso os custos fixos e variáveis?",
             "Como faço uma previsão financeira?",
