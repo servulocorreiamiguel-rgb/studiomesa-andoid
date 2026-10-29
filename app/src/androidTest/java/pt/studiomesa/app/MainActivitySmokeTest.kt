@@ -562,6 +562,29 @@ class MainActivitySmokeTest {
     }
 
     @Test
+    fun economicManagerDisplaysSmallUsageVarianceAndItsMoneyImpact() {
+        assumeFalse("Customer variant has its own navigation.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withContentDescription("Abrir menu de navegação")).perform(click())
+            onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            onView(withText("Ativar gestão económica")).perform(scrollTo(), click())
+
+            onView(withHint("Frango | 20 | 23 | 6,50\nQueijo | 5 | 4 | 8,00"))
+                .perform(scrollTo(), replaceText("Ingrediente | 0,0004 | 0,0008 | 1000"))
+
+            onView(withText("Analisar diferenças de consumo")).perform(scrollTo(), click())
+
+            onView(withText(containsString("diferença +0.0004")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+            onView(withText(containsString("impacto estimado +0,40")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
     fun premiumAnalysisCanSelectASevenDayPeriod() {
         assumeFalse("Customer variant has its own navigation.", isCustomerVariant())
         assumeTrue(
