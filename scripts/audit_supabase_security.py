@@ -143,6 +143,71 @@ def referenced_by_policy(sql: str, function_name: str) -> bool:
     )
 
 
+def tables_with_explicit_privilege_statements(sql: str) -> set[str]:
+    """Return public tables named in explicit GRANT/REVOKE statements.
+
+    New Supabase Data API defaults must not be relied on for table privileges.
+    A table may deliberately be RPC-only; an explicit REVOKE is still a valid
+    declaration of that access model.
+    """
+    referenced: set[str] = set()
+    for match in re.finditer(r"\b(?:grant|revoke)\b[^;]*;", sql, re.IGNORECASE):
+        statement = match.group(0)
+        if re.search(r"\bon\s+function\b", statement, re.IGNORECASE):
+            continue
+        object_match = re.search(
+            r"\bon\s+(?:table\s+)?([\s\S]*?)\s+(?:to|from)\b",
+            statement,
+            re.IGNORECASE,
+        )
+        if object_match is None:
+            continue
+        referenced.update(
+            name.lower()
+            for name in re.findall(
+                r"\bpublic\.[a-z_][a-z0-9_]*\b",
+                object_match.group(1),
+                re.IGNORECASE,
+            )
+        )
+    return referenced
+
+
+def public_table_grants_to_untrusted_roles(sql: str) -> list[tuple[str, str]]:
+    """Find public-table GRANT statements that expose table privileges to anon/PUBLIC."""
+    findings: list[tuple[str, str]] = []
+    for match in re.finditer(r"\bgrant\b[^;]*;", sql, re.IGNORECASE):
+        statement = match.group(0)
+        if re.search(r"\bon\s+function\b", statement, re.IGNORECASE):
+            continue
+        object_match = re.search(
+            r"\bon\s+(?:table\s+)?([\s\S]*?)\s+to\b([\s\S]*?);$",
+            statement,
+            re.IGNORECASE,
+        )
+        if object_match is None:
+            continue
+        objects = object_match.group(1)
+        recipients = object_match.group(2)
+        if not re.search(r"\b(?:public|anon)\b", recipients, re.IGNORECASE):
+            continue
+        table_names = {
+            name.lower()
+            for name in re.findall(
+                r"\bpublic\.[a-z_][a-z0-9_]*\b", objects, re.IGNORECASE
+            )
+        }
+        if not table_names and re.search(
+            r"\ball\s+tables\s+in\s+schema\s+public\b",
+            objects,
+            re.IGNORECASE,
+        ):
+            table_names.add("public.*")
+        for table_name in sorted(table_names):
+            findings.append((table_name, recipients.strip()))
+    return findings
+
+
 def audit_migration_sql(sql: str) -> tuple[list[str], int, int]:
     errors: list[str] = []
     definitions = security_definer_headers(sql)
@@ -185,6 +250,19 @@ def audit_migration_sql(sql: str) -> tuple[list[str], int, int]:
         )
         if not enabled:
             errors.append(f"{table_name}: tabela criada por migração sem ENABLE ROW LEVEL SECURITY.")
+
+    public_tables = {name for name in table_names if name.startswith("public.")}
+    explicitly_declared = tables_with_explicit_privilege_statements(sql)
+    for table_name in sorted(public_tables - explicitly_declared):
+        errors.append(
+            f"{table_name}: falta GRANT/REVOKE explícito de privilégios na tabela; "
+            "não dependas dos privilégios por omissão da Data API."
+        )
+    for table_name, recipients in public_table_grants_to_untrusted_roles(sql):
+        errors.append(
+            f"{table_name}: GRANT de privilégios de tabela para PUBLIC/anon ({recipients}); "
+            "confirma e justifica explicitamente qualquer exposição direta."
+        )
 
     return errors, len(definitions), len(table_names)
 
