@@ -64,9 +64,14 @@ def security_definer_definitions(sql: str) -> list[tuple[str, str, str]]:
 
 
 def strip_sql_comments_and_literals(sql: str) -> str:
-    """Remove SQL line/block comments and quoted literals before safety checks."""
-    without_comments = re.sub(r"--[^\n]*|/\*[\s\S]*?\*/", "", sql)
-    return re.sub(r"\'(?:\'\'|[^\'])*\'|\"(?:\"\"|[^\"])*\"", "", without_comments)
+    """Remove SQL dollar/single/double-quoted literals before stripping comments."""
+    without_dollar_quotes = re.sub(r"\$(\\w*)\$[\s\S]*?\$\\1\$", "", sql)
+    without_quoted_literals = re.sub(
+        r"\'(?:\'\'|[^\'])*\'|\"(?:\"\"|[^\"])*\"",
+        "",
+        without_dollar_quotes,
+    )
+    return re.sub(r"--[^\n]*|/\*[\s\S]*?\*/", "", without_quoted_literals)
 
 
 def body_references_auth_uid(body: str) -> bool:
