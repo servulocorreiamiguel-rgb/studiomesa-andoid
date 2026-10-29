@@ -1,0 +1,9 @@
+project_id = "svwvkfsyevuyabelrtjk"
+
+[functions.delete-account]
+enabled = true
+verify_jwt = true
+
+[functions.account-deletion-web]
+enabled = true
+verify_jwt = false
