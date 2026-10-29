@@ -188,6 +188,38 @@ class MainActivitySmokeTest {
     }
 
     @Test
+    fun calculatorDisplaysComplementaryPercentagesAtHalfCentTie() {
+        assumeFalse("Customer variant has no management calculator.", isCustomerVariant())
+        assumeTrue("The Essential plan does not include the price calculator.", isCalculatorAvailable())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withText("ABRIR CALCULADORA"))
+                .perform(scrollTo(), click())
+
+            onView(withHint("Ex.: 3,20"))
+                .perform(replaceText("1,00"))
+
+            onView(withHint("Ex.: 30"))
+                .perform(replaceText("0,625"))
+
+            onView(withText("Calcular preço sugerido"))
+                .perform(scrollTo(), click())
+
+            onView(withText(containsString("160,00")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+
+            onView(withText(containsString("Custo sobre o preço final: 0,63%")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+
+            onView(withText(containsString("Margem bruta: 99,37%")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
     fun calculatorRejectsPercentagesBelowSupportedPrecision() {
         assumeFalse("Customer variant has no management calculator.", isCustomerVariant())
         assumeTrue("The Essential plan does not include the price calculator.", isCalculatorAvailable())
