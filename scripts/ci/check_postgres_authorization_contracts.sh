@@ -44,6 +44,61 @@ if [ "$unsafe_definer_count" != "0" ]; then
 fi
 echo "PASS: application SECURITY DEFINER functions pin an empty search_path and are not executable by anon."
 
+# Test the effective defaults by creating disposable objects as the same postgres
+# role that replays migrations. Newly-created API objects must be opt-in, not public.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<'SQL'
+CREATE TABLE public.__studiomesa_default_privilege_probe (id bigint);
+CREATE SEQUENCE public.__studiomesa_default_privilege_probe_seq;
+CREATE FUNCTION public.__studiomesa_default_privilege_probe_fn()
+RETURNS integer LANGUAGE sql
+AS $function$ SELECT 1; $function$;
+
+DO $check$
+BEGIN
+  IF has_table_privilege('anon', 'public.__studiomesa_default_privilege_probe', 'SELECT')
+     OR has_table_privilege('anon', 'public.__studiomesa_default_privilege_probe', 'INSERT')
+     OR has_table_privilege('anon', 'public.__studiomesa_default_privilege_probe', 'UPDATE')
+     OR has_table_privilege('anon', 'public.__studiomesa_default_privilege_probe', 'DELETE')
+     OR has_table_privilege('anon', 'public.__studiomesa_default_privilege_probe', 'TRUNCATE')
+     OR has_table_privilege('anon', 'public.__studiomesa_default_privilege_probe', 'REFERENCES')
+     OR has_table_privilege('anon', 'public.__studiomesa_default_privilege_probe', 'TRIGGER')
+     OR has_table_privilege('authenticated', 'public.__studiomesa_default_privilege_probe', 'SELECT')
+     OR has_table_privilege('authenticated', 'public.__studiomesa_default_privilege_probe', 'INSERT')
+     OR has_table_privilege('authenticated', 'public.__studiomesa_default_privilege_probe', 'UPDATE')
+     OR has_table_privilege('authenticated', 'public.__studiomesa_default_privilege_probe', 'DELETE')
+     OR has_table_privilege('service_role', 'public.__studiomesa_default_privilege_probe', 'SELECT')
+     OR has_table_privilege('service_role', 'public.__studiomesa_default_privilege_probe', 'INSERT')
+     OR has_table_privilege('service_role', 'public.__studiomesa_default_privilege_probe', 'UPDATE')
+     OR has_table_privilege('service_role', 'public.__studiomesa_default_privilege_probe', 'DELETE') THEN
+    RAISE EXCEPTION 'New public tables inherited unexpected API-role privileges.';
+  END IF;
+
+  IF has_sequence_privilege('anon', 'public.__studiomesa_default_privilege_probe_seq', 'USAGE')
+     OR has_sequence_privilege('anon', 'public.__studiomesa_default_privilege_probe_seq', 'SELECT')
+     OR has_sequence_privilege('anon', 'public.__studiomesa_default_privilege_probe_seq', 'UPDATE')
+     OR has_sequence_privilege('authenticated', 'public.__studiomesa_default_privilege_probe_seq', 'USAGE')
+     OR has_sequence_privilege('authenticated', 'public.__studiomesa_default_privilege_probe_seq', 'SELECT')
+     OR has_sequence_privilege('service_role', 'public.__studiomesa_default_privilege_probe_seq', 'USAGE')
+     OR has_sequence_privilege('service_role', 'public.__studiomesa_default_privilege_probe_seq', 'SELECT') THEN
+    RAISE EXCEPTION 'New public sequences inherited unexpected API-role privileges.';
+  END IF;
+
+  IF has_function_privilege('anon', 'public.__studiomesa_default_privilege_probe_fn()', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.__studiomesa_default_privilege_probe_fn()', 'EXECUTE')
+     OR has_function_privilege('service_role', 'public.__studiomesa_default_privilege_probe_fn()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'New public functions inherited unexpected API-role or PUBLIC EXECUTE privileges.';
+  END IF;
+END;
+$check$;
+
+DROP FUNCTION public.__studiomesa_default_privilege_probe_fn();
+DROP SEQUENCE public.__studiomesa_default_privilege_probe_seq;
+DROP TABLE public.__studiomesa_default_privilege_probe;
+
+SQL
+
+echo "PASS: new public tables, sequences and functions require explicit grants."
+
 psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL
 INSERT INTO auth.users (id, email)
 VALUES ('$USER_A', 'ci-owner-a@example.invalid'),
