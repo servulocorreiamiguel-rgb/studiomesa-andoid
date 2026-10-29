@@ -12,7 +12,7 @@ class SupabaseSecurityAuditTests(unittest.TestCase):
         sql = """
         CREATE OR REPLACE FUNCTION public.safe_read(p_id uuid)
         RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
-        AS $function$ BEGIN RETURN p_id; END; $function$;
+        AS $function$ BEGIN IF (SELECT auth.uid()) IS NULL THEN RAISE EXCEPTION 'not authenticated'; END IF; RETURN p_id; END; $function$;
         REVOKE ALL ON FUNCTION public.safe_read(uuid) FROM PUBLIC, anon;
         CREATE TABLE public.safe_items (id uuid PRIMARY KEY);
         ALTER TABLE public.safe_items ENABLE ROW LEVEL SECURITY;
@@ -26,16 +26,116 @@ class SupabaseSecurityAuditTests(unittest.TestCase):
     def test_rejects_definer_without_empty_search_path(self):
         sql = """
         CREATE FUNCTION public.unsafe() RETURNS text LANGUAGE sql SECURITY DEFINER
-        AS $function$ SELECT 'unsafe'; $function$;
+        AS $function$ SELECT (SELECT auth.uid())::text; $function$;
         REVOKE ALL ON FUNCTION public.unsafe() FROM PUBLIC, anon;
         """
         errors, _, _ = audit_migration_sql(sql)
         self.assertTrue(any("SET search_path" in error for error in errors))
 
+    def test_accepts_only_validated_auth_user_delete_trigger_without_auth_uid(self):
+        sql = """
+        CREATE FUNCTION private.finalize_account_deletion_after_auth_delete()
+        RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+        AS $function$
+        BEGIN
+          DELETE FROM private.account_deletion_queue AS q
+          WHERE q.user_id = OLD.id;
+          RETURN OLD;
+        END;
+        $function$;
+        REVOKE ALL ON FUNCTION private.finalize_account_deletion_after_auth_delete()
+          FROM PUBLIC, anon, authenticated;
+        CREATE TRIGGER z_studiomesa_finalize_account_deletion
+          AFTER DELETE ON auth.users
+          FOR EACH ROW
+          EXECUTE FUNCTION private.finalize_account_deletion_after_auth_delete();
+        """
+        errors, function_count, _ = audit_migration_sql(sql)
+        self.assertEqual([], errors)
+        self.assertEqual(1, function_count)
+
+    def test_auth_delete_trigger_exception_requires_auth_users_binding(self):
+        sql = """
+        CREATE FUNCTION private.finalize_account_deletion_after_auth_delete()
+        RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+        AS $function$
+        BEGIN
+          DELETE FROM private.account_deletion_queue AS q
+          WHERE q.user_id = OLD.id;
+          RETURN OLD;
+        END;
+        $function$;
+        REVOKE ALL ON FUNCTION private.finalize_account_deletion_after_auth_delete()
+          FROM PUBLIC, anon, authenticated;
+        CREATE TRIGGER z_studiomesa_finalize_account_deletion
+          AFTER DELETE ON public.restaurants
+          FOR EACH ROW
+          EXECUTE FUNCTION private.finalize_account_deletion_after_auth_delete();
+        """
+        errors, _, _ = audit_migration_sql(sql)
+        self.assertTrue(any("auth.uid()" in error for error in errors))
+
+    def test_auth_delete_trigger_exception_does_not_accept_a_comment(self):
+        sql = """
+        CREATE FUNCTION private.finalize_account_deletion_after_auth_delete()
+        RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+        AS $function$
+        BEGIN
+          DELETE FROM private.account_deletion_queue AS q
+          WHERE q.user_id = OLD.id;
+          RETURN OLD;
+        END;
+        $function$;
+        REVOKE ALL ON FUNCTION private.finalize_account_deletion_after_auth_delete()
+          FROM PUBLIC, anon, authenticated;
+        -- CREATE TRIGGER z_studiomesa_finalize_account_deletion AFTER DELETE ON auth.users
+        -- FOR EACH ROW EXECUTE FUNCTION private.finalize_account_deletion_after_auth_delete();
+        """
+        errors, _, _ = audit_migration_sql(sql)
+        self.assertTrue(any("auth.uid()" in error for error in errors))
+
+    def test_rejects_security_definer_without_auth_uid_check(self):
+        sql = """
+        CREATE FUNCTION public.no_identity() RETURNS integer LANGUAGE sql SECURITY DEFINER SET search_path = ''
+        AS $function$ SELECT 1; $function$;
+        REVOKE ALL ON FUNCTION public.no_identity() FROM PUBLIC, anon;
+        """
+        errors, _, _ = audit_migration_sql(sql)
+        self.assertTrue(any("auth.uid()" in error for error in errors))
+
+    def test_comment_does_not_count_as_auth_uid_check(self):
+        sql = """
+        CREATE FUNCTION public.no_identity() RETURNS integer LANGUAGE sql SECURITY DEFINER SET search_path = ''
+        AS $function$ -- auth.uid() is only mentioned in this comment
+          SELECT 1;
+        $function$;
+        REVOKE ALL ON FUNCTION public.no_identity() FROM PUBLIC, anon;
+        """
+        errors, _, _ = audit_migration_sql(sql)
+        self.assertTrue(any("auth.uid()" in error for error in errors))
+
+    def test_string_literal_does_not_count_as_auth_uid_check(self):
+        sql = """
+        CREATE FUNCTION public.no_identity() RETURNS text LANGUAGE sql SECURITY DEFINER SET search_path = ''
+        AS $function$ SELECT 'auth.uid()'; $function$;
+        REVOKE ALL ON FUNCTION public.no_identity() FROM PUBLIC, anon;
+        """
+        errors, _, _ = audit_migration_sql(sql)
+        self.assertTrue(any("auth.uid()" in error for error in errors))
+
+    def test_dollar_quoted_literal_does_not_count_as_auth_uid_check(self):
+        sql = """
+        CREATE FUNCTION public.no_identity() RETURNS text LANGUAGE sql SECURITY DEFINER SET search_path = ''
+        AS $function$ SELECT $guard$auth.uid()$guard$; $function$;
+        REVOKE ALL ON FUNCTION public.no_identity() FROM PUBLIC, anon;
+        """
+        errors, _, _ = audit_migration_sql(sql)
+        self.assertTrue(any("auth.uid()" in error for error in errors))
+
     def test_rejects_public_definer_when_anon_not_revoked(self):
         sql = """
         CREATE FUNCTION public.unsafe() RETURNS text LANGUAGE sql SECURITY DEFINER SET search_path = ''
-        AS $function$ SELECT 'unsafe'; $function$;
+        AS $function$ SELECT (SELECT auth.uid())::text; $function$;
         REVOKE ALL ON FUNCTION public.unsafe() FROM PUBLIC;
         """
         errors, _, _ = audit_migration_sql(sql)
@@ -53,7 +153,7 @@ class SupabaseSecurityAuditTests(unittest.TestCase):
         sql = """
         CREATE FUNCTION public.guard() RETURNS integer
           LANGUAGE sql SECURITY DEFINER SET search_path = ''
-          AS $function$ SELECT 1; $function$;
+          AS $function$ SELECT CASE WHEN (SELECT auth.uid()) IS NULL THEN 0 ELSE 1 END; $function$;
         REVOKE ALL ON FUNCTION public.guard() FROM PUBLIC, anon;
         CREATE TABLE public.customer_data (id uuid PRIMARY KEY);
         ALTER TABLE public.customer_data ENABLE ROW LEVEL SECURITY;
@@ -66,7 +166,7 @@ class SupabaseSecurityAuditTests(unittest.TestCase):
         sql = """
         CREATE FUNCTION public.rpc_item_count() RETURNS integer
           LANGUAGE sql SECURITY DEFINER SET search_path = ''
-          AS $function$ SELECT 1; $function$;
+          AS $function$ SELECT CASE WHEN (SELECT auth.uid()) IS NULL THEN 0 ELSE 1 END; $function$;
         REVOKE ALL ON FUNCTION public.rpc_item_count() FROM PUBLIC, anon;
         CREATE TABLE public.rpc_only_items (id uuid PRIMARY KEY);
         ALTER TABLE public.rpc_only_items ENABLE ROW LEVEL SECURITY;
@@ -83,7 +183,7 @@ class SupabaseSecurityAuditTests(unittest.TestCase):
     def test_private_definer_must_revoke_authenticated(self):
         sql = """
         CREATE FUNCTION private.internal() RETURNS text LANGUAGE sql SECURITY DEFINER SET search_path = ''
-        AS $function$ SELECT 'ok'; $function$;
+        AS $function$ SELECT COALESCE((SELECT auth.uid())::text, ''); $function$;
         REVOKE ALL ON FUNCTION private.internal() FROM PUBLIC, anon;
         """
         errors, _, _ = audit_migration_sql(sql)

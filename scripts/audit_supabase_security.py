@@ -45,19 +45,86 @@ def compact(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
-def security_definer_headers(sql: str) -> list[tuple[str, str]]:
-    """Return (qualified function name, declaration header) for each definer function."""
-    found: list[tuple[str, str]] = []
+def security_definer_definitions(sql: str) -> list[tuple[str, str, str]]:
+    """Return (qualified name, declaration header, function body) for each definer."""
+    found: list[tuple[str, str, str]] = []
     for match in FUNCTION_RE.finditer(sql):
         tail = sql[match.start():]
         body_start = re.search(r"\bas\s+\$function\$", tail, re.IGNORECASE)
         if body_start is None:
             continue
         header = tail[:body_start.start()]
+        body_tail = tail[body_start.end():]
+        body_end = re.search(r"\$function\$\s*;", body_tail, re.IGNORECASE)
+        if body_end is None:
+            continue
         if re.search(r"\bsecurity\s+definer\b", header, re.IGNORECASE):
-            found.append((match.group(1).lower(), header))
+            found.append((match.group(1).lower(), header, body_tail[:body_end.start()]))
     return found
 
+
+def strip_sql_comments_and_literals(sql: str) -> str:
+    """Remove SQL dollar/single/double-quoted literals before stripping comments."""
+    without_dollar_quotes = re.sub(r"\$(\w*)\$[\s\S]*?\$\1\$", "", sql)
+    without_quoted_literals = re.sub(
+        r"\'(?:\'\'|[^\'])*\'|\"(?:\"\"|[^\"])*\"",
+        "",
+        without_dollar_quotes,
+    )
+    return re.sub(r"--[^\n]*|/\*[\s\S]*?\*/", "", without_quoted_literals)
+
+
+def body_references_auth_uid(body: str) -> bool:
+    """Require auth.uid() in SECURITY DEFINER bodies; comments/literals do not count."""
+    return bool(
+        re.search(
+            r"\bauth\s*\.\s*uid\s*\(\s*\)",
+            strip_sql_comments_and_literals(body),
+            re.IGNORECASE,
+        )
+    )
+
+
+def is_auth_user_delete_trigger(
+    sql: str,
+    function_name: str,
+    header: str,
+    body: str,
+) -> bool:
+    """Allow the one system trigger that uses OLD.id, not a request JWT identity."""
+    if function_name != "private.finalize_account_deletion_after_auth_delete":
+        return False
+    safe_header = strip_sql_comments_and_literals(header)
+    safe_body = strip_sql_comments_and_literals(body)
+    safe_sql = strip_sql_comments_and_literals(sql)
+    trigger_is_bound_to_auth_users = re.search(
+        r"\bcreate\s+trigger\s+[a-z_][a-z0-9_]*\s+"
+        r"after\s+delete\s+on\s+auth\.users\b"
+        r"[\s\S]*?\bexecute\s+function\s+"
+        r"private\.finalize_account_deletion_after_auth_delete\s*\(\s*\)\s*;",
+        safe_sql,
+        re.IGNORECASE,
+    )
+    return bool(
+        re.search(r"\breturns\s+trigger\b", safe_header, re.IGNORECASE)
+        and trigger_is_bound_to_auth_users
+        and re.search(r"\bOLD\s*\.\s*id\b", safe_body, re.IGNORECASE)
+        and re.search(
+            r"\bfrom\s+private\.account_deletion_queue\b",
+            safe_body,
+            re.IGNORECASE,
+        )
+        and re.search(
+            r"\bdelete\s+from\s+private\.account_deletion_queue\b",
+            safe_body,
+            re.IGNORECASE,
+        )
+        and re.search(
+            r"\bwhere\s+q\.user_id\s*=\s*OLD\s*\.\s*id\b",
+            safe_body,
+            re.IGNORECASE,
+        )
+    )
 
 def revoked_roles(sql: str, function_name: str) -> set[str]:
     roles: set[str] = set()
@@ -210,13 +277,20 @@ def public_table_grants_to_untrusted_roles(sql: str) -> list[tuple[str, str]]:
 
 def audit_migration_sql(sql: str) -> tuple[list[str], int, int]:
     errors: list[str] = []
-    definitions = security_definer_headers(sql)
+    definitions = security_definer_definitions(sql)
     if not definitions:
         errors.append("Não foi encontrada nenhuma declaração SECURITY DEFINER; confirma se as migrações foram carregadas.")
-    for name, header in definitions:
+    for name, header, body in definitions:
         if not re.search(r"\bset\s+search_path\s*(?:=|to)\s*''", header, re.IGNORECASE):
             errors.append(f"{name}: SECURITY DEFINER sem SET search_path = ''.")
-
+        if not body_references_auth_uid(body) and not is_auth_user_delete_trigger(
+            sql, name, header, body
+        ):
+            errors.append(
+                f"{name}: SECURITY DEFINER sem referência a auth.uid() no corpo; "
+                "exige verificação da identidade autenticada e do respetivo âmbito, "
+                "ou uma exceção de trigger explicitamente validada."
+            )
         revoked = revoked_roles(sql, name)
         # This one private membership helper must be executable by authenticated
         # because the app's RLS policies invoke it. Permit this narrow exception
