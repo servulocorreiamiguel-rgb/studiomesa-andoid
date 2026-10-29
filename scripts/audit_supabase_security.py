@@ -63,11 +63,62 @@ def security_definer_definitions(sql: str) -> list[tuple[str, str, str]]:
     return found
 
 
+def strip_sql_comments_and_literals(sql: str) -> str:
+    """Remove SQL line/block comments and quoted literals before safety checks."""
+    without_comments = re.sub(r"--[^\n]*|/\*[\s\S]*?\*/", "", sql)
+    return re.sub(r"\'(?:\'\'|[^\'])*\'|\"(?:\"\"|[^\"])*\"", "", without_comments)
+
+
 def body_references_auth_uid(body: str) -> bool:
-    """Require auth.uid() in SECURITY DEFINER bodies; SQL comments do not count."""
-    without_comments = re.sub(r"--[^\n]*|/\*[\s\S]*?\*/", "", body)
-    without_literals = re.sub(r"\'(?:\'\'|[^\'])*\'|\"(?:\"\"|[^\"])*\"", "", without_comments)
-    return bool(re.search(r"\bauth\s*\.\s*uid\s*\(\s*\)", without_literals, re.IGNORECASE))
+    """Require auth.uid() in SECURITY DEFINER bodies; comments/literals do not count."""
+    return bool(
+        re.search(
+            r"\bauth\s*\.\s*uid\s*\(\s*\)",
+            strip_sql_comments_and_literals(body),
+            re.IGNORECASE,
+        )
+    )
+
+
+def is_auth_user_delete_trigger(
+    sql: str,
+    function_name: str,
+    header: str,
+    body: str,
+) -> bool:
+    """Allow the one system trigger that uses OLD.id, not a request JWT identity."""
+    if function_name != "private.finalize_account_deletion_after_auth_delete":
+        return False
+    safe_header = strip_sql_comments_and_literals(header)
+    safe_body = strip_sql_comments_and_literals(body)
+    trigger_is_bound_to_auth_users = re.search(
+        r"\bcreate\s+trigger\s+[a-z_][a-z0-9_]*\s+"
+        r"after\s+delete\s+on\s+auth\.users\b"
+        r"[\s\S]*?\bexecute\s+function\s+"
+        r"private\.finalize_account_deletion_after_auth_delete\s*\(\s*\)\s*;",
+        sql,
+        re.IGNORECASE,
+    )
+    return bool(
+        re.search(r"\breturns\s+trigger\b", safe_header, re.IGNORECASE)
+        and trigger_is_bound_to_auth_users
+        and re.search(r"\bOLD\s*\.\s*id\b", safe_body, re.IGNORECASE)
+        and re.search(
+            r"\bfrom\s+private\.account_deletion_queue\b",
+            safe_body,
+            re.IGNORECASE,
+        )
+        and re.search(
+            r"\bdelete\s+from\s+private\.account_deletion_queue\b",
+            safe_body,
+            re.IGNORECASE,
+        )
+        and re.search(
+            r"\bwhere\s+q\.user_id\s*=\s*OLD\s*\.\s*id\b",
+            safe_body,
+            re.IGNORECASE,
+        )
+    )
 
 def revoked_roles(sql: str, function_name: str) -> set[str]:
     roles: set[str] = set()
@@ -226,10 +277,13 @@ def audit_migration_sql(sql: str) -> tuple[list[str], int, int]:
     for name, header, body in definitions:
         if not re.search(r"\bset\s+search_path\s*(?:=|to)\s*''", header, re.IGNORECASE):
             errors.append(f"{name}: SECURITY DEFINER sem SET search_path = ''.")
-        if not body_references_auth_uid(body):
+        if not body_references_auth_uid(body) and not is_auth_user_delete_trigger(
+            sql, name, header, body
+        ):
             errors.append(
                 f"{name}: SECURITY DEFINER sem referência a auth.uid() no corpo; "
-                "exige verificação da identidade autenticada e do respetivo âmbito."
+                "exige verificação da identidade autenticada e do respetivo âmbito, "
+                "ou uma exceção de trigger explicitamente validada."
             )
         revoked = revoked_roles(sql, name)
         # This one private membership helper must be executable by authenticated
