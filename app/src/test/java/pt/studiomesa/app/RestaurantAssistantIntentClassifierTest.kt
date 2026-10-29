@@ -269,6 +269,10 @@ class RestaurantAssistantIntentClassifierTest {
         assertTrue(RestaurantAssistantIntentClassifier.requestsDatedSales(historicSalesWithAdvice))
         assertTrue(RestaurantAssistantIntentClassifier.requestsDatedMenuPerformance(historicSalesWithAdvice))
 
+        val historicAnalysisWithAdvice = "Analisa as vendas em março e sugere como melhorar."
+        assertTrue(RestaurantAssistantIntentClassifier.requestsDatedSales(historicAnalysisWithAdvice))
+        assertTrue(RestaurantAssistantIntentClassifier.requestsDatedMenuPerformance(historicAnalysisWithAdvice))
+
         // Purely forward-looking advice must not be mistaken for an actual historical metric.
         assertTrue(!RestaurantAssistantIntentClassifier.requestsDatedSales(
             "Como posso aumentar as vendas no próximo domingo?"
