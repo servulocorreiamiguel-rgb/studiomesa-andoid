@@ -44,11 +44,11 @@ class SalesAnalysisCalculatorTest {
     fun rollingWindowsAndThisMonthHaveExplicitCalendarBoundaries() {
         val now = instant(2026, Calendar.OCTOBER, 29, 12)
         assertEquals(instant(2026, Calendar.OCTOBER, 23),
-            SalesAnalysisCalculator.startInclusiveMillis(SalesAnalysisPeriod.LAST_7_DAYS, now, zone))
+            (SalesAnalysisCalculator.startInclusiveMillis(SalesAnalysisPeriod.LAST_7_DAYS, now, zone) ?: -1L))
         assertEquals(instant(2026, Calendar.SEPTEMBER, 30),
-            SalesAnalysisCalculator.startInclusiveMillis(SalesAnalysisPeriod.LAST_30_DAYS, now, zone))
+            (SalesAnalysisCalculator.startInclusiveMillis(SalesAnalysisPeriod.LAST_30_DAYS, now, zone) ?: -1L))
         assertEquals(instant(2026, Calendar.OCTOBER, 1),
-            SalesAnalysisCalculator.startInclusiveMillis(SalesAnalysisPeriod.THIS_MONTH, now, zone))
+            (SalesAnalysisCalculator.startInclusiveMillis(SalesAnalysisPeriod.THIS_MONTH, now, zone) ?: -1L))
         assertNull(SalesAnalysisCalculator.startInclusiveMillis(SalesAnalysisPeriod.ALL_TIME, now, zone))
         assertTrue(SalesAnalysisCalculator.includes(
             SalesAnalysisPeriod.LAST_7_DAYS,
