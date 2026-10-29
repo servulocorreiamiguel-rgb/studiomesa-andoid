@@ -1,6 +1,3 @@
-const PROJECT_URL = "https://svwvkfsyevuyabelrtjk.supabase.co";
-const PUBLISHABLE_KEY = "sb_publishable_ioJIukpwd0_Fyajd41QL_Q_M6WKE0UH";
-
 const PAGE = `<!doctype html>
 <html lang="pt-PT">
 <head>
@@ -40,11 +37,11 @@ button:disabled{opacity:.55;cursor:wait}button.danger{background:var(--danger)}[
 <section><p id="status" role="status" aria-live="polite">Nenhuma eliminação foi solicitada.</p><p class="small">A tua conta só é eliminada depois de confirmares a ação e o servidor validar a sessão e as permissões. Não introduzas aqui a palavra-passe; usa apenas a ligação enviada ao teu email.</p></section>
 <footer style="margin:22px 4px;font-size:.9rem;color:#657168">StudioMesa · Gestão de restaurante. A política de privacidade pública tem de estar disponível antes da publicação comercial.</footer>
 </main>
-<script type="module">
+<script nonce="__STUDIOMESA_CSP_NONCE__" type="module">
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/+esm";
 const projectUrl = "https://svwvkfsyevuyabelrtjk.supabase.co";
 const publishableKey = "sb_publishable_ioJIukpwd0_Fyajd41QL_Q_M6WKE0UH";
-const supabase = createClient(projectUrl,publishableKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,flowType:"implicit"}});
+const supabase = createClient(projectUrl,publishableKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,flowType:"pkce"}});
 const emailForm=document.querySelector("#email-form"),sendButton=document.querySelector("#send-link"),signedInPanel=document.querySelector("#signed-in"),accountLabel=document.querySelector("#account-label"),deleteForm=document.querySelector("#delete-form"),deleteButton=document.querySelector("#delete-button"),statusEl=document.querySelector("#status");
 let currentSession=null,deletionSubmitted=false;
 function showStatus(message,error=false){statusEl.textContent=message;statusEl.classList.toggle("error",error)}
@@ -78,9 +75,44 @@ const {data}=await supabase.auth.getSession();if(data.session)showSession(data.s
 </script>
 </body></html>`;
 
-Deno.serve((req:Request)=>{
- if(req.method!=="GET")return Response.json({message:"Método não permitido."},{status:405});
- return new Response(PAGE,{status:200,headers:{
-  "Content-Type":"text/html; charset=utf-8","Cache-Control":"no-store, max-age=0","X-Content-Type-Options":"nosniff","Referrer-Policy":"no-referrer","X-Frame-Options":"DENY","Permissions-Policy":"camera=(), microphone=(), geolocation=()"
- }});
+Deno.serve((req: Request) => {
+ if (req.method !== "GET") {
+  return Response.json({ message: "Método não permitido." }, {
+   status: 405,
+   headers: {
+    "Cache-Control": "no-store, max-age=0",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+    "X-Frame-Options": "DENY",
+   },
+  });
+ }
+
+ const nonceBytes = crypto.getRandomValues(new Uint8Array(18));
+ const nonce = btoa(String.fromCharCode(...nonceBytes));
+ const page = PAGE.replace("__STUDIOMESA_CSP_NONCE__", nonce);
+ const contentSecurityPolicy = [
+  "default-src 'none'",
+  "base-uri 'none'",
+  "connect-src https://svwvkfsyevuyabelrtjk.supabase.co",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+  "img-src 'self' data:",
+  "object-src 'none'",
+  `script-src 'nonce-${nonce}' https://cdn.jsdelivr.net`,
+  "style-src 'unsafe-inline'",
+ ].join("; ");
+
+ return new Response(page, {
+  status: 200,
+  headers: {
+   "Content-Type": "text/html; charset=utf-8",
+   "Cache-Control": "no-store, max-age=0",
+   "Content-Security-Policy": contentSecurityPolicy,
+   "X-Content-Type-Options": "nosniff",
+   "Referrer-Policy": "no-referrer",
+   "X-Frame-Options": "DENY",
+   "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+  },
+ });
 });
