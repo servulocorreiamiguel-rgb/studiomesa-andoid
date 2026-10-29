@@ -113,16 +113,16 @@ Regra para cada nova migração que crie uma tabela em `public`:
 
 Não aplicar um `GRANT` amplo para `anon` como solução rápida. Os privilégios da tabela controlam se o papel pode aceder ao objeto; o RLS controla as linhas que esse papel pode ver ou alterar. Ambos são necessários.
 
-**Estado observado no projeto alojado em 29/10/2026:** as 11 tabelas de `public` têm RLS ativo; não foi encontrado acesso direto de tabela para `anon`; as tabelas existentes continuam acessíveis com os privilégios atuais. A consulta de privilégios por omissão ainda mostrou permissões amplas para objetos novos antes da data de aplicação da mudança. Não alterámos essas permissões no projeto de produção. Antes de qualquer futura alteração aos privilégios por omissão, deve ser testada uma migração completa, porque revogar EXECUTE por omissão pode afetar funções que as políticas RLS utilizam.
+**Estado observado no projeto alojado em 29/10/2026:** a migração `20261029133656_revoke_postgres_default_public_privileges.sql` já foi aplicada ao projeto ativo. Uma consulta posterior confirmou que as predefinições para novos objetos em `public` não concedem privilégios a `anon`, `authenticated` ou `service_role`, nem execução a `PUBLIC`. As 11 tabelas públicas existentes têm RLS e pelo menos uma política cada; a migração alterou apenas os privilégios predefinidos para objetos futuros, não os dados nem as concessões dos objetos existentes. O workflow de CI reproduz as 40 migrações numa base de dados descartável e testa, criando objetos temporários, que novas tabelas, sequências e funções não recebem permissões API por omissão. A comparação integral de todas as definições do esquema alojado com o esquema recriado continua a exigir uma revisão separada.
 
 
 A verificação da compilação, por si só, não certifica que a aplicação esteja pronta para operação comercial.
 
 
-## Auditoria do projeto alojado — 28/10/2026
+## Auditoria do projeto alojado — histórico de 28/10 e atualização de 29/10/2026
 
-Foi feita uma auditoria de leitura à base Supabase, registada em [`PRODUCTION-READINESS-2026-10-28.md`](PRODUCTION-READINESS-2026-10-28.md). Não foram alterados dados, permissões, migrações, utilizadores ou definições de Auth.
+O relatório [`PRODUCTION-READINESS-2026-10-28.md`](PRODUCTION-READINESS-2026-10-28.md) regista a auditoria de leitura realizada a 28/10, quando ainda não tinha sido alterada a configuração de privilégios por omissão. A 29/10 foi aplicada a migração `20261029133656_revoke_postgres_default_public_privileges.sql` e as predefinições foram verificadas novamente; lê o estado atualizado acima e em `PRODUCT-READINESS-CHECKLIST.md`. O relatório datado de 28/10 é um registo histórico e não deve ser usado isoladamente como estado atual.
 
-A auditoria confirmou RLS em todas as 11 tabelas públicas, políticas presentes, ausência de execução de funções `SECURITY DEFINER` pelo papel `anon` e `search_path` vazio nas funções auditadas. O Security Advisor mantém, no entanto, a proteção contra palavras-passe comprometidas desativada e avisa sobre funções privilegiadas chamadas por utilizadores autenticados. A organização está no plano Free; a verificação de palavras-passe comprometidas requer Pro ou superior segundo a [documentação Supabase](https://supabase.com/docs/guides/auth/password-security).
+A organização continua no plano Free. A proteção contra palavras-passe comprometidas permanece desativada e requer Pro ou superior segundo a [documentação oficial de segurança de palavras-passe](https://supabase.com/docs/guides/auth/password-security). O aviso de funções privilegiadas chamadas por utilizadores autenticados continua a exigir revisão individual e testes de autorização.
 
-Estes resultados não substituem os testes de autenticação ponta a ponta, os testes com contas separadas de diferentes restaurantes, a revisão independente das RPCs privilegiadas nem os testes em dispositivos físicos. Consulta o relatório antes de executar a preparação comercial.
+Estes resultados não substituem os testes de autenticação ponta a ponta, os testes com contas separadas de diferentes restaurantes, a revisão independente das RPCs privilegiadas nem os testes em dispositivos físicos.
