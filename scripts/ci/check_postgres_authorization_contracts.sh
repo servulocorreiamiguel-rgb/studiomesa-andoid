@@ -96,6 +96,7 @@ BEGIN
     RAISE EXCEPTION 'New public functions inherited unexpected API-role or PUBLIC EXECUTE privileges.';
   END IF;
 END;
+$check$;
 
 DROP FUNCTION public.__studiomesa_default_privilege_probe_fn();
 DROP SEQUENCE public.__studiomesa_default_privilege_probe_seq;
