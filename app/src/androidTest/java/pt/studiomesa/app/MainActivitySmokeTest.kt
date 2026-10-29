@@ -473,14 +473,14 @@ class MainActivitySmokeTest {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
             onView(withContentDescription("Abrir secção Análise")).perform(scrollTo(), click())
 
-            onView(withText("Período da análise: Todo o histórico"))
+            onView(withText("Período da análise: Todo o histórico carregado"))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
             onView(withText("Pedidos concluídos no período"))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
 
-            onView(withText("Período da análise: Todo o histórico"))
+            onView(withText("Período da análise: Todo o histórico carregado"))
                 .perform(scrollTo(), click())
             onView(withText("Últimos 7 dias")).perform(click())
 
