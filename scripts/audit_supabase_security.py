@@ -96,12 +96,13 @@ def is_auth_user_delete_trigger(
         return False
     safe_header = strip_sql_comments_and_literals(header)
     safe_body = strip_sql_comments_and_literals(body)
+    safe_sql = strip_sql_comments_and_literals(sql)
     trigger_is_bound_to_auth_users = re.search(
         r"\bcreate\s+trigger\s+[a-z_][a-z0-9_]*\s+"
         r"after\s+delete\s+on\s+auth\.users\b"
         r"[\s\S]*?\bexecute\s+function\s+"
         r"private\.finalize_account_deletion_after_auth_delete\s*\(\s*\)\s*;",
-        sql,
+        safe_sql,
         re.IGNORECASE,
     )
     return bool(
