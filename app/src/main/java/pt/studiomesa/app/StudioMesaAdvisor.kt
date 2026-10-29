@@ -455,6 +455,18 @@ internal object StudioMesaAdvisor {
             )
         }
 
+        if (containsAny(q, "quanto me custou") ||
+            (containsAny(q, "quanto me custa") && findMenuItemCandidates(rawQuestion, snapshot.menuItems).isNotEmpty())) {
+            val candidates = findMenuItemCandidates(rawQuestion, snapshot.menuItems)
+            if (candidates.size > 1) return clarificationForMenuItems(candidates, "consultar o custo registado")
+            if (candidates.size == 1) return answerRegisteredItemCost(rawQuestion, snapshot)
+            return StudioMesaAssistantAnswer(
+                "Custo do artigo não identificado",
+                "Indica o nome exato de um artigo da Carta. Posso consultar o custo interno agregado atualmente registado ou ajudar a calcular uma receita com os ingredientes que introduzires; não tenho um histórico de custos de compra e não vou inventar um valor.",
+                "Carta"
+            )
+        }
+
         if (containsAny(q, "ponto de equilibrio", "break even") &&
             containsAny(q, "tesouraria", "fluxo de caixa", "cash flow", "cashflow")) {
             return StudioMesaAssistantAnswer(
