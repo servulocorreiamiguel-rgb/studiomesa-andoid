@@ -4131,13 +4131,31 @@ class MainActivity : Activity() {
         }
         val summary = SalesAnalysisCalculator.summarize(orders, selectedAnalysisPeriod)
 
-        val menu = if (remoteMode) remoteMenuItems().let { items ->
-            (0 until items.length()).mapNotNull { items.optJSONObject(it) }
-        } else store.getMenu()
-        val ratios = menu.mapNotNull { item ->
-            val price = if (item is JSONObject) item.optDouble("price", Double.NaN) else (item as MenuEntry).price
-            val cost = if (item is JSONObject) item.optDouble("cost", Double.NaN) else (item as MenuEntry).cost
-            if (price.isFinite() && cost.isFinite() && price > 0.0 && cost >= 0.0) cost / price * 100.0 else null
+        val menuSize: Int
+        val ratios: List<Double>
+        if (remoteMode) {
+            val remoteMenu = remoteMenuItems()
+            menuSize = remoteMenu.length()
+            ratios = (0 until remoteMenu.length()).mapNotNull { index ->
+                val item = remoteMenu.optJSONObject(index) ?: return@mapNotNull null
+                val price = item.optDouble("price", Double.NaN)
+                val cost = item.optDouble("cost", Double.NaN)
+                if (price.isFinite() && cost.isFinite() && price > 0.0 && cost >= 0.0) {
+                    cost / price * 100.0
+                } else {
+                    null
+                }
+            }
+        } else {
+            val localMenu = store.getMenu()
+            menuSize = localMenu.size
+            ratios = localMenu.mapNotNull { item ->
+                if (item.price.isFinite() && item.cost.isFinite() && item.price > 0.0 && item.cost >= 0.0) {
+                    item.cost / item.price * 100.0
+                } else {
+                    null
+                }
+            }
         }
         val avgCostRatio = ratios.average()
 
@@ -4161,7 +4179,7 @@ class MainActivity : Activity() {
         addDivider(metrics)
         addMetric(metrics, "Valor nominal dos pedidos concluídos no período", money(summary.nominalCompletedValue))
         addDivider(metrics)
-        addMetric(metrics, "Artigos ativos na carta", menu.size.toString())
+        addMetric(metrics, "Artigos ativos na carta", menuSize.toString())
         addDivider(metrics, "Rácio de custo atual da carta / preço",
             if (avgCostRatio.isNaN()) "Sem dados" else String.format(Locale("pt", "PT"), "%.1f%%", avgCostRatio))
         container.addView(metrics, cardParams())
