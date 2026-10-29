@@ -102,7 +102,7 @@ A página foi verificada por carregamento HTTP público, mas **o percurso comple
 
 ## Migrações futuras e exposição da Data API (verificado em 29/10/2026)
 
-A Supabase anunciou que, a partir de **30/10/2026**, novos objetos públicos deixam de receber automaticamente as permissões usadas pela Data API. As tabelas existentes mantêm as permissões atuais; o risco principal é uma migração futura criar uma tabela sem os privilégios necessários e a API REST passar a responder com erro de permissões. Referências oficiais: [alteração de plataforma](https://supabase.com/changelog/45329-breaking-change-tables-not-exposed-to-data-and-graphql-api-automatically) e [proteção da Data API](https://supabase.com/docs/guides/api/securing-your-api).
+A Supabase anunciou que, a partir de **30/10/2026**, novas tabelas em `public` deixam de receber automaticamente os privilégios para `anon`, `authenticated` e `service_role` que permitem exposição pela Data API. As tabelas existentes mantêm os privilégios atuais; o risco principal é uma migração futura criar uma tabela sem os `GRANT`s necessários e a API REST responder com erro de permissões. As funções exigem uma revisão separada: o PostgreSQL pode conceder `EXECUTE` a `PUBLIC` por omissão, pelo que as migrações devem continuar a revogar esse acesso e conceder apenas aos papéis necessários. Referências oficiais: [alteração de plataforma](https://supabase.com/changelog/45329-breaking-change-tables-not-exposed-to-data-and-graphql-api-automatically) e [proteção da Data API](https://supabase.com/docs/guides/api/securing-your-api).
 
 Regra para cada nova migração que crie uma tabela em `public`:
 
