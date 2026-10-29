@@ -23,7 +23,7 @@ button:disabled{opacity:.55;cursor:wait}button.danger{background:var(--danger)}[
 <body><main>
 <header><h1>StudioMesa</h1><p>Pedido de eliminação de conta e dados associados</p></header>
 <section><h2>1. Confirmar que controlas a conta</h2>
-<p>Introduz o email da conta StudioMesa. Enviaremos uma ligação de autenticação única. Abre-a no mesmo navegador para continuar. Por segurança, esta página não confirma se um email está registado.</p>
+<p>Introduz o email da conta StudioMesa. Se o pedido puder ser processado, enviaremos uma ligação de autenticação única. Abre-a no mesmo navegador para continuar. A mensagem apresentada não confirma que uma ligação foi enviada.</p>
 <form id="email-form"><label for="email">Email da conta</label><input id="email" name="email" type="email" autocomplete="email" required maxlength="254"><button id="send-link" type="submit">Enviar ligação segura</button></form>
 </section>
 <section id="signed-in" hidden><h2>2. Escolher o âmbito da eliminação</h2><p id="account-label"></p>
@@ -47,10 +47,11 @@ let currentSession=null,deletionSubmitted=false;
 function showStatus(message,error=false){statusEl.textContent=message;statusEl.classList.toggle("error",error)}
 function showSession(session){currentSession=session;if(!session?.access_token||!session?.user?.email||deletionSubmitted)return;emailForm.hidden=true;signedInPanel.hidden=false;accountLabel.textContent="Sessão autenticada para "+session.user.email+".";showStatus("Sessão confirmada. Revê cuidadosamente o âmbito antes de continuares")}
 const redirectUrl=window.location.origin+window.location.pathname;
+const linkRequestResultMessage="Se o endereço corresponder a uma conta elegível e o serviço de email estiver disponível, receberás uma ligação segura. Abre-a no mesmo navegador para continuar. Se não receberes uma ligação, tenta mais tarde."
 emailForm.addEventListener("submit",async event=>{
  event.preventDefault();sendButton.disabled=true;showStatus("A pedir uma ligação segura…");
- try{const email=document.querySelector("#email").value.trim();const {error}=await supabase.auth.signInWithOtp({email,options:{shouldCreateUser:false,emailRedirectTo:redirectUrl}});if(error)throw error;showStatus("Se a conta puder iniciar sessão por este método, receberás uma ligação no email indicado. Abre-a no mesmo navegador para continuar.")}
- catch{showStatus("Não foi possível enviar a ligação. Confirma o endereço e tenta mais tarde. A configuração de redirecionamentos de autenticação pode precisar de atenção.",true)}
+ try{const email=document.querySelector("#email").value.trim();const {error}=await supabase.auth.signInWithOtp({email,options:{shouldCreateUser:false,emailRedirectTo:redirectUrl}});if(error)throw error;showStatus(linkRequestResultMessage)}
+ catch{showStatus(linkRequestResultMessage)}
  finally{sendButton.disabled=false}
 });
 deleteForm.addEventListener("submit",async event=>{
