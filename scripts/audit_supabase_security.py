@@ -173,6 +173,41 @@ def tables_with_explicit_privilege_statements(sql: str) -> set[str]:
     return referenced
 
 
+def public_table_grants_to_untrusted_roles(sql: str) -> list[tuple[str, str]]:
+    """Find public-table GRANT statements that expose table privileges to anon/PUBLIC."""
+    findings: list[tuple[str, str]] = []
+    for match in re.finditer(r"\bgrant\b[^;]*;", sql, re.IGNORECASE):
+        statement = match.group(0)
+        if re.search(r"\bon\s+function\b", statement, re.IGNORECASE):
+            continue
+        object_match = re.search(
+            r"\bon\s+(?:table\s+)?([\s\S]*?)\s+to\b([\s\S]*?);$",
+            statement,
+            re.IGNORECASE,
+        )
+        if object_match is None:
+            continue
+        objects = object_match.group(1)
+        recipients = object_match.group(2)
+        if not re.search(r"\b(?:public|anon)\b", recipients, re.IGNORECASE):
+            continue
+        table_names = {
+            name.lower()
+            for name in re.findall(
+                r"\bpublic\.[a-z_][a-z0-9_]*\b", objects, re.IGNORECASE
+            )
+        }
+        if not table_names and re.search(
+            r"\ball\s+tables\s+in\s+schema\s+public\b",
+            objects,
+            re.IGNORECASE,
+        ):
+            table_names.add("public.*")
+        for table_name in sorted(table_names):
+            findings.append((table_name, recipients.strip()))
+    return findings
+
+
 def audit_migration_sql(sql: str) -> tuple[list[str], int, int]:
     errors: list[str] = []
     definitions = security_definer_headers(sql)
@@ -222,6 +257,11 @@ def audit_migration_sql(sql: str) -> tuple[list[str], int, int]:
         errors.append(
             f"{table_name}: falta GRANT/REVOKE explícito de privilégios na tabela; "
             "não dependas dos privilégios por omissão da Data API."
+        )
+    for table_name, recipients in public_table_grants_to_untrusted_roles(sql):
+        errors.append(
+            f"{table_name}: GRANT de privilégios de tabela para PUBLIC/anon ({recipients}); "
+            "confirma e justifica explicitamente qualquer exposição direta."
         )
 
     return errors, len(definitions), len(table_names)
