@@ -1,4 +1,4 @@
-import { withSupabase } from "npm:@supabase/server";
+import { withSupabase } from "npm:@supabase/server@1.9.2";
 
 /**
  * Deletes only the account represented by the verified user session.
