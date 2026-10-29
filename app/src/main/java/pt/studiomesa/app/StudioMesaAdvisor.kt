@@ -218,11 +218,10 @@ internal object StudioMesaAdvisor {
 
     private fun answerMenuEngineering(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
         val q = normalizeLookupText(rawQuestion)
-        if (containsAny(q, "ontem", "hoje", "esta semana", "nesta semana", "semana passada", "mes passado", "no mes passado", "ultimos 7 dias") &&
-            containsAny(q, "vendas", "vendido", "vendeu", "faturacao", "receita")) {
+        if (RestaurantAssistantIntentClassifier.requestsDatedMenuPerformance(rawQuestion)) {
             return StudioMesaAssistantAnswer(
-                "Período de vendas não confirmado",
-                "Os dados de vendas disponíveis nesta análise não incluem um filtro temporal fiável para o período pedido. Não vou apresentar vendas de outros dias como se fossem de hoje ou de ontem. Abre a vista de vendas e seleciona o período pretendido antes de comparar artigos.",
+                "Período de desempenho não confirmado",
+                "Os dados disponíveis nesta análise não incluem um filtro temporal fiável para vendas, popularidade, preços, custos ou margens por período. Não vou apresentar valores atuais ou acumulados como se pertencessem ao intervalo indicado. A página Análise mostra totais gerais e ainda não permite filtrar estes dados por período; confirma os registos datados e os custos/preços históricos antes de comparar artigos.",
                 "Pedidos"
             )
         }
@@ -432,11 +431,26 @@ internal object StudioMesaAdvisor {
 
     private fun answerEconomicQuestion(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
         val q = normalizeLookupText(rawQuestion)
-        if (containsAny(q, "hoje", "ontem", "esta semana", "nesta semana", "semana passada", "mes passado", "ultimos 7 dias") &&
-            containsAny(q, "vendas", "vendido", "vendemos", "vendeu", "faturacao", "faturamos", "receita")) {
+        val isDedicatedMonthlyProfitEstimate = containsAny(
+            q,
+            "quanto lucro tive este mes",
+            "quanto foi o lucro este mes",
+            "qual foi o lucro este mes",
+            "lucro deste mes"
+        )
+        if (RestaurantAssistantIntentClassifier.requestsDatedMenuPerformance(rawQuestion) &&
+            !RestaurantAssistantIntentClassifier.requestsDatedSales(rawQuestion) &&
+            !isDedicatedMonthlyProfitEstimate) {
+            return StudioMesaAssistantAnswer(
+                "Período de desempenho não confirmado",
+                "Não tenho um filtro temporal fiável para consultar vendas, preços, custos, despesas, lucro ou margens históricas do intervalo pedido. Os valores de custo/preço carregados representam os valores atuais e não provam os valores históricos desse período. A página Análise mostra totais gerais sem filtro temporal; confirma os registos históricos antes de tomar decisões.",
+                "Pedidos"
+            )
+        }
+        if (RestaurantAssistantIntentClassifier.requestsDatedSales(rawQuestion)) {
             return StudioMesaAssistantAnswer(
                 "Período de vendas não confirmado",
-                "Os dados disponíveis nesta análise não incluem um filtro temporal fiável para o período pedido. Não vou apresentar totais de outros dias como se fossem de hoje ou desta semana. Abre a vista de vendas e seleciona o período pretendido antes de comparar resultados.",
+                "Os dados disponíveis nesta análise não incluem um filtro temporal fiável para o período pedido. Não vou apresentar totais de outros dias, semanas ou meses como se pertencessem ao intervalo indicado. A página Análise mostra totais gerais e ainda não tem filtro temporal; confirma os registos de vendas datados antes de comparar resultados.",
                 "Pedidos"
             )
         }
@@ -564,7 +578,13 @@ internal object StudioMesaAdvisor {
                 "Assistente"
             )
         }
-        if (containsAny(q, "previsao financeira", "prever vendas", "vendas da proxima semana", "faturacao esta semana", "faturacao diaria", "como esta a faturacao", "previsao de vendas")) {
+        if (containsAny(q,
+                "previsao financeira", "prever vendas", "vendas da proxima semana",
+                "faturacao esta semana", "faturacao diaria", "como esta a faturacao",
+                "previsao de vendas", "quanto vou vender", "quanto vamos vender",
+                "quanto venderei", "quanto venderemos", "vendas previstas",
+                "estimativa de vendas", "projecao de vendas",
+                "estimativa da faturacao", "projecao da faturacao")) {
             return StudioMesaAssistantAnswer(
                 "Referência simples de vendas",
                 "Ativa o Gestor económico e introduz pelo menos quatro vendas líquidas semanais comparáveis, da mais antiga para a mais recente. A referência calculada é a média das últimas quatro semanas, não um modelo que conhece sazonalidade, eventos, meteorologia ou tendências. Confirma que os períodos são comparáveis antes de a usar num orçamento.",

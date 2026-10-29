@@ -171,6 +171,63 @@ class RestaurantAssistantIntentClassifierTest {
         }
     }
 
+    @Test fun identifiesDatedSalesAcrossDaysWeeksMonthsAndYears() {
+        val datedQuestions = listOf(
+            "Quanto vendi no domingo passado?",
+            "Quanto vendi ontem?",
+            "Qual foi a faturação nos últimos 30 dias?",
+            "Qual foi a faturação nos últimos seis meses?",
+            "Quanto vendemos em março?",
+            "Quais pratos venderam mais na semana passada?"
+        )
+        datedQuestions.forEach { question ->
+            assertTrue("$question should be recognized as a dated sales question",
+                RestaurantAssistantIntentClassifier.requestsDatedSales(question))
+        }
+        assertTrue(RestaurantAssistantIntentClassifier.requestsDatedSales("Quanto foi a receita em 2025?"))
+        assertTrue(!RestaurantAssistantIntentClassifier.requestsDatedSales("Como posso aumentar as vendas?"))
+        assertTrue(!RestaurantAssistantIntentClassifier.requestsDatedSales("Como posso aumentar as vendas no próximo domingo?"))
+        assertTrue(!RestaurantAssistantIntentClassifier.requestsDatedMenuPerformance("Como posso reduzir custos esta semana?"))
+        assertTrue(!RestaurantAssistantIntentClassifier.requestsDatedSales("Previsão de vendas para amanhã"))
+        assertTrue(!RestaurantAssistantIntentClassifier.requestsDatedSales("Quanto vou vender na próxima semana?"))
+        assertTrue(!RestaurantAssistantIntentClassifier.requestsDatedMenuPerformance("Previsão de vendas da próxima semana"))
+        assertEquals(
+            RestaurantAssistantIntent.ECONOMIC_MANAGER,
+            RestaurantAssistantIntentClassifier.classify("Previsão de vendas para amanhã").intent
+        )
+        assertEquals(
+            RestaurantAssistantIntent.ECONOMIC_MANAGER,
+            RestaurantAssistantIntentClassifier.classify("Quanto vou vender na próxima semana?").intent
+        )
+        assertEquals(
+            RestaurantAssistantIntent.MENU_ENGINEERING,
+            RestaurantAssistantIntentClassifier.classify("Como posso aumentar as vendas no próximo domingo?").intent
+        )
+    }
+
+    @Test fun routesDatedSpecificDishSalesToMenuEngineeringWithoutGuessingThePeriod() {
+        val cases = listOf(
+            "Quanto vendi no domingo passado?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,
+            "Qual foi a faturação nos últimos 30 dias?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,
+            "Quais pratos venderam mais no domingo passado?" to RestaurantAssistantIntent.MENU_ENGINEERING,
+            "Quais foram os artigos mais vendidos no último mês?" to RestaurantAssistantIntent.MENU_ENGINEERING,
+            "Que artigos venderam mais em março?" to RestaurantAssistantIntent.MENU_ENGINEERING,
+            "Quais pratos foram mais rentáveis no mês passado?" to RestaurantAssistantIntent.MENU_ENGINEERING,
+            "Quais pratos foram mais rentáveis do mês de setembro?" to RestaurantAssistantIntent.MENU_ENGINEERING,
+            "Quais artigos tiveram a margem mais alta na semana passada?" to RestaurantAssistantIntent.MENU_ENGINEERING,
+            "Qual foi a margem média em março?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,
+            "Qual era o preço do Bitoque no mês passado?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,
+            "Quanto gastei em salários este mês?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,
+            "Quanto gastei em setembro?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,
+            "Quanto paguei em março?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,
+            "Qual foi o lucro em março?" to RestaurantAssistantIntent.ECONOMIC_MANAGER
+        )
+        cases.forEach { (question, expected) ->
+            assertEquals("$question -> ${RestaurantAssistantIntentClassifier.classify(question)}",
+                expected, RestaurantAssistantIntentClassifier.classify(question).intent)
+        }
+    }
+
     @Test fun routesDatedSalesPromotionsEnergyAndDishProfitQuestions() {
         val cases = listOf(
             "Quanto vendemos hoje?" to RestaurantAssistantIntent.ECONOMIC_MANAGER,

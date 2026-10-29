@@ -316,7 +316,7 @@ class StudioMesaAdvisorTest {
             salesLines = listOf(AssistantSaleLine("Bitoque", 10, "Concluído"))
         )
         val answer = StudioMesaAdvisor.answerQuestion("Qual foi o prato mais vendido ontem?", data)
-        assertEquals("Período de vendas não confirmado", answer.title)
+        assertEquals("Período de desempenho não confirmado", answer.title)
         assertTrue(answer.response.contains("não incluem um filtro temporal fiável"))
         assertFalse(answer.response.contains("10 unidades"))
     }
@@ -481,11 +481,64 @@ class StudioMesaAdvisorTest {
         assertFalse(answer.response.contains("Sopa"))
     }
 
+    @Test fun futureSalesQuestionsUseClearlyLabeledFourWeekReferenceInsteadOfHistoricalPeriodError() {
+        val questions = listOf(
+            "Previsão de vendas para amanhã",
+            "Previsão de vendas da próxima semana",
+            "Quanto vou vender na próxima semana?"
+        )
+        questions.forEach { question ->
+            val answer = StudioMesaAdvisor.answerQuestion(question, snapshot())
+            assertEquals("$question -> ${answer.title}", "Referência simples de vendas", answer.title)
+            assertTrue(answer.response.contains("últimas quatro semanas"))
+            assertFalse(answer.response.contains("Período de vendas não confirmado"))
+        }
+    }
+
     @Test fun currentWeekSalesQuestionIsNotAnsweredWithHistoricalAverage() {
         val answer = StudioMesaAdvisor.answerQuestion("Como está a faturação esta semana?", snapshot())
         assertEquals("Período de vendas não confirmado", answer.title)
         assertTrue(answer.response.contains("não incluem um filtro temporal fiável"))
         assertFalse(answer.response.contains("média das últimas quatro semanas"))
+    }
+
+    @Test fun dateGuardExplainsThatAnalysisHasNoPeriodFilter() {
+        val answer = StudioMesaAdvisor.answerQuestion("Qual foi o prato mais vendido ontem?", snapshot())
+        assertEquals("Período de desempenho não confirmado", answer.title)
+        assertTrue(answer.response.contains("ainda não permite filtrar estes dados por período"))
+        assertFalse(answer.response.contains("Abre a vista de vendas e seleciona o período pretendido"))
+    }
+
+    @Test fun datedMenuSalesNeverReuseAllTimeSalesAsIfTheyBelongedToRequestedPeriod() {
+        val data = snapshot(
+            menu = listOf(item("Sopa", "5.00", "2.00"), item("Bitoque", "14.00", "4.50")),
+            salesLines = listOf(
+                AssistantSaleLine("Sopa", 20, "Concluído"),
+                AssistantSaleLine("Bitoque", 8, "Concluído")
+            )
+        )
+        val questions = listOf(
+            "Quais pratos venderam mais no domingo passado?",
+            "Quais artigos foram mais vendidos nos últimos 30 dias?",
+            "Quanto vendi em março?",
+            "Quais pratos foram mais rentáveis no mês passado?",
+            "Quais pratos foram mais rentáveis do mês de setembro?",
+            "Quais artigos tiveram a margem mais alta na semana passada?",
+            "Qual era a margem do Bitoque no mês passado?",
+            "Qual era o preço do Bitoque no mês passado?",
+            "Quanto gastei em salários este mês?",
+            "Quanto gastei em setembro?",
+            "Quanto paguei em março?",
+            "Qual foi o lucro em março?"
+        )
+        questions.forEach { question ->
+            val answer = StudioMesaAdvisor.answerQuestion(question, data)
+            assertTrue("$question -> ${answer.title}", answer.title.contains("Período") && answer.title.contains("não confirmado"))
+            assertTrue(answer.response.contains("filtro temporal fiável"))
+            assertFalse(answer.response.contains("seleciona o período pretendido"))
+            assertFalse(answer.response.contains("Triagem indicativa"))
+            assertFalse(answer.response.contains("20 unidades"))
+        }
     }
 
 
