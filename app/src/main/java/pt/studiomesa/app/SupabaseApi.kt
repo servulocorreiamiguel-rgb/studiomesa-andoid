@@ -2,6 +2,7 @@ package pt.studiomesa.app
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.math.BigDecimal
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -437,6 +438,85 @@ object SupabaseApi {
             token,
             "O artigo já não existe ou a tua conta deixou de ter acesso a este restaurante."
         )
+    }
+
+    fun getRestaurantPriceAdviserEnabled(token: String): Boolean {
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/get_restaurant_price_adviser_enabled",
+            JSONObject(),
+            token
+        )
+        return response.trim().trim('"').equals("true", ignoreCase = true)
+    }
+
+    fun setRestaurantPriceAdviserEnabled(token: String, enabled: Boolean): Boolean {
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/set_restaurant_price_adviser_enabled",
+            JSONObject().put("p_enabled", enabled),
+            token
+        )
+        return response.trim().trim('"').equals("true", ignoreCase = true)
+    }
+
+    fun applyRestaurantAdvisedMenuPrice(
+        token: String,
+        actionId: String,
+        itemId: String,
+        expectedPrice: BigDecimal,
+        newPrice: BigDecimal,
+        targetCostPercent: BigDecimal
+    ): JSONObject {
+        require(runCatching { java.util.UUID.fromString(actionId).toString() == actionId }.getOrDefault(false)) {
+            "O identificador da ação não é válido."
+        }
+        require(runCatching { java.util.UUID.fromString(itemId).toString() == itemId }.getOrDefault(false)) {
+            "O identificador do artigo não é válido."
+        }
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/apply_restaurant_advised_menu_price",
+            JSONObject()
+                .put("p_action_id", actionId)
+                .put("p_item_id", itemId)
+                .put("p_expected_price", expectedPrice)
+                .put("p_new_price", newPrice)
+                .put("p_target_cost_percent", targetCostPercent),
+            token
+        )
+        val rows = try {
+            JSONArray(response)
+        } catch (_: Exception) {
+            throw IllegalStateException("O servidor não confirmou a alteração do preço.")
+        }
+        if (rows.length() != 1) {
+            throw IllegalStateException("O servidor não confirmou a alteração do preço.")
+        }
+        val result = rows.optJSONObject(0)
+            ?: throw IllegalStateException("A resposta do servidor não contém um resultado válido.")
+        val appliedPriceMatches = runCatching {
+            BigDecimal(result.optString("applied_price")).compareTo(newPrice) == 0
+        }.getOrDefault(false)
+        if (result.optString("action_id") != actionId ||
+            result.optString("menu_item_id") != itemId ||
+            !appliedPriceMatches
+        ) {
+            throw IllegalStateException(
+                "Não foi possível confirmar o preço aplicado. Consulta o histórico e atualiza a carta antes de repetir."
+            )
+        }
+        return result
+    }
+
+    fun listRestaurantPriceAdviserAudit(token: String, limit: Int = 20): JSONArray {
+        require(limit in 1..100) { "O limite do histórico deve estar entre 1 e 100." }
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/get_restaurant_price_adviser_audit",
+            JSONObject().put("p_limit", limit),
+            token
+        ))
     }
 
     fun deactivateMenuItem(token: String, itemId: String) {

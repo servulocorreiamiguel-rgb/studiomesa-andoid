@@ -34,6 +34,33 @@ class MainActivitySmokeTest {
     }
 
     @Test
+    fun premiumPriceAdviserIsReadOnlyForDemoData() {
+        val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
+        assumeTrue("The price adviser is only available in Premium.", packageName.contains(".premium.") && !isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withContentDescription("Abrir menu de navegação")).perform(click())
+            onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+
+            onView(withText("Consultor de preços"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+            onView(withText("Aplicação de preços desativada na demonstração"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+
+            onView(withText("Analisar preços da carta"))
+                .perform(scrollTo(), click())
+            onView(withText("Análise de preços da carta"))
+                .check(matches(isDisplayed()))
+            onView(withText(containsString("Modo de demonstração")))
+                .check(matches(isDisplayed()))
+            onView(withText(containsString("Rever e aplicar")))
+                .check(doesNotExist())
+        }
+    }
+
+    @Test
     fun appLaunchesIntoTheExpectedDemoExperience() {
         ActivityScenario.launch(MainActivity::class.java).use {
             if (isCustomerVariant()) {
