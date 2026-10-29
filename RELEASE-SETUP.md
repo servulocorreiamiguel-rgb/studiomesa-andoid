@@ -99,6 +99,23 @@ A página foi verificada por carregamento HTTP público, mas **o percurso comple
 - Configuração da ficha Google Play, classificação etária, declaração de segurança dos dados, capturas de ecrã, testes internos e revisão da loja.
 - Revisão dos requisitos atuais de publicação. A configuração atual usa `targetSdk = 36`, que satisfaz o requisito de API de destino anunciado pela Google para novas aplicações móveis submetidas desde 31 de agosto de 2026: https://support.google.com/googleplay/android-developer/answer/11926878?hl=pt
 
+
+## Migrações futuras e exposição da Data API (verificado em 29/10/2026)
+
+A Supabase anunciou que, a partir de **30/10/2026**, novas tabelas em `public` deixam de receber automaticamente os privilégios para `anon`, `authenticated` e `service_role` que permitem exposição pela Data API. As tabelas existentes mantêm os privilégios atuais; o risco principal é uma migração futura criar uma tabela sem os `GRANT`s necessários e a API REST responder com erro de permissões. As funções exigem uma revisão separada: o PostgreSQL pode conceder `EXECUTE` a `PUBLIC` por omissão, pelo que as migrações devem continuar a revogar esse acesso e conceder apenas aos papéis necessários. Referências oficiais: [alteração de plataforma](https://supabase.com/changelog/45329-breaking-change-tables-not-exposed-to-data-and-graphql-api-automatically) e [proteção da Data API](https://supabase.com/docs/guides/api/securing-your-api).
+
+Regra para cada nova migração que crie uma tabela em `public`:
+
+1. Ativar RLS e criar políticas que limitem o acesso ao restaurante e utilizador corretos.
+2. Declarar explicitamente os privilégios mínimos necessários com `GRANT` (normalmente para `authenticated`; conceder a `anon` apenas quando a funcionalidade for realmente pública).
+3. Para funções/RPCs privilegiadas, definir `SET search_path = ''`, revogar acesso a `PUBLIC`/`anon` e conceder `EXECUTE` apenas aos papéis necessários. Verificar também os privilégios efetivos em teste.
+4. Validar a migração numa base de dados descartável com os novos privilégios por omissão, e executar os testes de autorização para confirmar que um restaurante não consegue ler ou alterar dados de outro.
+
+Não aplicar um `GRANT` amplo para `anon` como solução rápida. Os privilégios da tabela controlam se o papel pode aceder ao objeto; o RLS controla as linhas que esse papel pode ver ou alterar. Ambos são necessários.
+
+**Estado observado no projeto alojado em 29/10/2026:** as 11 tabelas de `public` têm RLS ativo; não foi encontrado acesso direto de tabela para `anon`; as tabelas existentes continuam acessíveis com os privilégios atuais. A consulta de privilégios por omissão ainda mostrou permissões amplas para objetos novos antes da data de aplicação da mudança. Não alterámos essas permissões no projeto de produção. Antes de qualquer futura alteração aos privilégios por omissão, deve ser testada uma migração completa, porque revogar EXECUTE por omissão pode afetar funções que as políticas RLS utilizam.
+
+
 A verificação da compilação, por si só, não certifica que a aplicação esteja pronta para operação comercial.
 
 
