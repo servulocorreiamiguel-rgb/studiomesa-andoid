@@ -84,7 +84,7 @@ class RestaurantEconomicManagerTest {
     @Test fun rejectsCashProjectionAboveSupportedMoneyRange() {
         try {
             RestaurantEconomicManager.analyze(
-                input(cash = "999999999,99", receipts = "999999999,99", due = "0")
+                input(cash = "999999999.99", receipts = "999999999.99", due = "0")
             )
             fail("An out-of-range projected cash amount must be rejected.")
         } catch (e: IllegalArgumentException) {
@@ -295,10 +295,10 @@ class RestaurantEconomicManagerTest {
     @Test fun aBreakEvenEstimateOutsideTheSupportedRangeIsReportedAsUnavailable() {
         val result = RestaurantEconomicManager.analyze(
             input(
-                sales = "999999999,99",
-                food = "999999989,99",
+                sales = "999999999.99",
+                food = "999999989.99",
                 payroll = "0",
-                fixed = "999999999,99",
+                fixed = "999999999.99",
                 variable = "0"
             )
         )
