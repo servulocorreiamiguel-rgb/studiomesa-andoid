@@ -317,7 +317,8 @@ class StudioMesaAdvisorTest {
         )
         val answer = StudioMesaAdvisor.answerQuestion("Qual foi o prato mais vendido ontem?", data)
         assertEquals("Período de desempenho não confirmado", answer.title)
-        assertTrue(answer.response.contains("não incluem um filtro temporal fiável"))
+        assertTrue(answer.response.contains("não inclui datas por pedido"))
+        assertEquals("Análise", answer.actionPage)
         assertFalse(answer.response.contains("10 unidades"))
     }
 
@@ -498,15 +499,17 @@ class StudioMesaAdvisorTest {
     @Test fun currentWeekSalesQuestionIsNotAnsweredWithHistoricalAverage() {
         val answer = StudioMesaAdvisor.answerQuestion("Como está a faturação esta semana?", snapshot())
         assertEquals("Período de vendas não confirmado", answer.title)
-        assertTrue(answer.response.contains("não incluem um filtro temporal fiável"))
+        assertTrue(answer.response.contains("Não vou apresentar totais acumulados"))
         assertFalse(answer.response.contains("média das últimas quatro semanas"))
     }
 
-    @Test fun dateGuardExplainsThatAnalysisHasNoPeriodFilter() {
+    @Test fun dateGuardExplainsThatAnalysisFiltersTotalsButNotHistoricalDishMargins() {
         val answer = StudioMesaAdvisor.answerQuestion("Qual foi o prato mais vendido ontem?", snapshot())
         assertEquals("Período de desempenho não confirmado", answer.title)
-        assertTrue(answer.response.contains("ainda não permite filtrar estes dados por período"))
-        assertFalse(answer.response.contains("Abre a vista de vendas e seleciona o período pretendido"))
+        assertTrue(answer.response.contains("Na versão Premium, a página Análise permite filtrar contagens"))
+        assertTrue(answer.response.contains("não calcula rentabilidade histórica por artigo"))
+        assertEquals("Análise", answer.actionPage)
+        assertFalse(answer.response.contains("ainda não permite filtrar estes dados por período"))
     }
 
     @Test fun datedMenuSalesNeverReuseAllTimeSalesAsIfTheyBelongedToRequestedPeriod() {
@@ -534,7 +537,10 @@ class StudioMesaAdvisorTest {
         questions.forEach { question ->
             val answer = StudioMesaAdvisor.answerQuestion(question, data)
             assertTrue("$question -> ${answer.title}", answer.title.contains("Período") && answer.title.contains("não confirmado"))
-            assertTrue(answer.response.contains("filtro temporal fiável"))
+            assertTrue(
+                answer.response.contains("Na versão Premium") ||
+                    answer.response.contains("Não vou apresentar totais acumulados")
+            )
             assertFalse(answer.response.contains("seleciona o período pretendido"))
             assertFalse(answer.response.contains("Triagem indicativa"))
             assertFalse(answer.response.contains("20 unidades"))

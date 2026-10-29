@@ -221,8 +221,8 @@ internal object StudioMesaAdvisor {
         if (RestaurantAssistantIntentClassifier.requestsDatedMenuPerformance(rawQuestion)) {
             return StudioMesaAssistantAnswer(
                 "Período de desempenho não confirmado",
-                "Os dados disponíveis nesta análise não incluem um filtro temporal fiável para vendas, popularidade, preços, custos ou margens por período. Não vou apresentar valores atuais ou acumulados como se pertencessem ao intervalo indicado. A página Análise mostra totais gerais e ainda não permite filtrar estes dados por período; confirma os registos datados e os custos/preços históricos antes de comparar artigos.",
-                "Pedidos"
+                "O resumo recebido pelo assistente não inclui datas por pedido, por isso não consigo classificar vendas, popularidade ou margens por intervalo. Na versão Premium, a página Análise permite filtrar contagens e valor nominal de pedidos concluídos por período, mas não calcula rentabilidade histórica por artigo. Confirma os registos datados e os custos/preços históricos antes de comparar artigos.",
+                "Análise"
             )
         }
         if (containsAny(q, "prejuizo", "contribuicao negativa")) {
@@ -443,15 +443,15 @@ internal object StudioMesaAdvisor {
             !isDedicatedMonthlyProfitEstimate) {
             return StudioMesaAssistantAnswer(
                 "Período de desempenho não confirmado",
-                "Não tenho um filtro temporal fiável para consultar vendas, preços, custos, despesas, lucro ou margens históricas do intervalo pedido. Os valores de custo/preço carregados representam os valores atuais e não provam os valores históricos desse período. A página Análise mostra totais gerais sem filtro temporal; confirma os registos históricos antes de tomar decisões.",
-                "Pedidos"
+                "Os dados recebidos pelo Gestor económico não incluem séries temporais fiáveis de vendas, preços, custos, despesas ou margens. Os valores de custo/preço carregados são os atuais e não provam os valores históricos do período pedido. Na versão Premium, a página Análise permite consultar contagens e valor nominal de pedidos concluídos por intervalo, mas não reconstrói custos ou lucros históricos. Confirma os registos históricos antes de decidir.",
+                "Análise"
             )
         }
         if (RestaurantAssistantIntentClassifier.requestsDatedSales(rawQuestion)) {
             return StudioMesaAssistantAnswer(
                 "Período de vendas não confirmado",
-                "Os dados disponíveis nesta análise não incluem um filtro temporal fiável para o período pedido. Não vou apresentar totais de outros dias, semanas ou meses como se pertencessem ao intervalo indicado. A página Análise mostra totais gerais e ainda não tem filtro temporal; confirma os registos de vendas datados antes de comparar resultados.",
-                "Pedidos"
+                "Não vou apresentar totais acumulados como se pertencessem ao período pedido. Na versão Premium, abre Análise e escolhe o intervalo para consultar o número de pedidos e o valor nominal dos pedidos concluídos. Estes valores não confirmam pagamentos nem contabilidade, e não permitem inferir margem histórica sem os custos do mesmo período.",
+                "Análise"
             )
         }
 

@@ -45,6 +45,7 @@ class MainActivity : Activity() {
     private var activeCustomerPage = "Cartão"
     private var assistantQuestion = ""
     private var assistantAnswer: StudioMesaAssistantAnswer? = null
+    private var selectedAnalysisPeriod = SalesAnalysisPeriod.ALL_TIME
 
     // Owner-controlled economic tools: session-only until persistent authorization is designed.
     private var economicManagerEnabled = false
@@ -4078,90 +4079,148 @@ class MainActivity : Activity() {
     }
 
     private fun renderAnalysis(container: LinearLayout) {
-        pageIntro(container, "Análise", if (hasRemoteRestaurant())
-            "Indicadores operacionais dos dados partilhados no servidor."
-        else "Resumo local dos dados de demonstração.")
+        val remoteMode = hasRemoteRestaurant()
+        pageIntro(
+            container,
+            "Análise",
+            if (remoteMode) "Indicadores operacionais dos dados partilhados no servidor."
+            else "Resumo local dos dados de demonstração."
+        )
         addGap(container, 6)
-
-        if (hasRemoteRestaurant()) {
-            val orders = remoteOrders()
-            val menu = remoteMenuItems()
-            var activeCount = 0
-            var completedCount = 0
-            var completedValue = 0.0
-            for (index in 0 until orders.length()) {
-                val order = orders.optJSONObject(index) ?: continue
-                when (order.optString("status")) {
-                    "Aberto", "Em preparação", "Pronto" -> activeCount++
-                    "Concluído" -> {
-                        completedCount++
-                        completedValue += order.optDouble("amount", 0.0) * order.optInt("quantity", 1).coerceIn(1, 99)
-                    }
-                }
-            }
-            val ratios = mutableListOf<Double>()
-            for (index in 0 until menu.length()) {
-                val item = menu.optJSONObject(index) ?: continue
-                val price = item.optDouble("price", 0.0)
-                if (price > 0.0) ratios.add(item.optDouble("cost", 0.0) / price * 100.0)
-            }
-            val avgCostRatio = ratios.average()
-
-            val summary = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            summary.addView(statCard("PEDIDOS NO SERVIDOR", orders.length().toString(), forestSoft),
-                LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), dp(10)) })
-            summary.addView(statCard("EM CURSO", activeCount.toString(), copper),
-                LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, dp(10)) })
-            container.addView(summary)
-
-            val card = makeCard(17)
-            addMetric(card, "Pedidos concluídos", completedCount.toString())
-            addDivider(card)
-            addMetric(card, "Valor nominal de pedidos concluídos", money(completedValue))
-            addDivider(card)
-            addMetric(card, "Artigos ativos na carta", menu.length().toString())
-            addDivider(card)
-            addMetric(card, "Custo médio dos artigos / preço", if (avgCostRatio.isNaN()) "Sem dados" else String.format(Locale("pt", "PT"), "%.1f%%", avgCostRatio))
-            container.addView(card, cardParams())
-
-            addGap(container, 4)
-            val note = makeCard(14, copperPale)
-            note.addView(label("Indicadores operacionais", 13f, true, forest))
-            addGap(note, 5)
-            note.addView(label("Os dados são partilhados no servidor. O valor representa pedidos marcados como concluídos, não pagamentos confirmados nem vendas contabilísticas. Ainda não inclui IVA, custos indiretos, desperdício ou integração com caixa.", 12.5f, false, ink))
-            container.addView(note, cardParams())
-            return
+        if (remoteMode) {
+            container.addView(
+                secondaryButton("Atualizar análise do servidor") { refreshRemoteOperations() },
+                LinearLayout.LayoutParams(-1, dp(44))
+            )
+            addGap(container, 6)
         }
 
-        val orders = store.getOrders()
-        val activeOrders = orders.filter { it.status != "Concluído" && it.status != "Cancelado" }
-        val completedOrders = orders.filter { it.status == "Concluído" }
-        val menu = store.getMenu()
-        val valueRecorded = completedOrders.sumOf { it.amount * it.quantity }
-        val ratios = menu.filter { it.price > 0.0 }.map { it.cost / it.price * 100.0 }
-        val avgCostRatio = ratios.average()
-        val summary = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        summary.addView(statCard("PEDIDOS REGISTADOS", orders.size.toString(), forestSoft),
-            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), dp(10)) })
-        summary.addView(statCard("EM ABERTO", activeOrders.size.toString(), copper),
-            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, dp(10)) })
-        container.addView(summary)
+        val periods = SalesAnalysisPeriod.values()
+        container.addView(
+            secondaryButton("Período da análise: ${selectedAnalysisPeriod.label}") {
+                AlertDialog.Builder(this)
+                    .setTitle("Seleciona o período")
+                    .setItems(periods.map { it.label }.toTypedArray()) { _, selected ->
+                        selectedAnalysisPeriod = periods[selected]
+                        renderApp()
+                    }
+                    .show()
+            },
+            LinearLayout.LayoutParams(-1, dp(46))
+        )
+        addGap(container, 6)
+        container.addView(label(
+            "O período é calculado pela data de criação do pedido e pelo fuso horário local deste dispositivo. O valor é nominal, não uma confirmação de pagamento.",
+            11.5f, false, muted
+        ))
+        addGap(container, 8)
 
-        val card = makeCard(17)
-        addMetric(card, "Valor nominal de pedidos concluídos", money(valueRecorded))
-        addDivider(card)
-        addMetric(card, "Pedidos concluídos", completedOrders.size.toString())
-        addDivider(card)
-        addMetric(card, "Artigos na carta", menu.size.toString())
-        addDivider(card)
-        addMetric(card, "Custo médio dos artigos / preço", if (avgCostRatio.isNaN()) "Sem dados" else String.format(Locale("pt", "PT"), "%.1f%%", avgCostRatio))
-        container.addView(card, cardParams())
+        val orders = if (remoteMode) {
+            val remote = remoteOrders()
+            (0 until remote.length()).mapNotNull { index ->
+                val order = remote.optJSONObject(index) ?: return@mapNotNull null
+                SalesAnalysisOrder(
+                    createdAtMillis = parseOrderTimestamp(order.optString("created_at")),
+                    status = order.optString("status", "Aberto"),
+                    unitAmount = order.optDouble("amount", Double.NaN),
+                    quantity = order.optInt("quantity", 1)
+                )
+            }
+        } else {
+            store.getOrders().map { order ->
+                SalesAnalysisOrder(
+                    createdAtMillis = order.createdAt,
+                    status = order.status,
+                    unitAmount = order.amount,
+                    quantity = order.quantity
+                )
+            }
+        }
+        val summary = SalesAnalysisCalculator.summarize(orders, selectedAnalysisPeriod)
+
+        val menuSize: Int
+        val ratios: List<Double>
+        if (remoteMode) {
+            val remoteMenu = remoteMenuItems()
+            menuSize = remoteMenu.length()
+            ratios = (0 until remoteMenu.length()).mapNotNull { index ->
+                val item = remoteMenu.optJSONObject(index) ?: return@mapNotNull null
+                val price = item.optDouble("price", Double.NaN)
+                val cost = item.optDouble("cost", Double.NaN)
+                if (price.isFinite() && cost.isFinite() && price > 0.0 && cost >= 0.0) {
+                    cost / price * 100.0
+                } else {
+                    null
+                }
+            }
+        } else {
+            val localMenu = store.getMenu()
+            menuSize = localMenu.size
+            ratios = localMenu.mapNotNull { item ->
+                if (item.price.isFinite() && item.cost.isFinite() && item.price > 0.0 && item.cost >= 0.0) {
+                    item.cost / item.price * 100.0
+                } else {
+                    null
+                }
+            }
+        }
+        val avgCostRatio = ratios.average()
+
+        val summaryCards = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        summaryCards.addView(
+            statCard(
+                if (selectedAnalysisPeriod == SalesAnalysisPeriod.ALL_TIME) {
+                    if (remoteMode) "PEDIDOS CARREGADOS" else "PEDIDOS REGISTADOS"
+                } else "PEDIDOS NO PERÍODO",
+                summary.ordersInPeriod.toString(),
+                forestSoft
+            ),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), dp(10)) }
+        )
+        summaryCards.addView(
+            statCard("EM CURSO", summary.activeOrderCount.toString(), copper),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, dp(10)) }
+        )
+        container.addView(summaryCards)
+
+        val metrics = makeCard(17)
+        addMetric(metrics, "Pedidos criados no período e concluídos", summary.completedOrderCount.toString())
+        addDivider(metrics)
+        addMetric(metrics, "Valor nominal dos pedidos criados no período e concluídos", money(summary.nominalCompletedValue))
+        addDivider(metrics)
+        addMetric(metrics, "Artigos ativos na carta", menuSize.toString())
+        addDivider(metrics)
+        addMetric(
+            metrics,
+            "Média simples do custo atual / preço atual",
+            if (avgCostRatio.isNaN()) "Sem dados" else String.format(Locale("pt", "PT"), "%.1f%%", avgCostRatio)
+        )
+        container.addView(metrics, cardParams())
+
+        if (summary.ordersWithInvalidTimestampsExcluded > 0 && selectedAnalysisPeriod != SalesAnalysisPeriod.ALL_TIME) {
+            addGap(container, 4)
+            container.addView(emptyCard(
+                "${summary.ordersWithInvalidTimestampsExcluded} pedido(s) com data ausente ou inválida ficam de fora deste período. Seleciona «Todo o histórico carregado» para incluir todos os registos disponíveis na aplicação."
+            ), cardParams())
+        }
+        if (summary.completedOrdersWithInvalidAmount > 0) {
+            addGap(container, 4)
+            container.addView(emptyCard(
+                "${summary.completedOrdersWithInvalidAmount} pedido(s) concluído(s) têm valor ou quantidade inválidos; esses valores não foram somados."
+            ), cardParams())
+        }
 
         addGap(container, 4)
         val note = makeCard(14, copperPale)
-        note.addView(label("Indicadores de demonstração", 13f, true, forest))
+        note.addView(label(if (remoteMode) "Indicadores operacionais do servidor" else "Indicadores de demonstração", 13f, true, forest))
         addGap(note, 5)
-        note.addView(label("Os valores representam os registos guardados neste dispositivo. Não são pagamentos confirmados, não incluem IVA nem constituem contabilidade ou relatório financeiro oficial.", 12.5f, false, ink))
+        note.addView(label(
+            if (remoteMode)
+                "A soma usa apenas os pedidos que a aplicação recebeu e guardou em cache; confirma a última atualização. Se existirem mais pedidos do que os devolvidos pelo servidor, o resumo pode não cobrir todo o histórico. Não representa pagamentos confirmados nem vendas contabilísticas e não inclui IVA, custos indiretos, desperdício ou integração com caixa. O rácio da carta usa custos e preços atuais."
+            else
+                "Os valores usam os registos de demonstração guardados neste dispositivo. Não representam pagamentos confirmados nem contabilidade oficial. O rácio da carta usa custos e preços atuais.",
+            12.5f, false, ink
+        ))
         container.addView(note, cardParams())
     }
 

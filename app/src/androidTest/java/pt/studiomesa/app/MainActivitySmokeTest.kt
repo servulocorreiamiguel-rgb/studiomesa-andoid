@@ -461,4 +461,36 @@ class MainActivitySmokeTest {
         }
     }
 
+    @Test
+    fun premiumAnalysisCanSelectASevenDayPeriod() {
+        assumeFalse("Customer variant has its own navigation.", isCustomerVariant())
+        assumeTrue(
+            "Only the Premium plan exposes the Analysis screen.",
+            InstrumentationRegistry.getInstrumentation().targetContext.packageName.contains(".premium.")
+        )
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withContentDescription("Abrir menu de navegação")).perform(click())
+            onView(withContentDescription("Abrir secção Análise")).perform(scrollTo(), click())
+
+            onView(withText("Período da análise: Todo o histórico carregado"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+            onView(withText("Pedidos criados no período e concluídos"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+
+            onView(withText("Período da análise: Todo o histórico carregado"))
+                .perform(scrollTo(), click())
+            onView(withText("Últimos 7 dias")).perform(click())
+
+            onView(withText("Período da análise: Últimos 7 dias"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+            onView(withText("Valor nominal dos pedidos criados no período e concluídos"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+        }
+    }
+
 }
