@@ -1539,7 +1539,8 @@ class MainActivity : Activity() {
                     item.optDouble("cost", 0.0).coerceAtLeast(0.0),
                     item.optString("category", "Prato principal"),
                     item.optString("description", ""),
-                    item.optString("allergens", "")
+                    item.optString("allergens", ""),
+                    item.optString("id").trim().takeIf { it.isNotBlank() }
                 ))
             }
         }
