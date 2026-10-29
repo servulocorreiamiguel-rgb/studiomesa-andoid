@@ -185,6 +185,18 @@ class RestaurantAssistantIntentClassifierTest {
                 RestaurantAssistantIntentClassifier.requestsDatedSales(question))
         }
         assertTrue(RestaurantAssistantIntentClassifier.requestsDatedSales("Quanto foi a receita em 2025?"))
+        assertTrue(RestaurantAssistantIntentClassifier.requestsDatedSales("Quanto vendi em 29/10/2026?"))
+        assertTrue(RestaurantAssistantIntentClassifier.requestsDatedSales("Qual foi a faturação em 29.10.2026?"))
+        assertTrue(RestaurantAssistantIntentClassifier.requestsDatedSales("Quanto vendi em 29-10?"))
+        assertTrue(RestaurantAssistantIntentClassifier.requestsDatedMenuPerformance("Quais pratos venderam mais em 29/10/2026?"))
+        assertEquals(
+            RestaurantAssistantIntent.ECONOMIC_MANAGER,
+            RestaurantAssistantIntentClassifier.classify("Quanto vendi em 29/10/2026?").intent
+        )
+        assertEquals(
+            RestaurantAssistantIntent.MENU_ENGINEERING,
+            RestaurantAssistantIntentClassifier.classify("Quais pratos venderam mais em 29/10/2026?").intent
+        )
         assertTrue(!RestaurantAssistantIntentClassifier.requestsDatedSales("Como posso aumentar as vendas?"))
         assertTrue(!RestaurantAssistantIntentClassifier.requestsDatedSales("Como posso aumentar as vendas no próximo domingo?"))
         assertTrue(!RestaurantAssistantIntentClassifier.requestsDatedMenuPerformance("Como posso reduzir custos esta semana?"))
