@@ -90,10 +90,10 @@ internal object PriceCalculator {
             .multiply(oneHundred)
             .divide(suggestedPrice, 10, RoundingMode.HALF_UP)
             .setScale(2, RoundingMode.HALF_UP)
-        val grossMarginPercent = grossProfit
-            .multiply(oneHundred)
-            .divide(suggestedPrice, 10, RoundingMode.HALF_UP)
-            .setScale(2, RoundingMode.HALF_UP)
+        // The percentages are displayed as complementary shares. Independent HALF_UP
+        // rounding can make them total 100.01% for exact half-cent ties (for example,
+        // a 1.00 € cost on a 160.00 € price is 0.625% cost and 99.375% margin).
+        val grossMarginPercent = BigDecimal("100.00").subtract(actualCostPercent)
 
         return PriceCalculationResult(
             cost = cost,

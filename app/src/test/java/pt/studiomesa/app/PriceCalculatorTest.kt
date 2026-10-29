@@ -157,6 +157,20 @@ class PriceCalculatorTest {
     }
 
     @Test
+    fun keepsPercentagesComplementaryAtExactHalfCentTies() {
+        val result = PriceCalculator.calculate("1.00", "0.625")
+
+        assertEquals(BigDecimal("160.00"), result.suggestedPrice)
+        assertEquals(BigDecimal("159.00"), result.grossProfit)
+        assertEquals(BigDecimal("0.63"), result.actualCostPercent)
+        assertEquals(BigDecimal("99.37"), result.grossMarginPercent)
+        assertEquals(
+            BigDecimal("100.00"),
+            result.actualCostPercent.add(result.grossMarginPercent)
+        )
+    }
+
+    @Test
     fun avoidsIntermediateRoundingThatMakesPercentagesSumToOneHundredPointZeroOne() {
         val result = PriceCalculator.calculate("50.01", "50.005")
 
