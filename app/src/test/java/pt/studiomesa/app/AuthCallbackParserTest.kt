@@ -34,4 +34,16 @@ class AuthCallbackParserTest {
         assertEquals(emptyMap<String, String>(), AuthCallbackParser.parse(null))
         assertEquals(emptyMap<String, String>(), AuthCallbackParser.parse(""))
     }
+
+    @Test
+    fun rejectsOversizedCallbackBeforeDecodingParameters() {
+        val oversized = "code=" + "a".repeat(8_192)
+        assertEquals(emptyMap<String, String>(), AuthCallbackParser.parse(oversized))
+    }
+
+    @Test
+    fun rejectsCallbacksWithTooManyParameters() {
+        val excessive = (0..32).joinToString("&") { "p$it=value" }
+        assertEquals(emptyMap<String, String>(), AuthCallbackParser.parse(excessive))
+    }
 }
