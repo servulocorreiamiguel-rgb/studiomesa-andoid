@@ -23,7 +23,7 @@ internal data class SalesAnalysisSummary(
     val activeOrderCount: Int,
     val completedOrderCount: Int,
     val nominalCompletedValue: Double,
-    val undatedOrdersExcluded: Int,
+    val ordersWithInvalidTimestampsExcluded: Int,
     val completedOrdersWithInvalidAmount: Int
 )
 
@@ -79,7 +79,7 @@ internal object SalesAnalysisCalculator {
         nowMillis: Long = System.currentTimeMillis(),
         timeZone: TimeZone = TimeZone.getDefault()
     ): SalesAnalysisSummary {
-        val undated = if (period == SalesAnalysisPeriod.ALL_TIME) 0
+        val invalidTimestamps = if (period == SalesAnalysisPeriod.ALL_TIME) 0
             else orders.count { it.createdAtMillis <= 0L || it.createdAtMillis > nowMillis }
         val filtered = orders.filter {
             includes(period, it.createdAtMillis, nowMillis, timeZone)
@@ -111,7 +111,7 @@ internal object SalesAnalysisCalculator {
             activeOrderCount = active,
             completedOrderCount = completed.size,
             nominalCompletedValue = value,
-            undatedOrdersExcluded = undated,
+            ordersWithInvalidTimestampsExcluded = invalidTimestamps,
             completedOrdersWithInvalidAmount = invalidAmounts
         )
     }
