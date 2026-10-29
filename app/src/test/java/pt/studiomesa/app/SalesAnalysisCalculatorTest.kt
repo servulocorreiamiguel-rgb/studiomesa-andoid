@@ -85,7 +85,7 @@ class SalesAnalysisCalculatorTest {
         assertEquals(2, summary.activeOrderCount)
         assertEquals(1, summary.completedOrderCount)
         assertEquals(25.0, summary.nominalCompletedValue, 0.001)
-        assertEquals(1, summary.undatedOrdersExcluded)
+        assertEquals(2, summary.ordersWithInvalidTimestampsExcluded)
         assertEquals(0, summary.completedOrdersWithInvalidAmount)
     }
 
@@ -105,7 +105,7 @@ class SalesAnalysisCalculatorTest {
         assertEquals(2, summary.ordersInPeriod)
         assertEquals(2, summary.completedOrderCount)
         assertEquals(24.0, summary.nominalCompletedValue, 0.001)
-        assertEquals(0, summary.undatedOrdersExcluded)
+        assertEquals(0, summary.ordersWithInvalidTimestampsExcluded)
     }
 
     @Test
