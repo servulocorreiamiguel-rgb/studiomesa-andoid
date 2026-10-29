@@ -142,6 +142,22 @@ class RestaurantEconomicManagerTest {
         assertEquals(2, result.ingredients.size)
     }
 
+    @Test fun recipeLinesRetainSubCentPrecisionAndSumToRoundedRecipeCost() {
+        val result = RestaurantEconomicManager.costRecipe(
+            "A | 0,002 | 7,00 | 0\\nB | 0,002 | 7,00 | 0",
+            amount("30")
+        )
+
+        assertEquals(amount("0.01400000"), result.ingredients[0].costPerPortion)
+        assertEquals(amount("0.01400000"), result.ingredients[1].costPerPortion)
+        assertEquals(
+            amount("0.02800000"),
+            result.ingredients.fold(BigDecimal.ZERO) { sum, ingredient -> sum.add(ingredient.costPerPortion) }
+        )
+        assertEquals(amount("0.03"), result.totalCostPerPortion)
+        assertEquals(amount("0.09"), result.suggestedPriceAtTarget)
+    }
+
     @Test fun recipeCostRejectsMalformedLinesAndWasteOfOneHundredPercent() {
         listOf(
             "Farinha | 0,2 | 2,50",
