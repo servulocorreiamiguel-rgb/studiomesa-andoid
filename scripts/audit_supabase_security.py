@@ -45,19 +45,28 @@ def compact(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
-def security_definer_headers(sql: str) -> list[tuple[str, str]]:
-    """Return (qualified function name, declaration header) for each definer function."""
-    found: list[tuple[str, str]] = []
+def security_definer_definitions(sql: str) -> list[tuple[str, str, str]]:
+    """Return (qualified name, declaration header, function body) for each definer."""
+    found: list[tuple[str, str, str]] = []
     for match in FUNCTION_RE.finditer(sql):
         tail = sql[match.start():]
         body_start = re.search(r"\bas\s+\$function\$", tail, re.IGNORECASE)
         if body_start is None:
             continue
         header = tail[:body_start.start()]
+        body_tail = tail[body_start.end():]
+        body_end = re.search(r"\$function\$\s*;", body_tail, re.IGNORECASE)
+        if body_end is None:
+            continue
         if re.search(r"\bsecurity\s+definer\b", header, re.IGNORECASE):
-            found.append((match.group(1).lower(), header))
+            found.append((match.group(1).lower(), header, body_tail[:body_end.start()]))
     return found
 
+
+def body_references_auth_uid(body: str) -> bool:
+    """Require auth.uid() in SECURITY DEFINER bodies; SQL comments do not count."""
+    without_comments = re.sub(r"--[^\n]*|/\*[\s\S]*?\*/", "", body)
+    return bool(re.search(r"\bauth\s*\.\s*uid\s*\(\s*\)", without_comments, re.IGNORECASE))
 
 def revoked_roles(sql: str, function_name: str) -> set[str]:
     roles: set[str] = set()
@@ -210,13 +219,17 @@ def public_table_grants_to_untrusted_roles(sql: str) -> list[tuple[str, str]]:
 
 def audit_migration_sql(sql: str) -> tuple[list[str], int, int]:
     errors: list[str] = []
-    definitions = security_definer_headers(sql)
+    definitions = security_definer_definitions(sql)
     if not definitions:
         errors.append("Não foi encontrada nenhuma declaração SECURITY DEFINER; confirma se as migrações foram carregadas.")
-    for name, header in definitions:
+    for name, header, body in definitions:
         if not re.search(r"\bset\s+search_path\s*(?:=|to)\s*''", header, re.IGNORECASE):
             errors.append(f"{name}: SECURITY DEFINER sem SET search_path = ''.")
-
+        if not body_references_auth_uid(body):
+            errors.append(
+                f"{name}: SECURITY DEFINER sem referência a auth.uid() no corpo; "
+                "exige verificação da identidade autenticada e do respetivo âmbito."
+            )
         revoked = revoked_roles(sql, name)
         # This one private membership helper must be executable by authenticated
         # because the app's RLS policies invoke it. Permit this narrow exception
