@@ -44,6 +44,68 @@ if [ "$unsafe_definer_count" != "0" ]; then
 fi
 echo "PASS: application SECURITY DEFINER functions pin an empty search_path and are not executable by anon."
 
+# Test the effective defaults by creating disposable objects as the same postgres
+# role that replays migrations. Newly-created API objects must be opt-in, not public.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<'SQL'
+CREATE TABLE public.__studiomesa_default_privilege_probe (id bigint);
+CREATE SEQUENCE public.__studiomesa_default_privilege_probe_seq;
+CREATE FUNCTION public.__studiomesa_default_privilege_probe_fn()
+RETURNS integer LANGUAGE sql
+AS $function$ SELECT 1; $function$;
+
+DO $check$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM (VALUES ('anon'), ('authenticated'), ('service_role')) AS api_roles(role_name)
+    CROSS JOIN (
+      VALUES ('SELECT'), ('INSERT'), ('UPDATE'), ('DELETE'), ('TRUNCATE'),
+             ('REFERENCES'), ('TRIGGER'), ('MAINTAIN')
+    ) AS table_privileges(privilege_name)
+    WHERE has_table_privilege(
+      api_roles.role_name,
+      'public.__studiomesa_default_privilege_probe',
+      table_privileges.privilege_name
+    )
+  ) THEN
+    RAISE EXCEPTION 'New public tables inherited unexpected API-role privileges.';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM (VALUES ('anon'), ('authenticated'), ('service_role')) AS api_roles(role_name)
+    CROSS JOIN (VALUES ('USAGE'), ('SELECT'), ('UPDATE')) AS sequence_privileges(privilege_name)
+    WHERE has_sequence_privilege(
+      api_roles.role_name,
+      'public.__studiomesa_default_privilege_probe_seq',
+      sequence_privileges.privilege_name
+    )
+  ) THEN
+    RAISE EXCEPTION 'New public sequences inherited unexpected API-role privileges.';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM (VALUES ('anon'), ('authenticated'), ('service_role')) AS api_roles(role_name)
+    WHERE has_function_privilege(
+      api_roles.role_name,
+      'public.__studiomesa_default_privilege_probe_fn()',
+      'EXECUTE'
+    )
+  ) THEN
+    RAISE EXCEPTION 'New public functions inherited unexpected API-role or PUBLIC EXECUTE privileges.';
+  END IF;
+END;
+$check$;
+
+DROP FUNCTION public.__studiomesa_default_privilege_probe_fn();
+DROP SEQUENCE public.__studiomesa_default_privilege_probe_seq;
+DROP TABLE public.__studiomesa_default_privilege_probe;
+
+SQL
+
+echo "PASS: new public tables, sequences and functions require explicit grants."
+
 psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL
 INSERT INTO auth.users (id, email)
 VALUES ('$USER_A', 'ci-owner-a@example.invalid'),
