@@ -112,6 +112,7 @@ internal object RestaurantEconomicManager {
     private val zero = BigDecimal.ZERO
     private val hundred = BigDecimal("100")
     private val maxMoney = BigDecimal("999999999.99")
+    private val maxInventoryQuantity = BigDecimal("999999999")
     private val decimalPattern = Regex("^(?:\\d+(?:[.,]\\d*)?|[.,]\\d+)$")
 
     fun parseNonNegative(raw: String, fieldName: String): BigDecimal {
@@ -175,23 +176,33 @@ internal object RestaurantEconomicManager {
 
         // Simplified break-even: payroll and fixed operating costs are treated as fixed;
         // food consumed and other variable costs are treated as variable with sales.
+        require(operatingResult.abs() <= maxMoney) {
+            "O resultado operacional calculado ultrapassa o limite monetário suportado; confirma os valores e o período."
+        }
+
         val contributionRate = sales
             .subtract(input.foodCostConsumedIncludingWaste)
             .subtract(input.otherVariableCosts)
             .divide(sales, 8, RoundingMode.HALF_UP)
-        val estimatedBreakEven = if (contributionRate > zero) {
+        val breakEvenCandidate = if (contributionRate > zero) {
             input.monthlyPayroll.add(input.otherFixedCosts)
                 .divide(contributionRate, 2, RoundingMode.HALF_UP)
         } else null
+        val estimatedBreakEven = breakEvenCandidate?.takeIf { it <= maxMoney }
+        val breakEvenExceedsLimit = breakEvenCandidate != null && estimatedBreakEven == null
         val gapToBreakEven = estimatedBreakEven?.subtract(sales)?.max(zero)?.setScale(2, RoundingMode.HALF_UP)
         val projectedCash = if (
             input.cashAvailableNow != null &&
             input.expectedReceiptsNext30Days != null &&
             input.paymentsDueNext30Days != null
         ) {
-            input.cashAvailableNow.add(input.expectedReceiptsNext30Days)
+            val projection = input.cashAvailableNow.add(input.expectedReceiptsNext30Days)
                 .subtract(input.paymentsDueNext30Days)
                 .setScale(2, RoundingMode.HALF_UP)
+            require(projection.abs() <= maxMoney) {
+                "A tesouraria projetada ultrapassa o limite monetário suportado; confirma os valores."
+            }
+            projection
         } else null
         val wastePercentSales = input.recordedWasteCost?.let { percent(it, sales) }
         val wastePercentFoodCost = input.recordedWasteCost?.takeIf {
@@ -211,7 +222,9 @@ internal object RestaurantEconomicManager {
         if (operatingResult < zero) {
             warnings += "Com os valores introduzidos, o resultado operacional estimado é negativo. Confirma se o período e os custos estão completos e pede apoio contabilístico antes de tomar decisões importantes."
         }
-        if (estimatedBreakEven == null) {
+        if (breakEvenExceedsLimit) {
+            warnings += "O ponto de equilíbrio estimado ultrapassa o limite monetário suportado; confirma os valores e os custos variáveis."
+        } else if (estimatedBreakEven == null) {
             warnings += "Não é possível calcular o ponto de equilíbrio com esta estrutura: os custos alimentares e variáveis igualam ou ultrapassam as vendas."
         }
         if (projectedCash != null && projectedCash <= zero) {
@@ -298,8 +311,14 @@ internal object RestaurantEconomicManager {
         val safetyDays = parts[3].toIntOrNull()
         require(leadDays != null && leadDays in 0..365) { "O prazo do fornecedor tem de ser um número inteiro entre 0 e 365 dias." }
         require(safetyDays != null && safetyDays in 0..365) { "Os dias de segurança têm de ser um número inteiro entre 0 e 365." }
+        require(onHand <= maxInventoryQuantity && dailyUse <= maxInventoryQuantity) {
+            "O stock e o consumo diário não podem exceder o limite suportado pela aplicação."
+        }
         val coverage = leadDays + safetyDays
         val targetStock = dailyUse.multiply(BigDecimal(coverage)).setScale(3, RoundingMode.CEILING)
+        require(targetStock <= maxInventoryQuantity) {
+            "A reposição calculada excede o limite de quantidade suportado; confirma o consumo e os dias introduzidos."
+        }
         val suggested = targetStock.subtract(onHand).max(zero).setScale(3, RoundingMode.CEILING)
         return ReorderAnalysis(targetStock, suggested, coverage)
     }
@@ -322,7 +341,16 @@ internal object RestaurantEconomicManager {
             val unitCost = parseNonNegative(parts[2], "custo unitário na linha ${index + 1}")
             require(quantity > zero) { "Linha ${index + 1}: a quantidade tem de ser superior a zero." }
             require(unitCost > zero) { "Linha ${index + 1}: o custo unitário tem de ser superior a zero." }
-            WasteLogEntry(parts[0], quantity, unitCost, parts[3], quantity.multiply(unitCost).setScale(2, RoundingMode.HALF_UP))
+            val cost = quantity.multiply(unitCost).setScale(2, RoundingMode.HALF_UP)
+            require(cost <= maxMoney) {
+                "Linha ${index + 1}: o custo calculado do desperdício excede o limite monetário suportado."
+            }
+            WasteLogEntry(parts[0], quantity, unitCost, parts[3], cost)
+        }
+        val totalCost = entries.fold(zero) { sum, entry -> sum.add(entry.totalCost) }
+            .setScale(2, RoundingMode.HALF_UP)
+        require(totalCost <= maxMoney) {
+            "O custo total do desperdício excede o limite monetário suportado; divide ou corrige os registos."
         }
         val totals = entries.groupBy { it.reason.trim().lowercase(java.util.Locale.ROOT) }
             .map { (_, group) ->
@@ -332,7 +360,7 @@ internal object RestaurantEconomicManager {
             .sortedByDescending { it.second }
         return WasteLogReport(
             entries,
-            entries.fold(zero) { sum, entry -> sum.add(entry.totalCost) }.setScale(2, RoundingMode.HALF_UP),
+            totalCost,
             totals
         )
     }
@@ -369,8 +397,11 @@ internal object RestaurantEconomicManager {
             val options = group.map { q ->
                 val quantity = BigDecimal(q[3])
                 val packPrice = BigDecimal(q[4])
-                SupplierQuoteOption(q[1], quantity, packPrice,
-                    packPrice.divide(quantity, 4, RoundingMode.HALF_UP).setScale(4, RoundingMode.HALF_UP))
+                val unitPrice = packPrice.divide(quantity, 4, RoundingMode.HALF_UP).setScale(4, RoundingMode.HALF_UP)
+                require(unitPrice <= maxMoney) {
+                    "O preço por unidade calculado para ${q[0]} excede o limite suportado; confirma a quantidade e unidade da embalagem."
+                }
+                SupplierQuoteOption(q[1], quantity, packPrice, unitPrice)
             }.sortedBy { it.pricePerUnit }
             SupplierQuoteComparison(first[0], first[2], options)
         }.sortedBy { it.itemName.lowercase(java.util.Locale.ROOT) }
@@ -420,7 +451,11 @@ internal object RestaurantEconomicManager {
             val cost = parseNonNegative(parts[3], "custo unitário da linha ${index + 1}")
             require(cost > zero) { "Linha ${index + 1}: o custo unitário tem de ser superior a zero." }
             val variance = actual.subtract(expected).setScale(3, RoundingMode.HALF_UP)
-            UsageVariance(parts[0], expected, actual, variance, cost, variance.multiply(cost).setScale(2, RoundingMode.HALF_UP))
+            val impact = variance.multiply(cost).setScale(2, RoundingMode.HALF_UP)
+            require(impact.abs() <= maxMoney) {
+                "Linha ${index + 1}: o impacto monetário calculado excede o limite suportado; confirma as quantidades e o custo unitário."
+            }
+            UsageVariance(parts[0], expected, actual, variance, cost, impact)
         }
     }
 
@@ -444,6 +479,9 @@ internal object RestaurantEconomicManager {
             "O objetivo de pessoal tem de estar entre 0 e 100%."
         }
         val payrollCost = hours.multiply(hourlyCost).setScale(2, RoundingMode.HALF_UP)
+        require(payrollCost <= maxMoney) {
+            "O custo calculado das horas excede o limite monetário suportado; confirma horas e custo por hora."
+        }
         val payrollPercent = percent(payrollCost, sales)
         val budgetCost = sales.multiply(targetPercent).divide(hundred, 8, RoundingMode.HALF_UP)
         val hoursAtTarget = budgetCost.divide(hourlyCost, 2, RoundingMode.HALF_UP)

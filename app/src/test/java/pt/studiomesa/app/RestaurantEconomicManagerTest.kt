@@ -81,6 +81,17 @@ class RestaurantEconomicManagerTest {
         assertEquals(amount("1500.00"), result.projectedCashIn30Days)
     }
 
+    @Test fun rejectsCashProjectionAboveSupportedMoneyRange() {
+        try {
+            RestaurantEconomicManager.analyze(
+                input(cash = "999999999.99", receipts = "999999999.99", due = "0")
+            )
+            fail("An out-of-range projected cash amount must be rejected.")
+        } catch (e: IllegalArgumentException) {
+            assertTrue(e.message.orEmpty().contains("tesouraria projetada ultrapassa"))
+        }
+    }
+
     @Test fun warnsWhenProjectedCashIsZeroOrNegative() {
         val negative = RestaurantEconomicManager.analyze(
             input(cash = "500", receipts = "100", due = "900")
@@ -153,6 +164,15 @@ class RestaurantEconomicManagerTest {
         assertEquals(amount("0.000"), RestaurantEconomicManager.recommendReorder("25 | 3 | 4 | 2").suggestedOrderQuantity)
     }
 
+    @Test fun reorderRejectsCalculatedStockBeyondTheSupportedDatabaseRange() {
+        try {
+            RestaurantEconomicManager.recommendReorder("0 | 999999999 | 2 | 0")
+            fail("An impossible target stock quantity must be rejected.")
+        } catch (e: IllegalArgumentException) {
+            assertTrue(e.message.orEmpty().contains("excede o limite"))
+        }
+    }
+
     @Test fun reorderRejectsInvalidDayCounts() {
         try {
             RestaurantEconomicManager.recommendReorder("5 | 3 | -1 | 2")
@@ -193,6 +213,21 @@ class RestaurantEconomicManagerTest {
         assertEquals(amount("1.5000"), comparisons[0].options.first().pricePerUnit)
     }
 
+    @Test fun wasteLogRejectsDerivedCostsAboveTheSupportedMoneyRange() {
+        val invalidLogs = listOf(
+            "A | 999999999,99 | 999999999,99 | Validade",
+            "A | 600000000 | 1 | Validade\nB | 500000000 | 1 | Produção"
+        )
+        invalidLogs.forEach { raw ->
+            try {
+                RestaurantEconomicManager.analyzeWasteLog(raw)
+                fail("An out-of-range waste cost must be rejected.")
+            } catch (e: IllegalArgumentException) {
+                assertTrue(e.message.orEmpty().contains("limite monetário suportado"))
+            }
+        }
+    }
+
     @Test fun supplierQuotesRejectDuplicateSupplierAndInvalidPackSize() {
         listOf(
             "Tomate | A | kg | 10 | 16\nTomate | A | kg | 5 | 7",
@@ -204,6 +239,15 @@ class RestaurantEconomicManagerTest {
             } catch (_: IllegalArgumentException) {
                 // Expected validation failure.
             }
+        }
+    }
+
+    @Test fun supplierQuotesRejectCalculatedUnitPricesAboveTheSupportedRange() {
+        try {
+            RestaurantEconomicManager.compareSupplierQuotes("Sal | Fornecedor A | kg | 0,0001 | 999999999")
+            fail("An out-of-range unit price must be rejected.")
+        } catch (e: IllegalArgumentException) {
+            assertTrue(e.message.orEmpty().contains("preço por unidade calculado"))
         }
     }
 
@@ -227,6 +271,51 @@ class RestaurantEconomicManagerTest {
         assertEquals(amount("-8.00"), rows[1].varianceCost)
     }
 
+
+    @Test fun usageVarianceRejectsDerivedCostImpactAboveTheSupportedRange() {
+        try {
+            RestaurantEconomicManager.compareTheoreticalAndActualUsage(
+                "Frango | 0 | 999999999,99 | 999999999,99"
+            )
+            fail("An out-of-range consumption impact must be rejected.")
+        } catch (e: IllegalArgumentException) {
+            assertTrue(e.message.orEmpty().contains("impacto monetário calculado"))
+        }
+    }
+
+    @Test fun labourPlanRejectsDerivedPayrollCostAboveTheSupportedRange() {
+        try {
+            RestaurantEconomicManager.analyzeLabourPlan("2 | 999999999 | 8000 | 25")
+            fail("An out-of-range payroll amount must be rejected.")
+        } catch (e: IllegalArgumentException) {
+            assertTrue(e.message.orEmpty().contains("custo calculado das horas"))
+        }
+    }
+
+    @Test fun aBreakEvenEstimateOutsideTheSupportedRangeIsReportedAsUnavailable() {
+        val result = RestaurantEconomicManager.analyze(
+            input(
+                sales = "999999999.99",
+                food = "999999989.99",
+                payroll = "0",
+                fixed = "999999999.99",
+                variable = "0"
+            )
+        )
+        assertNull(result.estimatedBreakEvenSales)
+        assertTrue(result.warnings.any { it.contains("ponto de equilíbrio estimado ultrapassa o limite") })
+    }
+
+    @Test fun rejectsOperatingResultOutsideTheSupportedMoneyRange() {
+        try {
+            RestaurantEconomicManager.analyze(
+                input(sales = "1", food = "999999999", payroll = "999999999", fixed = "999999999", variable = "999999999")
+            )
+            fail("An out-of-range operating result must be rejected.")
+        } catch (e: IllegalArgumentException) {
+            assertTrue(e.message.orEmpty().contains("resultado operacional calculado ultrapassa"))
+        }
+    }
 
     @Test fun labourPlanCalculatesEstimatedCostAndHoursAtTarget() {
         val result = RestaurantEconomicManager.analyzeLabourPlan("120 | 12,50 | 8000 | 25")
