@@ -536,6 +536,55 @@ class MainActivitySmokeTest {
     }
 
     @Test
+    fun economicManagerExplainsBreakEvenBeyondSupportedRange() {
+        assumeFalse("Customer variant has its own navigation.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withContentDescription("Abrir menu de navegação")).perform(click())
+            onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            onView(withText("Ativar gestão económica")).perform(scrollTo(), click())
+
+            onView(withHint("Ex.: 18000")).perform(scrollTo(), replaceText("1000000"))
+            onView(withHint("Ex.: 5400")).perform(scrollTo(), replaceText("999999,9999"))
+            onView(withHint("Ex.: 6200")).perform(scrollTo(), replaceText("1"))
+            onView(withHint("Renda, seguros, software…")).perform(scrollTo(), replaceText("1"))
+            onView(withHint("Sem comida e pessoal")).perform(scrollTo(), replaceText("0"))
+
+            onView(withText("Calcular indicadores e alertas"))
+                .perform(scrollTo(), click())
+
+            onView(withText(containsString("O ponto de equilíbrio estimado ultrapassa o limite monetário suportado")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+            onView(withText(containsString("os custos alimentares e variáveis igualam ou ultrapassam as vendas")))
+                .check(doesNotExist())
+        }
+    }
+
+    @Test
+    fun economicManagerDisplaysSmallUsageVarianceAndItsMoneyImpact() {
+        assumeFalse("Customer variant has its own navigation.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withContentDescription("Abrir menu de navegação")).perform(click())
+            onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            onView(withText("Ativar gestão económica")).perform(scrollTo(), click())
+
+            onView(withHint("Frango | 20 | 23 | 6,50\nQueijo | 5 | 4 | 8,00"))
+                .perform(scrollTo(), replaceText("Ingrediente | 0,0004 | 0,0008 | 1000"))
+
+            onView(withText("Analisar diferenças de consumo")).perform(scrollTo(), click())
+
+            onView(withText(containsString("diferença +0.0004")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+            onView(withText(containsString("impacto estimado +0,40")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
     fun premiumAnalysisCanSelectASevenDayPeriod() {
         assumeFalse("Customer variant has its own navigation.", isCustomerVariant())
         assumeTrue(

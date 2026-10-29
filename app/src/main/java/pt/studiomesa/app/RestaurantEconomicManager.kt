@@ -188,7 +188,7 @@ internal object RestaurantEconomicManager {
         val contributionRate = sales
             .subtract(input.foodCostConsumedIncludingWaste)
             .subtract(input.otherVariableCosts)
-            .divide(sales, 8, RoundingMode.HALF_UP)
+            .divide(sales, 16, RoundingMode.HALF_UP)
         val breakEvenCandidate = if (contributionRate > zero) {
             input.monthlyPayroll.add(input.otherFixedCosts)
                 .divide(contributionRate, 2, RoundingMode.HALF_UP)
@@ -460,7 +460,7 @@ internal object RestaurantEconomicManager {
             val actual = parseNonNegative(parts[2], "consumo real da linha ${index + 1}")
             val cost = parseNonNegative(parts[3], "custo unitário da linha ${index + 1}")
             require(cost > zero) { "Linha ${index + 1}: o custo unitário tem de ser superior a zero." }
-            val variance = actual.subtract(expected).setScale(3, RoundingMode.HALF_UP)
+            val variance = actual.subtract(expected).setScale(4, RoundingMode.HALF_UP)
             val impact = variance.multiply(cost).setScale(2, RoundingMode.HALF_UP)
             require(impact.abs() <= maxMoney) {
                 "Linha ${index + 1}: o impacto monetário calculado excede o limite suportado; confirma as quantidades e o custo unitário."
