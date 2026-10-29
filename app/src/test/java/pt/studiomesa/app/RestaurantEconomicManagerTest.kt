@@ -144,7 +144,7 @@ class RestaurantEconomicManagerTest {
 
     @Test fun recipeLinesRetainSubCentPrecisionAndSumToRoundedRecipeCost() {
         val result = RestaurantEconomicManager.costRecipe(
-            "A | 0,002 | 7,00 | 0\\nB | 0,002 | 7,00 | 0",
+            "A | 0,002 | 7,00 | 0\nB | 0,002 | 7,00 | 0",
             amount("30")
         )
 
