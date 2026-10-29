@@ -322,12 +322,21 @@ class RestaurantEconomicManagerTest {
         val rows = RestaurantEconomicManager.compareTheoreticalAndActualUsage(
             "Frango | 20 | 23 | 6,50\nQueijo | 5 | 4 | 8,00"
         )
-        assertEquals(amount("3.000"), rows[0].varianceQuantity)
+        assertEquals(amount("3.0000"), rows[0].varianceQuantity)
         assertEquals(amount("19.50"), rows[0].varianceCost)
-        assertEquals(amount("-1.000"), rows[1].varianceQuantity)
+        assertEquals(amount("-1.0000"), rows[1].varianceQuantity)
         assertEquals(amount("-8.00"), rows[1].varianceCost)
     }
 
+
+    @Test fun usageVarianceRetainsFourDecimalDifferencesAndTheirFinancialImpact() {
+        val rows = RestaurantEconomicManager.compareTheoreticalAndActualUsage(
+            "Ingrediente | 0,0004 | 0,0008 | 1000"
+        )
+
+        assertEquals(amount("0.0004"), rows.single().varianceQuantity)
+        assertEquals(amount("0.40"), rows.single().varianceCost)
+    }
 
     @Test fun usageVarianceRejectsDerivedCostImpactAboveTheSupportedRange() {
         try {
