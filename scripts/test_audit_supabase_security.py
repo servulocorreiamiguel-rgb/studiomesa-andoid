@@ -32,6 +32,49 @@ class SupabaseSecurityAuditTests(unittest.TestCase):
         errors, _, _ = audit_migration_sql(sql)
         self.assertTrue(any("SET search_path" in error for error in errors))
 
+    def test_accepts_only_validated_auth_user_delete_trigger_without_auth_uid(self):
+        sql = """
+        CREATE FUNCTION private.finalize_account_deletion_after_auth_delete()
+        RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+        AS $function$
+        BEGIN
+          DELETE FROM private.account_deletion_queue AS q
+          WHERE q.user_id = OLD.id;
+          RETURN OLD;
+        END;
+        $function$;
+        REVOKE ALL ON FUNCTION private.finalize_account_deletion_after_auth_delete()
+          FROM PUBLIC, anon, authenticated;
+        CREATE TRIGGER z_studiomesa_finalize_account_deletion
+          AFTER DELETE ON auth.users
+          FOR EACH ROW
+          EXECUTE FUNCTION private.finalize_account_deletion_after_auth_delete();
+        """
+        errors, function_count, _ = audit_migration_sql(sql)
+        self.assertEqual([], errors)
+        self.assertEqual(1, function_count)
+
+    def test_auth_delete_trigger_exception_requires_auth_users_binding(self):
+        sql = """
+        CREATE FUNCTION private.finalize_account_deletion_after_auth_delete()
+        RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
+        AS $function$
+        BEGIN
+          DELETE FROM private.account_deletion_queue AS q
+          WHERE q.user_id = OLD.id;
+          RETURN OLD;
+        END;
+        $function$;
+        REVOKE ALL ON FUNCTION private.finalize_account_deletion_after_auth_delete()
+          FROM PUBLIC, anon, authenticated;
+        CREATE TRIGGER z_studiomesa_finalize_account_deletion
+          AFTER DELETE ON public.restaurants
+          FOR EACH ROW
+          EXECUTE FUNCTION private.finalize_account_deletion_after_auth_delete();
+        """
+        errors, _, _ = audit_migration_sql(sql)
+        self.assertTrue(any("auth.uid()" in error for error in errors))
+
     def test_rejects_security_definer_without_auth_uid_check(self):
         sql = """
         CREATE FUNCTION public.no_identity() RETURNS integer LANGUAGE sql SECURITY DEFINER SET search_path = ''
