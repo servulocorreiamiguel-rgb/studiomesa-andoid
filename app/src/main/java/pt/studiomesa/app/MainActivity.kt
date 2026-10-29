@@ -4189,8 +4189,12 @@ class MainActivity : Activity() {
         addMetric(metrics, "Valor nominal dos pedidos criados no período e concluídos", money(summary.nominalCompletedValue))
         addDivider(metrics)
         addMetric(metrics, "Artigos ativos na carta", menuSize.toString())
-        addDivider(metrics, "Rácio de custo atual da carta / preço",
-            if (avgCostRatio.isNaN()) "Sem dados" else String.format(Locale("pt", "PT"), "%.1f%%", avgCostRatio))
+        addDivider(metrics)
+        addMetric(
+            metrics,
+            "Média simples do custo atual / preço atual",
+            if (avgCostRatio.isNaN()) "Sem dados" else String.format(Locale("pt", "PT"), "%.1f%%", avgCostRatio)
+        )
         container.addView(metrics, cardParams())
 
         if (summary.ordersWithInvalidTimestampsExcluded > 0 && selectedAnalysisPeriod != SalesAnalysisPeriod.ALL_TIME) {
