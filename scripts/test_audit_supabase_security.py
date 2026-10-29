@@ -49,6 +49,19 @@ class SupabaseSecurityAuditTests(unittest.TestCase):
         errors, _, _ = audit_migration_sql(sql)
         self.assertTrue(any("GRANT/REVOKE explícito" in error for error in errors))
 
+    def test_rejects_public_table_granted_to_anon(self):
+        sql = """
+        CREATE FUNCTION public.guard() RETURNS integer
+          LANGUAGE sql SECURITY DEFINER SET search_path = ''
+          AS $function$ SELECT 1; $function$;
+        REVOKE ALL ON FUNCTION public.guard() FROM PUBLIC, anon;
+        CREATE TABLE public.customer_data (id uuid PRIMARY KEY);
+        ALTER TABLE public.customer_data ENABLE ROW LEVEL SECURITY;
+        GRANT SELECT ON TABLE public.customer_data TO anon;
+        """
+        errors, _, _ = audit_migration_sql(sql)
+        self.assertTrue(any("GRANT de privilégios de tabela para PUBLIC/anon" in error for error in errors))
+
     def test_accepts_explicit_revocation_for_rpc_only_public_table(self):
         sql = """
         CREATE FUNCTION public.rpc_item_count() RETURNS integer
