@@ -419,6 +419,22 @@ class MainActivitySmokeTest {
     }
 
     @Test
+    fun externalAuthCallbackCannotInjectBearerTokensWithoutPkceCode() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val callback = android.content.Intent(context, MainActivity::class.java).apply {
+            action = android.content.Intent.ACTION_VIEW
+            data = android.net.Uri.parse(
+                "studiomesa://auth-callback#access_token=untrusted&refresh_token=untrusted"
+            )
+        }
+
+        ActivityScenario.launch<MainActivity>(callback).use {
+            onView(withText("Ligação de autenticação inválida"))
+                .check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
     fun customerCanOpenAccountChooserWithoutNetworkCredentials() {
         assumeTrue("Restaurant variant uses the management account flow.", isCustomerVariant())
 

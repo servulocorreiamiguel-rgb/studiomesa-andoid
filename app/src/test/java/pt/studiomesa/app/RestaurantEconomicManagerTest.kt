@@ -132,6 +132,31 @@ class RestaurantEconomicManagerTest {
         }
     }
 
+    @Test fun rejectsOverlongNumericInputBeforeTrimmingWhitespace() {
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            RestaurantEconomicManager.parseNonNegative(" ".repeat(41) + "1", "teste")
+        }
+        assertTrue(error.message.orEmpty().contains("demasiado longo"))
+    }
+
+    @Test fun rejectsOversizedStructuredInputBeforeSplittingOrNormalizing() {
+        val oversized = "x".repeat(50_001)
+        val actions: List<() -> Unit> = listOf(
+            { RestaurantEconomicManager.costRecipe(oversized, amount("30")); Unit },
+            { RestaurantEconomicManager.recommendReorder(oversized); Unit },
+            { RestaurantEconomicManager.analyzeWasteLog(oversized); Unit },
+            { RestaurantEconomicManager.compareSupplierQuotes(oversized); Unit },
+            { RestaurantEconomicManager.compareBudget(oversized); Unit },
+            { RestaurantEconomicManager.compareTheoreticalAndActualUsage(oversized); Unit },
+            { RestaurantEconomicManager.analyzeLabourPlan(oversized); Unit },
+            { RestaurantEconomicManager.parseWeeklySales(oversized); Unit }
+        )
+
+        actions.forEach { action ->
+            assertThrows(IllegalArgumentException::class.java) { action() }
+        }
+    }
+
     @Test fun recipeCostIncludesIngredientWasteAndSuggestsPriceAtChosenTarget() {
         val result = RestaurantEconomicManager.costRecipe(
             "Farinha | 0,2 | 2,50 | 5\nMolho | 0,1 | 4,00 | 0",

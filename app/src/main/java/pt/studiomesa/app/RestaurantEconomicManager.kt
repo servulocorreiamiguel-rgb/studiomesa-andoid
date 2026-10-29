@@ -113,12 +113,17 @@ internal object RestaurantEconomicManager {
     private val hundred = BigDecimal("100")
     private val maxMoney = BigDecimal("999999999.99")
     private val maxInventoryQuantity = BigDecimal("999999999")
+    private const val MAX_NUMERIC_INPUT_LENGTH = 40
+    private const val MAX_RAW_INPUT_LENGTH = 50_000
     private val decimalPattern = Regex("^(?:\\d+(?:[.,]\\d*)?|[.,]\\d+)$")
 
     fun parseNonNegative(raw: String, fieldName: String): BigDecimal {
+        require(raw.length <= MAX_NUMERIC_INPUT_LENGTH) {
+            "O campo «$fieldName» é demasiado longo."
+        }
         val normalized = raw.trim().replace(',', '.')
         require(normalized.isNotEmpty()) { "Preenche o campo «$fieldName»." }
-        require(normalized.length <= 40 && decimalPattern.matches(normalized)) {
+        require(decimalPattern.matches(normalized)) {
             "O campo «$fieldName» tem de ser um número válido, sem valores negativos."
         }
         val value = try {
@@ -257,6 +262,7 @@ internal object RestaurantEconomicManager {
      * Quantity and unit price must use matching measurement units (e.g. kg and €/kg).
      */
     fun costRecipe(rawLines: String, targetFoodCostPercent: BigDecimal): RecipeCostAnalysis {
+        requireRawInputWithinLimit(rawLines, "Os dados da receita")
         require(targetFoodCostPercent > zero && targetFoodCostPercent <= hundred) {
             "O objetivo de custo alimentar tem de estar entre 0 e 100%."
         }
@@ -301,6 +307,7 @@ internal object RestaurantEconomicManager {
      * safety stock in whole days. Returns a quantity only; it never places an order.
      */
     fun recommendReorder(raw: String): ReorderAnalysis {
+        requireRawInputWithinLimit(raw, "Os dados de reposição")
         val parts = raw.split('|').map { it.trim() }
         require(parts.size == 4) {
             "Usa stock atual | consumo médio por dia | prazo do fornecedor em dias | dias de segurança."
@@ -329,6 +336,7 @@ internal object RestaurantEconomicManager {
      * This calculates manual records only; it does not subtract them from inventory.
      */
     fun analyzeWasteLog(rawLines: String): WasteLogReport {
+        requireRawInputWithinLimit(rawLines, "Os registos de desperdício")
         val lines = rawLines.lines().map { it.trim() }.filter { it.isNotEmpty() }
         require(lines.isNotEmpty()) { "Introduz pelo menos um registo de desperdício." }
         require(lines.size <= 200) { "O registo tem demasiadas linhas para uma única análise." }
@@ -370,6 +378,7 @@ internal object RestaurantEconomicManager {
      * Quotes are comparable only for the same item and same usage/purchase unit.
      */
     fun compareSupplierQuotes(rawLines: String): List<SupplierQuoteComparison> {
+        requireRawInputWithinLimit(rawLines, "As propostas de fornecedores")
         val lines = rawLines.lines().map { it.trim() }.filter { it.isNotEmpty() }
         require(lines.isNotEmpty()) { "Introduz pelo menos uma proposta para comparar preços." }
         require(lines.size <= 200) { "Existem demasiadas propostas para uma única comparação." }
@@ -412,6 +421,7 @@ internal object RestaurantEconomicManager {
      * Positive variance means actual is above budget; it is not automatically good or bad.
      */
     fun compareBudget(rawLines: String): List<BudgetVariance> {
+        requireRawInputWithinLimit(rawLines, "Os dados de orçamento")
         val lines = rawLines.lines().map { it.trim() }.filter { it.isNotEmpty() }
         require(lines.isNotEmpty()) { "Introduz pelo menos uma categoria com orçamento e valor real." }
         require(lines.size <= 100) { "Existem demasiadas categorias para uma única comparação." }
@@ -438,6 +448,7 @@ internal object RestaurantEconomicManager {
      * Positive variance means more product was used than expected from the recipe/sales baseline.
      */
     fun compareTheoreticalAndActualUsage(rawLines: String): List<UsageVariance> {
+        requireRawInputWithinLimit(rawLines, "Os dados de consumo")
         val lines = rawLines.lines().map { it.trim() }.filter { it.isNotEmpty() }
         require(lines.isNotEmpty()) { "Introduz pelo menos um artigo para comparar consumo teórico e real." }
         require(lines.size <= 200) { "Existem demasiados artigos para uma única comparação." }
@@ -465,6 +476,7 @@ internal object RestaurantEconomicManager {
      * This is a labour-cost scenario, not a roster optimizer or employment-law recommendation.
      */
     fun analyzeLabourPlan(raw: String): LabourPlanAnalysis {
+        requireRawInputWithinLimit(raw, "Os dados do cenário de pessoal")
         val parts = raw.split('|').map { it.trim() }
         require(parts.size == 4) {
             "Usa horas previstas | custo total por hora | vendas esperadas | objetivo de pessoal %."
@@ -498,11 +510,18 @@ internal object RestaurantEconomicManager {
     }
 
     fun parseWeeklySales(raw: String): List<BigDecimal> {
+        requireRawInputWithinLimit(raw, "O histórico semanal")
         if (raw.isBlank()) return emptyList()
         val tokens = raw.split(Regex("[;\\n]+")).map { it.trim() }.filter { it.isNotEmpty() }
         require(tokens.size <= 52) { "Introduz no máximo 52 valores semanais." }
         return tokens.mapIndexed { index, token ->
             parseNonNegative(token, "vendas da semana ${index + 1}")
+        }
+    }
+
+    private fun requireRawInputWithinLimit(raw: String, fieldName: String) {
+        require(raw.length <= MAX_RAW_INPUT_LENGTH) {
+            "$fieldName é demasiado longo; reduz ou divide os dados introduzidos."
         }
     }
 
