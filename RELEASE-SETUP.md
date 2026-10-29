@@ -89,6 +89,8 @@ A página envia uma ligação única ao email da conta; depois de a pessoa auten
 
 A página foi verificada por carregamento HTTP público, mas **o percurso completo por email ainda não foi validado**. O endereço acima pode ser indicado como recurso externo de eliminação na Play Console só depois de concluir os testes.
 
+**Verificação técnica de 29/10/2026:** o endpoint privado `delete-account` foi atualizado no projeto Supabase para a versão 3, com `verify_jwt=true` e dependência `npm:@supabase/server@1.9.2`, alinhada com o código versionado. Um pedido HTTP público sem token recebeu `401`, e a página pública continuou a responder com o formulário de eliminação. Isto comprova a barreira de autenticação e a disponibilidade da página; não comprova a entrega do email, a troca PKCE nem a eliminação real de uma conta descartável.
+
 ## O que ainda tem de ser concluído antes de vender
 
 - Testes ponta a ponta dos pedidos, reservas, inventário, fidelização, permissões, login, recuperação e logout em dispositivos reais e com contas de teste separadas.
