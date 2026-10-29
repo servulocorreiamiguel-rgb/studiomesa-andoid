@@ -85,6 +85,9 @@ def audit_function_sources(delete_source: str, web_source: str) -> list[str]:
         if part not in web_source:
             errors.append(f"The public page is missing a required security directive/header: {part}")
 
+    if "const linkRequestResultMessage=" not in web_source or web_source.count("showStatus(linkRequestResultMessage)") < 2:
+        errors.append("Account-deletion email requests must use the same generic status on success and failure to prevent email enumeration.")
+
     if "sb_secret_" in web_source or "service_role" in web_source:
         errors.append("The public page must not contain a secret/service-role API key.")
     return errors
