@@ -8,7 +8,7 @@ internal enum class SalesAnalysisPeriod(val label: String) {
     LAST_7_DAYS("Últimos 7 dias"),
     LAST_30_DAYS("Últimos 30 dias"),
     THIS_MONTH("Este mês"),
-    ALL_TIME("Todo o histórico")
+    ALL_TIME("Todo o histórico carregado")
 }
 
 internal data class SalesAnalysisOrder(
