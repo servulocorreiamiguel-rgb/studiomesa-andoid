@@ -47,6 +47,12 @@ jobs:
           python3 scripts/test_check_android_http_safety.py
           python3 scripts/check_android_http_safety.py
 
+      - name: Test Supabase Edge Function dependency pin audit
+        run: python3 scripts/test_check_supabase_edge_dependency_pins.py
+
+      - name: Audit Supabase Edge Function dependency pins
+        run: python3 scripts/check_supabase_edge_dependency_pins.py
+
       - name: Set up Java 17
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
         with:
