@@ -4087,6 +4087,13 @@ class MainActivity : Activity() {
             else "Resumo local dos dados de demonstração."
         )
         addGap(container, 6)
+        if (remoteMode) {
+            container.addView(
+                secondaryButton("Atualizar análise do servidor") { refreshRemoteOperations() },
+                LinearLayout.LayoutParams(-1, dp(44))
+            )
+            addGap(container, 6)
+        }
 
         val periods = SalesAnalysisPeriod.values()
         container.addView(
@@ -4177,9 +4184,9 @@ class MainActivity : Activity() {
         container.addView(summaryCards)
 
         val metrics = makeCard(17)
-        addMetric(metrics, "Pedidos concluídos no período", summary.completedOrderCount.toString())
+        addMetric(metrics, "Pedidos criados no período e concluídos", summary.completedOrderCount.toString())
         addDivider(metrics)
-        addMetric(metrics, "Valor nominal dos pedidos concluídos no período", money(summary.nominalCompletedValue))
+        addMetric(metrics, "Valor nominal dos pedidos criados no período e concluídos", money(summary.nominalCompletedValue))
         addDivider(metrics)
         addMetric(metrics, "Artigos ativos na carta", menuSize.toString())
         addDivider(metrics, "Rácio de custo atual da carta / preço",
