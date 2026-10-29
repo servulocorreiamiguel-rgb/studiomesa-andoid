@@ -476,7 +476,7 @@ class MainActivitySmokeTest {
             onView(withText("Período da análise: Todo o histórico carregado"))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
-            onView(withText("Pedidos concluídos no período"))
+            onView(withText("Pedidos criados no período e concluídos"))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
 
@@ -487,7 +487,7 @@ class MainActivitySmokeTest {
             onView(withText("Período da análise: Últimos 7 dias"))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
-            onView(withText("Valor nominal dos pedidos concluídos no período"))
+            onView(withText("Valor nominal dos pedidos criados no período e concluídos"))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
         }
