@@ -4162,7 +4162,9 @@ class MainActivity : Activity() {
         val summaryCards = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         summaryCards.addView(
             statCard(
-                if (selectedAnalysisPeriod == SalesAnalysisPeriod.ALL_TIME) "PEDIDOS REGISTADOS" else "PEDIDOS NO PERÍODO",
+                if (selectedAnalysisPeriod == SalesAnalysisPeriod.ALL_TIME) {
+                    if (remoteMode) "PEDIDOS CARREGADOS" else "PEDIDOS REGISTADOS"
+                } else "PEDIDOS NO PERÍODO",
                 summary.ordersInPeriod.toString(),
                 forestSoft
             ),
@@ -4187,7 +4189,7 @@ class MainActivity : Activity() {
         if (summary.ordersWithInvalidTimestampsExcluded > 0 && selectedAnalysisPeriod != SalesAnalysisPeriod.ALL_TIME) {
             addGap(container, 4)
             container.addView(emptyCard(
-                "${summary.ordersWithInvalidTimestampsExcluded} pedido(s) com data ausente ou inválida ficam de fora deste período. Seleciona «Todo o histórico» para incluir todos os registos disponíveis."
+                "${summary.ordersWithInvalidTimestampsExcluded} pedido(s) com data ausente ou inválida ficam de fora deste período. Seleciona «Todo o histórico carregado» para incluir todos os registos disponíveis na aplicação."
             ), cardParams())
         }
         if (summary.completedOrdersWithInvalidAmount > 0) {
@@ -4203,7 +4205,7 @@ class MainActivity : Activity() {
         addGap(note, 5)
         note.addView(label(
             if (remoteMode)
-                "A soma usa os pedidos concluídos que já estão carregados na aplicação; confirma a última atualização. Não representa pagamentos confirmados nem vendas contabilísticas e não inclui IVA, custos indiretos, desperdício ou integração com caixa. O rácio da carta usa custos e preços atuais."
+                "A soma usa apenas os pedidos que a aplicação recebeu e guardou em cache; confirma a última atualização. Se existirem mais pedidos do que os devolvidos pelo servidor, o resumo pode não cobrir todo o histórico. Não representa pagamentos confirmados nem vendas contabilísticas e não inclui IVA, custos indiretos, desperdício ou integração com caixa. O rácio da carta usa custos e preços atuais."
             else
                 "Os valores usam os registos de demonstração guardados neste dispositivo. Não representam pagamentos confirmados nem contabilidade oficial. O rácio da carta usa custos e preços atuais.",
             12.5f, false, ink
