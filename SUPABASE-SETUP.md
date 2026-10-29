@@ -106,3 +106,10 @@ Não se considera um backup verificado até existir evidência de um restauro te
 A lista exata de funcionalidades por plano está no `README.md`. A existência de um botão ou de uma tabela não prova que a funcionalidade está concluída. Reservas, gestão granular de funcionários, integrações POS/caixa, pagamentos, faturação, impressoras e recuperação comprovada devem ser considerados por implementar ou validar até existirem testes e evidências específicas.
 
 **Não utilizar esta aplicação para operar um restaurante real nem introduzir dados pessoais reais até a revisão de segurança, os testes funcionais e o restauro de backups estarem concluídos.**
+
+
+## Reforço das permissões predefinidas (29/10/2026)
+
+A migração `20261029133656_revoke_postgres_default_public_privileges.sql` foi aplicada ao projeto Supabase ativo depois de comparar os privilégios predefinidos reais com o repositório. A verificação de `pg_default_acl` confirmou que, em `public`, os novos objetos criados por `postgres` já não recebem privilégios por defeito para `anon`, `authenticated` ou `service_role`; as funções também já não recebem execução por defeito de `PUBLIC`. Os valores predefinidos do esquema `storage` não foram alterados por esta migração.
+
+A migração afeta apenas objetos criados no futuro; não revoga permissões de objetos existentes e não modifica dados. As permissões atuais, as políticas RLS e a autorização de cada função continuam a exigir revisão independente.
