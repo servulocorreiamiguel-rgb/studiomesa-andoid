@@ -18,6 +18,10 @@ internal object OrderHistoryPagination {
     ): List<T> {
         require(pageSize in 1..1_000) { "O tamanho da página tem de estar entre 1 e 1000." }
         require(maxPages > 0) { "O número máximo de páginas tem de ser superior a zero." }
+        require(maxPages <= Int.MAX_VALUE / pageSize) {
+            "O limite de páginas excede o intervalo suportado."
+        }
+        val maximumRows = pageSize * maxPages
 
         val collected = ArrayList<T>()
         for (pageIndex in 0 until maxPages) {
@@ -32,7 +36,7 @@ internal object OrderHistoryPagination {
         if (overflowProbe.isEmpty()) return collected
 
         throw IllegalStateException(
-            "O histórico tem mais de $MAX_SUPPORTED_ROWS pedidos. " +
+            "O histórico tem mais de $maximumRows pedidos. " +
                 "O carregamento foi interrompido para evitar apresentar uma análise parcial; contacta o suporte."
         )
     }
