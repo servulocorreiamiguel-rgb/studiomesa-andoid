@@ -143,6 +143,36 @@ def referenced_by_policy(sql: str, function_name: str) -> bool:
     )
 
 
+def tables_with_explicit_privilege_statements(sql: str) -> set[str]:
+    """Return public tables named in explicit GRANT/REVOKE statements.
+
+    New Supabase Data API defaults must not be relied on for table privileges.
+    A table may deliberately be RPC-only; an explicit REVOKE is still a valid
+    declaration of that access model.
+    """
+    referenced: set[str] = set()
+    for match in re.finditer(r"\b(?:grant|revoke)\b[^;]*;", sql, re.IGNORECASE):
+        statement = match.group(0)
+        if re.search(r"\bon\s+function\b", statement, re.IGNORECASE):
+            continue
+        object_match = re.search(
+            r"\bon\s+(?:table\s+)?([\s\S]*?)\s+(?:to|from)\b",
+            statement,
+            re.IGNORECASE,
+        )
+        if object_match is None:
+            continue
+        referenced.update(
+            name.lower()
+            for name in re.findall(
+                r"\bpublic\.[a-z_][a-z0-9_]*\b",
+                object_match.group(1),
+                re.IGNORECASE,
+            )
+        )
+    return referenced
+
+
 def audit_migration_sql(sql: str) -> tuple[list[str], int, int]:
     errors: list[str] = []
     definitions = security_definer_headers(sql)
@@ -185,6 +215,14 @@ def audit_migration_sql(sql: str) -> tuple[list[str], int, int]:
         )
         if not enabled:
             errors.append(f"{table_name}: tabela criada por migração sem ENABLE ROW LEVEL SECURITY.")
+
+    public_tables = {name for name in table_names if name.startswith("public.")}
+    explicitly_declared = tables_with_explicit_privilege_statements(sql)
+    for table_name in sorted(public_tables - explicitly_declared):
+        errors.append(
+            f"{table_name}: falta GRANT/REVOKE explícito de privilégios na tabela; "
+            "não dependas dos privilégios por omissão da Data API."
+        )
 
     return errors, len(definitions), len(table_names)
 
