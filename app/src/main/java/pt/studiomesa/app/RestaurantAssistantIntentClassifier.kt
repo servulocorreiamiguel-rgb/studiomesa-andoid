@@ -44,7 +44,7 @@ internal object RestaurantAssistantIntentClassifier {
     // In that case the historical part must still trigger the period-safety
     // guard; an advice verb must not make stale/all-time data look historical.
     private val explicitHistoricalMetricPattern = Regex(
-        """\b(?:quanto\s+(?:foi|vendi|vendemos|vendeu|venderam|gastei|gastamos|gastou|paguei|pagamos|pagou|custou|custaram)|qual\s+(?:foi|era)|quais\s+foram|(?:vendas?|receitas?|lucros?|margens?|custos?|despesas?)\s+(?:foram|foi|eram|era))\b"""
+        """\b(?:quanto\s+(?:foi|vendi|vendemos|vendeu|venderam|gastei|gastamos|gastou|paguei|pagamos|pagou|custou|custaram)|qual\s+(?:foi|era)|quais\s+foram|(?:vendas?|receitas?|lucros?|margens?|custos?|despesas?)\s+(?:foram|foi|eram|era)|(?:analisa|analise|mostra|mostre|consulta|consulte|resume|resuma)\s+(?:me\s+)?(?:as\s+)?(?:vendas?|receitas?|lucros?|margens?|precos?|custos?|despesas?|resultados?))\b"""
     )
 
     private fun hasExplicitHistoricalMetricRequest(normalized: String): Boolean =
