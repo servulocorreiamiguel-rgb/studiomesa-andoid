@@ -67,8 +67,9 @@ internal object SalesAnalysisCalculator {
         nowMillis: Long,
         timeZone: TimeZone = TimeZone.getDefault()
     ): Boolean {
+        if (createdAtMillis > nowMillis) return false
         if (period == SalesAnalysisPeriod.ALL_TIME) return true
-        if (createdAtMillis <= 0L || createdAtMillis > nowMillis) return false
+        if (createdAtMillis <= 0L) return false
         val start = startInclusiveMillis(period, nowMillis, timeZone) ?: return true
         return createdAtMillis >= start
     }
@@ -79,8 +80,11 @@ internal object SalesAnalysisCalculator {
         nowMillis: Long = System.currentTimeMillis(),
         timeZone: TimeZone = TimeZone.getDefault()
     ): SalesAnalysisSummary {
-        val invalidTimestamps = if (period == SalesAnalysisPeriod.ALL_TIME) 0
-            else orders.count { it.createdAtMillis <= 0L || it.createdAtMillis > nowMillis }
+        val invalidTimestamps = if (period == SalesAnalysisPeriod.ALL_TIME) {
+            orders.count { it.createdAtMillis > nowMillis }
+        } else {
+            orders.count { it.createdAtMillis <= 0L || it.createdAtMillis > nowMillis }
+        }
         val filtered = orders.filter {
             includes(period, it.createdAtMillis, nowMillis, timeZone)
         }
