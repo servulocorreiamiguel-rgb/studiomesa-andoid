@@ -625,4 +625,14 @@ class StudioMesaAdvisorTest {
         assertFalse(answer.response.contains("Sopa: contribuição"))
     }
 
+    @Test fun compoundHistoricalProfitAndAdviceDoesNotReuseCurrentTotals() {
+        val answer = StudioMesaAdvisor.answerQuestion(
+            "Qual foi o lucro em março e como posso reduzir custos?",
+            snapshot()
+        )
+        assertEquals("Período de desempenho não confirmado", answer.title)
+        assertTrue(answer.response.contains("não incluem séries temporais fiáveis"))
+        assertFalse(answer.response.contains("Estimativa de resultado mensal"))
+    }
+
 }
