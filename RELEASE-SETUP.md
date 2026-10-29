@@ -93,6 +93,10 @@ A página foi verificada por carregamento HTTP público, mas **o percurso comple
 
 **Verificação técnica de 29/10/2026:** o endpoint privado `delete-account` foi atualizado no projeto Supabase para a versão 3, com `verify_jwt=true` e dependência `npm:@supabase/server@1.9.2`, alinhada com o código versionado. Um pedido HTTP público sem token recebeu `401`, e a página pública continuou a responder com o formulário de eliminação. Isto comprova a barreira de autenticação e a disponibilidade da página; não comprova a entrega do email, a troca PKCE nem a eliminação real de uma conta descartável.
 
+## Consultor de preços com aprovação do proprietário — estado de 29/10/2026
+
+A migração `20261029203424_restaurant_price_adviser_owner_approval.sql` está aplicada ao Supabase alojado. A opção começa desligada; só o proprietário pode ativá-la e cada aumento exige confirmação individual. O servidor recalcula o preço com os dados atuais, bloqueia reduções e grava o histórico numa tabela privada. A CI da versão principal passou na execução [40925456259](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/40925456259). **Ainda não considerar pronta para uso comercial** até executar testes ponta a ponta com contas descartáveis de proprietário/funcionário e validar o comportamento em Android físico.
+
 ## O que ainda tem de ser concluído antes de vender
 
 - Testes ponta a ponta dos pedidos, reservas, inventário, fidelização, permissões, login, recuperação e logout em dispositivos reais e com contas de teste separadas.
@@ -117,7 +121,7 @@ Regra para cada nova migração que crie uma tabela em `public`:
 
 Não aplicar um `GRANT` amplo para `anon` como solução rápida. Os privilégios da tabela controlam se o papel pode aceder ao objeto; o RLS controla as linhas que esse papel pode ver ou alterar. Ambos são necessários.
 
-**Estado observado no projeto alojado em 29/10/2026:** a migração `20261029133656_revoke_postgres_default_public_privileges.sql` já foi aplicada ao projeto ativo. Uma consulta posterior confirmou que as predefinições para novos objetos em `public` não concedem privilégios a `anon`, `authenticated` ou `service_role`, nem execução a `PUBLIC`. As 11 tabelas públicas existentes têm RLS e pelo menos uma política cada; a migração alterou apenas os privilégios predefinidos para objetos futuros, não os dados nem as concessões dos objetos existentes. O workflow de CI reproduz as 40 migrações numa base de dados descartável e testa, criando objetos temporários, que novas tabelas, sequências e funções não recebem permissões API por omissão. A comparação integral de todas as definições do esquema alojado com o esquema recriado continua a exigir uma revisão separada.
+**Estado observado no projeto alojado em 29/10/2026:** a migração `20261029133656_revoke_postgres_default_public_privileges.sql` já foi aplicada ao projeto ativo. Uma consulta posterior confirmou que as predefinições para novos objetos em `public` não concedem privilégios a `anon`, `authenticated` ou `service_role`, nem execução a `PUBLIC`. As 11 tabelas públicas existentes têm RLS e pelo menos uma política cada; a migração alterou apenas os privilégios predefinidos para objetos futuros, não os dados nem as concessões dos objetos existentes. O workflow de CI reproduz as 41 migrações numa base de dados descartável e testa, criando objetos temporários, que novas tabelas, sequências e funções não recebem permissões API por omissão. A comparação integral de todas as definições do esquema alojado com o esquema recriado continua a exigir uma revisão separada.
 
 
 A verificação da compilação, por si só, não certifica que a aplicação esteja pronta para operação comercial.
