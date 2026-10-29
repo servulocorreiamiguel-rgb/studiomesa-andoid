@@ -90,22 +90,27 @@ class SalesAnalysisCalculatorTest {
     }
 
     @Test
-    fun allHistoryKeepsUndatedRecordsAndCancelledOrdersDoNotCountAsSales() {
+    fun allHistoryKeepsUndatedRecordsButExcludesFutureDatedOrders() {
         val now = instant(2026, Calendar.OCTOBER, 29, 12)
         val orders = listOf(
             SalesAnalysisOrder(instant(2026, Calendar.OCTOBER, 29, 10), "Concluído", 10.00, 2),
             SalesAnalysisOrder(0L, "Concluído", 4.00),
-            SalesAnalysisOrder(instant(2026, Calendar.OCTOBER, 29, 11), "Cancelado", 100.00)
+            SalesAnalysisOrder(instant(2026, Calendar.OCTOBER, 29, 11), "Cancelado", 100.00),
+            SalesAnalysisOrder(now + 1_000L, "Concluído", 999.00)
         )
 
         val summary = SalesAnalysisCalculator.summarize(
             orders, SalesAnalysisPeriod.ALL_TIME, now, zone
         )
 
+        assertTrue(SalesAnalysisCalculator.includes(SalesAnalysisPeriod.ALL_TIME, 0L, now, zone))
+        assertFalse(SalesAnalysisCalculator.includes(
+            SalesAnalysisPeriod.ALL_TIME, now + 1_000L, now, zone
+        ))
         assertEquals(2, summary.ordersInPeriod)
         assertEquals(2, summary.completedOrderCount)
         assertEquals(24.0, summary.nominalCompletedValue, 0.001)
-        assertEquals(0, summary.ordersWithInvalidTimestampsExcluded)
+        assertEquals(1, summary.ordersWithInvalidTimestampsExcluded)
     }
 
     @Test
