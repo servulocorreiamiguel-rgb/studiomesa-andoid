@@ -78,6 +78,8 @@ A página pública já está ativa em:
 
 A página envia uma ligação única ao email da conta; depois de a pessoa autenticar a sessão, permite pedir a eliminação. Não é seguro permitir eliminação apenas por introduzir um email.
 
+**Bloqueio de segurança adicional — enumeração de contas (29/10/2026):** a página usa `signInWithOtp` com `shouldCreateUser=false`. O projeto Supabase Auth tem um [problema público ainda aberto](https://github.com/supabase/auth/issues/1547) onde respostas HTTP e tempos de resposta podem revelar se um email existe. A mensagem neutra da interface reduz a diferença visível na página, mas **não oculta as respostas do endpoint Auth diretamente acessível**. O fluxo não deve ser considerado resistente à enumeração só por causa desta alteração. Antes da produção, reproduz o comportamento com contas descartáveis, revê as opções de proteção suportadas no projeto e documenta uma mitigação aceite. CAPTCHA/rate limiting podem reduzir abuso, mas não devem ser descritos como uma correção completa sem teste de eficácia.
+
 **Configuração obrigatória antes de testar o email:**
 
 1. Abre o [Dashboard do Supabase](https://supabase.com/dashboard/project/svwvkfsyevuyabelrtjk/auth/url-configuration) e entra em **Authentication → URL Configuration**.
