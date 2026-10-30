@@ -314,7 +314,7 @@ jobs:
             psql --no-psqlrc --set ON_ERROR_STOP=1 --file "${migration}"
             count=$((count + 1))
           done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
-          test "${count}" -eq 42
+          test "${count}" -eq 44
           echo "Successfully replayed ${count} versioned migration files."
 
       - name: Assert core schema, RLS and RPCs exist
@@ -358,6 +358,37 @@ jobs:
             END IF;
 
             IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public'
+                AND table_name = 'restaurant_orders'
+                AND column_name = 'menu_item_id'
+                AND is_nullable = 'YES'
+            ) OR NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public'
+                AND table_name = 'restaurant_orders'
+                AND column_name = 'unit_cost_snapshot'
+                AND is_nullable = 'YES'
+            ) OR NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'restaurant_orders_menu_item_same_restaurant_fk'
+                AND conrelid = 'public.restaurant_orders'::regclass
+                AND contype = 'f'
+            ) OR NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'menu_items_id_restaurant_pair_key'
+                AND conrelid = 'public.menu_items'::regclass
+                AND contype = 'u'
+            ) OR NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'restaurant_orders_unit_cost_snapshot_check'
+                AND conrelid = 'public.restaurant_orders'::regclass
+                AND contype = 'c'
+            ) THEN
+              RAISE EXCEPTION 'Stable order menu identity, nullable cost snapshot or same-restaurant/check constraints are missing.';
+            END IF;
+
+            IF NOT EXISTS (
               SELECT 1
               FROM pg_trigger t
               JOIN pg_class c ON c.oid = t.tgrelid
@@ -368,6 +399,35 @@ jobs:
                 AND NOT p.prosecdef
             ) THEN
               RAISE EXCEPTION 'Inventory cost snapshot trigger is missing or runs with SECURITY DEFINER.';
+            END IF;
+
+            IF NOT EXISTS (
+              SELECT 1
+              FROM pg_proc p
+              WHERE p.oid = 'private.prepare_restaurant_order()'::regprocedure
+                AND NOT p.prosecdef
+                AND COALESCE(p.proconfig @> ARRAY['search_path=""']::text[], false)
+                AND p.prosrc LIKE '%NEW.unit_cost_snapshot%'
+                AND p.prosrc LIKE '%mi.is_active%'
+                AND p.prosrc LIKE '%FOR SHARE%'
+                AND p.prosrc LIKE '%OLD.unit_cost_snapshot%'
+                AND p.prosrc LIKE '%TG_OP = ''UPDATE''%'
+            ) THEN
+              RAISE EXCEPTION 'Order snapshot trigger is missing server-owned values, immutable history, row locking or SECURITY INVOKER.';
+            END IF;
+
+            IF NOT EXISTS (
+              SELECT 1
+              FROM pg_trigger t
+              JOIN pg_class c ON c.oid = t.tgrelid
+              JOIN pg_proc p ON p.oid = t.tgfoid
+              WHERE t.tgname = 'restaurant_order_snapshot_immutable'
+                AND c.oid = 'public.restaurant_orders'::regclass
+                AND NOT t.tgisinternal
+                AND (t.tgtype & 16) = 16
+                AND NOT p.prosecdef
+            ) THEN
+              RAISE EXCEPTION 'Immutable order snapshot update trigger is missing or runs with SECURITY DEFINER.';
             END IF;
 
             IF has_function_privilege(
