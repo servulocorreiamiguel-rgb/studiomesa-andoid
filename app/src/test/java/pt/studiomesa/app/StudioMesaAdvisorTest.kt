@@ -45,6 +45,93 @@ class StudioMesaAdvisorTest {
         assertFalse(StudioMesaAdvisor.recommendations(snapshot(stockAvailable = true, stockItems = listOf(stock))).any { it.title.contains("Arroz") })
         assertTrue(StudioMesaAdvisor.recommendations(snapshot(stockAvailable = true, stockLoaded = true, stockItems = listOf(stock))).any { it.title.contains("Arroz") })
     }
+    @Test fun namedStockQuestionIncludesUnitCostStockValueAndMinimumReplenishmentEstimate() {
+        val data = snapshot(
+            stockAvailable = true,
+            stockLoaded = true,
+            stockItems = listOf(
+                AssistantStockItem(
+                    "Arroz", BigDecimal("2.000"), BigDecimal("5.000"),
+                    "kg", BigDecimal("3.5000")
+                )
+            )
+        )
+        val answer = StudioMesaAdvisor.answerQuestion("Quanto tenho de arroz em stock?", data)
+        assertEquals("Stock de Arroz", answer.title)
+        assertTrue(answer.response.contains("2 kg"))
+        assertTrue(answer.response.contains("3,50"))
+        assertTrue(answer.response.contains("7,00"))
+        assertTrue(answer.response.contains("faltam 3 kg"))
+        assertTrue(answer.response.contains("10,50"))
+    }
+
+    @Test fun stockValuationSumsKnownCostsAndExplicitlyExcludesUnknownItems() {
+        val data = snapshot(
+            stockAvailable = true,
+            stockLoaded = true,
+            stockItems = listOf(
+                AssistantStockItem("Arroz", BigDecimal("2"), BigDecimal("1"), "kg", BigDecimal("3.50")),
+                AssistantStockItem("Frango", BigDecimal("4"), BigDecimal("2"), "kg", null)
+            )
+        )
+        val answer = StudioMesaAdvisor.answerQuestion("Quanto vale o stock?", data)
+        assertEquals("Valor estimado do stock", answer.title)
+        assertTrue(answer.response.contains("7,00"))
+        assertTrue(answer.response.contains("1 artigo(s) ficaram excluídos"))
+        assertFalse(answer.response.contains("11,00"))
+    }
+
+    @Test fun stockValuationDoesNotInventValuesWhenNoUnitCostIsKnown() {
+        val data = snapshot(
+            stockAvailable = true,
+            stockLoaded = true,
+            stockItems = listOf(AssistantStockItem("Arroz", BigDecimal("2"), BigDecimal("1")))
+        )
+        val answer = StudioMesaAdvisor.answerQuestion("Qual é o valor do inventário?", data)
+        assertEquals("Valorização do stock indisponível", answer.title)
+        assertTrue(answer.response.contains("não vou atribuir um valor fictício"))
+    }
+
+    @Test fun stockValuationRequiresAConfirmedLoadedSnapshot() {
+        val answer = StudioMesaAdvisor.answerQuestion(
+            "Quanto vale o stock?",
+            snapshot(
+                stockAvailable = true,
+                stockLoaded = false,
+                stockItems = listOf(
+                    AssistantStockItem("Arroz", BigDecimal("2"), BigDecimal("1"), "kg", BigDecimal("3.50"))
+                )
+            )
+        )
+        assertEquals("Análise de stock", answer.title)
+        assertTrue(answer.response.contains("ainda não foram carregados"))
+        assertFalse(answer.response.contains("7,00"))
+    }
+
+    @Test fun lowStockRecommendationIncludesOnlyAnExplicitMinimumLevelCostEstimate() {
+        val data = snapshot(
+            stockAvailable = true,
+            stockLoaded = true,
+            stockItems = listOf(
+                AssistantStockItem("Arroz", BigDecimal("1.000"), BigDecimal("3.000"), "kg", BigDecimal("12.3456"))
+            )
+        )
+        val recommendation = StudioMesaAdvisor.recommendations(data).first { it.id.startsWith("stock-") }
+        assertTrue(recommendation.detail.contains("2 kg"))
+        assertTrue(recommendation.detail.contains("24,69"))
+        assertTrue(recommendation.detail.contains("prazo de entrega"))
+    }
+
+    @Test fun reportsMissingPurchaseCostsWithoutTreatingThemAsZero() {
+        val data = snapshot(
+            stockAvailable = true,
+            stockLoaded = true,
+            stockItems = listOf(AssistantStockItem("Arroz", BigDecimal("2"), BigDecimal("1")))
+        )
+        val recommendation = StudioMesaAdvisor.recommendations(data).first { it.id == "stock-costs-unknown" }
+        assertTrue(recommendation.detail.contains("Sem custo unitário confirmado"))
+    }
+
     @Test fun questionIntentFindsPricingAndOrderGuidance() {
         val data = snapshot(menu = listOf(item("Prato", "10.00", "4.00")), activeOrders = 4)
         assertEquals("Análise de preços", StudioMesaAdvisor.answerQuestion("Como melhoro o preço?", data).title)
