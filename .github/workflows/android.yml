@@ -314,7 +314,7 @@ jobs:
             psql --no-psqlrc --set ON_ERROR_STOP=1 --file "${migration}"
             count=$((count + 1))
           done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
-          test "${count}" -eq 43
+          test "${count}" -eq 44
           echo "Successfully replayed ${count} versioned migration files."
 
       - name: Assert core schema, RLS and RPCs exist
@@ -399,6 +399,18 @@ jobs:
                 AND NOT p.prosecdef
             ) THEN
               RAISE EXCEPTION 'Inventory cost snapshot trigger is missing or runs with SECURITY DEFINER.';
+            END IF;
+
+            IF NOT EXISTS (
+              SELECT 1
+              FROM pg_proc p
+              WHERE p.oid = 'private.prepare_restaurant_order()'::regprocedure
+                AND NOT p.prosecdef
+                AND COALESCE(p.proconfig @> ARRAY['search_path=""']::text[], false)
+                AND p.prosrc LIKE '%NEW.unit_cost_snapshot%'
+                AND p.prosrc LIKE '%mi.is_active%'
+            ) THEN
+              RAISE EXCEPTION 'Order snapshot trigger is missing server-owned menu values or does not run as SECURITY INVOKER.';
             END IF;
 
             IF has_function_privilege(
