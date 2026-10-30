@@ -654,25 +654,31 @@ object SupabaseApi {
                 ))
                 val row = rows.optJSONObject(0)
                 val userId = getUser(token).optString("id")
-                val menuItemMatches = if (menuItemId.isNullOrBlank()) row?.isNull("menu_item_id") == true
-                    else row?.optString("menu_item_id") == menuItemId
-                val savedCost = row?.takeUnless { it.isNull("unit_cost_snapshot") }
-                    ?.optString("unit_cost_snapshot")?.toBigDecimalOrNull()
-                val costMatches = if (unitCostSnapshot == null) row?.isNull("unit_cost_snapshot") == true
-                    else savedCost?.compareTo(unitCostSnapshot) == 0
+                val savedCostIsNull = row?.isNull("unit_cost_snapshot") == true
+                val savedCost = if (savedCostIsNull) null else {
+                    row?.optString("unit_cost_snapshot")?.toBigDecimalOrNull()
+                }
+                val snapshotMatches = row != null && OrderCreateRetryMatcher.matches(
+                    requestedMenuItemId = menuItemId,
+                    savedMenuItemId = row.optString("menu_item_id").takeIf { it.isNotBlank() },
+                    requestedItemName = itemName,
+                    savedItemName = row.optString("item_name"),
+                    requestedAmount = amount,
+                    savedAmount = row.optDouble("amount", Double.NaN),
+                    requestedUnitCost = unitCostSnapshot,
+                    savedUnitCost = savedCost,
+                    savedUnitCostIsNull = savedCostIsNull
+                )
                 row != null &&
                     userId.isNotBlank() &&
                     row.optString("id") == requestId &&
                     row.optString("restaurant_id") == restaurantId &&
                     row.optString("created_by") == userId &&
-                    row.optString("menu_item_id") == menuItemId.orEmpty() &&
                     row.optInt("table_number") == tableNumber &&
-                    row.optString("item_name") == itemName &&
-                    kotlin.math.abs(row.optDouble("amount", Double.NaN) - amount) < 0.000001 &&
                     row.optInt("quantity") == quantity &&
                     row.optString("service_course") == serviceCourse &&
                     row.optString("notes") == notes.trim() &&
-                    menuItemMatches && costMatches
+                    snapshotMatches
             }.getOrDefault(false)
             if (!existingMatches) throw writeError
         }
