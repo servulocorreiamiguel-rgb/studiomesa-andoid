@@ -950,6 +950,22 @@ object SupabaseApi {
         ))
     }
 
+    fun listInventoryWasteMovements(
+        token: String,
+        restaurantId: String,
+        limit: Int = 100
+    ): JSONArray {
+        require(limit in 1..200) { "O limite de perdas deve estar entre 1 e 200." }
+        val encodedRestaurant = URLEncoder.encode(restaurantId, "UTF-8")
+        val encodedWastePrefix = URLEncoder.encode(InventoryWasteNotes.PREFIX + "%", "UTF-8")
+        return JSONArray(call(
+            "GET",
+            "/rest/v1/restaurant_inventory_movements?select=item_id,delta,note,created_at&restaurant_id=eq.$encodedRestaurant&delta=lt.0&note=like.$encodedWastePrefix&order=created_at.desc&limit=$limit",
+            null,
+            token
+        ))
+    }
+
     fun listReservations(token: String, restaurantId: String): JSONArray {
         val encoded = URLEncoder.encode(restaurantId, "UTF-8")
         return JSONArray(call(
