@@ -71,7 +71,10 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [x] Atualização automática do inventário a cada 30 segundos quando a secção Stock está aberta em primeiro plano; a leitura manual mantém-se disponível e a última cópia válida é preservada em falhas de rede.
 - [ ] Testar desperdício e atualização automática ponta a ponta em Android físico, incluindo dois dispositivos, perda/restauro de rede, repetição idempotente, stock insuficiente e isolamento entre restaurantes.
 - [ ] Testar concorrência, valores-limite, sessão expirada e isolamento entre restaurantes.
-- [ ] Avisos automáticos, fornecedores/encomendas, consumo automático de ingredientes por receita, desperdício e inventário por local.
+- [x] Receitas ligam artigos da carta a ingredientes do inventário com quantidade por dose e desperdício de preparação; o consumo automático é aprovado exclusivamente pelo proprietário e desconta stock de forma transacional ao iniciar a preparação. Um pedido com stock insuficiente não avança nem deixa deduções parciais.
+- [ ] Testar receitas e consumo automático em dispositivos reais e com duas contas simultâneas; validar edição de receita, perda/restauro de rede e concorrência de preparação.
+- [ ] Conversões de unidades, custo de aquisição por ingrediente, custo real por receita e desperdício financeiro integrado.
+- [ ] Avisos automáticos, fornecedores/encomendas e inventário por local.
 
 ## Administração e equipa
 

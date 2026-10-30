@@ -50,3 +50,10 @@ AS $role$
     current_user
   );
 $role$;
+
+-- Supabase exposes the Auth helper functions to API roles. The isolated CI
+-- shim must mirror that so authenticated order-insert triggers can call auth.uid().
+GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION auth.uid() TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION auth.jwt() TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION auth.role() TO anon, authenticated, service_role;
