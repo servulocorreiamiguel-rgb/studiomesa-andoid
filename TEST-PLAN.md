@@ -179,3 +179,16 @@ Os testes unitários executam-se em todas as cinco variantes. O gestor económic
 | ECON-10 | Separação de responsabilidades | Executar cálculo de receita, previsão simples, cenário de pessoal ou registo de desperdício | Não modifica pedidos, stock, horários ou encomendas; todos os resultados são apresentados como estimativas manuais |
 
 Os casos ECON-07 e ECON-08 só passam a estado aprovado depois de o PR #58 e a CI do commit integrado terminarem com sucesso. A aprovação automatizada não substitui teste manual com dados fictícios num dispositivo real.
+
+
+## Atualização automática da fila da cozinha
+
+A aplicação consulta apenas os pedidos ativos a cada 15 segundos quando a secção Cozinha está aberta e a aplicação está em primeiro plano. A consulta é pausada ao sair da secção ou ao colocar a app em segundo plano. Não é uma subscrição em tempo real.
+
+| ID | Categoria | Ação / dados | Resultado esperado / estado |
+|---|---|---|---|
+| KIT-01 | Âmbito / sessão | Abrir Cozinha com restaurante remoto autenticado | A fila atualiza de 15 em 15 segundos; o pedido GET contém apenas estados ativos e respeita o filtro do restaurante. Teste unitário da política e do URL acrescentado; aguarda CI. |
+| KIT-02 | Eficiência | Abrir Pedidos, Início ou outra secção; colocar a app em segundo plano | Não são feitas consultas automáticas à fila da cozinha. A rotina é retomada quando a secção Cozinha volta a estar visível em primeiro plano. Teste de dispositivo pendente. |
+| KIT-03 | Concorrência | Simular uma consulta lenta e deixar chegar o intervalo seguinte | Não é iniciada uma segunda consulta enquanto a primeira está ativa; a atualização seguinte retoma sem duplicar pedidos. Teste automatizado da política acrescentado; cenário de rede real pendente. |
+| KIT-04 | Rede / recuperação | Perder a ligação durante a atualização automática e restabelecê-la | A última fila válida permanece visível, é mostrado um aviso não bloqueante e a consulta seguinte volta a atualizar os pedidos sem duplicados. Teste em Android real pendente. |
+| KIT-05 | Operação | Criar pedido noutro dispositivo enquanto Cozinha está aberta; depois avançar um ticket no primeiro dispositivo | O novo pedido aparece automaticamente até ao ciclo seguinte; o ticket avançado desaparece da fila ativa após confirmação do servidor. Teste com dois dispositivos reais pendente. |
