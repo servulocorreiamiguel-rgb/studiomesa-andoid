@@ -314,7 +314,7 @@ jobs:
             psql --no-psqlrc --set ON_ERROR_STOP=1 --file "${migration}"
             count=$((count + 1))
           done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
-          test "${count}" -eq 45
+          test "${count}" -eq 46
           echo "Successfully replayed ${count} versioned migration files."
 
       - name: Assert core schema, RLS and RPCs exist
@@ -436,6 +436,11 @@ jobs:
                 AND NOT p.prosecdef
             ) THEN
               RAISE EXCEPTION 'Immutable order snapshot update trigger is missing or runs with SECURITY DEFINER.';
+            END IF;
+
+            IF to_regclass('private.restaurant_price_adviser_audit_acted_by_idx') IS NULL
+              OR to_regclass('private.restaurant_price_adviser_settings_updated_by_idx') IS NULL THEN
+              RAISE EXCEPTION 'Price adviser actor foreign-key indexes are missing.';
             END IF;
 
             IF has_function_privilege(
