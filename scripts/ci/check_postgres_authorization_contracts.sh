@@ -239,6 +239,113 @@ if [ "$STAFF_C_RESTAURANT" != "$RESTAURANT_A" ]; then
 fi
 echo "PASS: staff join RPC works, repeated joins are idempotent, and a staff account cannot join a second restaurant."
 
+# A new order must reference the stable menu UUID and retain its own name,
+# sale-price and known-cost snapshots if the menu is edited or its row is deleted.
+ORDER_MENU_ITEM_A="aaaaaaaa-1111-4111-8111-111111111111"
+ORDER_MENU_ITEM_B="bbbbbbbb-2222-4222-8222-222222222222"
+ORDER_SNAPSHOT_ID="cccccccc-3333-4333-8333-333333333333"
+ORDER_LEGACY_ID="dddddddd-4444-4444-8444-444444444444"
+ORDER_FOREIGN_ID="eeeeeeee-5555-4555-8555-555555555555"
+ORDER_INVALID_COST_ID="ffffffff-6666-4666-8666-666666666666"
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+INSERT INTO public.menu_items
+  (id, restaurant_id, name, category, description, price, cost, allergens, is_active)
+VALUES
+  ('$ORDER_MENU_ITEM_A'::uuid, '$RESTAURANT_A'::uuid, 'Bitoque original',
+   'Prato principal', '', 13.50, 4.25, '', true);
+INSERT INTO public.restaurant_orders
+  (id, restaurant_id, table_number, item_name, amount, quantity,
+   service_course, notes, status, menu_item_id, unit_cost_snapshot)
+VALUES
+  ('$ORDER_SNAPSHOT_ID'::uuid, '$RESTAURANT_A'::uuid, 1,
+   'Bitoque original', 13.50, 2, 'Principal', '', 'Aberto',
+   '$ORDER_MENU_ITEM_A'::uuid, 4.25),
+  ('$ORDER_LEGACY_ID'::uuid, '$RESTAURANT_A'::uuid, 2,
+   'Pedido antigo sem ID', 7.00, 1, 'Principal', '', 'Aberto',
+   NULL, NULL);
+COMMIT;
+SQL
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL
+UPDATE public.menu_items
+SET name = 'Bitoque atualizado', price = 15.00, cost = 5.50
+WHERE id = '$ORDER_MENU_ITEM_A'::uuid
+  AND restaurant_id = '$RESTAURANT_A'::uuid;
+SQL
+
+order_snapshot_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT menu_item_id = '$ORDER_MENU_ITEM_A'::uuid
+         AND item_name = 'Bitoque original'
+         AND amount = 13.50
+         AND unit_cost_snapshot = 4.25
+      FROM public.restaurant_orders WHERE id = '$ORDER_SNAPSHOT_ID'::uuid;")"
+legacy_order_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT menu_item_id IS NULL AND unit_cost_snapshot IS NULL
+      FROM public.restaurant_orders WHERE id = '$ORDER_LEGACY_ID'::uuid;")"
+if [ "$order_snapshot_ok" != "t" ] || [ "$legacy_order_ok" != "t" ]; then
+  echo "ERROR: editing the menu changed an order snapshot or legacy orders were not preserved." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+INSERT INTO public.menu_items
+  (id, restaurant_id, name, category, price, cost, allergens, is_active)
+VALUES
+  ('$ORDER_MENU_ITEM_B'::uuid, '$RESTAURANT_B'::uuid, 'Dish restaurant B',
+   'Prato principal', 9.00, 2.00, '', true);
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+INSERT INTO public.restaurant_orders
+  (id, restaurant_id, table_number, item_name, amount, quantity,
+   service_course, notes, status, menu_item_id, unit_cost_snapshot)
+VALUES
+  ('$ORDER_FOREIGN_ID'::uuid, '$RESTAURANT_A'::uuid, 1,
+   'Dish restaurant B', 9.00, 1, 'Principal', '', 'Aberto',
+   '$ORDER_MENU_ITEM_B'::uuid, 2.00);
+COMMIT;
+SQL
+then
+  echo "ERROR: order A accepted a menu item belonging to restaurant B." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+INSERT INTO public.restaurant_orders
+  (id, restaurant_id, table_number, item_name, amount, quantity,
+   service_course, notes, status, menu_item_id, unit_cost_snapshot)
+VALUES
+  ('$ORDER_INVALID_COST_ID'::uuid, '$RESTAURANT_A'::uuid, 1,
+   'Invalid cost', 9.00, 1, 'Principal', '', 'Aberto',
+   NULL, -0.01);
+COMMIT;
+SQL
+then
+  echo "ERROR: order accepted a negative unit-cost snapshot." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 -c \
+  "DELETE FROM public.menu_items WHERE id = '$ORDER_MENU_ITEM_A'::uuid AND restaurant_id = '$RESTAURANT_A'::uuid;" >/dev/null
+deleted_menu_snapshot_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT menu_item_id IS NULL
+         AND item_name = 'Bitoque original'
+         AND amount = 13.50
+         AND unit_cost_snapshot = 4.25
+      FROM public.restaurant_orders WHERE id = '$ORDER_SNAPSHOT_ID'::uuid;")"
+if [ "$deleted_menu_snapshot_ok" != "t" ]; then
+  echo "ERROR: deleting a menu row did not preserve the order's historical snapshots." >&2
+  exit 1
+fi
+echo "PASS: new orders retain stable menu identity and known-cost snapshots, legacy orders remain valid, and cross-restaurant/negative-cost links are rejected."
+
 PRICE_MENU_ITEM_A="99999999-1111-4111-8111-111111111111"
 PRICE_MENU_ITEM_B="99999999-2222-4222-8222-222222222222"
 PRICE_ACTION_ID="99999999-3333-4333-8333-333333333333"
