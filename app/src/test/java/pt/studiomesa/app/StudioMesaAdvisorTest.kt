@@ -489,7 +489,7 @@ class StudioMesaAdvisorTest {
         )
         val answer = StudioMesaAdvisor.answerQuestion("Quanto tenho de arroz em stock?", data)
         assertEquals("Stock de Arroz", answer.title)
-        assertTrue(answer.response.contains("2 disponíveis"))
+        assertTrue(answer.response.contains("2 unidades disponíveis"))
         assertTrue(answer.response.contains("limite mínimo 5"))
         assertFalse(answer.response.contains("Frango"))
     }
