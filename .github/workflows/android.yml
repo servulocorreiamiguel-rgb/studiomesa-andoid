@@ -424,6 +424,8 @@ jobs:
               WHERE t.tgname = 'restaurant_order_snapshot_immutable'
                 AND c.oid = 'public.restaurant_orders'::regclass
                 AND NOT t.tgisinternal
+                AND (t.tgtype & 2) = 2
+                AND (t.tgtype & 4) = 4
                 AND (t.tgtype & 16) = 16
                 AND NOT p.prosecdef
             ) THEN
