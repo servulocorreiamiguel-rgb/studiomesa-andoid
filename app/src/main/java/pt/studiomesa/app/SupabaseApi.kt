@@ -1120,7 +1120,7 @@ object SupabaseApi {
         val encoded = URLEncoder.encode(itemId, "UTF-8")
         return JSONArray(call(
             "GET",
-            "/rest/v1/restaurant_inventory_movements?select=delta,quantity_after,note,created_at&item_id=eq.$encoded&order=created_at.desc&limit=30",
+            "/rest/v1/restaurant_inventory_movements?select=delta,quantity_after,note,created_at,unit_at_movement,unit_cost_at_movement&item_id=eq.$encoded&order=created_at.desc&limit=30",
             null,
             token
         ))
@@ -1136,7 +1136,7 @@ object SupabaseApi {
         val encodedWastePrefix = URLEncoder.encode(InventoryWasteNotes.PREFIX + "%", "UTF-8")
         return JSONArray(call(
             "GET",
-            "/rest/v1/restaurant_inventory_movements?select=item_id,delta,note,created_at,unit_cost_at_movement&restaurant_id=eq.$encodedRestaurant&delta=lt.0&note=like.$encodedWastePrefix&order=created_at.desc&limit=$limit",
+            "/rest/v1/restaurant_inventory_movements?select=item_id,delta,note,created_at,unit_at_movement,unit_cost_at_movement&restaurant_id=eq.$encodedRestaurant&delta=lt.0&note=like.$encodedWastePrefix&order=created_at.desc&limit=$limit",
             null,
             token
         ))
