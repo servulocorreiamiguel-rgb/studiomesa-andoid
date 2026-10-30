@@ -2,6 +2,8 @@
 
 Protótipo Android de gestão de restaurante com identidade visual própria e dados de demonstração. Não é uma solução certificada para operação comercial. Antes de um restaurante o usar em serviço real, é obrigatório testar os fluxos, configurar as regras do restaurante e confirmar os requisitos legais e operacionais.
 
+**Validação automática mais recente — CI #863 (30/10/2026):** 46 migrações reproduzidas e testes PostgreSQL/autorização aprovados; cinco variantes compiladas; testes unitários e Android Lint aprovados; cinco perfis testados em Android 8 e Android 16, com zero falhas (78 testes executados e 57 ignorados por não se aplicarem, em cada versão Android). Esta validação usa base de dados descartável e emuladores. Não substitui testes ponta a ponta com dois telemóveis reais nem valida a configuração de produção. Os APKs gerados são DEBUG, apenas para testes, e não para venda.
+
 ## Estrutura dos planos de demonstração
 
 - **Essencial — 890 € (referência):** aplicação de gestão do restaurante com mesas, carta, pedidos e fidelização.
