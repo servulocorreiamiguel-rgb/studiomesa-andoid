@@ -508,6 +508,15 @@ BEGIN
       updated_by = COALESCE((SELECT auth.uid()), r.updated_by),
       updated_at = now()
   WHERE r.restaurant_id = OLD.restaurant_id
+    -- During deletion of a restaurant or menu item, the corresponding
+    -- recipe is already being removed by its FK cascade. Do not update it
+    -- after its referenced menu row has disappeared.
+    AND EXISTS (
+      SELECT 1
+      FROM public.menu_items AS mi
+      WHERE mi.id = r.menu_item_id
+        AND mi.restaurant_id = r.restaurant_id
+    )
     AND EXISTS (
       SELECT 1
       FROM public.restaurant_recipe_ingredients AS ri
