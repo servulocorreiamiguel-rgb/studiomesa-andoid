@@ -14,6 +14,15 @@ internal data class AssistantStockItem(
     val unit: String = "",
     val unitCostPerUnit: BigDecimal? = null
 )
+internal object AssistantStockSnapshotPolicy {
+    const val MAX_AGE_MILLIS = 5 * 60 * 1000L
+
+    fun isFresh(nowMillis: Long, updatedAtMillis: Long): Boolean =
+        updatedAtMillis > 0L &&
+            nowMillis >= updatedAtMillis &&
+            nowMillis - updatedAtMillis <= MAX_AGE_MILLIS
+}
+
 internal enum class MenuEngineeringClass { STAR, WORKHORSE, PUZZLE, DOG, MISSING_COST }
 internal data class AssistantMenuEngineeringItem(val itemName: String, val unitsSold: Int, val popularitySharePercent: BigDecimal, val contributionPerUnit: BigDecimal?, val classification: MenuEngineeringClass, val recommendation: String)
 internal data class AssistantMenuEngineeringReport(val hasEnoughSales: Boolean, val hasMarginData: Boolean, val completedUnits: Int, val requiredUnits: Int = 5, val items: List<AssistantMenuEngineeringItem> = emptyList())
