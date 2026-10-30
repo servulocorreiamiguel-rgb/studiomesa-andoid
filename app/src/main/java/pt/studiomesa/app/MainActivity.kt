@@ -3268,12 +3268,23 @@ class MainActivity : Activity() {
                 .setPositiveButton("OK", null).show()
             return
         }
+        if (inventoryRefreshInFlight) return
+        inventoryRefreshInFlight = true
         runBackend({
             val items = SupabaseApi.listInventoryItems(backendToken(), backendRestaurantId())
             backendPrefs.edit().putString("remote_inventory_json", items.toString())
                 .putBoolean("inventory_loaded", true).apply()
             "OK"
-        }) { renderApp() }
+        }, onError = {
+            inventoryRefreshInFlight = false
+            inventoryRefreshFailed = true
+            if (activePage == "Stock") renderApp()
+        }) {
+            inventoryRefreshInFlight = false
+            inventoryUpdatedAtMillis = System.currentTimeMillis()
+            inventoryRefreshFailed = false
+            renderApp()
+        }
     }
 
     private fun refreshReservations() {
@@ -3515,8 +3526,13 @@ class MainActivity : Activity() {
         addGap(container, 12)
 
         if (!backendPrefs.getBoolean("inventory_loaded", false)) {
-            container.addView(emptyCard("A carregar o inventário do servidor…"))
-            refreshInventoryItems()
+            val message = when {
+                inventoryRefreshFailed -> "Não foi possível carregar o inventário. Usa «Atualizar stock» para tentar novamente."
+                inventoryRefreshInFlight -> "A carregar o inventário do servidor…"
+                else -> "A preparar a ligação ao inventário…"
+            }
+            container.addView(emptyCard(message))
+            if (!inventoryRefreshInFlight && !inventoryRefreshFailed) refreshInventoryItems()
             return
         }
         val items = remoteInventoryItems()
