@@ -45,6 +45,15 @@ class StudioMesaAdvisorTest {
         assertFalse(StudioMesaAdvisor.recommendations(snapshot(stockAvailable = true, stockItems = listOf(stock))).any { it.title.contains("Arroz") })
         assertTrue(StudioMesaAdvisor.recommendations(snapshot(stockAvailable = true, stockLoaded = true, stockItems = listOf(stock))).any { it.title.contains("Arroz") })
     }
+    @Test fun assistantStockSnapshotPolicyAcceptsOnlyRecentNonFutureSuccessfulReads() {
+        val now = 1_000_000L
+        assertTrue(AssistantStockSnapshotPolicy.isFresh(now, now))
+        assertTrue(AssistantStockSnapshotPolicy.isFresh(now, now - AssistantStockSnapshotPolicy.MAX_AGE_MILLIS))
+        assertFalse(AssistantStockSnapshotPolicy.isFresh(now, now - AssistantStockSnapshotPolicy.MAX_AGE_MILLIS - 1))
+        assertFalse(AssistantStockSnapshotPolicy.isFresh(now, 0L))
+        assertFalse(AssistantStockSnapshotPolicy.isFresh(now, now + 1))
+    }
+
     @Test fun namedStockQuestionIncludesUnitCostStockValueAndMinimumReplenishmentEstimate() {
         val data = snapshot(
             stockAvailable = true,
