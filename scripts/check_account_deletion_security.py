@@ -59,6 +59,15 @@ def audit_function_sources(delete_source: str, web_source: str) -> list[str]:
         errors.append("The public page must pin supabase-js to an exact x.y.z CDN version.")
     if not re.search(r'flowType\s*:\s*["\']pkce["\']', web_source):
         errors.append("The account deletion page must use the PKCE authentication flow.")
+
+    if re.search(r'supabase\.auth\.signInWithOtp\s*\(', web_source):
+        errors.append("The account deletion page must not use signInWithOtp, which can expose account existence through Auth responses.")
+
+    if not re.search(
+        r'supabase\.auth\.resetPasswordForEmail\(\s*email\s*,\s*\{\s*redirectTo\s*:\s*redirectUrl\s*\}\s*\)',
+        web_source,
+    ):
+        errors.append("The account deletion page must request password recovery with an explicit same-page redirect URL.")
     if re.search(r'flowType\s*:\s*["\']implicit["\']', web_source):
         errors.append("The legacy implicit authentication flow must not be enabled on the account deletion page.")
 
@@ -89,7 +98,7 @@ def audit_function_sources(delete_source: str, web_source: str) -> list[str]:
         errors.append("The page must not claim that its UI prevents email enumeration; the underlying Auth API must be assessed separately.")
 
     if "const linkRequestResultMessage=" not in web_source or web_source.count("showStatus(linkRequestResultMessage)") < 2:
-        errors.append("Account-deletion email requests must use the same generic status on success and failure; this only checks visible UI feedback and does not prove the Auth API resists enumeration.")
+        errors.append("Account-deletion recovery requests must use the same generic status on success and failure; this checks visible UI feedback only.")
 
     if "sb_secret_" in web_source or "service_role" in web_source:
         errors.append("The public page must not contain a secret/service-role API key.")
