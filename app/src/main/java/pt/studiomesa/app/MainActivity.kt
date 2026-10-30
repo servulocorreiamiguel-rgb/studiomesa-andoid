@@ -3583,7 +3583,7 @@ class MainActivity : Activity() {
             card.addView(label("${formatQuantity(quantity)} $unit", 22f, true, if (isLow) red else forest))
             card.addView(label("Alerta a ${formatQuantity(threshold)} $unit", 11.5f, false, muted))
             card.addView(label(
-                unitCost?.let { "Custo de compra: ${formatEuro(it)} / $unit" }
+                unitCost?.let { "Custo de compra: ${formatUnitCost(it)} / $unit" }
                     ?: "Custo de compra por unidade não definido",
                 11.5f, false, muted
             ))
@@ -3631,6 +3631,9 @@ class MainActivity : Activity() {
 
     private fun formatEuro(value: BigDecimal): String =
         NumberFormat.getCurrencyInstance(Locale("pt", "PT")).format(value)
+
+    private fun formatUnitCost(value: BigDecimal): String =
+        "€ " + DecimalFormat("0.0000", DecimalFormatSymbols.getInstance(Locale("pt", "PT"))).format(value)
 
     private fun formatQuantity(value: Double): String =
         String.format(Locale("pt", "PT"), "%.3f", value).trimEnd('0').trimEnd(',')
