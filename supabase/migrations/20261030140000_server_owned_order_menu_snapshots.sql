@@ -62,7 +62,7 @@ $function$;
 
 DROP TRIGGER IF EXISTS restaurant_order_snapshot_immutable ON public.restaurant_orders;
 CREATE TRIGGER restaurant_order_snapshot_immutable
-  BEFORE UPDATE ON public.restaurant_orders
+  BEFORE INSERT OR UPDATE ON public.restaurant_orders
   FOR EACH ROW EXECUTE FUNCTION private.prepare_restaurant_order();
 
 COMMIT;
