@@ -409,8 +409,25 @@ jobs:
                 AND COALESCE(p.proconfig @> ARRAY['search_path=""']::text[], false)
                 AND p.prosrc LIKE '%NEW.unit_cost_snapshot%'
                 AND p.prosrc LIKE '%mi.is_active%'
+                AND p.prosrc LIKE '%FOR SHARE%'
+                AND p.prosrc LIKE '%OLD.unit_cost_snapshot%'
+                AND p.prosrc LIKE '%TG_OP = ''UPDATE''%'
             ) THEN
-              RAISE EXCEPTION 'Order snapshot trigger is missing server-owned menu values or does not run as SECURITY INVOKER.';
+              RAISE EXCEPTION 'Order snapshot trigger is missing server-owned values, immutable history, row locking or SECURITY INVOKER.';
+            END IF;
+
+            IF NOT EXISTS (
+              SELECT 1
+              FROM pg_trigger t
+              JOIN pg_class c ON c.oid = t.tgrelid
+              JOIN pg_proc p ON p.oid = t.tgfoid
+              WHERE t.tgname = 'restaurant_order_snapshot_immutable'
+                AND c.oid = 'public.restaurant_orders'::regclass
+                AND NOT t.tgisinternal
+                AND (t.tgtype & 16) = 16
+                AND NOT p.prosecdef
+            ) THEN
+              RAISE EXCEPTION 'Immutable order snapshot update trigger is missing or runs with SECURITY DEFINER.';
             END IF;
 
             IF has_function_privilege(
