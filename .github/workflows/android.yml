@@ -362,6 +362,7 @@ jobs:
               WHERE table_schema = 'public'
                 AND table_name = 'restaurant_orders'
                 AND column_name = 'menu_item_id'
+                AND is_nullable = 'YES'
             ) OR NOT EXISTS (
               SELECT 1 FROM information_schema.columns
               WHERE table_schema = 'public'
@@ -372,8 +373,19 @@ jobs:
               SELECT 1 FROM pg_constraint
               WHERE conname = 'restaurant_orders_menu_item_same_restaurant_fk'
                 AND conrelid = 'public.restaurant_orders'::regclass
+                AND contype = 'f'
+            ) OR NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'menu_items_id_restaurant_pair_key'
+                AND conrelid = 'public.menu_items'::regclass
+                AND contype = 'u'
+            ) OR NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'restaurant_orders_unit_cost_snapshot_check'
+                AND conrelid = 'public.restaurant_orders'::regclass
+                AND contype = 'c'
             ) THEN
-              RAISE EXCEPTION 'Stable order menu identity, nullable cost snapshot or same-restaurant constraint is missing.';
+              RAISE EXCEPTION 'Stable order menu identity, nullable cost snapshot or same-restaurant/check constraints are missing.';
             END IF;
 
             IF NOT EXISTS (
