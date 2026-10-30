@@ -4061,7 +4061,16 @@ class MainActivity : Activity() {
                 val quantity = item.optDouble("quantity", 0.0)
                 val minimum = item.optDouble("low_stock_threshold", 0.0)
                 if (!quantity.isFinite() || !minimum.isFinite()) return@mapNotNull null
-                AssistantStockItem(name, BigDecimal.valueOf(quantity), BigDecimal.valueOf(minimum))
+                val unit = item.optString("unit", "").trim()
+                val unitCost = if (item.isNull("unit_cost_per_unit")) null else
+                    runCatching { BigDecimal(item.get("unit_cost_per_unit").toString()) }.getOrNull()
+                AssistantStockItem(
+                    name,
+                    BigDecimal(item.optString("quantity", "0")),
+                    BigDecimal(item.optString("low_stock_threshold", "0")),
+                    unit,
+                    unitCost
+                )
             }
         } else emptyList()
         val reservationsAreLoaded = hasCalculator && remote && reservationsLoaded
