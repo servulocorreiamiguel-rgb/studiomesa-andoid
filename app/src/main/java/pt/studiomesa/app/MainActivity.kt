@@ -13,6 +13,8 @@ import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.text.InputFilter
 import android.text.InputType
 import android.view.Gravity
@@ -44,6 +46,23 @@ class MainActivity : Activity() {
     private lateinit var appRoot: LinearLayout
     private var activePage = "Início"
     private var activeCustomerPage = "Cartão"
+
+    private var activityResumed = false
+    private var kitchenAutoRefreshScheduled = false
+    private var kitchenRefreshInFlight = false
+    private var kitchenOrdersCache: JSONArray? = null
+    private var kitchenQueueUpdatedAtMillis = 0L
+    private var kitchenQueueRefreshFailed = false
+    private var kitchenPageContainer: LinearLayout? = null
+    private val kitchenRefreshHandler = Handler(Looper.getMainLooper())
+    private val kitchenRefreshRunnable = object : Runnable {
+        override fun run() {
+            kitchenAutoRefreshScheduled = false
+            if (!shouldRunKitchenAutoRefresh()) return
+            refreshKitchenQueueSilently()
+            scheduleNextKitchenAutoRefresh()
+        }
+    }
     private var assistantQuestion = ""
     private var assistantAnswer: StudioMesaAssistantAnswer? = null
     private var selectedAnalysisPeriod = SalesAnalysisPeriod.ALL_TIME
@@ -123,6 +142,18 @@ class MainActivity : Activity() {
                 refreshRemoteOperations()
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        activityResumed = true
+        updateKitchenAutoRefresh()
+    }
+
+    override fun onPause() {
+        activityResumed = false
+        stopKitchenAutoRefresh()
+        super.onPause()
     }
 
     override fun onNewIntent(intent: android.content.Intent) {
@@ -508,9 +539,11 @@ class MainActivity : Activity() {
         }
         appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(60)))
         setContentView(appRoot)
+        updateKitchenAutoRefresh()
     }
 
     private fun renderPage(container: LinearLayout) {
+        if (activePage != "Cozinha") kitchenPageContainer = null
         when (activePage) {
             "Início" -> renderHome(container)
             "Mesas" -> renderTables(container)
@@ -1066,18 +1099,22 @@ class MainActivity : Activity() {
     }
 
     private fun renderKitchen(container: LinearLayout) {
+        kitchenPageContainer = container
         pageIntro(container, "Cozinha", "Fila de preparação por estado e tempo de espera.")
         addGap(container, 8)
         if (hasRemoteRestaurant()) {
-            container.addView(secondaryButton("Atualizar fila do servidor") { refreshRemoteOperations() },
+            container.addView(secondaryButton("Atualizar fila agora") { refreshKitchenQueueSilently() },
                 LinearLayout.LayoutParams(-1, dp(48)))
+            addGap(container, 6)
+            container.addView(label(kitchenQueueStatusMessage(), 11f, false,
+                if (kitchenQueueRefreshFailed) red else muted))
         } else {
             container.addView(label("Modo de demonstração · os pedidos não são partilhados com outros dispositivos.", 11f, false, muted))
         }
         addGap(container, 12)
 
         if (hasRemoteRestaurant()) {
-            val orders = remoteOrders()
+            val orders = kitchenOrdersCache ?: remoteOrders()
             val active = (0 until orders.length())
                 .mapNotNull { orders.optJSONObject(it) }
                 .filter { it.optString("status", "Aberto") !in setOf("Concluído", "Cancelado") }
@@ -1092,7 +1129,7 @@ class MainActivity : Activity() {
                 ))
 
             if (active.isEmpty()) {
-                container.addView(emptyCard("A fila está vazia. Os novos pedidos aparecerão aqui depois de atualizares os dados."))
+                container.addView(emptyCard("A fila está vazia. Os novos pedidos de dispositivos ligados aparecerão automaticamente até 15 segundos depois de serem criados."))
                 return
             }
             container.addView(label("${active.size} pedido(s) ativo(s)", 12f, true, forestSoft))
@@ -1121,7 +1158,12 @@ class MainActivity : Activity() {
                         SupabaseApi.updateOrder(token, order.optString("id"), nextStatus)
                         cacheRemoteOperations(token, backendRestaurantId())
                         "OK"
-                    }) { renderApp() }
+                    }) {
+                        kitchenOrdersCache = null
+                        kitchenQueueUpdatedAtMillis = System.currentTimeMillis()
+                        kitchenQueueRefreshFailed = false
+                        refreshKitchenPageContent()
+                    }
                 }
             }
         } else {
@@ -1156,6 +1198,122 @@ class MainActivity : Activity() {
                 }
             }
         }
+    }
+
+    private fun refreshKitchenPageContent() {
+        if (activePage != "Cozinha") return
+        val container = kitchenPageContainer ?: return
+        val scroll = container.parent as? ScrollView
+        val previousScrollY = scroll?.scrollY ?: 0
+        container.removeAllViews()
+        renderKitchen(container)
+        scroll?.post {
+            val maxScroll = (container.height - (scroll?.height ?: 0)).coerceAtLeast(0)
+            scroll?.scrollTo(0, previousScrollY.coerceAtMost(maxScroll))
+        }
+    }
+
+    private fun kitchenQueueStatusMessage(): String {
+        if (kitchenRefreshInFlight) return "A atualizar a fila do servidor…"
+        if (kitchenQueueRefreshFailed) {
+            return if (kitchenQueueUpdatedAtMillis > 0L) {
+                "Falha na atualização automática. A mostrar os dados recebidos às " +
+                    SimpleDateFormat("HH:mm:ss", Locale("pt", "PT")).format(Date(kitchenQueueUpdatedAtMillis)) + "."
+            } else {
+                "Não foi possível atualizar a fila. Tenta novamente manualmente."
+            }
+        }
+        return if (kitchenQueueUpdatedAtMillis > 0L) {
+            "Atualizada às " +
+                SimpleDateFormat("HH:mm:ss", Locale("pt", "PT")).format(Date(kitchenQueueUpdatedAtMillis)) +
+                " · atualização automática a cada 15 segundos."
+        } else {
+            "Atualização automática a cada 15 segundos enquanto esta secção estiver aberta."
+        }
+    }
+
+    private fun shouldRunKitchenAutoRefresh(): Boolean =
+        KitchenQueueRefreshPolicy.shouldScheduleAutoRefresh(
+            activityResumed = activityResumed,
+            isCustomerApp = isCustomerApp,
+            activePage = activePage,
+            hasRemoteRestaurant = hasRemoteRestaurant()
+        )
+
+    private fun updateKitchenAutoRefresh() {
+        if (!shouldRunKitchenAutoRefresh()) {
+            stopKitchenAutoRefresh()
+            return
+        }
+        if (!kitchenAutoRefreshScheduled) {
+            refreshKitchenQueueSilently()
+            scheduleNextKitchenAutoRefresh()
+        }
+    }
+
+    private fun scheduleNextKitchenAutoRefresh() {
+        if (!shouldRunKitchenAutoRefresh()) {
+            stopKitchenAutoRefresh()
+            return
+        }
+        if (!kitchenAutoRefreshScheduled) {
+            kitchenAutoRefreshScheduled = true
+            kitchenRefreshHandler.postDelayed(
+                kitchenRefreshRunnable,
+                KitchenQueueRefreshPolicy.REFRESH_INTERVAL_MILLIS
+            )
+        }
+    }
+
+    private fun stopKitchenAutoRefresh() {
+        kitchenRefreshHandler.removeCallbacks(kitchenRefreshRunnable)
+        kitchenAutoRefreshScheduled = false
+    }
+
+    private fun refreshKitchenQueueSilently() {
+        val restaurantId = backendRestaurantId()
+        if (restaurantId.isBlank() ||
+            !KitchenQueueRefreshPolicy.mayStartRefresh(
+                activityResumed = activityResumed,
+                isCustomerApp = isCustomerApp,
+                activePage = activePage,
+                hasRemoteRestaurant = hasRemoteRestaurant(),
+                refreshInFlight = kitchenRefreshInFlight
+            )
+        ) return
+
+        kitchenRefreshInFlight = true
+        Thread({
+            var loadedOrders: JSONArray? = null
+            try {
+                refreshSessionIfNeeded()
+                val token = backendToken()
+                if (token.isBlank() || backendRestaurantId() != restaurantId) {
+                    throw IllegalStateException("A sessão ou o restaurante já não estão disponíveis.")
+                }
+                loadedOrders = SupabaseApi.listActiveKitchenOrders(token, restaurantId)
+            } catch (_: Exception) {
+                // Keep the last verified queue visible and show a non-blocking refresh warning.
+            }
+
+            runOnUiThread {
+                kitchenRefreshInFlight = false
+                if (isFinishing || backendRestaurantId() != restaurantId || !hasRemoteRestaurant()) return@runOnUiThread
+
+                val freshOrders = loadedOrders
+                if (freshOrders != null) {
+                    kitchenOrdersCache = freshOrders
+                    kitchenQueueUpdatedAtMillis = System.currentTimeMillis()
+                    kitchenQueueRefreshFailed = false
+                } else {
+                    kitchenQueueRefreshFailed = true
+                }
+
+                if (activityResumed && activePage == "Cozinha") {
+                    refreshKitchenPageContent()
+                }
+            }
+        }, "StudioMesa-kitchen-refresh").start()
     }
 
     private fun renderKitchenTicket(
@@ -1449,6 +1607,7 @@ class MainActivity : Activity() {
         backendPrefs.getString("member_restaurant_name", null)?.trim()?.takeIf { it.isNotEmpty() }
             ?: "StudioMesa"
 
+    @Synchronized
     private fun refreshSessionIfNeeded() {
         val accessToken = backendToken()
         val refreshToken = secureSession.refreshToken()
@@ -1573,6 +1732,9 @@ class MainActivity : Activity() {
             cacheRemoteOperations(backendToken(), restaurantId)
             "OK"
         }) {
+            kitchenOrdersCache = null
+            kitchenQueueUpdatedAtMillis = System.currentTimeMillis()
+            kitchenQueueRefreshFailed = false
             renderApp()
         }
     }
@@ -1616,6 +1778,9 @@ class MainActivity : Activity() {
      */
     private fun prepareForAuthenticatedUser(newUserId: String) {
         clearEconomicManagerState()
+        kitchenOrdersCache = null
+        kitchenQueueUpdatedAtMillis = 0L
+        kitchenQueueRefreshFailed = false
         if (newUserId.isBlank()) {
             throw IllegalStateException("O servidor não devolveu um identificador de conta válido.")
         }

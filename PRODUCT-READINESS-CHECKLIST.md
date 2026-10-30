@@ -43,7 +43,8 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 
 - [x] Mesas, pedidos, quantidade, fase do serviço, notas e estados básicos.
 - [x] A criação de pedidos reutiliza o mesmo UUID para tentativas idênticas dentro do formulário e verifica o registo pelo servidor antes de declarar sucesso após um erro de escrita. Teste real de perda de rede continua pendente.
-- [x] Vista de cozinha separada para pedidos ativos, com tempo de espera, notas e avanço de estado; a fila ainda precisa de atualização manual.
+- [x] Vista de cozinha separada para pedidos ativos, com tempo de espera, notas e avanço de estado; a fila consulta automaticamente apenas os pedidos ativos a cada 15 segundos enquanto a secção está aberta e a app em primeiro plano, mantendo também atualização manual. A consulta não corre em segundo plano e não é uma subscrição em tempo real.
+- [ ] Testar a atualização automática da cozinha em dois dispositivos reais, incluindo criação simultânea de pedidos, perda/recuperação da rede, mudança de página, app em segundo plano e retoma; confirmar que a fila não perde pedidos e que não são feitas consultas concorrentes.
 - [x] Histórico de criação e alteração de estado no servidor.
 - [ ] Testar duplicações por repetição após falha de rede e pedidos concorrentes.
 - [ ] Testar cancelamentos, sessão expirada, reconexão e sincronização entre dispositivos.
@@ -102,7 +103,8 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [x] Publicada a página web externa para iniciar pedidos de eliminação: `https://svwvkfsyevuyabelrtjk.supabase.co/functions/v1/account-deletion-web`.
 - [x] A função protegida `delete-account` está na versão 3 do projeto Supabase, com `verify_jwt=true` e a dependência `@supabase/server@1.9.2` fixada. Pedido HTTP público sem token rejeitado com `401`; página web externa confirmada disponível. O percurso completo por email e a eliminação efetiva com uma conta descartável continuam pendentes.
 - [ ] Autorizar o URL de redirecionamento em Supabase Auth e testar envio/click de magic link com contas de teste.
-- [ ] **Bloqueio de enumeração de contas no fluxo de eliminação:** a página usa `signInWithOtp` com `shouldCreateUser=false`; a [issue pública do Supabase Auth](https://github.com/supabase/auth/issues/1547) documenta respostas HTTP/tempos que podem revelar se um email existe. A mensagem neutra na interface não corrige a resposta direta da API. Testar com contas descartáveis e decidir/documentar uma mitigação eficaz antes de usar contas reais.
+- [x] **Mitigação de enumeração na página de eliminação:** o pedido público foi alterado de `signInWithOtp` para `resetPasswordForEmail` com redirecionamento PKCE para a mesma página; a documentação do Supabase indica que o método de recuperação não revela se o endereço está registado. O verificador estático exige este fluxo e rejeita o uso de OTP nesta página. A alteração de código ainda depende da CI e da publicação da Edge Function.
+- [ ] **Validação Auth ponta a ponta:** comparar respostas HTTP e tempos com contas descartáveis existentes/inexistentes; confirmar envio do email de recuperação, allowlist do URL de redirecionamento, regresso ao mesmo navegador com sessão PKCE e eliminação segura após confirmação. Não considerar este fluxo aprovado para uso comercial antes destes testes.
 - [ ] Publicar uma política de privacidade pública e configurar a secção Data safety na Play Console; confirmar exportação, conservação e resposta a incidentes.
 - [ ] Não colocar chaves `service_role` ou `sb_secret_...` na aplicação. A chave `sb_publishable_...` incorporada no cliente é pública por natureza e depende de RLS/políticas corretas.
 

@@ -23,8 +23,8 @@ button:disabled{opacity:.55;cursor:wait}button.danger{background:var(--danger)}[
 <body><main>
 <header><h1>StudioMesa</h1><p>Pedido de eliminação de conta e dados associados</p></header>
 <section><h2>1. Confirmar que controlas a conta</h2>
-<p>Introduz o email da conta StudioMesa. Se o pedido puder ser processado, enviaremos uma ligação de autenticação única. Abre-a no mesmo navegador para continuar. A mensagem apresentada não confirma que uma ligação foi enviada.</p>
-<form id="email-form"><label for="email">Email da conta</label><input id="email" name="email" type="email" autocomplete="email" required maxlength="254"><button id="send-link" type="submit">Enviar ligação segura</button></form>
+<p>Introduz o email da tua conta StudioMesa. Se existir uma conta elegível, receberás uma ligação de recuperação. Abre-a no mesmo navegador para confirmar a identidade e continuar. A mensagem apresentada é igual quer exista ou não uma conta.</p>
+<form id="email-form"><label for="email">Email da conta</label><input id="email" name="email" type="email" autocomplete="email" required maxlength="254"><button id="send-link" type="submit">Enviar ligação de recuperação</button></form>
 </section>
 <section id="signed-in" hidden><h2>2. Escolher o âmbito da eliminação</h2><p id="account-label"></p>
 <form id="delete-form">
@@ -34,7 +34,7 @@ button:disabled{opacity:.55;cursor:wait}button.danger{background:var(--danger)}[
 <button id="delete-button" class="danger" type="submit">Eliminar definitivamente</button></form>
 <p class="small">Se fores proprietário e ainda existirem membros da equipa, o servidor bloqueará a eliminação do restaurante. Remove primeiro esses membros na app e volta a tentar.</p>
 </section>
-<section><p id="status" role="status" aria-live="polite">Nenhuma eliminação foi solicitada.</p><p class="small">A tua conta só é eliminada depois de confirmares a ação e o servidor validar a sessão e as permissões. Não introduzas aqui a palavra-passe; usa apenas a ligação enviada ao teu email.</p></section>
+<section><p id="status" role="status" aria-live="polite">Nenhuma eliminação foi solicitada.</p><p class="small">A tua conta só é eliminada depois de confirmares a ação e o servidor validar a sessão e as permissões. Não introduzas aqui a palavra-passe; usa apenas a ligação de recuperação enviada ao teu email.</p></section>
 <footer style="margin:22px 4px;font-size:.9rem;color:#657168">StudioMesa · Gestão de restaurante. A política de privacidade pública tem de estar disponível antes da publicação comercial.</footer>
 </main>
 <script nonce="__STUDIOMESA_CSP_NONCE__" type="module">
@@ -47,10 +47,10 @@ let currentSession=null,deletionSubmitted=false;
 function showStatus(message,error=false){statusEl.textContent=message;statusEl.classList.toggle("error",error)}
 function showSession(session){currentSession=session;if(!session?.access_token||!session?.user?.email||deletionSubmitted)return;emailForm.hidden=true;signedInPanel.hidden=false;accountLabel.textContent="Sessão autenticada para "+session.user.email+".";showStatus("Sessão confirmada. Revê cuidadosamente o âmbito antes de continuares")}
 const redirectUrl=window.location.origin+window.location.pathname;
-const linkRequestResultMessage="Se o endereço corresponder a uma conta elegível e o serviço de email estiver disponível, receberás uma ligação segura. Abre-a no mesmo navegador para continuar. Se não receberes uma ligação, tenta mais tarde."
+const linkRequestResultMessage="Se o endereço corresponder a uma conta elegível e o serviço de email estiver disponível, receberás uma ligação de recuperação. Abre-a no mesmo navegador para continuar. Se não receberes uma ligação, tenta mais tarde."
 emailForm.addEventListener("submit",async event=>{
  event.preventDefault();sendButton.disabled=true;showStatus("A pedir uma ligação segura…");
- try{const email=document.querySelector("#email").value.trim();const {error}=await supabase.auth.signInWithOtp({email,options:{shouldCreateUser:false,emailRedirectTo:redirectUrl}});if(error)throw error;showStatus(linkRequestResultMessage)}
+ try{const email=document.querySelector("#email").value.trim();const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:redirectUrl});if(error)throw error;showStatus(linkRequestResultMessage)}
  catch{showStatus(linkRequestResultMessage)}
  finally{sendButton.disabled=false}
 });
