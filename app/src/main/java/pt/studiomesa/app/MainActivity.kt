@@ -5360,8 +5360,11 @@ class MainActivity : Activity() {
                 when {
                     selected == null -> itemSpinner.requestFocus()
                     cloudMode && selected.id.isNullOrBlank() -> {
-                        itemSpinner.requestFocus()
-                        showError("O artigo selecionado não tem um identificador válido. Atualiza a carta antes de criar o pedido.")
+                        AlertDialog.Builder(this)
+                            .setTitle("Artigo indisponível")
+                            .setMessage("O artigo selecionado não tem um identificador válido. Atualiza a carta antes de criar o pedido.")
+                            .setPositiveButton("OK", null)
+                            .show()
                     }
                     quantity == null || quantity !in 1..99 -> quantityField.error = "Usa uma quantidade entre 1 e 99"
                     notes.length > 500 -> notesField.error = "As notas podem ter no máximo 500 caracteres"
