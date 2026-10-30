@@ -14,6 +14,23 @@ DECLARE
   v_cost numeric(10,2);
   v_is_active boolean;
 BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    IF NEW.item_name IS DISTINCT FROM OLD.item_name
+       OR NEW.amount IS DISTINCT FROM OLD.amount
+       OR NEW.unit_cost_snapshot IS DISTINCT FROM OLD.unit_cost_snapshot THEN
+      RAISE EXCEPTION 'O nome, preço e custo fotografados de um pedido são imutáveis.';
+    END IF;
+
+    -- A menu item can only be unlinked (e.g. when the menu row is deleted).
+    -- Reassigning an existing order to another dish would rewrite its history.
+    IF NEW.menu_item_id IS DISTINCT FROM OLD.menu_item_id
+       AND NEW.menu_item_id IS NOT NULL THEN
+      RAISE EXCEPTION 'Não é possível voltar a associar um pedido existente a outro artigo da carta.';
+    END IF;
+
+    RETURN NEW;
+  END IF;
+
   NEW.created_by := (SELECT auth.uid());
 
   IF NEW.menu_item_id IS NOT NULL THEN
@@ -21,7 +38,8 @@ BEGIN
       INTO v_name, v_price, v_cost, v_is_active
     FROM public.menu_items AS mi
     WHERE mi.id = NEW.menu_item_id
-      AND mi.restaurant_id = NEW.restaurant_id;
+      AND mi.restaurant_id = NEW.restaurant_id
+    FOR SHARE;
 
     IF NOT FOUND THEN
       RAISE EXCEPTION 'O artigo selecionado não existe neste restaurante.';
@@ -41,5 +59,10 @@ BEGIN
   RETURN NEW;
 END;
 $function$;
+
+DROP TRIGGER IF EXISTS restaurant_order_snapshot_immutable ON public.restaurant_orders;
+CREATE TRIGGER restaurant_order_snapshot_immutable
+  BEFORE UPDATE ON public.restaurant_orders
+  FOR EACH ROW EXECUTE FUNCTION private.prepare_restaurant_order();
 
 COMMIT;
