@@ -530,6 +530,36 @@ object SupabaseApi {
         )
     }
 
+    /**
+     * Loads only orders that are still active for the kitchen screen.
+     * Closed history is deliberately excluded from the 15-second refresh cycle.
+     */
+    fun listActiveKitchenOrders(token: String, restaurantId: String): JSONArray {
+        val loadedRows = OrderHistoryPagination.collect { offset, limit ->
+            val page = JSONArray(call(
+                "GET",
+                KitchenQueueQuery.path(restaurantId, offset, limit),
+                null,
+                token
+            ))
+            (0 until page.length()).map { index ->
+                page.optJSONObject(index)
+                    ?: throw IllegalStateException("O servidor devolveu um pedido de cozinha inválido.")
+            }
+        }
+
+        val result = JSONArray()
+        val seenIds = HashSet<String>()
+        loadedRows.forEach { order ->
+            val id = order.optString("id").trim()
+            if (id.isBlank()) {
+                throw IllegalStateException("O servidor devolveu um pedido sem identificador.")
+            }
+            if (seenIds.add(id)) result.put(order)
+        }
+        return result
+    }
+
     fun listOrders(token: String, restaurantId: String): JSONArray {
         val encoded = URLEncoder.encode(restaurantId, "UTF-8")
         val loadedRows = OrderHistoryPagination.collect { offset, limit ->
