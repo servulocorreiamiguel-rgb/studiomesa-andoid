@@ -208,3 +208,16 @@ A aplicação consulta apenas os pedidos ativos a cada 15 segundos quando a sec�
 | WST-09 | Inválido | Observação com mais de 350 caracteres | Rejeitada antes do envio |
 
 O registo guarda quantidade e motivo no histórico de movimentos de stock existente. Não calcula o custo financeiro da perda enquanto não existir um custo de aquisição unitário fiável por artigo.
+
+## Atualização automática do inventário
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| STK-01 | Sincronização | Abrir Stock num dispositivo e alterar quantidade noutro | A alteração aparece no primeiro dispositivo no ciclo seguinte, até 30 segundos depois |
+| STK-02 | Navegação | Sair de Stock para outra secção | A consulta periódica deixa de ser agendada |
+| STK-03 | Segundo plano | Colocar a aplicação em segundo plano ou bloquear o telemóvel | A consulta periódica pára; é retomada ao regressar a Stock |
+| STK-04 | Concorrência | Manter uma leitura lenta e chegar o ciclo seguinte | Não começa uma segunda leitura automática em paralelo |
+| STK-05 | Rede | Perder a ligação durante uma leitura e restabelecê-la | Mantém a última leitura válida, mostra aviso e recupera na próxima leitura |
+| STK-06 | Isolamento | Trocar de sessão/restaurante enquanto uma leitura está pendente | A resposta antiga não substitui o inventário da nova conta/restaurante |
+
+A atualização periódica é polling, não uma subscrição Supabase Realtime, e só funciona com a página Stock visível e a aplicação em primeiro plano.
