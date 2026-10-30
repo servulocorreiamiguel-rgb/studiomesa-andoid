@@ -267,5 +267,7 @@ Os valores de stock são estimativas ao custo de compra atual e não incluem por
 | ORD-06 | Validação | Enviar custo interno negativo | Restrição da base de dados rejeita o pedido |
 | ORD-07 | Custo desconhecido | Artigo sem custo interno positivo confirmado | O pedido guarda custo NULL e não inventa custo zero |
 | ORD-08 | Repetição | Repetir a mesma criação após perda de resposta, mantendo o UUID de tentativa; alterar depois a fotografia com a mesma chave | Repetição idêntica é reconhecida; payload diferente não é aceite como a mesma tentativa |
+| ORD-09 | Fonte autoritativa | Enviar deliberadamente nome, preço e custo falsificados no pedido com UUID de artigo válido | Trigger invoker substitui os três campos pelos valores actuais da carta consultada no servidor |
+| ORD-10 | Arquivado | Enviar novo pedido para um artigo inativo/arquivado | Trigger recusa o pedido; pedidos antigos permanecem válidos |
 
-A migração `20261030130000_order_menu_item_and_cost_snapshots.sql` tem de ser aplicada antes de disponibilizar esta versão Android. Esta fase ainda **não desconta ingredientes**. A ligação de fichas técnicas e o consumo automático só podem avançar depois de revisão das unidades, receitas, transações e testes de concorrência descritos em `RECIPE-INVENTORY-LINK-DESIGN-2026-10-30.md`.
+As migrações `20261030130000_order_menu_item_and_cost_snapshots.sql` e `20261030140000_server_owned_order_menu_snapshots.sql` tem de ser aplicada antes de disponibilizar esta versão Android. Esta fase ainda **não desconta ingredientes**. A ligação de fichas técnicas e o consumo automático só podem avançar depois de revisão das unidades, receitas, transações e testes de concorrência descritos em `RECIPE-INVENTORY-LINK-DESIGN-2026-10-30.md`.
