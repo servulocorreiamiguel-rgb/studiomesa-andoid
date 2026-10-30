@@ -43,7 +43,8 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 
 - [x] Mesas, pedidos, quantidade, fase do serviço, notas e estados básicos.
 - [x] A criação de pedidos reutiliza o mesmo UUID para tentativas idênticas dentro do formulário e verifica o registo pelo servidor antes de declarar sucesso após um erro de escrita. Teste real de perda de rede continua pendente.
-- [x] Vista de cozinha separada para pedidos ativos, com tempo de espera, notas e avanço de estado; a fila ainda precisa de atualização manual.
+- [x] Vista de cozinha separada para pedidos ativos, com tempo de espera, notas e avanço de estado; a fila consulta automaticamente apenas os pedidos ativos a cada 15 segundos enquanto a secção está aberta e a app em primeiro plano, mantendo também atualização manual. A consulta não corre em segundo plano e não é uma subscrição em tempo real.
+- [ ] Testar a atualização automática da cozinha em dois dispositivos reais, incluindo criação simultânea de pedidos, perda/recuperação da rede, mudança de página, app em segundo plano e retoma; confirmar que a fila não perde pedidos e que não são feitas consultas concorrentes.
 - [x] Histórico de criação e alteração de estado no servidor.
 - [ ] Testar duplicações por repetição após falha de rede e pedidos concorrentes.
 - [ ] Testar cancelamentos, sessão expirada, reconexão e sincronização entre dispositivos.
