@@ -50,3 +50,10 @@ AS $role$
     current_user
   );
 $role$;
+
+-- Match the minimal Auth function visibility provided by hosted Supabase.
+-- The shim deliberately does not grant table access to auth.users.
+GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION auth.uid() TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION auth.jwt() TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION auth.role() TO anon, authenticated, service_role;
