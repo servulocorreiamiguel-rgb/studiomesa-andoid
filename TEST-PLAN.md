@@ -269,5 +269,6 @@ Os valores de stock são estimativas ao custo de compra atual e não incluem por
 | ORD-08 | Repetição | Repetir a mesma criação após perda de resposta, mantendo o UUID de tentativa; alterar depois a fotografia com a mesma chave | Repetição idêntica é reconhecida; payload diferente não é aceite como a mesma tentativa |
 | ORD-09 | Fonte autoritativa | Enviar deliberadamente nome, preço e custo falsificados no pedido com UUID de artigo válido | Trigger invoker substitui os três campos pelos valores actuais da carta consultada no servidor |
 | ORD-10 | Arquivado | Enviar novo pedido para um artigo inativo/arquivado | Trigger recusa o pedido; pedidos antigos permanecem válidos |
+| ORD-11 | Imutabilidade | Tentar actualizar nome, preço ou custo de um pedido existente via REST | Trigger recusa a alteração; a eliminação do artigo da carta pode apenas desligar o UUID, sem mudar as fotografias |
 
 As migrações `20261030130000_order_menu_item_and_cost_snapshots.sql` e `20261030140000_server_owned_order_menu_snapshots.sql` tem de ser aplicada antes de disponibilizar esta versão Android. Esta fase ainda **não desconta ingredientes**. A ligação de fichas técnicas e o consumo automático só podem avançar depois de revisão das unidades, receitas, transações e testes de concorrência descritos em `RECIPE-INVENTORY-LINK-DESIGN-2026-10-30.md`.
