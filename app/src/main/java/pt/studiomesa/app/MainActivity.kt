@@ -5359,6 +5359,10 @@ class MainActivity : Activity() {
                 val notes = notesField.text.toString().trim()
                 when {
                     selected == null -> itemSpinner.requestFocus()
+                    cloudMode && selected.id.isNullOrBlank() -> {
+                        itemSpinner.requestFocus()
+                        showError("O artigo selecionado não tem um identificador válido. Atualiza a carta antes de criar o pedido.")
+                    }
                     quantity == null || quantity !in 1..99 -> quantityField.error = "Usa uma quantidade entre 1 e 99"
                     notes.length > 500 -> notesField.error = "As notas podem ter no máximo 500 caracteres"
                     else -> {
@@ -5369,6 +5373,8 @@ class MainActivity : Activity() {
                                 .put("table_number", table)
                                 .put("item_name", selected.name)
                                 .put("amount", selected.price)
+                                .put("menu_item_id", selected.id ?: JSONObject.NULL)
+                                .put("unit_cost_snapshot", selected.cost.takeIf { it.isFinite() && it > 0.0 } ?: JSONObject.NULL)
                                 .put("quantity", quantity)
                                 .put("service_course", serviceCourse)
                                 .put("notes", notes)
@@ -5386,7 +5392,9 @@ class MainActivity : Activity() {
                                 val token = backendToken()
                                 SupabaseApi.createOrder(
                                     token, restaurantId, table, selected.name, selected.price,
-                                    quantity, serviceCourse, notes, requestId
+                                    quantity, serviceCourse, notes, requestId,
+                                    menuItemId = selected.id,
+                                    unitCostSnapshot = selected.cost.takeIf { it.isFinite() && it > 0.0 }?.let { BigDecimal.valueOf(it) }
                                 )
                                 cacheRemoteOperations(token, restaurantId)
                                 "OK"
