@@ -3360,7 +3360,7 @@ class MainActivity : Activity() {
     }
 
     private fun renderStock(container: LinearLayout) {
-        pageIntro(container, "Stock e inventário", "Quantidades, níveis mínimos e histórico de movimentos.")
+        pageIntro(container, "Stock e inventário", "Quantidades, limites mínimos, movimentos e desperdício registado.")
         addGap(container, 8)
         if (!hasRemoteRestaurant()) {
             container.addView(emptyCard("O inventário partilhado exige uma conta autenticada e um restaurante configurado na secção Conta."))
@@ -3383,6 +3383,11 @@ class MainActivity : Activity() {
             container.addView(emptyCard("Ainda não há artigos de stock. Adiciona ingredientes, bebidas ou consumíveis e define um limite mínimo."))
             return
         }
+        container.addView(
+            secondaryButton("Consultar desperdício registado") { showInventoryWasteHistory() },
+            LinearLayout.LayoutParams(-1, dp(48))
+        )
+        addGap(container, 8)
         var lowCount = 0
         for (index in 0 until items.length()) {
             val item = items.optJSONObject(index) ?: continue
@@ -3419,6 +3424,11 @@ class MainActivity : Activity() {
             buttons.addView(secondaryButton("− Saída") { showStockAdjustmentDialog(id, name, unit, false) },
                 LinearLayout.LayoutParams(0, dp(48), 1f).apply { setMargins(dp(4), 0, 0, 0) })
             card.addView(buttons)
+            addGap(card, 5)
+            card.addView(
+                secondaryButton("Registar desperdício") { showInventoryWasteDialog(id, name, unit) },
+                LinearLayout.LayoutParams(-1, dp(48))
+            )
             addGap(card, 5)
             card.addView(secondaryButton("Ver histórico de movimentos") { showInventoryMovements(id, name) },
                 LinearLayout.LayoutParams(-1, dp(48)))
@@ -3610,6 +3620,154 @@ class MainActivity : Activity() {
             }
         }
         dialog.show()
+    }
+
+    private fun showInventoryWasteDialog(itemId: String, itemName: String, unit: String) {
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(10))
+        }
+        val amount = inputField("Quantidade desperdiçada", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+        val reason = Spinner(this)
+        val reasonAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, InventoryWasteNotes.reasons)
+        reasonAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        reason.adapter = reasonAdapter
+        val details = inputField("Observação opcional", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+
+        form.addView(label("Artigo: $itemName", 12f, true, forest))
+        addGap(form, 7)
+        form.addView(label("Quantidade a retirar ($unit)", 11f, true, forestSoft))
+        form.addView(amount, fieldParams())
+        addGap(form, 5)
+        form.addView(label("Motivo do desperdício", 11f, true, forestSoft))
+        form.addView(reason, LinearLayout.LayoutParams(-1, dp(48)))
+        addGap(form, 5)
+        form.addView(label("Detalhe (máximo 350 caracteres)", 11f, true, forestSoft))
+        form.addView(details, fieldParams())
+        addGap(form, 5)
+        form.addView(label(
+            "O registo reduz o stock no servidor e fica no histórico. O servidor impede que a quantidade fique negativa.",
+            10.5f, false, muted
+        ))
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Registar desperdício")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Registar perda", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val rawValue = amount.text.toString().trim().replace(',', '.')
+                val value = rawValue.toDoubleOrNull()
+                if (value == null || !value.isFinite() || value <= 0.0 || value > 999999999.0) {
+                    amount.error = "Indica uma quantidade positiva válida."
+                    return@setOnClickListener
+                }
+                if (!StockDecimalValidator.hasAtMostThreeDecimalPlaces(rawValue)) {
+                    amount.error = "Usa no máximo três casas decimais."
+                    return@setOnClickListener
+                }
+                val movementNote = try {
+                    InventoryWasteNotes.build(
+                        reason.selectedItem?.toString().orEmpty(),
+                        details.text.toString()
+                    )
+                } catch (error: IllegalArgumentException) {
+                    details.error = error.message ?: "Revê o motivo e a observação."
+                    return@setOnClickListener
+                }
+
+                val restaurantId = backendRestaurantId()
+                val delta = -value
+                val signature = JSONObject()
+                    .put("restaurant_id", restaurantId)
+                    .put("item_id", itemId)
+                    .put("delta", delta)
+                    .put("note", movementNote)
+                    .toString()
+                val requestOperation = "stock_adjust"
+                val requestAccountId = backendPrefs.getString("user_id", "").orEmpty()
+                val requestId = try {
+                    pendingRequestIds.getOrCreate(requestOperation, requestAccountId, signature)
+                } catch (_: Exception) {
+                    amount.error = "Não foi possível guardar a referência segura. Tenta novamente."
+                    return@setOnClickListener
+                }
+
+                runBackend({
+                    val token = backendToken()
+                    SupabaseApi.adjustInventoryStock(
+                        token, restaurantId, itemId, delta, movementNote, requestId
+                    )
+                    val latest = SupabaseApi.listInventoryItems(token, restaurantId)
+                    backendPrefs.edit()
+                        .putString("remote_inventory_json", latest.toString())
+                        .putBoolean("inventory_loaded", true)
+                        .apply()
+                    "OK"
+                }) {
+                    dialog.dismiss()
+                    renderApp()
+                    pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
+                }
+            }
+        }
+        dialog.show()
+        dialog.window?.setLayout(-1, dp(560))
+    }
+
+    private fun showInventoryWasteHistory() {
+        runBackend({
+            SupabaseApi.listInventoryWasteMovements(
+                backendToken(), backendRestaurantId(), 100
+            ).toString()
+        }) { raw ->
+            val rows = JSONArray(raw)
+            if (rows.length() == 0) {
+                AlertDialog.Builder(this)
+                    .setTitle("Desperdício registado")
+                    .setMessage("Ainda não existem perdas registadas no inventário.")
+                    .setPositiveButton("Fechar", null)
+                    .show()
+                return@runBackend
+            }
+
+            val itemNames = mutableMapOf<String, Pair<String, String>>()
+            val inventory = remoteInventoryItems()
+            for (index in 0 until inventory.length()) {
+                val item = inventory.optJSONObject(index) ?: continue
+                itemNames[item.optString("id")] = Pair(
+                    item.optString("name", "Artigo"),
+                    item.optString("unit", "unidades")
+                )
+            }
+            val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "PT"))
+            val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US)
+            val message = buildString {
+                for (index in 0 until rows.length()) {
+                    val row = rows.optJSONObject(index) ?: continue
+                    val itemId = row.optString("item_id")
+                    val item = itemNames[itemId]
+                    val delta = row.optDouble("delta", 0.0)
+                    val date = runCatching {
+                        dateFormat.format(isoFormat.parse(row.optString("created_at")) ?: Date())
+                    }.getOrElse { row.optString("created_at").take(16) }
+                    append(item?.first ?: "Artigo de stock")
+                    append(" · −").append(formatQuantity(kotlin.math.abs(delta)))
+                    append(' ').append(item?.second ?: "")
+                    append(" · ").append(date).append('\n')
+                    append(row.optString("note").removePrefix(InventoryWasteNotes.PREFIX))
+                    if (index < rows.length() - 1) append("\n\n")
+                }
+                append("\n\nConsulta limitada às 100 perdas mais recentes.")
+            }
+            AlertDialog.Builder(this)
+                .setTitle("Desperdício registado")
+                .setMessage(message)
+                .setPositiveButton("Fechar", null)
+                .show()
+        }
     }
 
     private fun showInventoryMovements(itemId: String, itemName: String) {

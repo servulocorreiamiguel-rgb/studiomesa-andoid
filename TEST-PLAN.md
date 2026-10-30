@@ -192,3 +192,19 @@ A aplicação consulta apenas os pedidos ativos a cada 15 segundos quando a sec�
 | KIT-03 | Concorrência | Simular uma consulta lenta e deixar chegar o intervalo seguinte | Não é iniciada uma segunda consulta enquanto a primeira está ativa; a atualização seguinte retoma sem duplicar pedidos. Teste automatizado da política acrescentado; cenário de rede real pendente. |
 | KIT-04 | Rede / recuperação | Perder a ligação durante a atualização automática e restabelecê-la | A última fila válida permanece visível, é mostrado um aviso não bloqueante e a consulta seguinte volta a atualizar os pedidos sem duplicados. Teste em Android real pendente. |
 | KIT-05 | Operação | Criar pedido noutro dispositivo enquanto Cozinha está aberta; depois avançar um ticket no primeiro dispositivo | O novo pedido aparece automaticamente até ao ciclo seguinte; o ticket avançado desaparece da fila ativa após confirmação do servidor. Teste com dois dispositivos reais pendente. |
+
+## Registo persistente de desperdício de stock
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| WST-01 | Normal | Registar uma perda com artigo, quantidade e motivo válido | O stock diminui exactamente pela quantidade registada e o movimento fica no histórico |
+| WST-02 | Normal | Registar perda sem observação adicional | O motivo fica guardado e a operação é aceite |
+| WST-03 | Limite | Quantidade com três casas decimais | Aceite sem arredondamento |
+| WST-04 | Inválido | Quantidade zero, negativa, não numérica ou com quatro casas decimais | Rejeitada sem movimento |
+| WST-05 | Stock insuficiente | Registar desperdício superior ao stock disponível | O servidor recusa a operação; o stock não fica negativo |
+| WST-06 | Idempotência | Repetir a mesma tentativa após perder a resposta | O mesmo movimento é reconhecido; não é descontado duas vezes |
+| WST-07 | Permissões | Conta sem acesso ou de outro restaurante tenta registar/consultar perdas | Operação/consulta recusada pelas verificações do servidor e RLS |
+| WST-08 | Histórico | Consultar o registo de desperdício | Só aparecem movimentos negativos com o prefixo de desperdício, por ordem mais recente; a consulta indica o limite de 100 registos |
+| WST-09 | Inválido | Observação com mais de 350 caracteres | Rejeitada antes do envio |
+
+O registo guarda quantidade e motivo no histórico de movimentos de stock existente. Não calcula o custo financeiro da perda enquanto não existir um custo de aquisição unitário fiável por artigo.
