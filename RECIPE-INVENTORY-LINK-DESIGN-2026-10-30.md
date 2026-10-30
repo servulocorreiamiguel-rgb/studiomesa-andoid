@@ -22,7 +22,7 @@ Consequência: ligar receitas diretamente ao nome do prato seria frágil. Renome
 2. Quando o artigo da carta for eliminado, manter o pedido e os seus campos de fotografia; o identificador pode ficar nulo. Arquivar um artigo não deve apagar pedidos nem receitas históricas.
 3. Guardar um campo de custo unitário no pedido, anulável quando desconhecido. O preço já registado em `amount` mantém a semântica atual de preço por unidade.
 4. Atualizar o formulário para enviar o UUID, nome, preço e custo atuais do artigo selecionado.
-5. No servidor, verificar que o UUID pertence ao restaurante e que o artigo está ativo na criação. Os nomes, preços e custos fotografados no pedido não devem depender de futuras alterações à carta.
+5. No servidor, verificar que o UUID pertence ao restaurante e que o artigo está ativo na criação. O trigger `private.prepare_restaurant_order()` executa como SECURITY INVOKER, consulta o artigo sob RLS e substitui nome, preço e custo enviados pelo cliente pelos valores actuais lidos no PostgreSQL. Os valores fotografados no pedido não dependem de futuras alterações à carta.
 6. Os pedidos antigos mantêm `menu_item_id = NULL`; nunca tentar associá-los retroativamente só pelo nome.
 
 **Critérios de aceitação:** pedido novo ligado ao artigo certo; nome/preço/custo preservados depois de editar a carta; pedido antigo continua visível; UUID de artigo de outro restaurante recusado; artigos arquivados não podem ser usados para pedidos novos.
