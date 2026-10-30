@@ -68,7 +68,8 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [x] A interface e o servidor rejeitam quantidades, limites e movimentos com mais de três casas decimais, evitando arredondamento silencioso; o cenário ponta a ponta ainda requer validação em Android real.
 - [x] Entradas e saídas transacionais no servidor, com saldo após movimento, nota, data e utilizador no histórico.
 - [x] Registo de desperdício por artigo, com motivo controlado, desconto transacional de stock, chave anti-duplicados e consulta das 100 perdas mais recentes.
-- [ ] Testar o registo de desperdício ponta a ponta em Android físico, incluindo perda de rede, repetição idempotente, stock insuficiente e isolamento entre restaurantes.
+- [x] Atualização automática do inventário a cada 30 segundos quando a secção Stock está aberta em primeiro plano; a leitura manual mantém-se disponível e a última cópia válida é preservada em falhas de rede.
+- [ ] Testar desperdício e atualização automática ponta a ponta em Android físico, incluindo dois dispositivos, perda/restauro de rede, repetição idempotente, stock insuficiente e isolamento entre restaurantes.
 - [ ] Testar concorrência, valores-limite, sessão expirada e isolamento entre restaurantes.
 - [ ] Avisos automáticos, fornecedores/encomendas, consumo automático de ingredientes por receita, desperdício e inventário por local.
 
