@@ -54,6 +54,20 @@ class MainActivity : Activity() {
     private var kitchenQueueUpdatedAtMillis = 0L
     private var kitchenQueueRefreshFailed = false
     private var kitchenPageContainer: LinearLayout? = null
+    private var inventoryAutoRefreshScheduled = false
+    private var inventoryRefreshInFlight = false
+    private var inventoryUpdatedAtMillis = 0L
+    private var inventoryRefreshFailed = false
+    private var inventoryPageContainer: LinearLayout? = null
+    private val inventoryRefreshHandler = Handler(Looper.getMainLooper())
+    private val inventoryRefreshRunnable = object : Runnable {
+        override fun run() {
+            inventoryAutoRefreshScheduled = false
+            if (!shouldRunInventoryAutoRefresh()) return
+            refreshInventoryItemsSilently()
+            scheduleNextInventoryAutoRefresh()
+        }
+    }
     private val kitchenRefreshHandler = Handler(Looper.getMainLooper())
     private val kitchenRefreshRunnable = object : Runnable {
         override fun run() {
@@ -148,11 +162,13 @@ class MainActivity : Activity() {
         super.onResume()
         activityResumed = true
         updateKitchenAutoRefresh()
+        updateInventoryAutoRefresh()
     }
 
     override fun onPause() {
         activityResumed = false
         stopKitchenAutoRefresh()
+        stopInventoryAutoRefresh()
         super.onPause()
     }
 
@@ -540,6 +556,7 @@ class MainActivity : Activity() {
         appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(60)))
         setContentView(appRoot)
         updateKitchenAutoRefresh()
+        updateInventoryAutoRefresh()
     }
 
     private fun renderPage(container: LinearLayout) {
@@ -3126,6 +3143,124 @@ class MainActivity : Activity() {
 
     private fun remoteReservations(): JSONArray = reservationCache
 
+    private fun inventoryRefreshStatusMessage(): String {
+        if (inventoryRefreshInFlight) return "A atualizar o stock do servidor…"
+        if (inventoryRefreshFailed) {
+            return if (inventoryUpdatedAtMillis > 0L) {
+                "Falha na atualização automática. A mostrar os dados recebidos às " +
+                    SimpleDateFormat("HH:mm:ss", Locale("pt", "PT")).format(Date(inventoryUpdatedAtMillis)) + "."
+            } else {
+                "Não foi possível atualizar o stock. Tenta novamente manualmente."
+            }
+        }
+        return if (inventoryUpdatedAtMillis > 0L) {
+            "Atualizado às " +
+                SimpleDateFormat("HH:mm:ss", Locale("pt", "PT")).format(Date(inventoryUpdatedAtMillis)) +
+                " · atualização automática a cada 30 segundos."
+        } else {
+            "Atualização automática a cada 30 segundos enquanto esta secção estiver aberta."
+        }
+    }
+
+    private fun shouldRunInventoryAutoRefresh(): Boolean =
+        InventoryRefreshPolicy.shouldScheduleAutoRefresh(
+            activityResumed = activityResumed,
+            isCustomerApp = isCustomerApp,
+            isPremium = isPremium,
+            activePage = activePage,
+            hasRemoteRestaurant = hasRemoteRestaurant()
+        )
+
+    private fun updateInventoryAutoRefresh() {
+        if (!shouldRunInventoryAutoRefresh()) {
+            stopInventoryAutoRefresh()
+            return
+        }
+        scheduleNextInventoryAutoRefresh()
+    }
+
+    private fun scheduleNextInventoryAutoRefresh() {
+        if (!shouldRunInventoryAutoRefresh()) {
+            stopInventoryAutoRefresh()
+            return
+        }
+        if (!inventoryAutoRefreshScheduled) {
+            inventoryAutoRefreshScheduled = true
+            inventoryRefreshHandler.postDelayed(
+                inventoryRefreshRunnable,
+                InventoryRefreshPolicy.REFRESH_INTERVAL_MILLIS
+            )
+        }
+    }
+
+    private fun stopInventoryAutoRefresh() {
+        inventoryRefreshHandler.removeCallbacks(inventoryRefreshRunnable)
+        inventoryAutoRefreshScheduled = false
+    }
+
+    private fun refreshInventoryItemsSilently() {
+        val restaurantId = backendRestaurantId()
+        if (restaurantId.isBlank() ||
+            !InventoryRefreshPolicy.mayStartRefresh(
+                activityResumed = activityResumed,
+                isCustomerApp = isCustomerApp,
+                isPremium = isPremium,
+                activePage = activePage,
+                hasRemoteRestaurant = hasRemoteRestaurant(),
+                refreshInFlight = inventoryRefreshInFlight
+            )
+        ) return
+
+        inventoryRefreshInFlight = true
+        Thread({
+            var freshItems: JSONArray? = null
+            try {
+                refreshSessionIfNeeded()
+                val token = backendToken()
+                if (token.isBlank() || backendRestaurantId() != restaurantId) {
+                    throw IllegalStateException("A sessão ou o restaurante já não estão disponíveis.")
+                }
+                freshItems = SupabaseApi.listInventoryItems(token, restaurantId)
+            } catch (_: Exception) {
+                // Retain the last verified stock snapshot and show a non-blocking warning.
+            }
+
+            runOnUiThread {
+                inventoryRefreshInFlight = false
+                if (isFinishing || backendRestaurantId() != restaurantId || !hasRemoteRestaurant()) return@runOnUiThread
+
+                val loadedItems = freshItems
+                if (loadedItems != null) {
+                    backendPrefs.edit()
+                        .putString("remote_inventory_json", loadedItems.toString())
+                        .putBoolean("inventory_loaded", true)
+                        .apply()
+                    inventoryUpdatedAtMillis = System.currentTimeMillis()
+                    inventoryRefreshFailed = false
+                } else {
+                    inventoryRefreshFailed = true
+                }
+
+                if (activityResumed && activePage == "Stock") {
+                    refreshInventoryPageContent()
+                }
+            }
+        }, "StudioMesa-stock-refresh").start()
+    }
+
+    private fun refreshInventoryPageContent() {
+        if (activePage != "Stock") return
+        val container = inventoryPageContainer ?: return
+        val scroll = container.parent as? ScrollView
+        val previousScrollY = scroll?.scrollY ?: 0
+        container.removeAllViews()
+        renderStock(container)
+        scroll?.post {
+            val maxScroll = (container.height - (scroll?.height ?: 0)).coerceAtLeast(0)
+            scroll?.scrollTo(0, previousScrollY.coerceAtMost(maxScroll))
+        }
+    }
+
     private fun refreshInventoryItems() {
         if (!hasRemoteRestaurant()) {
             AlertDialog.Builder(this).setTitle("Liga o restaurante")
@@ -3133,12 +3268,23 @@ class MainActivity : Activity() {
                 .setPositiveButton("OK", null).show()
             return
         }
+        if (inventoryRefreshInFlight) return
+        inventoryRefreshInFlight = true
         runBackend({
             val items = SupabaseApi.listInventoryItems(backendToken(), backendRestaurantId())
             backendPrefs.edit().putString("remote_inventory_json", items.toString())
                 .putBoolean("inventory_loaded", true).apply()
             "OK"
-        }) { renderApp() }
+        }, onError = {
+            inventoryRefreshInFlight = false
+            inventoryRefreshFailed = true
+            if (activePage == "Stock") renderApp()
+        }) {
+            inventoryRefreshInFlight = false
+            inventoryUpdatedAtMillis = System.currentTimeMillis()
+            inventoryRefreshFailed = false
+            renderApp()
+        }
     }
 
     private fun refreshReservations() {
@@ -3360,6 +3506,7 @@ class MainActivity : Activity() {
     }
 
     private fun renderStock(container: LinearLayout) {
+        inventoryPageContainer = container
         pageIntro(container, "Stock e inventário", "Quantidades, limites mínimos, movimentos e desperdício registado.")
         addGap(container, 8)
         if (!hasRemoteRestaurant()) {
@@ -3371,11 +3518,21 @@ class MainActivity : Activity() {
         addGap(container, 6)
         container.addView(secondaryButton("Atualizar stock") { refreshInventoryItems() },
             LinearLayout.LayoutParams(-1, dp(48)))
+        addGap(container, 6)
+        container.addView(label(
+            inventoryRefreshStatusMessage(),
+            11f, false, if (inventoryRefreshFailed) red else muted
+        ))
         addGap(container, 12)
 
         if (!backendPrefs.getBoolean("inventory_loaded", false)) {
-            container.addView(emptyCard("A carregar o inventário do servidor…"))
-            refreshInventoryItems()
+            val message = when {
+                inventoryRefreshFailed -> "Não foi possível carregar o inventário. Usa «Atualizar stock» para tentar novamente."
+                inventoryRefreshInFlight -> "A carregar o inventário do servidor…"
+                else -> "A preparar a ligação ao inventário…"
+            }
+            container.addView(emptyCard(message))
+            if (!inventoryRefreshInFlight && !inventoryRefreshFailed) refreshInventoryItems()
             return
         }
         val items = remoteInventoryItems()
