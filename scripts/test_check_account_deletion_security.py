@@ -90,7 +90,7 @@ class AccountDeletionSecurityTests(unittest.TestCase):
         )
         errors = audit_function_sources(VALID_DELETE_SOURCE, source)
         self.assertTrue(any("must not use signInWithOtp" in e for e in errors))
-        self.assertTrue(any("resetPasswordForEmail" in e for e in errors))
+        self.assertTrue(any("explicit same-page redirect URL" in e for e in errors))
 
     def test_rejects_recovery_request_without_explicit_redirect(self) -> None:
         source = VALID_WEB_SOURCE.replace(
