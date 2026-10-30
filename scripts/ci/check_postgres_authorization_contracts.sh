@@ -758,13 +758,31 @@ SELECT * FROM public.adjust_inventory_stock_idempotent(
 COMMIT;
 SQL
 
+# Change the live stock unit only after movements exist. Historical movements
+# must retain the unit used when each quantity was recorded.
+psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.save_inventory_item_with_cost(
+  '$RESTAURANT_A'::uuid, '$COST_ITEM'::uuid,
+  'Flour with cost', 'g', 9.500::numeric, 1.000::numeric,
+  'Unit change after historical losses', 20.0000::numeric
+);
+COMMIT;
+SQL
+
 cost_snapshot_history="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
   -c "SELECT string_agg(unit_cost_at_movement::numeric(12,4)::text, ',' ORDER BY created_at) FROM public.restaurant_inventory_movements WHERE item_id = '$COST_ITEM'::uuid AND note = 'Desperdício · Deterioração';")"
+unit_snapshot_history="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT string_agg(unit_at_movement, ',' ORDER BY created_at) FROM public.restaurant_inventory_movements WHERE item_id = '$COST_ITEM'::uuid AND note = 'Desperdício · Deterioração';")"
 current_cost_and_quantity="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
-  -c "SELECT unit_cost_per_unit::numeric(12,4)::text || '|' || quantity::numeric(12,3)::text FROM public.restaurant_inventory_items WHERE id = '$COST_ITEM'::uuid;")"
-if [ "$cost_snapshot_history" != "12.3456,20.0000" ] || [ "$current_cost_and_quantity" != "20.0000|9.500" ]; then
-  echo "ERROR: waste movements did not preserve the unit cost that was active at each movement." >&2
-  printf 'Snapshots: %s; current item: %s\n' "$cost_snapshot_history" "$current_cost_and_quantity" >&2
+  -c "SELECT unit_cost_per_unit::numeric(12,4)::text || '|' || quantity::numeric(12,3)::text || '|' || unit FROM public.restaurant_inventory_items WHERE id = '$COST_ITEM'::uuid;")"
+if [ "$cost_snapshot_history" != "12.3456,20.0000" ] || \
+   [ "$unit_snapshot_history" != "kg,kg" ] || \
+   [ "$current_cost_and_quantity" != "20.0000|9.500|g" ]; then
+  echo "ERROR: waste movements did not preserve the historical cost and unit after the current stock unit changed." >&2
+  printf 'Cost snapshots: %s; unit snapshots: %s; current item: %s\n' "$cost_snapshot_history" "$unit_snapshot_history" "$current_cost_and_quantity" >&2
   exit 1
 fi
 
