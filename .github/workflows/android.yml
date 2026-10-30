@@ -314,7 +314,7 @@ jobs:
             psql --no-psqlrc --set ON_ERROR_STOP=1 --file "${migration}"
             count=$((count + 1))
           done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
-          test "${count}" -eq 44
+          test "${count}" -eq 45
           echo "Successfully replayed ${count} versioned migration files."
 
       - name: Assert core schema, RLS and RPCs exist
@@ -326,6 +326,8 @@ jobs:
               OR to_regclass('public.restaurant_orders') IS NULL
               OR to_regclass('public.restaurant_reservations') IS NULL
               OR to_regclass('public.restaurant_inventory_items') IS NULL
+              OR to_regclass('public.restaurant_recipes') IS NULL
+              OR to_regclass('public.restaurant_recipe_ingredients') IS NULL
               OR to_regclass('public.loyalty_members') IS NULL
               OR to_regclass('private.restaurant_join_codes') IS NULL THEN
               RAISE EXCEPTION 'Core StudioMesa tables are missing after clean migration replay.';
@@ -334,6 +336,10 @@ jobs:
             IF to_regprocedure('public.create_restaurant(text,text)') IS NULL
               OR to_regprocedure('public.create_restaurant_reservation_idempotent(uuid,uuid,text,text,integer,timestamp with time zone,integer,integer,text)') IS NULL
               OR to_regprocedure('public.adjust_inventory_stock_idempotent(uuid,uuid,numeric,text)') IS NULL
+              OR to_regprocedure('public.save_restaurant_recipe_ingredient(uuid,uuid,uuid,numeric,numeric)') IS NULL
+              OR to_regprocedure('public.remove_restaurant_recipe_ingredient(uuid,uuid)') IS NULL
+              OR to_regprocedure('public.set_restaurant_recipe_active(uuid,uuid,boolean)') IS NULL
+              OR to_regprocedure('private.consume_recipe_stock_for_order()') IS NULL
               OR to_regprocedure('public.adjust_loyalty_points_idempotent(uuid,uuid,integer,text)') IS NULL THEN
               RAISE EXCEPTION 'A required RPC is missing after clean migration replay.';
             END IF;
