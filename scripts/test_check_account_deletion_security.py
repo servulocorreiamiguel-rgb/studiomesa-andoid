@@ -86,7 +86,7 @@ class AccountDeletionSecurityTests(unittest.TestCase):
     def test_rejects_otp_request_that_can_expose_account_existence(self) -> None:
         source = VALID_WEB_SOURCE.replace(
             "resetPasswordForEmail(email, { redirectTo: redirectUrl })",
-            'signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo: redirectUrl } })',
+            'supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo: redirectUrl } })',
         )
         errors = audit_function_sources(VALID_DELETE_SOURCE, source)
         self.assertTrue(any("must not use signInWithOtp" in e for e in errors))
