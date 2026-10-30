@@ -243,10 +243,12 @@ echo "PASS: staff join RPC works, repeated joins are idempotent, and a staff acc
 # sale-price and known-cost snapshots if the menu is edited or its row is deleted.
 ORDER_MENU_ITEM_A="aaaaaaaa-1111-4111-8111-111111111111"
 ORDER_MENU_ITEM_B="bbbbbbbb-2222-4222-8222-222222222222"
+ORDER_MENU_ITEM_ARCHIVED="abababab-3333-4333-8333-333333333333"
 ORDER_SNAPSHOT_ID="cccccccc-3333-4333-8333-333333333333"
 ORDER_LEGACY_ID="dddddddd-4444-4444-8444-444444444444"
 ORDER_FOREIGN_ID="eeeeeeee-5555-4555-8555-555555555555"
 ORDER_INVALID_COST_ID="ffffffff-6666-4666-8666-666666666666"
+ORDER_ARCHIVED_ORDER_ID="99999999-7777-4777-8777-777777777777"
 
 psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL
 BEGIN;
@@ -256,14 +258,16 @@ INSERT INTO public.menu_items
   (id, restaurant_id, name, category, description, price, cost, allergens, is_active)
 VALUES
   ('$ORDER_MENU_ITEM_A'::uuid, '$RESTAURANT_A'::uuid, 'Bitoque original',
-   'Prato principal', '', 13.50, 4.25, '', true);
+   'Prato principal', '', 13.50, 4.25, '', true),
+  ('$ORDER_MENU_ITEM_ARCHIVED'::uuid, '$RESTAURANT_A'::uuid, 'Prato arquivado',
+   'Prato principal', '', 8.00, 2.00, '', false);
 INSERT INTO public.restaurant_orders
   (id, restaurant_id, table_number, item_name, amount, quantity,
    service_course, notes, status, menu_item_id, unit_cost_snapshot)
 VALUES
   ('$ORDER_SNAPSHOT_ID'::uuid, '$RESTAURANT_A'::uuid, 1,
-   'Bitoque original', 13.50, 2, 'Principal', '', 'Aberto',
-   '$ORDER_MENU_ITEM_A'::uuid, 4.25),
+   'Preço e custo forjados pelo cliente', 0.01, 2, 'Principal', '', 'Aberto',
+   '$ORDER_MENU_ITEM_A'::uuid, 0.01),
   ('$ORDER_LEGACY_ID'::uuid, '$RESTAURANT_A'::uuid, 2,
    'Pedido antigo sem ID', 7.00, 1, 'Principal', '', 'Aberto',
    NULL, NULL);
@@ -288,6 +292,24 @@ legacy_order_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ER
       FROM public.restaurant_orders WHERE id = '$ORDER_LEGACY_ID'::uuid;")"
 if [ "$order_snapshot_ok" != "t" ] || [ "$legacy_order_ok" != "t" ]; then
   echo "ERROR: editing the menu changed an order snapshot or legacy orders were not preserved." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+INSERT INTO public.restaurant_orders
+  (id, restaurant_id, table_number, item_name, amount, quantity,
+   service_course, notes, status, menu_item_id, unit_cost_snapshot)
+VALUES
+  ('$ORDER_ARCHIVED_ORDER_ID'::uuid, '$RESTAURANT_A'::uuid, 1,
+   'Prato arquivado', 8.00, 1, 'Principal', '', 'Aberto',
+   '$ORDER_MENU_ITEM_ARCHIVED'::uuid, 2.00);
+COMMIT;
+SQL
+then
+  echo "ERROR: order creation accepted an archived menu item." >&2
   exit 1
 fi
 
@@ -344,7 +366,7 @@ if [ "$deleted_menu_snapshot_ok" != "t" ]; then
   echo "ERROR: deleting a menu row did not preserve the order's historical snapshots." >&2
   exit 1
 fi
-echo "PASS: new orders retain stable menu identity and known-cost snapshots, legacy orders remain valid, and cross-restaurant/negative-cost links are rejected."
+echo "PASS: order snapshots are server-owned, archived/cross-restaurant menu items are rejected, legacy orders remain valid, and historical values survive edits/deletes."
 
 PRICE_MENU_ITEM_A="99999999-1111-4111-8111-111111111111"
 PRICE_MENU_ITEM_B="99999999-2222-4222-8222-222222222222"
