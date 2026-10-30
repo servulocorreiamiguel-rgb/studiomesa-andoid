@@ -207,7 +207,7 @@ A aplicação consulta apenas os pedidos ativos a cada 15 segundos quando a sec�
 | WST-08 | Histórico | Consultar o registo de desperdício | Só aparecem movimentos negativos com o prefixo de desperdício, por ordem mais recente; a consulta indica o limite de 100 registos |
 | WST-09 | Inválido | Observação com mais de 350 caracteres | Rejeitada antes do envio |
 
-O registo guarda quantidade e motivo no histórico de movimentos de stock existente. Não calcula o custo financeiro da perda enquanto não existir um custo de aquisição unitário fiável por artigo.
+O registo guarda quantidade e motivo no histórico de movimentos. Quando existe custo de aquisição conhecido, os novos movimentos preservam uma fotografia desse custo e permitem estimar o valor das perdas. Movimentos antigos sem custo continuam desconhecidos.
 
 ## Atualização automática do inventário
 
@@ -221,6 +221,25 @@ O registo guarda quantidade e motivo no histórico de movimentos de stock existe
 | STK-06 | Isolamento | Trocar de sessão/restaurante enquanto uma leitura está pendente | A resposta antiga não substitui o inventário da nova conta/restaurante |
 
 A atualização periódica é polling, não uma subscrição Supabase Realtime, e só funciona com a página Stock visível e a aplicação em primeiro plano.
+
+## Receitas e consumo automático de stock
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| RCP-01 | Configuração | Associar um artigo da carta a um ingrediente, quantidade por dose e desperdício | A linha fica guardada no restaurante correto; a receita permanece desligada |
+| RCP-02 | Permissões | Funcionário tenta ativar ou desativar consumo automático | O servidor rejeita; só o proprietário pode aprovar |
+| RCP-03 | Reaprovação | Editar ou remover uma linha depois de a receita estar ativa | A receita fica automaticamente desligada até nova aprovação do proprietário |
+| RCP-04 | Cálculo | Pedido de duas doses com 0,300 kg por dose e 5% de desperdício | Desconto de 0,632 kg, arredondado conservadoramente a três casas decimais |
+| RCP-05 | Transação | Preparar pedido com stock suficiente em todos os ingredientes | Estado e todos os movimentos são gravados na mesma transação |
+| RCP-06 | Falta de stock | Um ingrediente não tem quantidade suficiente | A alteração de estado falha; não fica nenhum movimento nem desconto parcial |
+| RCP-07 | Idempotência | Reabrir e voltar a preparar o mesmo pedido | Não desconta os ingredientes novamente |
+| RCP-08 | Cancelamento | Cancelar um pedido ainda não preparado | Não consome stock |
+| RCP-09 | Compatibilidade | Preparar um pedido antigo sem menu_item_id | Mantém o fluxo antigo e não tenta deduzir ingredientes |
+| RCP-10 | Isolamento | Conta de outro restaurante tenta consultar, editar ou ativar receita | RLS/RPC impedem a leitura e a operação |
+| RCP-11 | Unidades | Configurar ingredientes com unidades incompatíveis | A aplicação explica que não há conversão automática; a equipa tem de manter unidades compatíveis |
+
+O servidor é a autoridade final para quantidades e stock. Os ensaios de CI usam uma base PostgreSQL descartável; a validação em dois dispositivos físicos continua pendente.
+
 ## Custo unitário de compra e valorização do desperdício
 
 | ID | Categoria | Ação / dados | Resultado esperado / estado |
