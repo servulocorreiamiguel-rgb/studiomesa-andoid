@@ -1450,6 +1450,12 @@ class MainActivity : Activity() {
                         )
                     )
                 }, LinearLayout.LayoutParams(-1, dp(48)))
+                if (isPremium && item.optString("id").isNotBlank()) {
+                    addGap(card, 5)
+                    card.addView(secondaryButton("Configurar receita e ingredientes") {
+                        showRecipeDialog(item.optString("id"), item.optString("name"))
+                    }, LinearLayout.LayoutParams(-1, dp(48)))
+                }
                 addGap(card, 5)
                 card.addView(secondaryButton("Arquivar artigo") {
                     AlertDialog.Builder(this)
@@ -5370,9 +5376,15 @@ class MainActivity : Activity() {
                     notes.length > 500 -> notesField.error = "As notas podem ter no máximo 500 caracteres"
                     else -> {
                         if (cloudMode) {
+                            val menuItemId = selected.id?.trim().orEmpty()
+                            if (menuItemId.isBlank()) {
+                                quantityField.error = "Atualiza a carta do servidor antes de criar este pedido."
+                                return@setOnClickListener
+                            }
                             val restaurantId = backendRestaurantId()
                             val signature = JSONObject()
                                 .put("restaurant_id", restaurantId)
+                                .put("menu_item_id", menuItemId)
                                 .put("table_number", table)
                                 .put("item_name", selected.name)
                                 .put("amount", selected.price)
@@ -5422,6 +5434,288 @@ class MainActivity : Activity() {
             }
         }
         dialog.show()
+    }
+
+    private fun showRecipeDialog(menuItemId: String, menuItemName: String) {
+        if (!isPremium || !hasRemoteRestaurant() || menuItemId.isBlank()) return
+        runBackend({
+            val token = backendToken()
+            val restaurantId = backendRestaurantId()
+            val recipe = SupabaseApi.getRestaurantRecipe(token, restaurantId, menuItemId)
+            val stock = SupabaseApi.listInventoryItems(token, restaurantId)
+            val recipeId = recipe?.optString("id").orEmpty()
+            val ingredients = if (recipeId.isNotBlank()) {
+                SupabaseApi.listRecipeIngredients(token, recipeId)
+            } else JSONArray()
+            JSONObject()
+                .put("recipe", recipe ?: JSONObject.NULL)
+                .put("ingredients", ingredients)
+                .put("stock", stock)
+                .toString()
+        }) { raw ->
+            showRecipeDialogContent(menuItemId, menuItemName, JSONObject(raw))
+        }
+    }
+
+    private fun showRecipeDialogContent(
+        menuItemId: String,
+        menuItemName: String,
+        data: JSONObject
+    ) {
+        val recipe = data.optJSONObject("recipe")
+        val recipeId = recipe?.optString("id").orEmpty()
+        val active = recipe?.optBoolean("is_active", false) ?: false
+        val requiresReview = recipe?.optBoolean("requires_review", false) ?: false
+        val inventory = data.optJSONArray("stock") ?: JSONArray()
+        val ingredients = data.optJSONArray("ingredients") ?: JSONArray()
+        val inventoryById = mutableMapOf<String, JSONObject>()
+        for (index in 0 until inventory.length()) {
+            val item = inventory.optJSONObject(index) ?: continue
+            inventoryById[item.optString("id")] = item
+        }
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(10))
+        }
+        val statusCard = makeCard(12, if (active) paleGreen else copperPale)
+        val statusTitle = when {
+            active -> "Consumo automático ativo"
+            requiresReview -> "Revisão do proprietário necessária"
+            else -> "Receita ainda não aprovada"
+        }
+        val statusDescription = when {
+            active -> "Quando um pedido ligado a este prato passa de «Aberto» para «Em preparação», o servidor desconta os ingredientes desta receita."
+            requiresReview -> "A receita ou uma unidade de stock foi alterada. Os pedidos deste prato ficam bloqueados até o proprietário rever as quantidades e aprovar novamente."
+            else -> "Configura os ingredientes e pede ao proprietário para ativar o consumo automático. A receita começa sempre desligada."
+        }
+        statusCard.addView(label(
+            statusTitle,
+            14f, true, if (active) forest else forestDeep
+        ))
+        addGap(statusCard, 4)
+        statusCard.addView(label(statusDescription, 11.5f, false, ink))
+        content.addView(statusCard)
+        addGap(content, 10)
+
+        if (ingredients.length() == 0) {
+            content.addView(emptyCard("Ainda não há ingredientes associados. Adiciona cada ingrediente com a quantidade necessária por dose."))
+        } else {
+            content.addView(label("Ingredientes por dose", 13.5f, true, forestDeep))
+            addGap(content, 5)
+            for (index in 0 until ingredients.length()) {
+                val line = ingredients.optJSONObject(index) ?: continue
+                val inventoryItemId = line.optString("inventory_item_id")
+                val stockItem = inventoryById[inventoryItemId]
+                val ingredientName = stockItem?.optString("name", "Ingrediente") ?: "Ingrediente"
+                val unit = stockItem?.optString("unit", "unidades") ?: "unidades"
+                val amount = line.optString("quantity_per_portion")
+                val waste = line.optString("waste_percent", "0")
+                val card = makeCard(12)
+                card.addView(label(ingredientName, 14f, true, forestDeep))
+                addGap(card, 3)
+                card.addView(label(
+                    "$amount $unit por dose · desperdício de $waste%",
+                    11.5f, false, muted
+                ))
+                addGap(card, 7)
+                card.addView(secondaryButton("Remover ingrediente") {
+                    AlertDialog.Builder(this)
+                        .setTitle("Remover ingrediente?")
+                        .setMessage("A remoção desativa a receita e exige nova aprovação do proprietário.")
+                        .setNegativeButton("Cancelar", null)
+                        .setPositiveButton("Remover") { _, _ ->
+                            runBackend({
+                                SupabaseApi.removeRecipeIngredient(
+                                    backendToken(), recipeId, inventoryItemId
+                                )
+                                "OK"
+                            }) {
+                                showRecipeDialog(menuItemId, menuItemName)
+                            }
+                        }
+                        .show()
+                }, LinearLayout.LayoutParams(-1, dp(44)))
+                content.addView(card, cardParams())
+                addGap(content, 5)
+            }
+        }
+
+        addGap(content, 7)
+        content.addView(primaryButton("+  Adicionar ingrediente") {
+            if (inventory.length() == 0) {
+                AlertDialog.Builder(this)
+                    .setTitle("Inventário vazio")
+                    .setMessage("Adiciona primeiro os ingredientes na secção Stock.")
+                    .setPositiveButton("OK", null)
+                    .show()
+            } else {
+                showAddRecipeIngredientDialog(menuItemId, menuItemName, inventory)
+            }
+        }, LinearLayout.LayoutParams(-1, dp(48)))
+
+        val isOwner = backendPrefs.getString("restaurant_role", "").orEmpty() == "owner"
+        if (recipeId.isNotBlank() && isOwner) {
+            addGap(content, 6)
+            content.addView(secondaryButton(
+                when {
+                    active -> "Desativar consumo automático"
+                    requiresReview -> "Rever e aprovar receita"
+                    else -> "Aprovar e ativar consumo automático"
+                }
+            ) {
+                val confirmation = when {
+                    active -> "Os novos pedidos deixam de descontar ingredientes automaticamente. Os movimentos já registados não são revertidos."
+                    requiresReview -> "Revê o artigo, cada ingrediente, a unidade e as quantidades por dose. Só aproves depois de confirmares que a ficha técnica está correta. A partir daí, o servidor volta a descontar o stock ao iniciar a preparação."
+                    else -> "Confirma que a receita e as quantidades por dose foram verificadas. O stock passa a ser descontado quando os pedidos começam a ser preparados."
+                }
+                AlertDialog.Builder(this)
+                    .setTitle(
+                        when {
+                            active -> "Desativar receita?"
+                            requiresReview -> "Confirmar revisão?"
+                            else -> "Ativar receita?"
+                        }
+                    )
+                    .setMessage(confirmation)
+                    .setNegativeButton("Cancelar", null)
+                    .setPositiveButton(if (active) "Desativar" else "Aprovar e ativar") { _, _ ->
+                        runBackend({
+                            SupabaseApi.setRecipeActive(
+                                backendToken(), backendRestaurantId(), menuItemId, !active
+                            )
+                            "OK"
+                        }) {
+                            showRecipeDialog(menuItemId, menuItemName)
+                        }
+                    }
+                    .show()
+            }, LinearLayout.LayoutParams(-1, dp(48)))
+        } else if (recipeId.isNotBlank()) {
+            addGap(content, 5)
+            content.addView(label(
+                if (requiresReview) {
+                    "A receita foi alterada e aguarda revisão do proprietário. Os pedidos deste prato não podem iniciar preparação."
+                } else {
+                    "A ativação e desativação do consumo automático são exclusivas do proprietário."
+                },
+                10.5f, false, muted
+            ))
+        }
+
+        addGap(content, 7)
+        content.addView(label(
+            "Usa a mesma unidade do inventário (kg com kg, L com L ou unidades com unidades). Não há conversões automáticas. Alterar quantidades, mudar a unidade ou eliminar um ingrediente exige nova revisão e aprovação do proprietário; enquanto a revisão estiver pendente, os pedidos deste prato não avançam para preparação.",
+            10.5f, false, muted
+        ))
+
+        val scroll = ScrollView(this).apply { addView(content) }
+        AlertDialog.Builder(this)
+            .setTitle("Receita · $menuItemName")
+            .setView(scroll)
+            .setPositiveButton("Fechar", null)
+            .show()
+    }
+
+    private fun showAddRecipeIngredientDialog(
+        menuItemId: String,
+        menuItemName: String,
+        inventory: JSONArray
+    ) {
+        val stockItems = (0 until inventory.length()).mapNotNull { index ->
+            inventory.optJSONObject(index)?.let { item ->
+                val id = item.optString("id").trim()
+                if (id.isBlank()) null else item
+            }
+        }
+        if (stockItems.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setMessage("Não há artigos de inventário válidos para associar.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(10))
+        }
+        val ingredientSpinner = Spinner(this)
+        ingredientSpinner.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            stockItems.map { item ->
+                "${item.optString("name")} · ${item.optString("unit", "unidades")}"
+            }
+        )
+        val quantity = inputField(
+            "Quantidade por dose (ex.: 0,150)",
+            InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+        )
+        val waste = inputField(
+            "Desperdício de preparação (%)",
+            InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+        ).apply { setText("0") }
+
+        form.addView(label("Ingrediente do inventário", 11f, true, forestSoft))
+        form.addView(ingredientSpinner, fieldParams())
+        addGap(form, 5)
+        form.addView(label("Quantidade necessária por dose", 11f, true, forestSoft))
+        form.addView(quantity, fieldParams())
+        addGap(form, 5)
+        form.addView(label("Desperdício esperado na preparação", 11f, true, forestSoft))
+        form.addView(waste, fieldParams())
+        addGap(form, 7)
+        form.addView(label(
+            "O valor é multiplicado pela quantidade de pratos do pedido. A percentagem de desperdício aumenta a quantidade retirada do stock.",
+            10.5f, false, muted
+        ))
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Adicionar ingrediente · $menuItemName")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Guardar ingrediente", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val selected = stockItems.getOrNull(ingredientSpinner.selectedItemPosition)
+                val quantityValue = try {
+                    RestaurantRecipeInputValidator.parseQuantityPerPortion(
+                        quantity.text.toString()
+                    )
+                } catch (error: IllegalArgumentException) {
+                    quantity.error = error.message ?: "Quantidade inválida."
+                    return@setOnClickListener
+                }
+                val wasteValue = try {
+                    RestaurantRecipeInputValidator.parseWastePercent(waste.text.toString())
+                } catch (error: IllegalArgumentException) {
+                    waste.error = error.message ?: "Percentagem inválida."
+                    return@setOnClickListener
+                }
+                if (selected == null) {
+                    ingredientSpinner.requestFocus()
+                    return@setOnClickListener
+                }
+                runBackend({
+                    SupabaseApi.saveRecipeIngredient(
+                        backendToken(),
+                        backendRestaurantId(),
+                        menuItemId,
+                        selected.optString("id"),
+                        quantityValue,
+                        wasteValue
+                    )
+                    "OK"
+                }) {
+                    dialog.dismiss()
+                    showRecipeDialog(menuItemId, menuItemName)
+                }
+            }
+        }
+        dialog.show()
+        dialog.window?.setLayout(-1, dp(560))
     }
 
     private fun showEditMenuItemDialog(itemId: String?, current: MenuEntry) {
