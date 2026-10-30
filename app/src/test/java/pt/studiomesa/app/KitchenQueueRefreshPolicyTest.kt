@@ -66,7 +66,7 @@ class KitchenQueueRefreshPolicyTest {
 
         val encodedFilter = path.substringAfter("&status=").substringBefore("&order=")
         assertEquals(
-            "in.(Aberto,Em preparação,Pronto)",
+            "in.(\"Aberto\",\"Em preparação\",\"Pronto\")",
             URLDecoder.decode(encodedFilter, "UTF-8")
         )
         assertTrue(path.contains("select=id,table_number,item_name,amount,quantity"))
