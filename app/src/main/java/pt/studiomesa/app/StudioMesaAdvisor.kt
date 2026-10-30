@@ -209,7 +209,9 @@ internal object StudioMesaAdvisor {
         } else {
             val knownItems = snapshot.stockItems.filter { it.unitCostPerUnit != null && it.quantity >= zero }
             val knownStockValue = knownItems.fold(zero) { sum, item ->
-                sum.add(item.quantity.multiply(item.unitCostPerUnit).setScale(2, RoundingMode.HALF_UP))
+                item.unitCostPerUnit?.let { cost ->
+                    sum.add(item.quantity.multiply(cost).setScale(2, RoundingMode.HALF_UP))
+                } ?: sum
             }.setScale(2, RoundingMode.HALF_UP)
             val unknownCostCount = snapshot.stockItems.count { it.unitCostPerUnit == null }
             "Stock: $lowStock artigo(s) no limite mínimo ou abaixo dele. Valor estimado com custo conhecido: ${euro(knownStockValue)}; $unknownCostCount artigo(s) sem custo registado."
@@ -768,7 +770,9 @@ internal object StudioMesaAdvisor {
                 "Stock"
             )
             val knownValue = knownItems.fold(zero) { sum, item ->
-                sum.add(item.quantity.multiply(item.unitCostPerUnit).setScale(2, RoundingMode.HALF_UP))
+                item.unitCostPerUnit?.let { cost ->
+                    sum.add(item.quantity.multiply(cost).setScale(2, RoundingMode.HALF_UP))
+                } ?: sum
             }.setScale(2, RoundingMode.HALF_UP)
             return StudioMesaAssistantAnswer(
                 "Valor estimado do stock",
