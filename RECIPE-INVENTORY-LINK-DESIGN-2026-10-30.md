@@ -1,8 +1,18 @@
 # Fase seguinte — ligar fichas técnicas, carta, pedidos e inventário
 
-**Estado:** desenho técnico preparado; ainda não aplicado à base de dados nem à aplicação.
-**Base de trabalho:** ramo de preparação com a valorização de custos de stock.
+**Estado em 30/10/2026:** a implementação candidata está na PR #72 (`feat/order-menu-snapshots-2026-10-30`) e foi reproduzida com sucesso numa base PostgreSQL descartável pela CI #857. **Ainda não foi aplicada ao Supabase de produção nem validada ponta a ponta em telemóveis reais.**
+**Base de trabalho:** PR #72, commit de código `6707d530bd6c6cf6ff0222e173b396c7b5168cc7`.
 **Princípio:** nenhuma quantidade é descontada sem associação estável, receita válida, validação de unidade e uma transação idempotente no servidor.
+
+## Estado real da implementação candidata (PR #72)
+
+- **Fase A — implementada no candidato:** pedidos novos guardam o UUID do artigo e o servidor cria snapshots de nome, preço e custo; pedidos antigos continuam sem associação retroativa. Os snapshots são imutáveis.
+- **Fase B — parcialmente implementada:** existem `restaurant_recipes` e `restaurant_recipe_ingredients`, com quantidade por dose, desperdício, unidade fotografada e isolamento por restaurante. Cada artigo tem uma ficha actual, não uma tabela de versões. Alterações podem exigir nova aprovação, mas **não existe ainda histórico formal de revisões de receita** nem fotografia da composição completa da receita no momento de cada consumo.
+- **Fase C — consumo transaccional implementado no candidato:** ao passar um pedido de `Aberto` para `Em preparação`, o trigger desconta os ingredientes e cria movimentos ligados ao pedido. Uma chave única por pedido/ingrediente evita repetir o mesmo consumo; falta de stock reverte toda a operação. A activação é feita por receita e só o proprietário a pode aprovar; começa desligada.
+- **Histórico:** os movimentos registam custo e unidade no momento do movimento. Não existe ainda uma tabela separada com linhas completas de consumo por pedido/revisão da receita. Registos anteriores à migração não têm unidade histórica recuperável e são apresentados como desconhecidos.
+- **Limites ainda em aberto:** não há conversão automática de unidades, nem garantia de histórico versionado da ficha técnica. Os testes CI passaram na base descartável, mas continuam pendentes os testes E2E com dois Android físicos, falhas de rede e contas reais descartáveis, além da migração de produção com backup e reversão testados.
+
+As secções seguintes preservam o desenho e os critérios originais da fase. Onde o desenho propõe versões formais de receitas ou uma tabela de consumo por linha, esses pontos são **trabalho futuro**, não funcionalidades concluídas da PR #72.
 
 ## 1. Problema confirmado no modelo atual
 
