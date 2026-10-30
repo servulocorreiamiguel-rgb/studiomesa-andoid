@@ -1607,6 +1607,7 @@ class MainActivity : Activity() {
         backendPrefs.getString("member_restaurant_name", null)?.trim()?.takeIf { it.isNotEmpty() }
             ?: "StudioMesa"
 
+    @Synchronized
     private fun refreshSessionIfNeeded() {
         val accessToken = backendToken()
         val refreshToken = secureSession.refreshToken()
