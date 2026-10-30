@@ -3714,7 +3714,7 @@ class MainActivity : Activity() {
                                 .put("quantity", qty)
                                 .put("low_stock_threshold", low)
                                 .put("note", itemNote)
-                                .put("unit_cost_per_unit", parsedUnitCost?.toPlainString() ?: JSONObject.NULL)
+                                .put("unit_cost_per_unit", parsedUnitCost ?: JSONObject.NULL)
                                 .toString()
                         } else ""
                         val requestId = if (item == null) {
