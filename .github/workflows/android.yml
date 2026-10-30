@@ -314,7 +314,7 @@ jobs:
             psql --no-psqlrc --set ON_ERROR_STOP=1 --file "${migration}"
             count=$((count + 1))
           done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
-          test "${count}" -eq 42
+          test "${count}" -eq 43
           echo "Successfully replayed ${count} versioned migration files."
 
       - name: Assert core schema, RLS and RPCs exist
@@ -355,6 +355,25 @@ jobs:
                 AND column_name = 'unit_cost_at_movement'
             ) THEN
               RAISE EXCEPTION 'Inventory unit-cost or historical cost snapshot columns are missing.';
+            END IF;
+
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public'
+                AND table_name = 'restaurant_orders'
+                AND column_name = 'menu_item_id'
+            ) OR NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public'
+                AND table_name = 'restaurant_orders'
+                AND column_name = 'unit_cost_snapshot'
+                AND is_nullable = 'YES'
+            ) OR NOT EXISTS (
+              SELECT 1 FROM pg_constraint
+              WHERE conname = 'restaurant_orders_menu_item_same_restaurant_fk'
+                AND conrelid = 'public.restaurant_orders'::regclass
+            ) THEN
+              RAISE EXCEPTION 'Stable order menu identity, nullable cost snapshot or same-restaurant constraint is missing.';
             END IF;
 
             IF NOT EXISTS (
