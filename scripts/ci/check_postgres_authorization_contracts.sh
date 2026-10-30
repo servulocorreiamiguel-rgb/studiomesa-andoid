@@ -1126,6 +1126,10 @@ echo "PASS: recipe lines are tenant-isolated and RPC-only; only the owner can ac
 
 # One two-portion order consumes 0.632 kg of ingredient A (0.300 kg per portion,
 # 5% preparation waste, rounded up to 0.001 kg) and 0.200 kg of ingredient C.
+# Give ingredient A a known purchase cost so the cost-snapshot trigger is
+# verified for automatic recipe-consumption movements.
+psql --no-psqlrc --set ON_ERROR_STOP=1 -c \
+  "UPDATE public.restaurant_inventory_items SET unit_cost_per_unit = 3.5000 WHERE id = '$ITEM_A'::uuid;" >/dev/null
 create_recipe_order "$USER_A" "$RECIPE_ORDER_ID" "$PRICE_MENU_ITEM_A" "2"
 set_recipe_order_status "$USER_A" "$RECIPE_ORDER_ID" "Em preparação"
 
@@ -1135,6 +1139,12 @@ recipe_movement_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set
 if [ "$recipe_stock_a" != "7.368" ] || [ "$recipe_stock_c" != "4.800" ] || [ "$recipe_movement_count" != "2" ]; then
   echo "ERROR: recipe preparation did not deduct all ingredients using conservative rounding." >&2
   printf 'Stock A=%s, stock C=%s, movements=%s\n' "$recipe_stock_a" "$recipe_stock_c" "$recipe_movement_count" >&2
+  exit 1
+fi
+recipe_movement_cost_a="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT unit_cost_at_movement::text FROM public.restaurant_inventory_movements WHERE source_order_id = '$RECIPE_ORDER_ID'::uuid AND item_id = '$ITEM_A'::uuid;")"
+if [ "$recipe_movement_cost_a" != "3.5000" ]; then
+  echo "ERROR: recipe consumption did not snapshot the current ingredient purchase cost." >&2
   exit 1
 fi
 
@@ -1148,7 +1158,17 @@ if [ "$recipe_replay_count" != "2" ] || [ "$recipe_stock_a_after_replay" != "7.3
   echo "ERROR: reopening a consumed order deducted its recipe twice." >&2
   exit 1
 fi
-echo "PASS: order preparation consumes its complete recipe atomically and cannot deduct the same ticket twice."
+# A later purchase-cost edit must not rewrite the historical cost of this
+# automatically consumed ingredient.
+psql --no-psqlrc --set ON_ERROR_STOP=1 -c \
+  "UPDATE public.restaurant_inventory_items SET unit_cost_per_unit = 4.2500 WHERE id = '$ITEM_A'::uuid;" >/dev/null
+recipe_historical_cost_a="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT unit_cost_at_movement::text FROM public.restaurant_inventory_movements WHERE source_order_id = '$RECIPE_ORDER_ID'::uuid AND item_id = '$ITEM_A'::uuid;")"
+if [ "$recipe_historical_cost_a" != "3.5000" ]; then
+  echo "ERROR: changing the current purchase cost rewrote the historical recipe-consumption cost." >&2
+  exit 1
+fi
+echo "PASS: recipe preparation consumes stock atomically, snapshots ingredient cost and cannot deduct/revalue the same ticket twice."
 
 # An insufficient ingredient rejects the whole status transition; no earlier
 # ingredient deduction or partial movement survives the failed transaction.
