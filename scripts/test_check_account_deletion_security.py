@@ -32,7 +32,10 @@ VALID_WEB_SOURCE = """
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/+esm";
 const PAGE = `<script nonce="__STUDIOMESA_CSP_NONCE__" type="module">
 const supabase = createClient(url, key, { auth: { flowType: "pkce" } });
-const linkRequestResultMessage="If the address matches an eligible account, a link may be sent."; showStatus(linkRequestResultMessage); showStatus(linkRequestResultMessage);
+const redirectUrl = window.location.origin + window.location.pathname;
+const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: redirectUrl });
+if (error) throw error;
+const linkRequestResultMessage="If the address matches an eligible account, a recovery link may be sent."; showStatus(linkRequestResultMessage); showStatus(linkRequestResultMessage);
 </script>`;
 const nonceBytes = crypto.getRandomValues(new Uint8Array(18));
 const nonce = btoa(String.fromCharCode(...nonceBytes));
@@ -79,6 +82,23 @@ class AccountDeletionSecurityTests(unittest.TestCase):
 
     def test_accepts_user_scoped_delete_endpoint_pkce_and_nonce_csp(self) -> None:
         self.assertEqual([], audit_function_sources(VALID_DELETE_SOURCE, VALID_WEB_SOURCE))
+
+    def test_rejects_otp_request_that_can_expose_account_existence(self) -> None:
+        source = VALID_WEB_SOURCE.replace(
+            "resetPasswordForEmail(email, { redirectTo: redirectUrl })",
+            'signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo: redirectUrl } })',
+        )
+        errors = audit_function_sources(VALID_DELETE_SOURCE, source)
+        self.assertTrue(any("must not use signInWithOtp" in e for e in errors))
+        self.assertTrue(any("resetPasswordForEmail" in e for e in errors))
+
+    def test_rejects_recovery_request_without_explicit_redirect(self) -> None:
+        source = VALID_WEB_SOURCE.replace(
+            "resetPasswordForEmail(email, { redirectTo: redirectUrl })",
+            "resetPasswordForEmail(email, {})",
+        )
+        errors = audit_function_sources(VALID_DELETE_SOURCE, source)
+        self.assertTrue(any("explicit same-page redirect URL" in e for e in errors))
 
     def test_rejects_different_magic_link_success_and_failure_messages(self) -> None:
         source = VALID_WEB_SOURCE.replace(
