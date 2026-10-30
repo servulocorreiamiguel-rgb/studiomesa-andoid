@@ -3946,14 +3946,11 @@ class MainActivity : Activity() {
                 return@runBackend
             }
 
-            val itemNames = mutableMapOf<String, Pair<String, String>>()
+            val itemNames = mutableMapOf<String, String>()
             val inventory = remoteInventoryItems()
             for (index in 0 until inventory.length()) {
                 val item = inventory.optJSONObject(index) ?: continue
-                itemNames[item.optString("id")] = Pair(
-                    item.optString("name", "Artigo"),
-                    item.optString("unit", "unidades")
-                )
+                itemNames[item.optString("id")] = item.optString("name", "Artigo")
             }
             val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "PT"))
             val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US)
@@ -3966,6 +3963,8 @@ class MainActivity : Activity() {
                     val quantity = runCatching {
                         BigDecimal(row.get("delta").toString()).abs()
                     }.getOrNull()
+                    val movementUnit = row.optString("unit_at_movement").trim()
+                        .takeIf { it.isNotBlank() } ?: "unidade não registada"
                     val unitCostAtMovement = if (row.isNull("unit_cost_at_movement")) null else
                         runCatching { BigDecimal(row.get("unit_cost_at_movement").toString()) }.getOrNull()
                     val estimatedCost = if (quantity == null) null else
@@ -3975,9 +3974,9 @@ class MainActivity : Activity() {
                     val date = runCatching {
                         dateFormat.format(isoFormat.parse(row.optString("created_at")) ?: Date())
                     }.getOrElse { row.optString("created_at").take(16) }
-                    append(item?.first ?: "Artigo de stock")
+                    append(item ?: "Artigo de stock")
                     append(" · −").append(quantity?.let { formatQuantity(it.toDouble()) } ?: "—")
-                    append(' ').append(item?.second ?: "")
+                    append(' ').append(movementUnit)
                     append(" · ").append(date).append('\n')
                     append(row.optString("note").removePrefix(InventoryWasteNotes.PREFIX))
                     append('\n')
@@ -4021,11 +4020,15 @@ class MainActivity : Activity() {
                 for (index in 0 until rows.length()) {
                     val row = rows.optJSONObject(index) ?: continue
                     val delta = row.optDouble("delta", 0.0)
+                    val movementUnit = row.optString("unit_at_movement").trim()
+                        .takeIf { it.isNotBlank() } ?: "unidade não registada"
                     val date = runCatching { dateFormat.format(isoFormat.parse(row.optString("created_at")) ?: Date()) }
                         .getOrElse { row.optString("created_at").take(16) }
                     append(date).append(" · ")
                     append(if (delta > 0) "+" else "").append(formatQuantity(delta))
+                    append(' ').append(movementUnit)
                     append(" → saldo ").append(formatQuantity(row.optDouble("quantity_after", 0.0)))
+                    append(' ').append(movementUnit)
                     val noteText = row.optString("note").trim()
                     if (noteText.isNotBlank()) append(" · ").append(noteText)
                     if (index < rows.length() - 1) append('\n')
