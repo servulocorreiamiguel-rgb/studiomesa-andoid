@@ -4051,7 +4051,12 @@ class MainActivity : Activity() {
         }
         val active = statuses.count { it !in setOf("Concluído", "Cancelado") }
         val preparing = statuses.count { it == "Em preparação" }
-        val stockLoaded = isPremium && remote && backendPrefs.getBoolean("inventory_loaded", false)
+        val stockSnapshotFresh = AssistantStockSnapshotPolicy.isFresh(
+            System.currentTimeMillis(), inventoryUpdatedAtMillis
+        )
+        val stockLoaded = isPremium && remote &&
+            backendPrefs.getBoolean("inventory_loaded", false) &&
+            !inventoryRefreshFailed && stockSnapshotFresh
         val stockItems = if (stockLoaded) {
             val items = remoteInventoryItems()
             (0 until items.length()).mapNotNull { index ->
