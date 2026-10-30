@@ -40,11 +40,22 @@ internal object RestaurantAssistantIntentClassifier {
         """\b(?:aumentar|aumento|melhorar|melhore|crescer|reduzir|reduza|poupar|economizar|diminuir|baixar|otimizar|divulgar|promover|promocao|campanha|publicar|publicacao|marketing|estrategia|ideias de|vender mais|como vender|quero vender|conseguir vender)\b"""
     )
 
+    // A question may combine a historical metric with a request for advice.
+    // In that case the historical part must still trigger the period-safety
+    // guard; an advice verb must not make stale/all-time data look historical.
+    private val explicitHistoricalMetricPattern = Regex(
+        """\b(?:quanto\s+(?:foi|vendi|vendemos|vendeu|venderam|gastei|gastamos|gastou|paguei|pagamos|pagou|custou|custaram)|qual\s+(?:foi|era)|quais\s+foram|(?:vendas?|receitas?|lucros?|margens?|custos?|despesas?)\s+(?:foram|foi|eram|era)|(?:analisa|analise|mostra|mostre|consulta|consulte|resume|resuma)\s+(?:me\s+)?(?:as\s+)?(?:vendas?|receitas?|lucros?|margens?|precos?|custos?|despesas?|resultados?))\b"""
+    )
+
+    private fun hasExplicitHistoricalMetricRequest(normalized: String): Boolean =
+        explicitHistoricalMetricPattern.containsMatchIn(normalized)
+
     fun requestsDatedSales(question: String): Boolean {
         val normalized = normalize(question)
         return datedPeriodPattern.containsMatchIn(normalized) &&
             salesLanguagePattern.containsMatchIn(normalized) &&
-            !salesGrowthOrMarketingPattern.containsMatchIn(normalized)
+            (!salesGrowthOrMarketingPattern.containsMatchIn(normalized) ||
+                hasExplicitHistoricalMetricRequest(normalized))
     }
 
     private val menuPerformanceLanguagePattern = Regex(
@@ -55,7 +66,8 @@ internal object RestaurantAssistantIntentClassifier {
         val normalized = normalize(question)
         return datedPeriodPattern.containsMatchIn(normalized) &&
             menuPerformanceLanguagePattern.containsMatchIn(normalized) &&
-            !salesGrowthOrMarketingPattern.containsMatchIn(normalized)
+            (!salesGrowthOrMarketingPattern.containsMatchIn(normalized) ||
+                hasExplicitHistoricalMetricRequest(normalized))
     }
 
     private val rules = listOf(
