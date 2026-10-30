@@ -622,6 +622,7 @@ object SupabaseApi {
         val body = JSONObject()
             .put("id", requestId)
             .put("restaurant_id", restaurantId)
+            .put("menu_item_id", menuItemId ?: JSONObject.NULL)
             .put("table_number", tableNumber)
             .put("item_name", itemName)
             .put("amount", amount)
@@ -664,6 +665,7 @@ object SupabaseApi {
                     row.optString("id") == requestId &&
                     row.optString("restaurant_id") == restaurantId &&
                     row.optString("created_by") == userId &&
+                    row.optString("menu_item_id") == menuItemId.orEmpty() &&
                     row.optInt("table_number") == tableNumber &&
                     row.optString("item_name") == itemName &&
                     kotlin.math.abs(row.optDouble("amount", Double.NaN) - amount) < 0.000001 &&
@@ -840,6 +842,92 @@ object SupabaseApi {
             null,
             token
         ))
+    }
+
+    fun getRestaurantRecipe(
+        token: String,
+        restaurantId: String,
+        menuItemId: String
+    ): JSONObject? {
+        val encodedRestaurant = URLEncoder.encode(restaurantId, "UTF-8")
+        val encodedMenuItem = URLEncoder.encode(menuItemId, "UTF-8")
+        val rows = JSONArray(call(
+            "GET",
+            "/rest/v1/restaurant_recipes?select=id,menu_item_id,is_active,requires_review,updated_at&restaurant_id=eq.$encodedRestaurant&menu_item_id=eq.$encodedMenuItem&limit=1",
+            null,
+            token
+        ))
+        return rows.optJSONObject(0)
+    }
+
+    fun listRecipeIngredients(token: String, recipeId: String): JSONArray {
+        val encoded = URLEncoder.encode(recipeId, "UTF-8")
+        return JSONArray(call(
+            "GET",
+            "/rest/v1/restaurant_recipe_ingredients?select=id,inventory_item_id,quantity_per_portion,waste_percent&recipe_id=eq.$encoded&order=created_at.asc,id.asc",
+            null,
+            token
+        ))
+    }
+
+    fun saveRecipeIngredient(
+        token: String,
+        restaurantId: String,
+        menuItemId: String,
+        inventoryItemId: String,
+        quantityPerPortion: BigDecimal,
+        wastePercent: BigDecimal
+    ): String {
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/save_restaurant_recipe_ingredient",
+            JSONObject()
+                .put("p_restaurant_id", restaurantId)
+                .put("p_menu_item_id", menuItemId)
+                .put("p_inventory_item_id", inventoryItemId)
+                .put("p_quantity_per_portion", quantityPerPortion)
+                .put("p_waste_percent", wastePercent),
+            token
+        )
+        val recipeId = response.trim().trim('"')
+        require(runCatching { java.util.UUID.fromString(recipeId).toString() == recipeId }.getOrDefault(false)) {
+            "O servidor não confirmou a gravação da receita."
+        }
+        return recipeId
+    }
+
+    fun removeRecipeIngredient(token: String, recipeId: String, inventoryItemId: String) {
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/remove_restaurant_recipe_ingredient",
+            JSONObject()
+                .put("p_recipe_id", recipeId)
+                .put("p_inventory_item_id", inventoryItemId),
+            token
+        )
+        if (!response.trim().trim('"').equals("true", ignoreCase = true)) {
+            throw IllegalStateException("O servidor não confirmou a remoção do ingrediente.")
+        }
+    }
+
+    fun setRecipeActive(
+        token: String,
+        restaurantId: String,
+        menuItemId: String,
+        enabled: Boolean
+    ) {
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/set_restaurant_recipe_active",
+            JSONObject()
+                .put("p_restaurant_id", restaurantId)
+                .put("p_menu_item_id", menuItemId)
+                .put("p_is_active", enabled),
+            token
+        )
+        if (!response.trim().trim('"').equals(enabled.toString(), ignoreCase = true)) {
+            throw IllegalStateException("O servidor não confirmou o estado da receita.")
+        }
     }
 
     fun saveInventoryItem(
