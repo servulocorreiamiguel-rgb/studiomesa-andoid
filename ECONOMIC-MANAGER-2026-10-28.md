@@ -11,6 +11,7 @@ Dar ao proprietário uma área opcional de apoio à decisão, com cálculos dete
 - Estimativa de vendas da semana seguinte através da média simples das quatro últimas semanas comparáveis. Não modela sazonalidade, feriados, meteorologia, eventos ou tendências; exige pelo menos quatro valores.
 - Custo da receita por dose: linhas de ingrediente, quantidade por dose, custo por unidade de compra e percentagem de desperdício; calcula custo e preço indicativo para o objetivo de custo alimentar escolhido.
 - Quantidade de reposição: stock atual, consumo médio diário, prazo do fornecedor e dias de segurança. Apenas recomenda quantidade; não emite encomendas nem altera stock.
+- A IA local lê os custos unitários atuais dos artigos de inventário, estima o valor das existências com custo conhecido, identifica artigos sem custo e calcula o custo indicativo para repor até ao limite mínimo configurado. Não assume lead time, quantidade de embalagem, portes ou desconto; não emite encomendas.
 - Comparação manual de preços entre fornecedores, normalizada por unidade de compra, apenas quando artigo e unidade coincidem.
 - Comparação orçamento-versus-realizado por categoria, mostrando a diferença absoluta e percentual sem presumir que uma variação é favorável.
 - Consumo teórico-versus-real por ingrediente, com estimativa do impacto em euros; requer unidades e período comparáveis.
