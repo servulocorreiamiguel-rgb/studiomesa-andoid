@@ -45,7 +45,7 @@ Os campos do gestor económico e os relatórios não são persistidos em SharedP
 3. Registar faturas e alterações de preços de fornecedores com validação humana.
 4. Adicionar histórico datado de vendas e calendário para previsão por dia da semana/sazonalidade e comparação entre previsão e realizado.
 5. Criar livro de caixa manual auditável e comparação real entre valores previstos e executados; depois avaliar integrações externas seguras. Não afirmar que existe acesso bancário até existir integração.
-6. Acrescentar consumo automático de ingredientes a partir de receitas e vendas, registos persistentes de desperdício, receção de compras/faturas, histórico de preços por fornecedor e controlos de validade; estas ligações ainda não existem.
+6. Ligar os artigos de stock às receitas e às vendas para calcular consumo teórico e movimentos automáticos após confirmação do pedido; acrescentar receção de compras/faturas, histórico de preços por fornecedor e controlos de validade. O registo persistente de desperdício por artigo, motivo e data já existe, mas ainda falta ligá-lo ao consumo teórico/real e aos custos por período.
 7. Construir previsão com vendas datadas por dia/turno, sazonalidade, feriados/eventos e comparação forecast-versus-real; a média simples de quatro semanas é apenas uma referência preliminar.
 8. Integrar horas trabalhadas reais, escalas e custo de pessoal por turno apenas após desenho de permissões e testes laborais/operacionais.
 9. Validar o módulo com restaurantes reais e contabilista certificado antes de o usar como aconselhamento fiscal/contabilístico.
