@@ -6,7 +6,8 @@ ALTER TABLE public.restaurant_inventory_items
   ADD COLUMN IF NOT EXISTS unit_cost_per_unit numeric(12,4);
 
 ALTER TABLE public.restaurant_inventory_movements
-  ADD COLUMN IF NOT EXISTS unit_cost_at_movement numeric(12,4);
+  ADD COLUMN IF NOT EXISTS unit_cost_at_movement numeric(12,4),
+  ADD COLUMN IF NOT EXISTS unit_at_movement text;
 
 DO $constraints$
 BEGIN
@@ -29,6 +30,19 @@ BEGIN
       ADD CONSTRAINT restaurant_inventory_movements_unit_cost_nonnegative
       CHECK (unit_cost_at_movement IS NULL OR unit_cost_at_movement >= 0);
   END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'restaurant_inventory_movements_unit_snapshot_valid'
+      AND conrelid = 'public.restaurant_inventory_movements'::regclass
+  ) THEN
+    ALTER TABLE public.restaurant_inventory_movements
+      ADD CONSTRAINT restaurant_inventory_movements_unit_snapshot_valid
+      CHECK (
+        unit_at_movement IS NULL
+        OR char_length(trim(unit_at_movement)) BETWEEN 1 AND 24
+      );
+  END IF;
 END;
 $constraints$;
 
@@ -38,8 +52,8 @@ LANGUAGE plpgsql
 SET search_path TO ''
 AS $function$
 BEGIN
-  SELECT i.unit_cost_per_unit
-    INTO NEW.unit_cost_at_movement
+  SELECT i.unit_cost_per_unit, i.unit
+    INTO NEW.unit_cost_at_movement, NEW.unit_at_movement
   FROM public.restaurant_inventory_items AS i
   WHERE i.id = NEW.item_id
     AND i.restaurant_id = NEW.restaurant_id;
