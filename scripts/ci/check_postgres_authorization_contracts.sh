@@ -299,6 +299,22 @@ if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
 SET LOCAL ROLE authenticated;
+UPDATE public.restaurant_orders
+SET item_name = 'Nome alterado pelo cliente',
+    amount = 0.01,
+    unit_cost_snapshot = 0.01
+WHERE id = '$ORDER_SNAPSHOT_ID'::uuid;
+COMMIT;
+SQL
+then
+  echo "ERROR: a client unexpectedly changed immutable order name/price/cost snapshots." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
 INSERT INTO public.restaurant_orders
   (id, restaurant_id, table_number, item_name, amount, quantity,
    service_course, notes, status, menu_item_id, unit_cost_snapshot)
@@ -366,7 +382,7 @@ if [ "$deleted_menu_snapshot_ok" != "t" ]; then
   echo "ERROR: deleting a menu row did not preserve the order's historical snapshots." >&2
   exit 1
 fi
-echo "PASS: order snapshots are server-owned, archived/cross-restaurant menu items are rejected, legacy orders remain valid, and historical values survive edits/deletes."
+echo "PASS: order snapshots are server-owned and immutable, archived/cross-restaurant menu items are rejected, legacy orders remain valid, and historical values survive menu edits/deletes."
 
 PRICE_MENU_ITEM_A="99999999-1111-4111-8111-111111111111"
 PRICE_MENU_ITEM_B="99999999-2222-4222-8222-222222222222"
