@@ -136,10 +136,13 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'O artigo da carta não existe ou está arquivado.';
   END IF;
+  -- Lock the stock row before upserting/locking the recipe row. The order-consumption
+  -- trigger uses the same stock-then-recipe lock order to avoid a lock inversion.
   SELECT ii.unit INTO v_inventory_unit
   FROM public.restaurant_inventory_items AS ii
   WHERE ii.id = p_inventory_item_id
-    AND ii.restaurant_id = p_restaurant_id;
+    AND ii.restaurant_id = p_restaurant_id
+  FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'O ingrediente não pertence ao inventário deste restaurante.';
   END IF;
