@@ -52,7 +52,7 @@ internal object KitchenQueueQuery {
 
         val encodedRestaurant = URLEncoder.encode(restaurantId, "UTF-8")
         val encodedStatuses = URLEncoder.encode(
-            "in.(Aberto,Em preparação,Pronto)",
+            "in.(\"Aberto\",\"Em preparação\",\"Pronto\")",
             "UTF-8"
         )
         return "/rest/v1/restaurant_orders?select=$SELECT" +
