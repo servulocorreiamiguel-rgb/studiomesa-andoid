@@ -36,11 +36,11 @@ Os campos do gestor económico e os relatórios não são persistidos em SharedP
 - A referência de custo alimentar é configurável pelo proprietário; não existe uma percentagem universal adequada a todos os conceitos de restauração.
 - A estimativa de procura é uma média simples; não é um modelo preditivo treinado.
 - Não são executadas ações automáticas: sem alteração de preços, movimentos de stock, encomendas, pagamentos ou horários.
-- A gestão de desperdício está limitada ao valor agregado introduzido manualmente. Falta um registo por artigo, motivo, data e colaborador.
+- O inventário já permite associar um custo de compra unitário manual a cada artigo e guardar esse custo como fotografia em novos movimentos. O histórico de desperdício calcula perdas com custo conhecido por artigo e data. Movimentos anteriores à migração sem fotografia de custo permanecem desconhecidos; não são reconstituídos com o preço atual. A valorização atual do stock usa o custo unitário atual e não é um método FIFO ou custo médio.
 - O custo por receita usa quantidades e custos fornecidos manualmente; ainda não está ligado aos ingredientes do stock nem a movimentos automáticos por venda.
 
 ## Trabalho seguinte recomendado
-1. Criar tabelas privadas de ingredientes, receitas, linhas de receita, registos de desperdício e custos por período, todas com identificação do restaurante e políticas RLS testadas.
+1. Criar tabelas privadas de receitas e linhas de receita ligadas aos artigos de inventário, com identificação do restaurante e políticas RLS testadas.
 2. Ligar vendas a preço/custo histórico por identificador estável, evitando reconstruir resultados antigos com preços atuais.
 3. Registar faturas e alterações de preços de fornecedores com validação humana.
 4. Adicionar histórico datado de vendas e calendário para previsão por dia da semana/sazonalidade e comparação entre previsão e realizado.
