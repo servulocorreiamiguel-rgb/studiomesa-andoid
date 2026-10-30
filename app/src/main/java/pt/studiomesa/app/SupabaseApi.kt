@@ -565,7 +565,7 @@ object SupabaseApi {
         val loadedRows = OrderHistoryPagination.collect { offset, limit ->
             val page = JSONArray(call(
                 "GET",
-                "/rest/v1/restaurant_orders?select=id,table_number,item_name,amount,quantity,service_course,notes,status,created_at&restaurant_id=eq.$encoded&order=created_at.desc,id.desc&limit=$limit&offset=$offset",
+                "/rest/v1/restaurant_orders?select=id,menu_item_id,unit_cost_snapshot,table_number,item_name,amount,quantity,service_course,notes,status,created_at&restaurant_id=eq.$encoded&order=created_at.desc,id.desc&limit=$limit&offset=$offset",
                 null,
                 token
             ))
@@ -598,11 +598,27 @@ object SupabaseApi {
         quantity: Int,
         serviceCourse: String,
         notes: String,
-        requestId: String
+        requestId: String,
+        menuItemId: String? = null,
+        unitCostSnapshot: BigDecimal? = null
     ) {
         require(runCatching { java.util.UUID.fromString(requestId).toString() == requestId }.getOrDefault(false)) {
             "O identificador da tentativa de pedido não é válido."
         }
+        if (!menuItemId.isNullOrBlank()) {
+            require(runCatching { java.util.UUID.fromString(menuItemId).toString() == menuItemId }.getOrDefault(false)) {
+                "O artigo selecionado não tem um identificador válido."
+            }
+        }
+        if (unitCostSnapshot != null) {
+            require(unitCostSnapshot >= BigDecimal.ZERO && unitCostSnapshot.scale() <= 2 &&
+                unitCostSnapshot <= BigDecimal("99999999.99")) {
+                "O custo registado no pedido não é válido."
+            }
+        }
+        require(amount.isFinite() && amount >= 0.0 && amount <= 99999999.99)
+        require(quantity in 1..99)
+
         val body = JSONObject()
             .put("id", requestId)
             .put("restaurant_id", restaurantId)
@@ -613,6 +629,8 @@ object SupabaseApi {
             .put("service_course", serviceCourse)
             .put("notes", notes.trim())
             .put("status", "Aberto")
+        if (!menuItemId.isNullOrBlank()) body.put("menu_item_id", menuItemId)
+        if (unitCostSnapshot != null) body.put("unit_cost_snapshot", unitCostSnapshot)
 
         try {
             mutateRows(
@@ -624,18 +642,23 @@ object SupabaseApi {
             )
         } catch (writeError: Exception) {
             // The request may have committed while its HTTP response was lost.
-            // Reuse the client-generated primary key and verify the saved row before
-            // reporting success, rather than inserting a duplicate on retry.
+            // Reuse the client-generated primary key and verify every snapshot field.
             val existingMatches = runCatching {
                 val encodedId = URLEncoder.encode(requestId, "UTF-8")
                 val rows = JSONArray(call(
                     "GET",
-                    "/rest/v1/restaurant_orders?select=id,restaurant_id,table_number,item_name,amount,quantity,service_course,notes,created_by&id=eq.$encodedId",
+                    "/rest/v1/restaurant_orders?select=id,restaurant_id,table_number,item_name,amount,quantity,service_course,notes,created_by,menu_item_id,unit_cost_snapshot&id=eq.$encodedId",
                     null,
                     token
                 ))
                 val row = rows.optJSONObject(0)
                 val userId = getUser(token).optString("id")
+                val menuItemMatches = if (menuItemId.isNullOrBlank()) row?.isNull("menu_item_id") == true
+                    else row?.optString("menu_item_id") == menuItemId
+                val savedCost = row?.takeUnless { it.isNull("unit_cost_snapshot") }
+                    ?.optString("unit_cost_snapshot")?.toBigDecimalOrNull()
+                val costMatches = if (unitCostSnapshot == null) row?.isNull("unit_cost_snapshot") == true
+                    else savedCost?.compareTo(unitCostSnapshot) == 0
                 row != null &&
                     userId.isNotBlank() &&
                     row.optString("id") == requestId &&
@@ -646,7 +669,8 @@ object SupabaseApi {
                     kotlin.math.abs(row.optDouble("amount", Double.NaN) - amount) < 0.000001 &&
                     row.optInt("quantity") == quantity &&
                     row.optString("service_course") == serviceCourse &&
-                    row.optString("notes") == notes.trim()
+                    row.optString("notes") == notes.trim() &&
+                    menuItemMatches && costMatches
             }.getOrDefault(false)
             if (!existingMatches) throw writeError
         }
