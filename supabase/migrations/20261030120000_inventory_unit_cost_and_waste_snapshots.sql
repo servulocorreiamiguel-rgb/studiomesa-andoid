@@ -35,7 +35,6 @@ $constraints$;
 CREATE OR REPLACE FUNCTION private.capture_inventory_movement_unit_cost()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
 SET search_path TO ''
 AS $function$
 BEGIN
