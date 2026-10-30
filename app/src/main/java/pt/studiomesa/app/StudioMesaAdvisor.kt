@@ -7,7 +7,22 @@ import java.util.Locale
 
 internal data class AssistantMenuItem(val name: String, val sellingPrice: BigDecimal, val unitCost: BigDecimal, val category: String = "Prato principal", val description: String = "")
 internal data class AssistantSaleLine(val itemName: String, val quantity: Int, val status: String)
-internal data class AssistantStockItem(val name: String, val quantity: BigDecimal, val minimumQuantity: BigDecimal)
+internal data class AssistantStockItem(
+    val name: String,
+    val quantity: BigDecimal,
+    val minimumQuantity: BigDecimal,
+    val unit: String = "",
+    val unitCostPerUnit: BigDecimal? = null
+)
+internal object AssistantStockSnapshotPolicy {
+    const val MAX_AGE_MILLIS = 5 * 60 * 1000L
+
+    fun isFresh(nowMillis: Long, updatedAtMillis: Long): Boolean =
+        updatedAtMillis > 0L &&
+            nowMillis >= updatedAtMillis &&
+            nowMillis - updatedAtMillis <= MAX_AGE_MILLIS
+}
+
 internal enum class MenuEngineeringClass { STAR, WORKHORSE, PUZZLE, DOG, MISSING_COST }
 internal data class AssistantMenuEngineeringItem(val itemName: String, val unitsSold: Int, val popularitySharePercent: BigDecimal, val contributionPerUnit: BigDecimal?, val classification: MenuEngineeringClass, val recommendation: String)
 internal data class AssistantMenuEngineeringReport(val hasEnoughSales: Boolean, val hasMarginData: Boolean, val completedUnits: Int, val requiredUnits: Int = 5, val items: List<AssistantMenuEngineeringItem> = emptyList())
@@ -107,11 +122,29 @@ internal object StudioMesaAdvisor {
                 "O assistente não assume que a cache de stock está atualizada. Abre Stock e atualiza os dados antes de decidir sobre ingredientes.", "Stock"
             ) else if (snapshot.stockLoaded) {
                 snapshot.stockItems.filter { it.quantity <= it.minimumQuantity }.take(4).forEach { item ->
+                    val missingToMinimum = item.minimumQuantity.subtract(item.quantity).max(zero)
+                    val replenishmentEstimate = item.unitCostPerUnit
+                        ?.takeIf { it >= zero && missingToMinimum > zero }
+                        ?.let { missingToMinimum.multiply(it).setScale(2, RoundingMode.HALF_UP) }
+                    val replenishmentNote = replenishmentEstimate?.let {
+                        " Para voltar ao limite mínimo registado faltam ${decimal(missingToMinimum)} ${item.unit.ifBlank { "unidades" }}; custo estimado: ${euro(it)}."
+                    }.orEmpty()
                     out += AssistantRecommendation(
                         "stock-${item.name.hashCode()}",
                         if (item.quantity <= zero) AssistantPriority.URGENT else AssistantPriority.ATTENTION,
                         if (item.quantity <= zero) "${item.name}: stock esgotado" else "${item.name}: stock baixo",
-                        "Quantidade registada: ${decimal(item.quantity)}; limite mínimo: ${decimal(item.minimumQuantity)}. Confirma a contagem física antes de encomendar ou registar movimentos.", "Stock"
+                        "Quantidade registada: ${decimal(item.quantity)}; limite mínimo: ${decimal(item.minimumQuantity)}. ${replenishmentNote} Confirma a contagem física, a embalagem e o prazo de entrega antes de encomendar.",
+                        "Stock"
+                    )
+                }
+                val itemsWithoutCost = snapshot.stockItems.count { it.unitCostPerUnit == null }
+                if (itemsWithoutCost > 0) {
+                    out += AssistantRecommendation(
+                        "stock-costs-unknown",
+                        AssistantPriority.TIP,
+                        "Faltam custos de compra em $itemsWithoutCost artigo(s) de stock",
+                        "Sem custo unitário confirmado, não consigo calcular o valor dessas existências nem estimar o custo de reposição. Preenche o custo de compra em Stock.",
+                        "Stock"
                     )
                 }
             }
@@ -180,7 +213,18 @@ internal object StudioMesaAdvisor {
         lines += "Fonte: " + if (snapshot.isDemo) "dados de demonstração locais." else "dados carregados pela aplicação."
         lines += "Carta: ${snapshot.menuItems.size} artigo(s); $missingCosts sem custo interno válido."
         lines += "Pedidos ativos: ${snapshot.activeOrderCount}; em preparação: ${snapshot.preparationOrderCount}."
-        if (snapshot.stockFeatureAvailable) lines += if (lowStock == null) "Stock: dados ainda não carregados; não é possível confirmar artigos baixos." else "Stock: $lowStock artigo(s) no limite mínimo ou abaixo dele."
+        if (snapshot.stockFeatureAvailable) lines += if (lowStock == null) {
+            "Stock: dados ainda não carregados; não é possível confirmar artigos baixos nem valorizar existências."
+        } else {
+            val knownItems = snapshot.stockItems.filter { it.unitCostPerUnit != null && it.quantity >= zero }
+            val knownStockValue = knownItems.fold(zero) { sum, item ->
+                item.unitCostPerUnit?.let { cost ->
+                    sum.add(item.quantity.multiply(cost).setScale(2, RoundingMode.HALF_UP))
+                } ?: sum
+            }.setScale(2, RoundingMode.HALF_UP)
+            val unknownCostCount = snapshot.stockItems.count { it.unitCostPerUnit == null }
+            "Stock: $lowStock artigo(s) no limite mínimo ou abaixo dele. Valor estimado com custo conhecido: ${euro(knownStockValue)}; $unknownCostCount artigo(s) sem custo registado."
+        }
         if (snapshot.reservationsFeatureAvailable) lines += if (!snapshot.reservationsLoaded) "Reservas: lista ainda não carregada; não assumas que está vazia." else "Reservas pendentes: ${snapshot.pendingReservations}."
         lines += when {
             !report.hasEnoughSales -> "Engenharia da carta: só ${report.completedUnits} unidade(s) concluídas correspondem à carta atual; são precisas ${report.requiredUnits} para uma triagem inicial."
@@ -720,6 +764,32 @@ internal object StudioMesaAdvisor {
         )
 
         val normalizedQuestion = normalizeLookupText(rawQuestion)
+        val asksTotalStockValue = containsAny(
+            normalizedQuestion,
+            "valor do stock", "valor em stock", "quanto vale o stock",
+            "quanto vale o inventario", "valor do inventario",
+            "quanto dinheiro tenho em stock", "quanto tenho empatado em stock"
+        )
+        if (asksTotalStockValue) {
+            val knownItems = s.stockItems.filter { it.unitCostPerUnit != null && it.quantity >= zero }
+            val unknownCostCount = s.stockItems.count { it.unitCostPerUnit == null }
+            if (knownItems.isEmpty()) return StudioMesaAssistantAnswer(
+                "Valorização do stock indisponível",
+                "Não há custos unitários confirmados nos artigos carregados. Preenche o custo de compra por kg, litro ou unidade na secção Stock; não vou atribuir um valor fictício às existências.",
+                "Stock"
+            )
+            val knownValue = knownItems.fold(zero) { sum, item ->
+                item.unitCostPerUnit?.let { cost ->
+                    sum.add(item.quantity.multiply(cost).setScale(2, RoundingMode.HALF_UP))
+                } ?: sum
+            }.setScale(2, RoundingMode.HALF_UP)
+            return StudioMesaAssistantAnswer(
+                "Valor estimado do stock",
+                "O valor estimado das existências com custo conhecido é ${euro(knownValue)} (${knownItems.size} artigo(s)). ${if (unknownCostCount > 0) "$unknownCostCount artigo(s) ficaram excluídos por não terem custo unitário registado." else "Todos os artigos carregados têm custo unitário registado."} O cálculo usa o custo de compra atual introduzido pelo restaurante; não é FIFO, custo médio contabilístico nem prova do valor de venda. Confirma a contagem física e as faturas.",
+                "Stock"
+            )
+        }
+
         val paddedQuestion = " $normalizedQuestion "
         val mentioned = s.stockItems.filter { item ->
             val name = normalizeLookupText(item.name)
@@ -746,9 +816,26 @@ internal object StudioMesaAdvisor {
                 item.quantity <= item.minimumQuantity -> "Está no limite mínimo ou abaixo dele. Confirma a contagem física e o prazo de entrega antes de decidir a encomenda."
                 else -> "Está acima do limite mínimo registado. Confirma a contagem física antes de tomar decisões de compra."
             }
+            val unit = item.unit.ifBlank { "unidades" }
+            val costDetail = item.unitCostPerUnit?.takeIf { it >= zero }?.let { unitCost ->
+                val currentValue = item.quantity.takeIf { it >= zero }
+                    ?.multiply(unitCost)
+                    ?.setScale(2, RoundingMode.HALF_UP)
+                val shortfall = item.minimumQuantity.subtract(item.quantity).max(zero)
+                val topUpCost = shortfall.takeIf { it > zero }
+                    ?.multiply(unitCost)
+                    ?.setScale(2, RoundingMode.HALF_UP)
+                buildString {
+                    append(" Custo de compra registado: ${euro(unitCost)} por $unit.")
+                    currentValue?.let { append(" Valor estimado da quantidade atual: ${euro(it)}.") }
+                    if (shortfall > zero) {
+                        append(" Para voltar ao limite mínimo faltam ${decimal(shortfall)} $unit; custo estimado: ${topUpCost?.let { euro(it) } ?: "indisponível"}.")
+                    }
+                }
+            } ?: " Custo de compra por $unit não registado; não consigo estimar o valor nem a reposição."
             return StudioMesaAssistantAnswer(
                 "Stock de ${item.name}",
-                "${item.name}: ${decimal(item.quantity)} disponíveis no registo; limite mínimo ${decimal(item.minimumQuantity)}. $status",
+                "${item.name}: ${decimal(item.quantity)} $unit disponíveis no registo; limite mínimo ${decimal(item.minimumQuantity)} $unit. $status$costDetail",
                 "Stock"
             )
         }
@@ -761,8 +848,16 @@ internal object StudioMesaAdvisor {
         )
 
         val low = s.stockItems.filter { it.quantity <= it.minimumQuantity }
-        val detail = if (low.isEmpty()) "Não encontrei artigos abaixo do limite mínimo nos dados carregados. Confirma a contagem física: só consigo analisar o que foi registado."
-        else low.take(5).joinToString("\n") { "• ${it.name}: ${decimal(it.quantity)} disponíveis; mínimo ${decimal(it.minimumQuantity)}." } + "\nConfirma a contagem física antes de encomendar ou alterar stock."
+        val detail = if (low.isEmpty()) {
+            "Não encontrei artigos abaixo do limite mínimo nos dados carregados. Confirma a contagem física: só consigo analisar o que foi registado."
+        } else low.take(5).joinToString("\n") { item ->
+            val unit = item.unit.ifBlank { "unidades" }
+            val shortfall = item.minimumQuantity.subtract(item.quantity).max(zero)
+            val topUpCost = item.unitCostPerUnit?.takeIf { it >= zero && shortfall > zero }
+                ?.let { shortfall.multiply(it).setScale(2, RoundingMode.HALF_UP) }
+            "• ${item.name}: ${decimal(item.quantity)} $unit disponíveis; mínimo ${decimal(item.minimumQuantity)} $unit." +
+                (topUpCost?.let { " Faltam ${decimal(shortfall)} $unit para o mínimo; custo estimado ${euro(it)}." } ?: "")
+        } + "\nConfirma a contagem física, a embalagem e o prazo de entrega antes de encomendar."
         return StudioMesaAssistantAnswer("Análise de stock", detail, "Stock")
     }
 

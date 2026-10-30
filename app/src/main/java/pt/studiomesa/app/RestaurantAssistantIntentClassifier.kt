@@ -150,6 +150,10 @@ internal object RestaurantAssistantIntentClassifier {
             "rentavel", "rentabilidade do artigo", "rentabilidade do prato", "vale a pena vender"),
         rule(RestaurantAssistantIntent.PRICING, 6, "preco", "margem", "lucro", "custo por artigo"),
 
+        rule(RestaurantAssistantIntent.STOCK, 10,
+            "valor do stock", "valor em stock", "quanto vale o stock",
+            "quanto vale o inventario", "valor do inventario",
+            "quanto dinheiro tenho em stock", "quanto tenho empatado em stock"),
         rule(RestaurantAssistantIntent.STOCK, 9, "quantidade em stock", "quanto tenho de stock"),
         rule(RestaurantAssistantIntent.STOCK, 8,
             "stock baixo", "stock esgotado", "stock a acabar", "ingrediente em falta",

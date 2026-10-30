@@ -3546,6 +3546,8 @@ class MainActivity : Activity() {
         )
         addGap(container, 8)
         var lowCount = 0
+        var stockValueWithKnownCost = BigDecimal.ZERO.setScale(2)
+        var itemsWithoutUnitCost = 0
         for (index in 0 until items.length()) {
             val item = items.optJSONObject(index) ?: continue
             val id = item.optString("id")
@@ -3553,6 +3555,15 @@ class MainActivity : Activity() {
             val unit = item.optString("unit", "unidades")
             val quantity = item.optDouble("quantity", 0.0)
             val threshold = item.optDouble("low_stock_threshold", 0.0)
+            val unitCost = if (item.isNull("unit_cost_per_unit")) null else
+                runCatching { BigDecimal(item.optString("unit_cost_per_unit")) }.getOrNull()
+            if (unitCost == null) {
+                itemsWithoutUnitCost++
+            } else {
+                val itemQuantity = runCatching { BigDecimal(item.optString("quantity", "0")) }.getOrNull()
+                val itemValue = itemQuantity?.let { InventoryWasteCostCalculator.estimate(it, unitCost) }
+                if (itemValue != null) stockValueWithKnownCost = stockValueWithKnownCost.add(itemValue)
+            }
             val isLow = quantity <= threshold
             if (isLow) lowCount++
             val card = makeCard(15)
@@ -3571,6 +3582,11 @@ class MainActivity : Activity() {
             addGap(card, 8)
             card.addView(label("${formatQuantity(quantity)} $unit", 22f, true, if (isLow) red else forest))
             card.addView(label("Alerta a ${formatQuantity(threshold)} $unit", 11.5f, false, muted))
+            card.addView(label(
+                unitCost?.let { "Custo de compra: ${formatUnitCost(it)} / $unit" }
+                    ?: "Custo de compra por unidade não definido",
+                11.5f, false, muted
+            ))
             addGap(card, 10)
             card.addView(secondaryButton("Editar artigo e limite") { showInventoryItemDialog(item) },
                 LinearLayout.LayoutParams(-1, dp(48)))
@@ -3594,7 +3610,30 @@ class MainActivity : Activity() {
         val summary = makeCard(13, if (lowCount > 0) paleRed else paleGreen)
         summary.addView(label(if (lowCount > 0) "$lowCount artigo(s) no limite mínimo ou abaixo dele" else "Todos os artigos acima dos respetivos limites", 12.5f, true, if (lowCount > 0) red else forest))
         container.addView(summary, cardParams())
+
+        val valuation = makeCard(13)
+        valuation.addView(label(
+            "Valor estimado do stock com custo registado: ${formatEuro(stockValueWithKnownCost)}",
+            13f, true, forest
+        ))
+        if (itemsWithoutUnitCost > 0) {
+            valuation.addView(label(
+                "$itemsWithoutUnitCost artigo(s) sem custo unitário; ficam fora deste total.",
+                11f, false, muted
+            ))
+        }
+        valuation.addView(label(
+            "Estimativa baseada no custo unitário atual introduzido pelo restaurante; não é valorização contabilística FIFO ou custo médio.",
+            10.5f, false, muted
+        ))
+        container.addView(valuation, cardParams())
     }
+
+    private fun formatEuro(value: BigDecimal): String =
+        NumberFormat.getCurrencyInstance(Locale("pt", "PT")).format(value)
+
+    private fun formatUnitCost(value: BigDecimal): String =
+        "€ " + DecimalFormat("0.0000", DecimalFormatSymbols.getInstance(Locale("pt", "PT"))).format(value)
 
     private fun formatQuantity(value: Double): String =
         String.format(Locale("pt", "PT"), "%.3f", value).trimEnd('0').trimEnd(',')
@@ -3621,12 +3660,16 @@ class MainActivity : Activity() {
         val threshold = inputField("Avisar quando for igual ou inferior a", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL).apply {
             setText(formatQuantity(item?.optDouble("low_stock_threshold", 0.0) ?: 0.0))
         }
+        val unitCost = inputField("Custo de compra por unidade (€)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL).apply {
+            setText(item?.let { if (it.isNull("unit_cost_per_unit")) "" else it.optString("unit_cost_per_unit") } ?: "")
+        }
         val note = inputField("Motivo (opcional)", InputType.TYPE_CLASS_TEXT).apply { setText(if (item == null) "Stock inicial" else "Correção de inventário") }
         listOf(
             "Nome" to name,
             "Unidade" to unit,
             "Quantidade" to quantity,
             "Limite mínimo" to threshold,
+            "Custo por unidade (€ por kg, L ou unidade)" to unitCost,
             "Nota do movimento" to note
         ).forEach { (caption, field) ->
             form.addView(label(caption, 11f, true, forestSoft))
@@ -3647,6 +3690,12 @@ class MainActivity : Activity() {
                 val lowText = threshold.text.toString().trim().replace(',', '.')
                 val qty = qtyText.toDoubleOrNull()
                 val low = lowText.toDoubleOrNull()
+                val parsedUnitCost = try {
+                    InventoryUnitCostValidator.parseOrNull(unitCost.text.toString())
+                } catch (error: IllegalArgumentException) {
+                    unitCost.error = error.message ?: "Custo unitário inválido."
+                    return@setOnClickListener
+                }
                 when {
                     itemName.isBlank() || itemName.length > 100 -> name.error = "Indica um nome até 100 caracteres."
                     itemUnit.isBlank() || itemUnit.length > 24 -> unit.error = "Indica uma unidade até 24 caracteres."
@@ -3668,6 +3717,7 @@ class MainActivity : Activity() {
                                 .put("quantity", qty)
                                 .put("low_stock_threshold", low)
                                 .put("note", itemNote)
+                                .put("unit_cost_per_unit", parsedUnitCost ?: JSONObject.NULL)
                                 .toString()
                         } else ""
                         val requestId = if (item == null) {
@@ -3681,14 +3731,14 @@ class MainActivity : Activity() {
                         runBackend({
                             val token = backendToken()
                             if (item == null) {
-                                SupabaseApi.createInventoryItem(
+                                SupabaseApi.createInventoryItemWithCost(
                                     token, requireNotNull(requestId), restaurantId,
-                                    itemName, itemUnit, qty, low, itemNote
+                                    itemName, itemUnit, qty, low, itemNote, parsedUnitCost
                                 )
                             } else {
-                                SupabaseApi.saveInventoryItem(
+                                SupabaseApi.saveInventoryItemWithCost(
                                     token, restaurantId, item.optString("id"),
-                                    itemName, itemUnit, qty, low, itemNote
+                                    itemName, itemUnit, qty, low, itemNote, parsedUnitCost
                                 )
                             }
                             val latest = SupabaseApi.listInventoryItems(token, restaurantId)
@@ -3707,7 +3757,7 @@ class MainActivity : Activity() {
             }
         }
         dialog.show()
-        dialog.window?.setLayout(-1, dp(520))
+        dialog.window?.setLayout(-1, dp(580))
     }
 
     private fun showStockAdjustmentDialog(itemId: String, itemName: String, unit: String, isInbound: Boolean) {
@@ -3901,21 +3951,42 @@ class MainActivity : Activity() {
             }
             val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "PT"))
             val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US)
+            val movementCosts = mutableListOf<BigDecimal?>()
             val message = buildString {
                 for (index in 0 until rows.length()) {
                     val row = rows.optJSONObject(index) ?: continue
                     val itemId = row.optString("item_id")
                     val item = itemNames[itemId]
-                    val delta = row.optDouble("delta", 0.0)
+                    val quantity = runCatching {
+                        BigDecimal(row.get("delta").toString()).abs()
+                    }.getOrNull()
+                    val unitCostAtMovement = if (row.isNull("unit_cost_at_movement")) null else
+                        runCatching { BigDecimal(row.get("unit_cost_at_movement").toString()) }.getOrNull()
+                    val estimatedCost = if (quantity == null) null else
+                        runCatching { InventoryWasteCostCalculator.estimate(quantity, unitCostAtMovement) }.getOrNull()
+                    movementCosts.add(estimatedCost)
+
                     val date = runCatching {
                         dateFormat.format(isoFormat.parse(row.optString("created_at")) ?: Date())
                     }.getOrElse { row.optString("created_at").take(16) }
                     append(item?.first ?: "Artigo de stock")
-                    append(" · −").append(formatQuantity(kotlin.math.abs(delta)))
+                    append(" · −").append(quantity?.let { formatQuantity(it.toDouble()) } ?: "—")
                     append(' ').append(item?.second ?: "")
                     append(" · ").append(date).append('\n')
                     append(row.optString("note").removePrefix(InventoryWasteNotes.PREFIX))
+                    append('\n')
+                    append(
+                        estimatedCost?.let { "Custo estimado na data: ${formatEuro(it)}" }
+                            ?: "Custo não registado na data desta perda"
+                    )
                     if (index < rows.length() - 1) append("\n\n")
+                }
+                val costSummary = InventoryWasteCostCalculator.summarize(movementCosts)
+                append("\n\nTotal estimado das perdas com custo registado: ${formatEuro(costSummary.knownTotal)}")
+                if (costSummary.movementsWithoutCost > 0) {
+                    append("\n")
+                    append(costSummary.movementsWithoutCost)
+                    append(" perda(s) sem custo conhecido; não foram estimadas.")
                 }
                 append("\n\nConsulta limitada às 100 perdas mais recentes.")
             }
@@ -3980,7 +4051,12 @@ class MainActivity : Activity() {
         }
         val active = statuses.count { it !in setOf("Concluído", "Cancelado") }
         val preparing = statuses.count { it == "Em preparação" }
-        val stockLoaded = isPremium && remote && backendPrefs.getBoolean("inventory_loaded", false)
+        val stockSnapshotFresh = AssistantStockSnapshotPolicy.isFresh(
+            System.currentTimeMillis(), inventoryUpdatedAtMillis
+        )
+        val stockLoaded = isPremium && remote &&
+            backendPrefs.getBoolean("inventory_loaded", false) &&
+            !inventoryRefreshFailed && stockSnapshotFresh
         val stockItems = if (stockLoaded) {
             val items = remoteInventoryItems()
             (0 until items.length()).mapNotNull { index ->
@@ -3990,7 +4066,16 @@ class MainActivity : Activity() {
                 val quantity = item.optDouble("quantity", 0.0)
                 val minimum = item.optDouble("low_stock_threshold", 0.0)
                 if (!quantity.isFinite() || !minimum.isFinite()) return@mapNotNull null
-                AssistantStockItem(name, BigDecimal.valueOf(quantity), BigDecimal.valueOf(minimum))
+                val unit = item.optString("unit", "").trim()
+                val unitCost = if (item.isNull("unit_cost_per_unit")) null else
+                    runCatching { BigDecimal(item.get("unit_cost_per_unit").toString()) }.getOrNull()
+                AssistantStockItem(
+                    name,
+                    BigDecimal(item.optString("quantity", "0")),
+                    BigDecimal(item.optString("low_stock_threshold", "0")),
+                    unit,
+                    unitCost
+                )
             }
         } else emptyList()
         val reservationsAreLoaded = hasCalculator && remote && reservationsLoaded

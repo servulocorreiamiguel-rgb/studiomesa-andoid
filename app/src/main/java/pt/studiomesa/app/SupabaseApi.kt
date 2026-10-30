@@ -812,7 +812,7 @@ object SupabaseApi {
         val encoded = URLEncoder.encode(restaurantId, "UTF-8")
         return JSONArray(call(
             "GET",
-            "/rest/v1/restaurant_inventory_items?select=id,name,unit,quantity,low_stock_threshold,updated_at&restaurant_id=eq.$encoded&order=name.asc",
+            "/rest/v1/restaurant_inventory_items?select=id,name,unit,quantity,low_stock_threshold,unit_cost_per_unit,updated_at&restaurant_id=eq.$encoded&order=name.asc",
             null,
             token
         ))
@@ -863,6 +863,64 @@ object SupabaseApi {
         val itemId = call(
             "POST",
             "/rest/v1/rpc/create_inventory_item_idempotent",
+            body,
+            token
+        ).trim().trim('"')
+        require(runCatching { java.util.UUID.fromString(itemId).toString() == itemId }.getOrDefault(false)) {
+            "O servidor não confirmou a criação do artigo de stock."
+        }
+        return itemId
+    }
+
+    fun saveInventoryItemWithCost(
+        token: String,
+        restaurantId: String,
+        itemId: String?,
+        name: String,
+        unit: String,
+        quantity: Double,
+        lowStockThreshold: Double,
+        note: String,
+        unitCostPerUnit: java.math.BigDecimal?
+    ): String {
+        val body = JSONObject()
+            .put("p_restaurant_id", restaurantId)
+            .put("p_item_id", itemId ?: JSONObject.NULL)
+            .put("p_name", name.trim())
+            .put("p_unit", unit.trim())
+            .put("p_quantity", quantity)
+            .put("p_low_stock_threshold", lowStockThreshold)
+            .put("p_note", note.trim())
+            .put("p_unit_cost_per_unit", unitCostPerUnit ?: JSONObject.NULL)
+        return call("POST", "/rest/v1/rpc/save_inventory_item_with_cost", body, token).trim().trim('"')
+    }
+
+    fun createInventoryItemWithCost(
+        token: String,
+        requestId: String,
+        restaurantId: String,
+        name: String,
+        unit: String,
+        quantity: Double,
+        lowStockThreshold: Double,
+        note: String,
+        unitCostPerUnit: java.math.BigDecimal?
+    ): String {
+        require(runCatching { java.util.UUID.fromString(requestId).toString() == requestId }.getOrDefault(false)) {
+            "O identificador da tentativa de criação de stock não é válido."
+        }
+        val body = JSONObject()
+            .put("p_client_request_id", requestId)
+            .put("p_restaurant_id", restaurantId)
+            .put("p_name", name.trim())
+            .put("p_unit", unit.trim())
+            .put("p_quantity", quantity)
+            .put("p_low_stock_threshold", lowStockThreshold)
+            .put("p_note", note.trim())
+            .put("p_unit_cost_per_unit", unitCostPerUnit ?: JSONObject.NULL)
+        val itemId = call(
+            "POST",
+            "/rest/v1/rpc/create_inventory_item_idempotent_with_cost",
             body,
             token
         ).trim().trim('"')
@@ -960,7 +1018,7 @@ object SupabaseApi {
         val encodedWastePrefix = URLEncoder.encode(InventoryWasteNotes.PREFIX + "%", "UTF-8")
         return JSONArray(call(
             "GET",
-            "/rest/v1/restaurant_inventory_movements?select=item_id,delta,note,created_at&restaurant_id=eq.$encodedRestaurant&delta=lt.0&note=like.$encodedWastePrefix&order=created_at.desc&limit=$limit",
+            "/rest/v1/restaurant_inventory_movements?select=item_id,delta,note,created_at,unit_cost_at_movement&restaurant_id=eq.$encodedRestaurant&delta=lt.0&note=like.$encodedWastePrefix&order=created_at.desc&limit=$limit",
             null,
             token
         ))

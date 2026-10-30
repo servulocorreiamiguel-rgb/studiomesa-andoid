@@ -314,7 +314,7 @@ jobs:
             psql --no-psqlrc --set ON_ERROR_STOP=1 --file "${migration}"
             count=$((count + 1))
           done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
-          test "${count}" -eq 41
+          test "${count}" -eq 42
           echo "Successfully replayed ${count} versioned migration files."
 
       - name: Assert core schema, RLS and RPCs exist
@@ -336,6 +336,58 @@ jobs:
               OR to_regprocedure('public.adjust_inventory_stock_idempotent(uuid,uuid,numeric,text)') IS NULL
               OR to_regprocedure('public.adjust_loyalty_points_idempotent(uuid,uuid,integer,text)') IS NULL THEN
               RAISE EXCEPTION 'A required RPC is missing after clean migration replay.';
+            END IF;
+
+            IF to_regprocedure('public.save_inventory_item_with_cost(uuid,uuid,text,text,numeric,numeric,text,numeric)') IS NULL
+              OR to_regprocedure('public.create_inventory_item_idempotent_with_cost(uuid,uuid,text,text,numeric,numeric,text,numeric)') IS NULL THEN
+              RAISE EXCEPTION 'Cost-aware inventory RPCs are missing after clean migration replay.';
+            END IF;
+
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public'
+                AND table_name = 'restaurant_inventory_items'
+                AND column_name = 'unit_cost_per_unit'
+            ) OR NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public'
+                AND table_name = 'restaurant_inventory_movements'
+                AND column_name = 'unit_cost_at_movement'
+            ) THEN
+              RAISE EXCEPTION 'Inventory unit-cost or historical cost snapshot columns are missing.';
+            END IF;
+
+            IF NOT EXISTS (
+              SELECT 1
+              FROM pg_trigger t
+              JOIN pg_class c ON c.oid = t.tgrelid
+              JOIN pg_proc p ON p.oid = t.tgfoid
+              WHERE t.tgname = 'restaurant_inventory_movement_cost_snapshot'
+                AND c.oid = 'public.restaurant_inventory_movements'::regclass
+                AND NOT t.tgisinternal
+                AND NOT p.prosecdef
+            ) THEN
+              RAISE EXCEPTION 'Inventory cost snapshot trigger is missing or runs with SECURITY DEFINER.';
+            END IF;
+
+            IF has_function_privilege(
+              'anon',
+              'public.save_inventory_item_with_cost(uuid,uuid,text,text,numeric,numeric,text,numeric)',
+              'EXECUTE'
+            ) OR has_function_privilege(
+              'anon',
+              'public.create_inventory_item_idempotent_with_cost(uuid,uuid,text,text,numeric,numeric,text,numeric)',
+              'EXECUTE'
+            ) OR NOT has_function_privilege(
+              'authenticated',
+              'public.save_inventory_item_with_cost(uuid,uuid,text,text,numeric,numeric,text,numeric)',
+              'EXECUTE'
+            ) OR NOT has_function_privilege(
+              'authenticated',
+              'public.create_inventory_item_idempotent_with_cost(uuid,uuid,text,text,numeric,numeric,text,numeric)',
+              'EXECUTE'
+            ) THEN
+              RAISE EXCEPTION 'Cost-aware inventory RPC grants are not restricted to authenticated callers.';
             END IF;
 
             IF EXISTS (

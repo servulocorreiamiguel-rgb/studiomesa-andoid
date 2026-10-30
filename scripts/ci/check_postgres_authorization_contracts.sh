@@ -541,6 +541,151 @@ then
 fi
 echo "PASS: cross-restaurant stock adjustments and changed idempotency payloads are rejected."
 
+# Cost-aware stock creation, cost history and waste valuation snapshot tests.
+COST_ITEM_REQUEST="12121212-1212-4121-8121-121212121212"
+COST_WASTE_REQUEST_OLD="13131313-1313-4131-8131-131313131313"
+COST_WASTE_REQUEST_NEW="14141414-1414-4141-8141-141414141414"
+
+COST_ITEM="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.create_inventory_item_idempotent_with_cost(
+  '$COST_ITEM_REQUEST'::uuid, '$RESTAURANT_A'::uuid,
+  'Flour with cost', 'kg', 10.000::numeric, 1.000::numeric,
+  'Initial purchase', 12.3456::numeric
+);
+COMMIT;
+SQL
+)"
+COST_ITEM_RETRY="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.create_inventory_item_idempotent_with_cost(
+  '$COST_ITEM_REQUEST'::uuid, '$RESTAURANT_A'::uuid,
+  'Flour with cost', 'kg', 10.000::numeric, 1.000::numeric,
+  'Initial purchase', 12.3456::numeric
+);
+COMMIT;
+SQL
+)"
+if [ -z "$COST_ITEM" ] || [ "$COST_ITEM" != "$COST_ITEM_RETRY" ]; then
+  echo "ERROR: cost-aware item creation did not return the same item on an identical retry." >&2
+  exit 1
+fi
+
+# First waste movement snapshots the initial purchase cost.
+psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.adjust_inventory_stock_idempotent(
+  '$COST_WASTE_REQUEST_OLD'::uuid, '$COST_ITEM'::uuid,
+  -0.250::numeric, 'Desperdício · Deterioração'
+);
+COMMIT;
+SQL
+
+# Change the current cost without changing quantity: the first movement must
+# retain its original price snapshot.
+psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.save_inventory_item_with_cost(
+  '$RESTAURANT_A'::uuid, '$COST_ITEM'::uuid,
+  'Flour with cost', 'kg', 9.750::numeric, 1.000::numeric,
+  'Supplier price update', 20.0000::numeric
+);
+COMMIT;
+SQL
+
+# Second waste movement must snapshot the new cost, without rewriting the first.
+psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.adjust_inventory_stock_idempotent(
+  '$COST_WASTE_REQUEST_NEW'::uuid, '$COST_ITEM'::uuid,
+  -0.250::numeric, 'Desperdício · Deterioração'
+);
+COMMIT;
+SQL
+
+cost_snapshot_history="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT string_agg(unit_cost_at_movement::numeric(12,4)::text, ',' ORDER BY created_at) FROM public.restaurant_inventory_movements WHERE item_id = '$COST_ITEM'::uuid AND note = 'Desperdício · Deterioração';")"
+current_cost_and_quantity="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT unit_cost_per_unit::numeric(12,4)::text || '|' || quantity::numeric(12,3)::text FROM public.restaurant_inventory_items WHERE id = '$COST_ITEM'::uuid;")"
+if [ "$cost_snapshot_history" != "12.3456,20.0000" ] || [ "$current_cost_and_quantity" != "20.0000|9.500" ]; then
+  echo "ERROR: waste movements did not preserve the unit cost that was active at each movement." >&2
+  printf 'Snapshots: %s; current item: %s\n' "$cost_snapshot_history" "$current_cost_and_quantity" >&2
+  exit 1
+fi
+
+# Same idempotency key cannot be reused with a different purchase cost.
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.create_inventory_item_idempotent_with_cost(
+  '$COST_ITEM_REQUEST'::uuid, '$RESTAURANT_A'::uuid,
+  'Flour with cost', 'kg', 10.000::numeric, 1.000::numeric,
+  'Initial purchase', 13.0000::numeric
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: cost-aware creation idempotency accepted a changed unit cost." >&2
+  exit 1
+fi
+
+# Cost-aware functions must keep the same restaurant boundary as legacy stock RPCs.
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.save_inventory_item_with_cost(
+  '$RESTAURANT_B'::uuid, '$ITEM_B'::uuid,
+  'Flour B', 'kg', 20.000::numeric, 1.000::numeric,
+  'Unauthorized cost change', 99.0000::numeric
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: owner A unexpectedly changed a purchase cost in restaurant B." >&2
+  exit 1
+fi
+
+# Invalid precision must be rejected by PostgreSQL, not rounded silently.
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.save_inventory_item_with_cost(
+  '$RESTAURANT_A'::uuid, '$COST_ITEM'::uuid,
+  'Flour with cost', 'kg', 9.500::numeric, 1.000::numeric,
+  'Invalid precision', 1.23456::numeric
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: server accepted a unit cost with more than four decimal places." >&2
+  exit 1
+fi
+
+# The uncosted legacy item stays explicitly unknown; no historical price is fabricated.
+legacy_cost_is_null="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT unit_cost_per_unit IS NULL FROM public.restaurant_inventory_items WHERE id = '$ITEM_A'::uuid;")"
+legacy_waste_costs_unknown="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*) = 0 FROM public.restaurant_inventory_movements WHERE item_id = '$ITEM_A'::uuid AND unit_cost_at_movement IS NOT NULL;")"
+if [ "$legacy_cost_is_null" != "t" ] || [ "$legacy_waste_costs_unknown" != "t" ]; then
+  echo "ERROR: legacy stock without a purchase cost was assigned an invented historical cost." >&2
+  exit 1
+fi
+
+echo "PASS: purchase cost creation is idempotent, waste snapshots preserve each movement price, invalid/cross-restaurant cost changes are rejected, and legacy costs remain unknown."
+
 
 # Customer-card, loyalty and reservation authorization checks use separate synthetic
 # users for restaurants A/B. All records are created only in this disposable database.
