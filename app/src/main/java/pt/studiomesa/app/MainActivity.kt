@@ -5356,6 +5356,9 @@ class MainActivity : Activity() {
             )
         }
 
+        val toolIndex = container.childCount
+        val toolTargets = linkedMapOf<String, View>()
+
         addGap(container, 6)
         val monthly = makeCard(15)
         monthly.addView(label("1 · Indicadores económicos mensais", 17f, true, forestDeep))
@@ -5433,6 +5436,7 @@ class MainActivity : Activity() {
             monthly.addView(label(economicReportText, 12f, false, ink))
         }
         container.addView(monthly, cardParams())
+        toolTargets["Indicadores mensais"] = monthly
 
         addGap(container, 6)
         val scenario = makeCard(15)
@@ -5503,6 +5507,7 @@ class MainActivity : Activity() {
             scenario.addView(label(scenarioReportText, 12f, false, ink))
         }
         container.addView(scenario, cardParams())
+        toolTargets["Simulador de cenários"] = scenario
 
         addGap(container, 6)
         val breakEvenTarget = makeCard(15)
@@ -5559,6 +5564,7 @@ class MainActivity : Activity() {
             breakEvenTarget.addView(label(breakEvenTargetReportText, 12f, false, ink))
         }
         container.addView(breakEvenTarget, cardParams())
+        toolTargets["Meta diária para equilíbrio"] = breakEvenTarget
 
         addGap(container, 6)
         val recipe = makeCard(15)
@@ -5588,6 +5594,7 @@ class MainActivity : Activity() {
             recipe.addView(label(recipeReportText, 12f, false, ink))
         }
         container.addView(recipe, cardParams())
+        toolTargets["Custo por receita e dose"] = recipe
 
         addGap(container, 6)
         val reorder = makeCard(15)
@@ -5615,6 +5622,7 @@ class MainActivity : Activity() {
             reorder.addView(label(reorderReportText, 12f, false, ink))
         }
         container.addView(reorder, cardParams())
+        toolTargets["Reposição de stock"] = reorder
 
         addGap(container, 6)
         economicLogCard(
@@ -5635,6 +5643,7 @@ class MainActivity : Activity() {
             },
             save = { wasteReportText = it }
         )
+        toolTargets["Registo de desperdício"] = container.getChildAt(container.childCount - 1)
 
         addGap(container, 6)
         economicLogCard(
@@ -5660,6 +5669,7 @@ class MainActivity : Activity() {
             },
             save = { supplierReportText = it }
         )
+        toolTargets["Comparar fornecedores"] = container.getChildAt(container.childCount - 1)
 
         addGap(container, 6)
         economicLogCard(
@@ -5682,6 +5692,7 @@ class MainActivity : Activity() {
             },
             save = { budgetReportText = it }
         )
+        toolTargets["Orçamento vs. realizado"] = container.getChildAt(container.childCount - 1)
 
         addGap(container, 6)
         economicLogCard(
@@ -5706,6 +5717,7 @@ class MainActivity : Activity() {
             },
             save = { usageReportText = it }
         )
+        toolTargets["Consumo teórico vs. real"] = container.getChildAt(container.childCount - 1)
 
         addGap(container, 6)
         economicLogCard(
@@ -5730,6 +5742,30 @@ class MainActivity : Activity() {
             },
             save = { labourReportText = it }
         )
+        toolTargets["Custo de horas de equipa"] = container.getChildAt(container.childCount - 1)
+
+        val toolNames = toolTargets.keys.toList()
+        val quickAccess = makeCard(13, paleGreen)
+        quickAccess.addView(label("NAVEGAÇÃO RÁPIDA", 9.5f, true, forestSoft))
+        addGap(quickAccess, 4)
+        quickAccess.addView(label(
+            "Escolhe uma ferramenta para ires diretamente à respetiva área.",
+            11.5f, false, ink
+        ))
+        addGap(quickAccess, 8)
+        quickAccess.addView(secondaryButton("Ir para uma ferramenta  ↓") {
+            AlertDialog.Builder(this)
+                .setTitle("Gestor económico")
+                .setItems(toolNames.toTypedArray()) { _, selected ->
+                    val target = toolTargets[toolNames[selected]] ?: return@setItems
+                    target.post {
+                        val scroll = container.parent as? ScrollView
+                        scroll?.smoothScrollTo(0, (target.top - dp(12)).coerceAtLeast(0))
+                    }
+                }
+                .show()
+        }, LinearLayout.LayoutParams(-1, dp(44)))
+        container.addView(quickAccess, toolIndex)
 
         addGap(container, 4)
         container.addView(label(
