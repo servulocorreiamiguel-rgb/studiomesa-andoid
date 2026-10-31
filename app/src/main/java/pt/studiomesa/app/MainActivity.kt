@@ -4792,7 +4792,8 @@ class MainActivity : Activity() {
         }
         heroRow.addView(label("✦", 28f, true, copper), LinearLayout.LayoutParams(dp(42), dp(42)))
         val heroText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        heroText.addView(label("Assistente StudioMesa", 18f, true, white))
+        heroText.addView(label("Gestão inteligente do restaurante", 18f, true, white))
+        heroText.addView(label("ANÁLISE LOCAL · SEM API PAGA", 10f, true, copperPale))
         heroText.addView(label("Gestão, operação e decisões com dados.", 11.5f, false, copperPale))
         heroRow.addView(heroText, LinearLayout.LayoutParams(0, -2, 1f))
         hero.addView(heroRow)
@@ -4859,7 +4860,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        quickRowOne.addView(assistantPromptButton("Resumo da operação", "", true),
+        quickRowOne.addView(assistantPromptButton("Gerar resumo da operação", "", true),
             LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(0, 0, dp(5), 0) })
         quickRowOne.addView(assistantPromptButton("Rever margens", "Quais artigos têm melhor margem e quais têm a margem mais baixa?"),
             LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(dp(5), 0, 0, 0) })
