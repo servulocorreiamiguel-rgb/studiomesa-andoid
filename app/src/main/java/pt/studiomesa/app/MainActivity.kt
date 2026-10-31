@@ -5104,19 +5104,21 @@ class MainActivity : Activity() {
         container.addView(composer, cardParams())
 
         addGap(container, 8)
-        val economicLink = makeCard(13, copperPale)
-        economicLink.addView(label("GESTÃO ECONÓMICA", 9.5f, true, forestSoft))
-        addGap(economicLink, 4)
-        economicLink.addView(label(
-            "Abre a área do proprietário para simular cenários, calcular metas e consultar ferramentas financeiras.",
-            12f, false, ink
-        ))
-        addGap(economicLink, 8)
-        economicLink.addView(secondaryButton("Abrir gestão económica") {
-            activePage = "Gestão económica"
-            renderApp()
-        }, LinearLayout.LayoutParams(-1, dp(44)))
-        container.addView(economicLink, cardParams())
+        if ("Gestão económica" in availablePages()) {
+            val economicLink = makeCard(13, copperPale)
+            economicLink.addView(label("GESTÃO ECONÓMICA", 9.5f, true, forestSoft))
+            addGap(economicLink, 4)
+            economicLink.addView(label(
+                "Abre a área do proprietário para simular cenários, calcular metas e consultar ferramentas financeiras.",
+                12f, false, ink
+            ))
+            addGap(economicLink, 8)
+            economicLink.addView(secondaryButton("Abrir gestão económica") {
+                activePage = "Gestão económica"
+                renderApp()
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+            container.addView(economicLink, cardParams())
+        }
 
         addGap(container, 5)
         sectionHeading(container, "Sugestões para rever", "Prioridades estimadas. Confirma os dados e decide antes de alterar qualquer coisa.")
