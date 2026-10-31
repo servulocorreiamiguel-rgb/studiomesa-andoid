@@ -112,6 +112,17 @@ LANGUAGE plpgsql
 SET search_path TO ''
 AS $function$
 BEGIN
+  -- Account deletion cascades from the restaurant row. Let PostgreSQL remove
+  -- its menu rows in that parent-deletion transaction; this guard is for
+  -- isolated menu-item deletion while the restaurant itself remains present.
+  IF pg_trigger_depth() > 1
+     AND NOT EXISTS (
+       SELECT 1 FROM public.restaurants AS r
+       WHERE r.id = OLD.restaurant_id
+     ) THEN
+    RETURN OLD;
+  END IF;
+
   IF EXISTS (
     SELECT 1
     FROM public.restaurant_orders AS o
