@@ -314,7 +314,7 @@ jobs:
             psql --no-psqlrc --set ON_ERROR_STOP=1 --file "${migration}"
             count=$((count + 1))
           done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
-          test "${count}" -eq 46
+          test "${count}" -eq 47
           echo "Successfully replayed ${count} versioned migration files."
 
       - name: Assert core schema, RLS and RPCs exist
@@ -335,6 +335,8 @@ jobs:
 
             IF to_regprocedure('public.create_restaurant(text,text)') IS NULL
               OR to_regprocedure('public.create_restaurant_reservation_idempotent(uuid,uuid,text,text,integer,timestamp with time zone,integer,integer,text)') IS NULL
+              OR to_regprocedure('public.create_customer_reservation_request(uuid,uuid,integer,timestamp with time zone,text,text)') IS NULL
+              OR to_regprocedure('public.cancel_my_customer_reservation(uuid)') IS NULL
               OR to_regprocedure('public.adjust_inventory_stock_idempotent(uuid,uuid,numeric,text)') IS NULL
               OR to_regprocedure('public.save_restaurant_recipe_ingredient(uuid,uuid,uuid,numeric,numeric)') IS NULL
               OR to_regprocedure('public.remove_restaurant_recipe_ingredient(uuid,uuid)') IS NULL
@@ -347,6 +349,19 @@ jobs:
             IF to_regprocedure('public.save_inventory_item_with_cost(uuid,uuid,text,text,numeric,numeric,text,numeric)') IS NULL
               OR to_regprocedure('public.create_inventory_item_idempotent_with_cost(uuid,uuid,text,text,numeric,numeric,text,numeric)') IS NULL THEN
               RAISE EXCEPTION 'Cost-aware inventory RPCs are missing after clean migration replay.';
+            END IF;
+
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema = 'public'
+                AND table_name = 'restaurant_reservations'
+                AND column_name = 'loyalty_member_id'
+            ) OR NOT EXISTS (
+              SELECT 1 FROM pg_indexes
+              WHERE schemaname = 'public'
+                AND indexname = 'restaurant_reservations_member_time_idx'
+            ) THEN
+              RAISE EXCEPTION 'Customer reservation ownership column or lookup index is missing.';
             END IF;
 
             IF NOT EXISTS (
