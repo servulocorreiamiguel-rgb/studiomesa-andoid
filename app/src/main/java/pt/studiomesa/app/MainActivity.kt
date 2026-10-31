@@ -5700,7 +5700,7 @@ class MainActivity : Activity() {
 
         addGap(container, 4)
         container.addView(label(
-            "Limites: cálculos indicativos, sem contabilidade certificada, ligação bancária, leitura automática de faturas, acesso a fornecedores ou movimentos automáticos de stock. Os registos de desperdício, propostas e comparações são manuais e ficam apenas nesta sessão. Não altera preços, stock, pagamentos nem encomendas.",
+            "Limites: cálculos indicativos, sem contabilidade certificada, ligação bancária, leitura automática de faturas, acesso a fornecedores ou movimentos automáticos de stock. Os registos de desperdício, propostas e comparações são manuais; por defeito ficam na sessão, mas o proprietário pode guardar uma cópia cifrada local por opção. Não são sincronizados nem alteram preços, stock, pagamentos ou encomendas.",
             10.5f, false, muted
         ))
     }
