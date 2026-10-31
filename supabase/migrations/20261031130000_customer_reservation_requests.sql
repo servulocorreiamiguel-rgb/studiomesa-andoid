@@ -145,8 +145,6 @@ SET search_path TO ''
 AS $function$
 DECLARE
   v_user_id uuid := (SELECT auth.uid());
-  v_member_id uuid;
-  v_restaurant_id uuid;
   v_status text;
   v_reservation_at timestamptz;
 BEGIN
@@ -154,8 +152,8 @@ BEGIN
     RAISE EXCEPTION 'É necessário iniciar sessão.';
   END IF;
 
-  SELECT r.loyalty_member_id, r.restaurant_id, r.status, r.reservation_at
-    INTO v_member_id, v_restaurant_id, v_status, v_reservation_at
+  SELECT r.status, r.reservation_at
+    INTO v_status, v_reservation_at
   FROM public.restaurant_reservations AS r
   WHERE r.id = p_reservation_id
     AND EXISTS (
