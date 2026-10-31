@@ -692,6 +692,16 @@ class MainActivity : Activity() {
                 "Explora o painel com dados de exemplo. Liga um restaurante na secção Conta para partilhar a operação com a equipa.",
             14f, false, muted
         ))
+        if (remote) {
+            val lastSync = backendPrefs.getLong("remote_operations_updated_at", 0L)
+            val syncLabel = if (lastSync > 0L) {
+                "Última sincronização concluída às " +
+                    SimpleDateFormat("HH:mm", Locale("pt", "PT")).format(Date(lastSync))
+            } else {
+                "Ainda não existe uma sincronização concluída neste dispositivo."
+            }
+            container.addView(label(syncLabel, 10.5f, true, forestSoft))
+        }
         addGap(container, 18)
 
         val tableTotal: Int
@@ -1829,6 +1839,7 @@ class MainActivity : Activity() {
         if (isCustomerApp || token.isBlank()) return
 
         try {
+            val previousRestaurantId = backendRestaurantId()
             val restaurant = SupabaseApi.getMyRestaurant(token)
             val editor = backendPrefs.edit()
                 .remove("restaurant_id")
@@ -1838,6 +1849,15 @@ class MainActivity : Activity() {
                 .remove("restaurant_role")
             if (restaurant != null) {
                 val restaurantId = restaurant.optString("restaurant_id")
+                if (previousRestaurantId.isNotBlank() && previousRestaurantId != restaurantId) {
+                    editor.remove("remote_members_json")
+                        .remove("remote_tables_json")
+                        .remove("remote_menu_json")
+                        .remove("remote_orders_json")
+                        .remove("remote_inventory_json")
+                        .remove("inventory_loaded")
+                        .remove("remote_operations_updated_at")
+                }
                 editor.putString("restaurant_id", restaurantId)
                     .putString("restaurant_name", restaurant.optString("restaurant_name"))
                     .putString("join_code", restaurant.optString("join_code"))
@@ -1855,6 +1875,7 @@ class MainActivity : Activity() {
                     .remove("remote_tables_json")
                     .remove("remote_menu_json")
                     .remove("remote_orders_json")
+                    .remove("remote_operations_updated_at")
                     .remove("remote_inventory_json")
                     .remove("inventory_loaded")
                     .remove("remote_reservations_json")
@@ -1915,6 +1936,7 @@ class MainActivity : Activity() {
             .putString("remote_tables_json", tables.toString())
             .putString("remote_menu_json", menu.toString())
             .putString("remote_orders_json", orders.toString())
+            .putLong("remote_operations_updated_at", System.currentTimeMillis())
             .apply()
     }
 
