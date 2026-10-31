@@ -3988,7 +3988,10 @@ class MainActivity : Activity() {
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
         }.timeInMillis
-        val tomorrowStart = todayStart + 24L * 60L * 60L * 1000L
+        val tomorrowStart = Calendar.getInstance().apply {
+            timeInMillis = todayStart
+            add(Calendar.DAY_OF_MONTH, 1)
+        }.timeInMillis
         val pendingCount = allReservations.count { it.optString("status") == "Pendente" }
         val confirmedCount = allReservations.count { it.optString("status") == "Confirmada" }
         val todayCount = allReservations.count {
