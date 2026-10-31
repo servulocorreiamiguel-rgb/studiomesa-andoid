@@ -43,6 +43,7 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [x] A criação de reservas usa um identificador de tentativa único e índice composto para que uma repetição da mesma operação possa devolver a reserva original; teste real de perda de rede continua pendente.
 - [ ] A branch candidata acrescenta pedidos de reserva na aplicação de cliente, associados ao cartão de fidelização autenticado, com estado inicial pendente, consulta apenas das próprias reservas e cancelamento apenas pelo titular. A migração `20261031130000_customer_reservation_requests.sql` ainda não foi aplicada ao Supabase alojado nem validada por CI; todos os casos `CRES-*` em `TEST-PLAN.md` aguardam a ronda final.
 - [ ] A branch permite à equipa atribuir ou mudar a mesa de uma reserva futura através de uma RPC autenticada; o servidor valida restaurante, capacidade e sobreposição temporal. A migração ainda não foi reproduzida por CI; casos `RTA-*` em `TEST-PLAN.md` aguardam a ronda final.
+- [ ] A agenda tem contagens de reservas pendentes, confirmadas e de hoje, com filtros por pendentes, confirmadas e hoje. O cliente de Profissional/Premium escolhe data e hora pelos seletores Android e acompanha o estado; Essencial não apresenta esta funcionalidade. Os casos `RFL-*` e `CRES-17..20` estão documentados, ainda sem execução.
 - [ ] Definir minimização de dados pessoais no servidor, acesso, conservação e eliminação.
 
 ## Pedidos e serviço
@@ -83,6 +84,14 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [x] Custo de aquisição unitário opcional por artigo (até quatro casas decimais), fotografia do custo nos novos movimentos e valorização indicativa das existências com custo conhecido e das novas perdas; movimentos antigos sem custo continuam desconhecidos.
 - [ ] Conversões de unidades; cálculo automático do custo por receita/dose ligado à ficha técnica e integração desse custo no gestor económico.
 - [ ] Avisos automáticos, fornecedores/encomendas e inventário por local.
+
+## Gestão económica e assistente
+
+- [x] O Gestor económico está separado do Assistente e reservado ao proprietário quando o restaurante está configurado; inclui métricas mensais, cenário financeiro, meta diária para ponto de equilíbrio, custo por receita/dose, reposição, desperdício, fornecedores, orçamento, consumo teórico vs. real e cenário de custo de pessoal.
+- [x] O proprietário pode guardar por opção os campos económicos numa cópia local cifrada com Android Keystore, isolada por conta/restaurante e excluída das cópias automáticas; o modo de demonstração não oferece persistência.
+- [ ] Testar a cópia cifrada em Android real, incluindo recuperação, isolamento entre contas/restaurantes, corrupção do ficheiro, eliminação e comportamento após reinstalação/limpeza de dados.
+- [ ] Executar os casos unitários e de interface do simulador, metas diárias, permissões de proprietário e as restantes ferramentas apenas na ronda final, conforme TEST-PLAN.md.
+- [ ] O assistente continua determinístico/local, não é um LLM generativo nem consultor contabilístico certificado; confirmar que a apresentação comercial deixa esta limitação clara.
 
 ## Administração e equipa
 
