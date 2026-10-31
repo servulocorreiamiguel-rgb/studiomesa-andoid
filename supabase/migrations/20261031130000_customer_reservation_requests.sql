@@ -148,6 +148,7 @@ AS $function$
 DECLARE
   v_user_id uuid := (SELECT auth.uid());
   v_member_id uuid;
+  v_restaurant_id uuid;
   v_status text;
   v_reservation_at timestamptz;
 BEGIN
@@ -155,8 +156,8 @@ BEGIN
     RAISE EXCEPTION 'É necessário iniciar sessão.';
   END IF;
 
-  SELECT r.loyalty_member_id, r.status, r.reservation_at
-    INTO v_member_id, v_status, v_reservation_at
+  SELECT r.loyalty_member_id, r.restaurant_id, r.status, r.reservation_at
+    INTO v_member_id, v_restaurant_id, v_status, v_reservation_at
   FROM public.restaurant_reservations AS r
   WHERE r.id = p_reservation_id
   FOR UPDATE;
@@ -168,6 +169,7 @@ BEGIN
     SELECT 1
     FROM public.loyalty_members AS lm
     WHERE lm.id = v_member_id
+      AND lm.restaurant_id = v_restaurant_id
       AND lm.auth_user_id = v_user_id
   ) THEN
     RAISE EXCEPTION 'Não tens autorização para cancelar este pedido de reserva.';
