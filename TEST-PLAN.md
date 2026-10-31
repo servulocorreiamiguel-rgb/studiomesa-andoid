@@ -376,3 +376,10 @@ Estes casos são executados na ronda final. A app do restaurante pode atribuir o
 | RFL-04 | Hoje | Selecionar o filtro Hoje perto da mudança de dia e nas datas de mudança de horário de verão | Mostra as reservas do dia local correto sem perder ou duplicar reservas na fronteira do dia |
 | RFL-05 | Sem resultados | Escolher um filtro sem reservas correspondentes | Mostra uma mensagem específica e mantém disponível a escolha de outro filtro |
 | RFL-06 | Atualização | Atualizar a agenda depois de confirmar, cancelar ou atribuir mesa | Os indicadores e a lista correspondem à resposta mais recente do servidor |
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| CRES-17 | Data/hora / interface | Abrir o formulário de reserva na app de cliente | Usa seletores nativos de calendário e relógio; não exige escrita manual de data |
+| CRES-18 | Data/hora / limites | Tentar escolher dia passado ou mais de um ano no futuro; escolher hoje com uma hora já passada | O calendário limita os dias disponíveis e a validação final impede uma hora passada |
+| CRES-19 | Fuso horário | Selecionar data/hora local e consultar a reserva no cliente e na agenda do restaurante | A mesma hora é apresentada no fuso local dos dispositivos, sem deslocamento indevido no formato ISO |
+
