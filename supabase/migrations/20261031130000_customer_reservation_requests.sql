@@ -87,7 +87,6 @@ BEGIN
 
   IF FOUND THEN
     IF v_existing.loyalty_member_id = p_member_id
-       AND v_existing.guest_name = v_guest_name
        AND v_existing.guest_phone = v_phone
        AND v_existing.party_size = p_party_size
        AND v_existing.reservation_at = p_reservation_at
@@ -121,7 +120,6 @@ BEGIN
 
     IF FOUND
        AND v_existing.loyalty_member_id = p_member_id
-       AND v_existing.guest_name = v_guest_name
        AND v_existing.guest_phone = v_phone
        AND v_existing.party_size = p_party_size
        AND v_existing.reservation_at = p_reservation_at
