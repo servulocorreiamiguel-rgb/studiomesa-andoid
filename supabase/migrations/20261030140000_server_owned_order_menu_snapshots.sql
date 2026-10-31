@@ -106,7 +106,7 @@ CREATE TRIGGER restaurant_order_snapshot_immutable
 -- Deleting a menu row must not detach an order that is still waiting to enter
 -- preparation. Otherwise a client could delete the row and bypass recipe stock
 -- consumption by advancing the now-unlinked order.
-CREATE OR REPLACE FUNCTION private.prevent_menu_item_delete_with_open_orders()
+CREATE OR REPLACE FUNCTION private.prevent_menu_item_delete_with_orders()
 RETURNS trigger
 LANGUAGE plpgsql
 SET search_path TO ''
@@ -128,21 +128,20 @@ BEGIN
     FROM public.restaurant_orders AS o
     WHERE o.restaurant_id = OLD.restaurant_id
       AND o.menu_item_id = OLD.id
-      AND o.status = 'Aberto'
   ) THEN
-    RAISE EXCEPTION 'Não é possível eliminar um artigo ligado a pedidos ainda abertos. Arquiva-o ou conclui/cancela primeiro os pedidos.';
+    RAISE EXCEPTION 'Não é possível eliminar um artigo que tenha pedidos associados. Arquiva-o para preservar o histórico.';
   END IF;
 
   RETURN OLD;
 END;
 $function$;
 
-REVOKE ALL ON FUNCTION private.prevent_menu_item_delete_with_open_orders()
+REVOKE ALL ON FUNCTION private.prevent_menu_item_delete_with_orders()
   FROM PUBLIC, anon, authenticated;
 
-DROP TRIGGER IF EXISTS menu_item_delete_requires_no_open_orders ON public.menu_items;
-CREATE TRIGGER menu_item_delete_requires_no_open_orders
+DROP TRIGGER IF EXISTS menu_item_delete_requires_no_orders ON public.menu_items;
+CREATE TRIGGER menu_item_delete_requires_no_orders
   BEFORE DELETE ON public.menu_items
-  FOR EACH ROW EXECUTE FUNCTION private.prevent_menu_item_delete_with_open_orders();
+  FOR EACH ROW EXECUTE FUNCTION private.prevent_menu_item_delete_with_orders();
 
 COMMIT;
