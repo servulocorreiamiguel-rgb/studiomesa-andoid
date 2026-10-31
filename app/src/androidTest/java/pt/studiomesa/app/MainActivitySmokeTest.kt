@@ -421,9 +421,9 @@ class MainActivitySmokeTest {
             onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
             onView(withText("Assistente StudioMesa")).check(matches(isDisplayed()))
             onView(withText(containsString("SEM API PAGA"))).check(matches(isDisplayed()))
-            onView(withHint("Ex.: Como posso melhorar o preço dos pratos?"))
+            onView(withHint("Escreve a tua pergunta…"))
                 .perform(scrollTo(), replaceText("Como melhorar o preço?"))
-            onView(withText("Analisar pergunta")).perform(scrollTo(), click())
+            onView(withContentDescription("Enviar pergunta ao assistente")).perform(scrollTo(), click())
             onView(withText("Análise de preços")).perform(scrollTo()).check(matches(isDisplayed()))
             onView(withText(containsString("Não alterei nenhum preço.")))
                 .perform(scrollTo())
@@ -458,6 +458,18 @@ class MainActivitySmokeTest {
         ActivityScenario.launch<MainActivity>(callback).use {
             onView(withText("Ligação de autenticação inválida"))
                 .check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
+    fun customerNavigationDrawerIsAvailableOnCustomerVariants() {
+        assumeTrue("Restaurant variant uses the management navigation.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withContentDescription("Abrir menu de navegação")).perform(click())
+            onView(withText("A MINHA EXPERIÊNCIA")).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Carta")).perform(click())
+            onView(withText("Descobre o menu.")).check(matches(isDisplayed()))
         }
     }
 
