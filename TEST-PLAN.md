@@ -324,3 +324,28 @@ Estes casos ficam reservados à ronda final, depois de o design e as funcionalid
 | UX-06 | Regressão de planos | Abrir as cinco variantes e confirmar a navegação conforme o plano e tipo de aplicação | Cliente só vê Cartão, Carta e Conta; versões de restaurante mostram as suas secções permitidas |
 
 A aprovação final exige CI completa nas cinco variantes, testes instrumentados nos emuladores Android 8 e 16, e validação manual em dispositivos reais. Os fluxos financeiros e a cópia cifrada devem usar contas e valores fictícios.
+
+## Pedidos de reserva na aplicação de cliente
+
+Estes casos ficam reservados à ronda final. O cliente só pode criar pedidos através do cartão de fidelização associado à própria conta; o restaurante continua a decidir a confirmação e a atribuição de mesa.
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| CRES-01 | Associação | Cliente autenticado sem cartão associado abre Reservas | Não é permitido criar pedido; é encaminhado para a associação ao restaurante |
+| CRES-02 | Criação | Cliente associado pede reserva futura para 2 pessoas | É criada uma reserva Pendente, ligada ao membro autenticado, sem mesa atribuída e com duração padrão de 90 minutos |
+| CRES-03 | Permissões | Cliente altera manualmente o UUID do cartão para o cartão de outra pessoa | RPC recusa a criação; nenhum pedido é criado |
+| CRES-04 | Isolamento | Cliente A consulta o UUID da reserva de Cliente B através da REST API | RLS não devolve os dados de B |
+| CRES-05 | Isolamento | Cliente A tenta cancelar uma reserva pertencente a Cliente B | RPC recusa; a reserva de B mantém o estado original |
+| CRES-06 | Idempotência | Repetir a mesma criação depois de perder a resposta HTTP | Devolve o ID original; existe apenas uma reserva |
+| CRES-07 | Idempotência / payload diferente | Reutilizar a chave de criação com data, pessoas, contacto ou notas diferentes | RPC rejeita a tentativa; a reserva original não é alterada |
+| CRES-08 | Dados inválidos | Pessoas fora de 1–60, data passada, data superior a um ano, contacto acima de 40 ou notas acima de 1000 caracteres | App e servidor rejeitam sem criar reservas |
+| CRES-09 | Cancelamento | Titular cancela o próprio pedido Pendente ou Confirmado com data futura | Estado passa a Cancelada; a lista do cliente e a agenda do restaurante refletem o estado |
+| CRES-10 | Cancelamento / repetição | Repetir o cancelamento após perda da resposta | A operação é reconhecida como já concluída; não apresenta um falso erro |
+| CRES-11 | Estado | Cliente tenta cancelar uma reserva Concluída, Não compareceu ou com data passada | RPC recusa; o estado não muda |
+| CRES-12 | Visibilidade do restaurante | Proprietário abre a agenda de reservas após pedido de cliente | Vê o pedido como Pendente, identifica que veio da aplicação de cliente e pode confirmar ou cancelar |
+| CRES-13 | Privacidade | Terminar sessão e iniciar sessão com outra conta no mesmo dispositivo | A lista em memória é limpa e não mostra pedidos da conta anterior |
+| CRES-14 | Rede | Perder a resposta após criar ou cancelar, recuperar ligação e atualizar a lista | Não duplica a criação; o estado final confirmado no servidor é apresentado |
+| CRES-15 | Migração | Reproduzir as 47 migrações desde uma base vazia | A coluna de membro, índice, políticas RLS e duas RPCs de cliente existem; funções não concedem execução a anon/PUBLIC |
+| CRES-16 | Compatibilidade | Consultar reservas antigas sem loyalty_member_id | Continuam visíveis ao pessoal; não são mostradas à conta de cliente por associação presumida |
+
+A migração `20261031130000_customer_reservation_requests.sql` não deve ser aplicada ao Supabase alojado sem backup cifrado, ensaio de restauro, plano de reversão e rollout controlado. A CI usa uma base de dados descartável; a validação live e em dispositivos reais continua pendente.
