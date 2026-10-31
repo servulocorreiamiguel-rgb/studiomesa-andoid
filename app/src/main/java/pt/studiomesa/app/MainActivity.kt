@@ -3998,8 +3998,9 @@ class MainActivity : Activity() {
             card.addView(top)
             addGap(card, 6)
             val rawDate = reservation.optString("reservation_at")
-            val dateText = runCatching { displayFormat.format(isoFormat.parse(rawDate) ?: Date()) }
-                .getOrElse { rawDate.replace('T', ' ').take(16) }
+            val parsedReservationDate = runCatching { isoFormat.parse(rawDate) }.getOrNull()
+            val dateText = parsedReservationDate?.let { displayFormat.format(it) }
+                ?: rawDate.replace('T', ' ').take(16)
             val tableNo = reservation.optInt("table_number", 0)
             card.addView(label("$dateText · ${reservation.optInt("party_size", 1)} pessoa(s)", 12.5f, true, ink))
             card.addView(label(if (tableNo > 0) "Mesa $tableNo · ${reservation.optInt("duration_minutes", 90)} min" else "Mesa por atribuir · ${reservation.optInt("duration_minutes", 90)} min", 11.5f, false, muted))
@@ -4010,6 +4011,14 @@ class MainActivity : Activity() {
             if (phone.isNotBlank()) card.addView(label("Contacto: $phone", 11.5f, false, muted))
             val notes = reservation.optString("notes").trim()
             if (notes.isNotBlank()) card.addView(label("Notas: $notes", 11.5f, false, muted))
+            if (status in setOf("Pendente", "Confirmada") &&
+                parsedReservationDate != null && parsedReservationDate.time > System.currentTimeMillis()
+            ) {
+                addGap(card, 6)
+                card.addView(secondaryButton(if (tableNo > 0) "Alterar mesa atribuída" else "Atribuir mesa") {
+                    showAssignReservationTableDialog(id, guest, reservation.optInt("party_size", 1), dateText)
+                }, LinearLayout.LayoutParams(-1, dp(44)))
+            }
             addGap(card, 10)
             when (status) {
                 "Pendente" -> card.addView(primaryButton("Confirmar reserva") {
@@ -4038,6 +4047,49 @@ class MainActivity : Activity() {
             }
             container.addView(card, cardParams())
         }
+    }
+
+    private fun showAssignReservationTableDialog(
+        reservationId: String,
+        guestName: String,
+        partySize: Int,
+        dateText: String
+    ) {
+        if (!hasRemoteRestaurant()) return
+        val tableField = inputField("Número da mesa (1–100)", InputType.TYPE_CLASS_NUMBER)
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Atribuir mesa")
+            .setMessage(
+                "$guestName · $partySize pessoa(s)\n$dateText\n\nO servidor confirma que a mesa pertence ao restaurante, tem capacidade suficiente e não está ocupada por outra reserva nesse horário."
+            )
+            .setView(tableField)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Guardar mesa", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val tableNumber = tableField.text.toString().trim().toIntOrNull()
+                if (tableNumber == null || tableNumber !in 1..100) {
+                    tableField.error = "Indica uma mesa entre 1 e 100."
+                    return@setOnClickListener
+                }
+                runBackend(
+                    task = {
+                        SupabaseApi.assignReservationTable(backendToken(), reservationId, tableNumber)
+                        reservationCache = SupabaseApi.listReservations(backendToken(), backendRestaurantId())
+                        reservationsLoaded = true
+                        "OK"
+                    },
+                    onSuccess = {
+                        dialog.dismiss()
+                        Toast.makeText(this, "Mesa atribuída à reserva.", Toast.LENGTH_SHORT).show()
+                        renderApp()
+                    }
+                )
+            }
+        }
+        dialog.show()
+        dialog.window?.setLayout(-1, dp(310))
     }
 
     private fun setReservationStatus(reservationId: String, status: String) {
