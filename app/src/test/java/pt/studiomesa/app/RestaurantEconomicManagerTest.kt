@@ -402,4 +402,51 @@ class RestaurantEconomicManagerTest {
         }
     }
 
+    @Test fun scenarioSimulatorComparesBaselineWithExplicitPercentageChanges() {
+        val result = RestaurantEconomicManager.simulateScenario(
+            baselineInput = input(),
+            salesChangePercent = amount("-10"),
+            foodCostChangePercent = amount("5"),
+            payrollChangePercent = amount("0"),
+            otherVariableCostChangePercent = amount("0")
+        )
+
+        assertEquals(amount("2000.00"), result.baseline.estimatedOperatingResult)
+        assertEquals(amount("850.00"), result.scenario.estimatedOperatingResult)
+        assertEquals(amount("-1000.00"), result.salesChange)
+        assertEquals(amount("-1150.00"), result.operatingResultChange)
+        assertEquals(amount("7570.59"), result.scenario.estimatedBreakEvenSales)
+    }
+
+    @Test fun scenarioPercentParserAcceptsPortugueseDecimalAndNegativeValues() {
+        assertEquals(amount("-10.5"), RestaurantEconomicManager.parseScenarioPercent("-10,5", "vendas"))
+        assertEquals(amount("2.25"), RestaurantEconomicManager.parseScenarioPercent("2,25", "custos"))
+    }
+
+    @Test fun scenarioPercentParserRejectsInvalidRangesAndPrecision() {
+        listOf("-100.01", "300.01", "1.001", "texto", "").forEach { raw ->
+            try {
+                RestaurantEconomicManager.parseScenarioPercent(raw, "variação")
+                fail("Invalid scenario percentage was accepted: $raw")
+            } catch (_: IllegalArgumentException) {
+                // Expected validation failure.
+            }
+        }
+    }
+
+    @Test fun scenarioSimulatorRejectsSalesReducedToZero() {
+        try {
+            RestaurantEconomicManager.simulateScenario(
+                baselineInput = input(),
+                salesChangePercent = amount("-100"),
+                foodCostChangePercent = amount("0"),
+                payrollChangePercent = amount("0"),
+                otherVariableCostChangePercent = amount("0")
+            )
+            fail("A zero-sales scenario must be rejected.")
+        } catch (e: IllegalArgumentException) {
+            assertTrue(e.message.orEmpty().contains("vendas a zero"))
+        }
+    }
+
 }
