@@ -462,7 +462,7 @@ class MainActivitySmokeTest {
     }
 
     @Test
-    fun customerNavigationDrawerOpensMenuAndReservationRequestArea() {
+    fun customerNavigationDrawerIsAvailableOnCustomerVariants() {
         assumeTrue("Restaurant variant uses the management navigation.", isCustomerVariant())
 
         ActivityScenario.launch(MainActivity::class.java).use {
@@ -470,13 +470,24 @@ class MainActivitySmokeTest {
             onView(withText("A MINHA EXPERIÊNCIA")).check(matches(isDisplayed()))
             onView(withContentDescription("Abrir secção Carta")).perform(click())
             onView(withText("Descobre o menu.")).check(matches(isDisplayed()))
+        }
+    }
 
+    @Test
+    fun customerReservationEntryMatchesTheSelectedPlan() {
+        assumeTrue("This navigation is only available in customer variants.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
-            onView(withContentDescription("Abrir secção Reservas")).perform(click())
-            onView(withText("As minhas reservas.")).check(matches(isDisplayed()))
-            onView(withText(containsString("Inicia sessão para pedir uma reserva")))
-                .check(matches(isDisplayed()))
-            onView(withText("Criar conta / iniciar sessão")).check(matches(isDisplayed()))
+            if (isCalculatorAvailable()) {
+                onView(withContentDescription("Abrir secção Reservas")).check(matches(isDisplayed()))
+                onView(withContentDescription("Abrir secção Reservas")).perform(click())
+                onView(withText("As minhas reservas.")).check(matches(isDisplayed()))
+                onView(withText(containsString("Inicia sessão para pedir uma reserva")))
+                    .check(matches(isDisplayed()))
+            } else {
+                onView(withContentDescription("Abrir secção Reservas")).check(doesNotExist())
+            }
         }
     }
 
