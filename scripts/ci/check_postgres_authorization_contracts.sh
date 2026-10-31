@@ -352,7 +352,9 @@ then
   exit 1
 fi
 
-if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+# A manual/legacy order must discard any client-supplied cost, including
+# negative values; NULL means the cost is genuinely unknown.
+psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
 SET LOCAL ROLE authenticated;
@@ -361,12 +363,14 @@ INSERT INTO public.restaurant_orders
    service_course, notes, status, menu_item_id, unit_cost_snapshot)
 VALUES
   ('$ORDER_INVALID_COST_ID'::uuid, '$RESTAURANT_A'::uuid, 1,
-   'Invalid cost', 9.00, 1, 'Principal', '', 'Aberto',
+   'Manual order with forged cost', 9.00, 1, 'Principal', '', 'Aberto',
    NULL, -0.01);
 COMMIT;
 SQL
-then
-  echo "ERROR: order accepted a negative unit-cost snapshot." >&2
+manual_forged_cost_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT unit_cost_snapshot IS NULL FROM public.restaurant_orders WHERE id = '$ORDER_INVALID_COST_ID'::uuid;")"
+if [ "$manual_forged_cost_ok" != "t" ]; then
+  echo "ERROR: a client-supplied negative cost was not discarded for a manual order." >&2
   exit 1
 fi
 
