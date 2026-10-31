@@ -1220,7 +1220,7 @@ recipe_bypass_state="$(psql --no-psqlrc --quiet --tuples-only --no-align --set O
   -c "SELECT status || '|' || menu_item_id::text || '|' || (SELECT count(*)::text FROM public.restaurant_inventory_movements WHERE source_order_id = '$RECIPE_UNLINK_ORDER_ID'::uuid) FROM public.restaurant_orders WHERE id = '$RECIPE_UNLINK_ORDER_ID'::uuid;")"
 if [ "$recipe_bypass_state" != "Aberto|$PRICE_MENU_ITEM_A|0" ]; then
   echo "ERROR: a rejected order-bypass attempt changed the order or consumed stock." >&2
-  printf 'State: %s\\n' "$recipe_bypass_state" >&2
+  printf 'State: %s\n' "$recipe_bypass_state" >&2
   exit 1
 fi
 echo "PASS: new orders must start open; linked menu identity cannot be cleared by clients; invalid stage jumps are rejected."
