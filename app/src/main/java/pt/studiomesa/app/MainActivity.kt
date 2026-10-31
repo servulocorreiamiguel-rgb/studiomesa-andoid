@@ -677,15 +677,22 @@ class MainActivity : Activity() {
     }
 
     private fun renderHome(container: LinearLayout) {
+        val remote = hasRemoteRestaurant()
         container.addView(label("Painel de operação", 10f, true, forestSoft))
         addGap(container, 5)
         container.addView(label("A sala, num relance.", 27f, true, forestDeep))
         addGap(container, 5)
-        container.addView(label("Demonstração StudioMesa. Os dados, a carta e os pedidos são exemplos; configura o restaurante e introduz dados aprovados antes de qualquer utilização real.", 14f, false, muted))
+        container.addView(label(
+            if (remote)
+                "Resumo da operação partilhada. Os indicadores usam os últimos dados recebidos do servidor."
+            else
+                "Explora o painel com dados de exemplo. Liga um restaurante na secção Conta para partilhar a operação com a equipa.",
+            14f, false, muted
+        ))
         addGap(container, 18)
 
         val tableTotal: Int
-        val occupied = if (hasRemoteRestaurant()) {
+        val occupied = if (remote) {
             val tables = remoteTables()
             tableTotal = tables.length()
             (0 until tables.length()).count { tables.optJSONObject(it)?.optBoolean("is_occupied", false) == true }
@@ -693,39 +700,105 @@ class MainActivity : Activity() {
             tableTotal = 12
             store.occupiedTableCount()
         }
-        val activeOrders = if (hasRemoteRestaurant()) {
+        val orderStatuses = if (remote) {
             val orders = remoteOrders()
-            (0 until orders.length()).count {
-                val status = orders.optJSONObject(it)?.optString("status").orEmpty()
-                status != "Concluído" && status != "Cancelado"
-            }
-        } else store.getOrders().count { it.status != "Concluído" && it.status != "Cancelado" }
-        val stats = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        stats.addView(statCard("MESAS OCUPADAS", "$occupied / $tableTotal", if (occupied > 0) copper else forestSoft),
-            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), 0) })
-        stats.addView(statCard("PEDIDOS ATIVOS", activeOrders.toString(), if (activeOrders > 0) copper else forestSoft),
-            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, 0) })
-        container.addView(stats)
+            (0 until orders.length()).mapNotNull { orders.optJSONObject(it)?.optString("status") }
+        } else {
+            store.getOrders().map { it.status }
+        }
+        val activeOrders = orderStatuses.count { it !in setOf("Concluído", "Cancelado") }
+        val preparingOrders = orderStatuses.count { it == "Em preparação" }
+        val availableTables = (tableTotal - occupied).coerceAtLeast(0)
 
-        addGap(container, 21)
+        val firstStats = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        firstStats.addView(
+            statCard("MESAS OCUPADAS", "$occupied / $tableTotal", if (occupied > 0) copper else forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), 0) }
+        )
+        firstStats.addView(
+            statCard("PEDIDOS ATIVOS", activeOrders.toString(), if (activeOrders > 0) copper else forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, 0) }
+        )
+        container.addView(firstStats)
+
+        addGap(container, 8)
+        val secondStats = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        secondStats.addView(
+            statCard("MESAS LIVRES", availableTables.toString(), if (availableTables > 0) green else muted),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), 0) }
+        )
+        secondStats.addView(
+            statCard("EM PREPARAÇÃO", preparingOrders.toString(), if (preparingOrders > 0) copper else forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, 0) }
+        )
+        container.addView(secondStats)
+
+        addGap(container, 18)
+        sectionHeading(container, "Estado do serviço", "O que merece atenção neste momento.")
+        val serviceCard = makeCard(15, if (activeOrders > 0) copperPale else white)
+        serviceCard.addView(label(
+            when {
+                activeOrders > 0 && preparingOrders > 0 ->
+                    "$activeOrders pedido(s) continuam ativos; $preparingOrders estão em preparação."
+                activeOrders > 0 ->
+                    "$activeOrders pedido(s) continuam ativos. Confirma os estados antes de fechar o serviço."
+                occupied > 0 ->
+                    "Existem $occupied mesa(s) ocupadas e não há pedidos ativos nos dados disponíveis."
+                else ->
+                    "Não existem mesas ocupadas nem pedidos ativos nos dados disponíveis."
+            },
+            13f, true, forestDeep
+        ))
+        addGap(serviceCard, 10)
+        val serviceActions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        serviceActions.addView(
+            secondaryButton("Ver pedidos") {
+                activePage = "Pedidos"
+                renderApp()
+            },
+            LinearLayout.LayoutParams(0, dp(44), 1f).apply { setMargins(0, 0, dp(5), 0) }
+        )
+        serviceActions.addView(
+            secondaryButton("Abrir cozinha") {
+                activePage = "Cozinha"
+                renderApp()
+            },
+            LinearLayout.LayoutParams(0, dp(44), 1f).apply { setMargins(dp(5), 0, 0, 0) }
+        )
+        serviceCard.addView(serviceActions)
+        container.addView(serviceCard, cardParams())
+
+        if (remote) {
+            container.addView(
+                secondaryButton("Atualizar dados do painel") { refreshRemoteOperations() },
+                LinearLayout.LayoutParams(-1, dp(46)).apply { setMargins(0, 0, 0, dp(14)) }
+            )
+        }
+
         sectionHeading(container, "Acesso rápido", "Escolhe uma área para continuar.")
-        actionCard(container, "01", "Mesas", "Consulta as " + tableTotal + " mesas do restaurante.", "ABRIR MESAS") {
+        actionCard(container, "01", "Mesas", "Consulta as $tableTotal mesas do restaurante.", "ABRIR MESAS") {
             activePage = "Mesas"; renderApp()
         }
         actionCard(container, "02", "Pedidos", "Regista pedidos e acompanha a conclusão.", "ABRIR PEDIDOS") {
             activePage = "Pedidos"; renderApp()
         }
-        actionCard(container, "03", "Carta e custos", "Artigos de exemplo, preços e custos.", "ABRIR CARTA") {
+        actionCard(container, "03", "Carta e custos",
+            if (remote) "Gere os artigos, preços e custos aprovados." else "Artigos de exemplo, preços e custos.",
+            "ABRIR CARTA"
+        ) {
             activePage = "Carta"; renderApp()
         }
         actionCard(container, "04", "Pontos de fidelização", "Cria cartões de cliente e ajusta saldos de pontos.", "GERIR CLIENTES") {
             activePage = "Pontos"; renderApp()
         }
         if (hasCalculator) {
-            actionCard(container, "05", "Reservas", "Regista reservas, capacidade e disponibilidade de mesas.", "GERIR RESERVAS") {
+            actionCard(container, "05", "Reservas", "Regista reservas e acompanha confirmações.", "GERIR RESERVAS") {
                 activePage = "Reservas"; renderApp()
             }
-            actionCard(container, "06", "Preço Justo", "Calcula um preço indicativo a partir do custo.", "ABRIR CALCULADORA") {
+            actionCard(container, "06", "Preço Justo", "Calcula preços indicativos a partir dos custos.", "ABRIR CALCULADORA") {
                 activePage = "Preço Justo"; renderApp()
             }
         }
@@ -733,7 +806,7 @@ class MainActivity : Activity() {
             actionCard(container, "07", "Stock e inventário", "Controla quantidades, níveis mínimos e movimentos.", "GERIR STOCK") {
                 activePage = "Stock"; renderApp()
             }
-            actionCard(container, "08", "Análise operacional", "Resumo dos pedidos, artigos e custos registados.", "VER ANÁLISE") {
+            actionCard(container, "08", "Análise operacional", "Consulta os pedidos, artigos e custos registados.", "VER ANÁLISE") {
                 activePage = "Análise"; renderApp()
             }
         }
@@ -743,11 +816,13 @@ class MainActivity : Activity() {
 
         addGap(container, 6)
         val note = makeCard(14, copperPale)
-        note.addView(label(if (hasRemoteRestaurant()) "OPERAÇÃO PARTILHADA" else "DEMONSTRAÇÃO", 10f, true, forest))
+        note.addView(label(if (remote) "OPERAÇÃO PARTILHADA" else "MODO DE DEMONSTRAÇÃO", 10f, true, forest))
         addGap(note, 4)
         note.addView(label(
-            if (hasRemoteRestaurant()) "Mesas, carta, pedidos e estados ficam guardados no servidor e podem ser consultados pela equipa autenticada. Ainda não existe integração com caixa registadora, pagamentos ou impressora de cozinha."
-            else "O modo de demonstração guarda mesas, carta e pedidos apenas neste telemóvel. Liga uma conta e configura o restaurante para usar os dados partilhados no servidor.",
+            if (remote)
+                "Mesas, carta e pedidos são guardados no servidor e partilhados com a equipa autenticada. Os indicadores deste painel não são atualizados em tempo real. Não existe integração com caixa registadora, pagamentos ou impressora de cozinha."
+            else
+                "O modo de demonstração guarda mesas, carta e pedidos apenas neste telemóvel. Liga uma conta e configura o restaurante para usar os dados partilhados no servidor.",
             12.5f, false, ink
         ))
         container.addView(note, cardParams())
