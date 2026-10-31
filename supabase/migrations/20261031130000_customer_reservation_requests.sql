@@ -186,9 +186,93 @@ BEGIN
 END;
 $function$;
 
+CREATE OR REPLACE FUNCTION public.assign_restaurant_reservation_table(
+  p_reservation_id uuid,
+  p_table_number integer
+) RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+DECLARE
+  v_user_id uuid := (SELECT auth.uid());
+  v_restaurant_id uuid;
+  v_party_size integer;
+  v_reservation_at timestamptz;
+  v_duration_minutes integer;
+  v_status text;
+  v_current_table_number integer;
+  v_seats integer;
+BEGIN
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'É necessário iniciar sessão.';
+  END IF;
+  IF p_reservation_id IS NULL OR p_table_number IS NULL OR p_table_number NOT BETWEEN 1 AND 100 THEN
+    RAISE EXCEPTION 'Indica uma reserva e uma mesa válidas.';
+  END IF;
+
+  SELECT r.restaurant_id, r.party_size, r.reservation_at, r.duration_minutes,
+         r.status, r.table_number
+    INTO v_restaurant_id, v_party_size, v_reservation_at, v_duration_minutes,
+         v_status, v_current_table_number
+  FROM public.restaurant_reservations AS r
+  WHERE r.id = p_reservation_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Reserva não encontrada.';
+  END IF;
+  IF NOT private.is_restaurant_staff(v_restaurant_id) THEN
+    RAISE EXCEPTION 'Sem autorização para atribuir uma mesa a esta reserva.';
+  END IF;
+  IF v_status NOT IN ('Pendente', 'Confirmada') OR v_reservation_at <= now() THEN
+    RAISE EXCEPTION 'Só podes atribuir mesas a reservas pendentes ou confirmadas com data futura.';
+  END IF;
+  IF v_current_table_number = p_table_number THEN
+    RETURN;
+  END IF;
+
+  SELECT t.seats
+    INTO v_seats
+  FROM public.restaurant_tables AS t
+  WHERE t.restaurant_id = v_restaurant_id
+    AND t.table_number = p_table_number
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'A mesa selecionada não existe neste restaurante.';
+  END IF;
+  IF v_seats < v_party_size THEN
+    RAISE EXCEPTION 'A mesa não tem capacidade para este número de pessoas.';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.restaurant_reservations AS r
+    WHERE r.restaurant_id = v_restaurant_id
+      AND r.id <> p_reservation_id
+      AND r.table_number = p_table_number
+      AND r.status IN ('Pendente', 'Confirmada')
+      AND r.reservation_at < v_reservation_at + (v_duration_minutes * interval '1 minute')
+      AND v_reservation_at < r.reservation_at + (r.duration_minutes * interval '1 minute')
+  ) THEN
+    RAISE EXCEPTION 'Esta mesa já tem uma reserva pendente ou confirmada nesse horário.';
+  END IF;
+
+  UPDATE public.restaurant_reservations
+  SET table_number = p_table_number, updated_at = now()
+  WHERE id = p_reservation_id;
+END;
+$function$;
+
 REVOKE ALL ON FUNCTION public.create_customer_reservation_request(uuid, uuid, integer, timestamptz, text, text)
   FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.create_customer_reservation_request(uuid, uuid, integer, timestamptz, text, text)
+  TO authenticated;
+
+REVOKE ALL ON FUNCTION public.assign_restaurant_reservation_table(uuid, integer)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.assign_restaurant_reservation_table(uuid, integer)
   TO authenticated;
 
 REVOKE ALL ON FUNCTION public.cancel_my_customer_reservation(uuid)
