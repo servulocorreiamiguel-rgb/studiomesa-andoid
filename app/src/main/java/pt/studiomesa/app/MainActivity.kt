@@ -2021,6 +2021,10 @@ class MainActivity : Activity() {
      */
     private fun prepareForAuthenticatedUser(newUserId: String) {
         clearEconomicManagerState()
+        customerReservationsCache = JSONArray()
+        customerReservationsLoaded = false
+        customerReservationsLoading = false
+        customerReservationsLoadError = false
         kitchenOrdersCache = null
         kitchenQueueUpdatedAtMillis = 0L
         kitchenQueueRefreshFailed = false
@@ -3256,7 +3260,8 @@ class MainActivity : Activity() {
             setText(SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "PT")).format(defaultDate))
         }
         val notes = multilineInputField("Notas ou pedidos especiais (opcional)")
-        form.addView(label("Reserva em nome de " + store.getCustomerProfileName(), 11f, true, forestSoft))
+        val customerName = store.getCustomerProfileName().ifBlank { "Cartão de cliente" }
+        form.addView(label("Reserva em nome de " + customerName, 11f, true, forestSoft))
         addGap(form, 5)
         listOf(
             "Número de pessoas" to party,
