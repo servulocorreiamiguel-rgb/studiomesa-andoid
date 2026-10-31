@@ -553,6 +553,28 @@ class MainActivitySmokeTest {
             onView(withText(containsString("Ponto de equilíbrio mensal estimado")))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
+
+            onView(withHint("Ex.: -10 para uma quebra de 10%"))
+                .perform(scrollTo(), replaceText("-10"))
+            onView(withHint("Ex.: 5 para um aumento de 5%"))
+                .perform(scrollTo(), replaceText("5"))
+            onView(withHint("Ex.: 2 para um aumento de 2%"))
+                .perform(scrollTo(), replaceText("0"))
+            onView(withHint("Ex.: -3 para uma redução de 3%"))
+                .perform(scrollTo(), replaceText("0"))
+            onView(withText("Simular impacto no resultado"))
+                .perform(scrollTo(), click())
+            onView(withText(containsString("Resultado no cenário")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+
+            onView(withHint("Ex.: 26")).perform(scrollTo(), replaceText("26"))
+            onView(withHint("Ex.: 22,50")).perform(scrollTo(), replaceText("20"))
+            onView(withText("Calcular meta diária"))
+                .perform(scrollTo(), click())
+            onView(withText(containsString("Clientes estimados por dia")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
         }
     }
 
