@@ -172,6 +172,10 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'Não tens autorização para cancelar este pedido de reserva.';
   END IF;
+  -- A retry after a lost HTTP response is harmless once cancellation committed.
+  IF v_status = 'Cancelada' THEN
+    RETURN;
+  END IF;
   IF v_status NOT IN ('Pendente', 'Confirmada') OR v_reservation_at <= now() THEN
     RAISE EXCEPTION 'Só podes cancelar pedidos pendentes ou confirmados com data futura.';
   END IF;
