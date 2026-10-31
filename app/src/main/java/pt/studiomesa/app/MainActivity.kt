@@ -3172,7 +3172,7 @@ class MainActivity : Activity() {
                 ),
                 cardParams()
             )
-            if (!customerReservationsLoading) refreshCustomerReservations()
+            if (!customerReservationsLoading && !customerReservationsLoadError) refreshCustomerReservations()
             return
         }
 
@@ -3214,7 +3214,7 @@ class MainActivity : Activity() {
             card.addView(top)
             addGap(card, 7)
             card.addView(label(
-                "${reservation.optInt("party_size", 1)} pessoa(s) · Duração prevista: 90 minutos",
+                "${reservation.optInt("party_size", 1)} pessoa(s) · Duração prevista: ${reservation.optInt("duration_minutes", 90)} minutos",
                 12f, false, muted
             ))
             val phone = reservation.optString("guest_phone").trim()
