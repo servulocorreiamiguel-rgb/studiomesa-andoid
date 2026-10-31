@@ -17,6 +17,13 @@ internal data class EconomicManagerInput(
     val weeklyNetSalesHistory: List<BigDecimal> = emptyList()
 )
 
+internal data class EconomicScenarioAnalysis(
+    val baseline: EconomicManagerAnalysis,
+    val scenario: EconomicManagerAnalysis,
+    val salesChange: BigDecimal,
+    val operatingResultChange: BigDecimal
+)
+
 internal data class EconomicManagerAnalysis(
     val foodCostPercent: BigDecimal,
     val payrollPercent: BigDecimal,
@@ -116,6 +123,7 @@ internal object RestaurantEconomicManager {
     private const val MAX_NUMERIC_INPUT_LENGTH = 40
     private const val MAX_RAW_INPUT_LENGTH = 50_000
     private val decimalPattern = Regex("^(?:\\d+(?:[.,]\\d*)?|[.,]\\d+)$")
+    private val signedDecimalPattern = Regex("^-?(?:\\d+(?:[.,]\\d*)?|[.,]\\d+)$")
 
     fun parseNonNegative(raw: String, fieldName: String): BigDecimal {
         require(raw.length <= MAX_NUMERIC_INPUT_LENGTH) {
@@ -255,6 +263,92 @@ internal object RestaurantEconomicManager {
             forecastNextWeekSales = forecast,
             warnings = warnings
         )
+    }
+
+    /**
+     * Simulates a simple monthly scenario from the owner's current baseline figures.
+     * Percentage changes are explicit assumptions, not forecasts or automatic actions.
+     */
+    fun parseScenarioPercent(raw: String, fieldName: String): BigDecimal {
+        val normalized = raw.trim().replace(',', '.')
+        require(normalized.length in 1..12 && signedDecimalPattern.matches(normalized)) {
+            "O campo «$fieldName» tem de ser uma percentagem válida."
+        }
+        val value = try {
+            BigDecimal(normalized)
+        } catch (_: NumberFormatException) {
+            throw IllegalArgumentException("O campo «$fieldName» não contém uma percentagem válida.")
+        }
+        require(value.scale().coerceAtLeast(0) <= 2 && value >= BigDecimal("-100") && value <= BigDecimal("300")) {
+            "A variação de «$fieldName» tem de estar entre -100% e 300%, com até duas casas decimais."
+        }
+        return value
+    }
+
+    fun simulateScenario(
+        baselineInput: EconomicManagerInput,
+        salesChangePercent: BigDecimal,
+        foodCostChangePercent: BigDecimal,
+        payrollChangePercent: BigDecimal,
+        otherVariableCostChangePercent: BigDecimal
+    ): EconomicScenarioAnalysis {
+        val baselineForScenario = baselineInput.copy(
+            recordedWasteCost = null,
+            cashAvailableNow = null,
+            expectedReceiptsNext30Days = null,
+            paymentsDueNext30Days = null,
+            weeklyNetSalesHistory = emptyList()
+        )
+        val baseline = analyze(baselineForScenario)
+        require(salesChangePercent > BigDecimal("-100")) {
+            "A variação das vendas não pode reduzir as vendas a zero."
+        }
+        val scenarioSales = applyPercentChange(
+            baselineInput.monthlyNetSales, salesChangePercent, "vendas"
+        )
+        val scenarioFood = applyPercentChange(
+            baselineInput.foodCostConsumedIncludingWaste, foodCostChangePercent, "custo alimentar"
+        )
+        val scenarioPayroll = applyPercentChange(
+            baselineInput.monthlyPayroll, payrollChangePercent, "custo de pessoal"
+        )
+        val scenarioVariable = applyPercentChange(
+            baselineInput.otherVariableCosts, otherVariableCostChangePercent, "outros custos variáveis"
+        )
+        val scenario = analyze(
+            baselineForScenario.copy(
+                monthlyNetSales = scenarioSales,
+                foodCostConsumedIncludingWaste = scenarioFood,
+                monthlyPayroll = scenarioPayroll,
+                otherVariableCosts = scenarioVariable
+            )
+        )
+        return EconomicScenarioAnalysis(
+            baseline = baseline,
+            scenario = scenario,
+            salesChange = scenarioSales.subtract(baselineInput.monthlyNetSales)
+                .setScale(2, RoundingMode.HALF_UP),
+            operatingResultChange = scenario.estimatedOperatingResult
+                .subtract(baseline.estimatedOperatingResult)
+                .setScale(2, RoundingMode.HALF_UP)
+        )
+    }
+
+    private fun applyPercentChange(
+        amount: BigDecimal,
+        changePercent: BigDecimal,
+        fieldName: String
+    ): BigDecimal {
+        require(changePercent >= BigDecimal("-100") && changePercent <= BigDecimal("300")) {
+            "A variação de $fieldName tem de estar entre -100% e 300%."
+        }
+        val changed = amount.multiply(hundred.add(changePercent))
+            .divide(hundred, 12, RoundingMode.HALF_UP)
+            .setScale(2, RoundingMode.HALF_UP)
+        require(changed >= zero && changed <= maxMoney) {
+            "O valor simulado de $fieldName ultrapassa os limites suportados."
+        }
+        return changed
     }
 
     /**

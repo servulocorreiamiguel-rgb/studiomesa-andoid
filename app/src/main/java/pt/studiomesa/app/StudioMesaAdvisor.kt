@@ -516,7 +516,7 @@ internal object StudioMesaAdvisor {
             return StudioMesaAssistantAnswer(
                 "Gestor económico (opcional)",
                 "A pergunta combina duas análises diferentes. Para o ponto de equilíbrio, introduz vendas e custos do mesmo mês; para a tesouraria a 30 dias, introduz saldo atual, recebimentos e pagamentos com datas compatíveis. Calcula cada uma na respetiva secção. Estes cálculos usam valores manuais e não consultam bancos ou fornecedores.",
-                "Assistente"
+                "Gestão económica"
             )
         }
         if (containsAny(q, "resumo da tesouraria", "tesouraria e custo alimentar", "resumo financeiro") &&
@@ -524,7 +524,7 @@ internal object StudioMesaAdvisor {
             return StudioMesaAssistantAnswer(
                 "Gestor económico (opcional)",
                 "Para resumir a tesouraria e o custo alimentar, faz duas análises na área económica: o custo alimentar usa vendas líquidas e consumo alimentar do mesmo período; a tesouraria usa saldo atual, recebimentos e pagamentos previstos a 30 dias. Os valores são introduzidos manualmente; não consultam bancos ou fornecedores.",
-                "Assistente"
+                "Gestão económica"
             )
         }
 
@@ -543,7 +543,7 @@ internal object StudioMesaAdvisor {
             return StudioMesaAssistantAnswer(
                 "Custo por receita e ingredientes",
                 "A Carta guarda um custo agregado por artigo, não uma lista fiável de ingredientes por dose. Para calcular o custo detalhado, ativa o Gestor económico e usa «Custo por receita e dose»: introduz cada ingrediente, quantidade por dose, preço por unidade de compra e desperdício %. As unidades têm de coincidir (por exemplo, kg e €/kg). Não vou inventar ingredientes nem quantidades.",
-                "Assistente"
+                "Gestão económica"
             )
         }
 
@@ -556,8 +556,8 @@ internal object StudioMesaAdvisor {
         if (containsAny(q, "quanto lucro", "lucro", "prejuizo", "resultado operacional", "resultado deste mes", "lucro deste mes")) {
             return StudioMesaAssistantAnswer(
                 "Estimativa de resultado mensal",
-                "Não consigo confirmar o lucro de um mês apenas com os preços atuais da Carta: preciso de vendas líquidas e custos do mesmo período, incluindo pessoal, outros custos fixos e variáveis. Os pedidos carregados não são, por si só, contabilidade mensal completa. Ativa o Gestor económico e introduz os valores do mês sem IVA para calcular uma estimativa; não vou inventar um lucro.",
-                "Assistente"
+                "Não consigo confirmar o lucro de um mês apenas com os preços atuais da Carta: preciso de vendas líquidas e custos do mesmo período, incluindo pessoal, outros custos fixos e variáveis. Os pedidos carregados não são, por si só, contabilidade mensal completa. Abre Gestão económica e ativa o gestor para introduz os valores do mês sem IVA para calcular uma estimativa; não vou inventar um lucro.",
+                "Gestão económica"
             )
         }
 
@@ -568,70 +568,70 @@ internal object StudioMesaAdvisor {
             } else {
                 "Esta IA local não pesquisa a Internet nem dispõe de preços atuais dos concorrentes. Para uma comparação fiável, introduz dados públicos verificáveis, o mesmo período, zona e tipo de oferta; não vou inventar preços ou posicionamento da concorrência."
             }
-            return StudioMesaAssistantAnswer("Comparação com a concorrência não disponível", detail, "Assistente")
+            return StudioMesaAssistantAnswer("Comparação com a concorrência não disponível", detail, "Gestão económica")
         }
         if (containsAny(q, "energia", "eletricidade", "conta de luz", "conta da luz", "gas")) {
             return StudioMesaAssistantAnswer(
                 "Análise do custo de energia",
                 "Esta sessão não tem faturas de eletricidade ou gás nem leituras automáticas. Introduz a fatura no campo de outros custos fixos do gestor económico e compara montantes de períodos equivalentes, tendo em conta alterações de tarifa e consumo. Não vou prometer uma poupança sem esses dados.",
-                "Assistente"
+                "Gestão económica"
             )
         }
         if (containsAny(q, "fornecedor", "fornecedores", "comparar propostas", "preco de compra") &&
             !containsAny(q, "quantidade a encomendar", "quantidade devo encomendar", "que quantidade devo encomendar", "quanto devo encomendar", "quanto encomendar", "repor stock", "reabastecer", "ponto de encomenda")) {
             return StudioMesaAssistantAnswer(
                 "Comparar fornecedores",
-                "Ativa o Gestor económico e usa «Comparação de fornecedores». Introduz uma linha por proposta no formato artigo | fornecedor | unidade | quantidade na embalagem | preço da embalagem. Compara o mesmo artigo e unidades equivalentes; o sistema calcula o preço por unidade com base nos valores introduzidos. Não consulta fornecedores online, não confirma qualidade, transporte ou IVA e não faz encomendas.",
-                "Assistente"
+                "Abre Gestão económica e ativa o gestor para usa «Comparação de fornecedores». Introduz uma linha por proposta no formato artigo | fornecedor | unidade | quantidade na embalagem | preço da embalagem. Compara o mesmo artigo e unidades equivalentes; o sistema calcula o preço por unidade com base nos valores introduzidos. Não consulta fornecedores online, não confirma qualidade, transporte ou IVA e não faz encomendas.",
+                "Gestão económica"
             )
         }
         if (containsAny(q, "desperdicio", "perda alimentar", "comida deitada fora")) {
             return StudioMesaAssistantAnswer(
                 "Analisar desperdício",
-                "Ativa o Gestor económico e usa «Registo de desperdício». Introduz artigo | quantidade | custo por unidade | motivo. O total e a distribuição por motivo usam apenas os registos inseridos; não atualizam o stock. Para evitar dupla contagem, o custo alimentar mensal deve já incluir os consumos desperdiçados se o desperdício for apresentado como indicador separado.",
-                "Assistente"
+                "Abre Gestão económica e ativa o gestor para usa «Registo de desperdício». Introduz artigo | quantidade | custo por unidade | motivo. O total e a distribuição por motivo usam apenas os registos inseridos; não atualizam o stock. Para evitar dupla contagem, o custo alimentar mensal deve já incluir os consumos desperdiçados se o desperdício for apresentado como indicador separado.",
+                "Gestão económica"
             )
         }
         if (containsAny(q, "consumo teorico", "consumo real", "variacao de stock", "consumo esperado")) {
             return StudioMesaAssistantAnswer(
                 "Consumo teórico vs. real",
-                "Ativa o Gestor económico e usa «Consumo teórico vs. real». Introduz artigo | consumo teórico | consumo real | custo por unidade. Mantém as mesmas unidades e períodos. Uma diferença positiva indica consumo acima da referência introduzida, mas pode resultar de porções, desperdício, contagem ou registos incompletos; não identifica sozinha a causa.",
-                "Assistente"
+                "Abre Gestão económica e ativa o gestor para usa «Consumo teórico vs. real». Introduz artigo | consumo teórico | consumo real | custo por unidade. Mantém as mesmas unidades e períodos. Uma diferença positiva indica consumo acima da referência introduzida, mas pode resultar de porções, desperdício, contagem ou registos incompletos; não identifica sozinha a causa.",
+                "Gestão económica"
             )
         }
         if (containsAny(q, "orcamento versus real", "orcamento e realizado", "comparar orcamento", "orcamento mensal", "desvio orcamental")) {
             return StudioMesaAssistantAnswer(
                 "Orçamento vs. realizado",
-                "Ativa o Gestor económico e usa «Orçamento vs. realizado». Introduz categoria | orçamento | valor real, com valores do mesmo período e âmbito. Um desvio positivo significa que o valor real excede o orçamento, não que seja automaticamente mau; interpreta cada categoria antes de agir.",
-                "Assistente"
+                "Abre Gestão económica e ativa o gestor para usa «Orçamento vs. realizado». Introduz categoria | orçamento | valor real, com valores do mesmo período e âmbito. Um desvio positivo significa que o valor real excede o orçamento, não que seja automaticamente mau; interpreta cada categoria antes de agir.",
+                "Gestão económica"
             )
         }
         if (containsAny(q, "custo de pessoal", "custos de pessoal", "salarios", "horas de equipa", "custo da equipa", "custo por hora", "planeamento de pessoal")) {
             return StudioMesaAssistantAnswer(
                 "Cenário de custo de pessoal",
-                "Ativa o Gestor económico e usa «Cenário de custo de pessoal». Introduz horas previstas | custo total por hora, incluindo encargos | vendas esperadas | objetivo de pessoal %. O resultado é uma simulação financeira, não uma escala de turnos nem aconselhamento laboral; confirma contratos, convenções, descansos e legislação aplicável antes de alterar horários.",
-                "Assistente"
+                "Abre Gestão económica e ativa o gestor para usa «Cenário de custo de pessoal». Introduz horas previstas | custo total por hora, incluindo encargos | vendas esperadas | objetivo de pessoal %. O resultado é uma simulação financeira, não uma escala de turnos nem aconselhamento laboral; confirma contratos, convenções, descansos e legislação aplicável antes de alterar horários.",
+                "Gestão económica"
             )
         }
         if (containsAny(q, "quantidade a encomendar", "quantidade devo encomendar", "que quantidade devo encomendar", "quanto devo encomendar", "quanto encomendar", "repor stock", "reabastecer", "ponto de encomenda")) {
             return StudioMesaAssistantAnswer(
                 "Quantidade indicativa de reposição",
-                "Ativa o Gestor económico e usa «Quantidade de reposição». Introduz stock atual | consumo médio por dia | prazo do fornecedor em dias | dias de segurança. A quantidade sugerida cobre o prazo e a margem de segurança indicados, não prevê procura futura nem verifica encomendas já feitas. Confirma unidades, validade, capacidade e contagem física; o sistema não encomenda automaticamente.",
-                "Assistente"
+                "Abre Gestão económica e ativa o gestor para usa «Quantidade de reposição». Introduz stock atual | consumo médio por dia | prazo do fornecedor em dias | dias de segurança. A quantidade sugerida cobre o prazo e a margem de segurança indicados, não prevê procura futura nem verifica encomendas já feitas. Confirma unidades, validade, capacidade e contagem física; o sistema não encomenda automaticamente.",
+                "Gestão económica"
             )
         }
         if (containsAny(q, "tesouraria", "fluxo de caixa", "cash flow", "cashflow", "saldo de caixa", "caixa a 30 dias", "tesouraria a 30 dias")) {
             return StudioMesaAssistantAnswer(
                 "Previsão simples de tesouraria",
-                "Ativa o Gestor económico e preenche saldo de caixa/banco disponível, recebimentos previstos e pagamentos a vencer nos próximos 30 dias. Os três valores são necessários e devem ter datas compatíveis. A projeção é saldo inicial + recebimentos − pagamentos; não liga à banca, não confirma cobranças e pode omitir movimentos que não introduzas.",
-                "Assistente"
+                "Abre Gestão económica e ativa o gestor para preenche saldo de caixa/banco disponível, recebimentos previstos e pagamentos a vencer nos próximos 30 dias. Os três valores são necessários e devem ter datas compatíveis. A projeção é saldo inicial + recebimentos − pagamentos; não liga à banca, não confirma cobranças e pode omitir movimentos que não introduzas.",
+                "Gestão económica"
             )
         }
         if (containsAny(q, "ponto de equilibrio", "break even", "vendas para cobrir custos")) {
             return StudioMesaAssistantAnswer(
                 "Ponto de equilíbrio",
-                "Ativa o Gestor económico e introduz vendas líquidas sem IVA, custo alimentar consumido, custo total de pessoal, outros custos fixos e outros custos variáveis do mesmo período. O cálculo simplificado trata pessoal e custos fixos como fixos e comida e outros custos variáveis como proporcionais às vendas. Se a estrutura de contribuição não for positiva, não é possível calcular um ponto de equilíbrio fiável.",
-                "Assistente"
+                "Abre Gestão económica e ativa o gestor para introduz vendas líquidas sem IVA, custo alimentar consumido, custo total de pessoal, outros custos fixos e outros custos variáveis do mesmo período. O cálculo simplificado trata pessoal e custos fixos como fixos e comida e outros custos variáveis como proporcionais às vendas. Se a estrutura de contribuição não for positiva, não é possível calcular um ponto de equilíbrio fiável.",
+                "Gestão económica"
             )
         }
         if (containsAny(q,
@@ -643,15 +643,15 @@ internal object StudioMesaAdvisor {
                 "estimativa da faturacao", "projecao da faturacao")) {
             return StudioMesaAssistantAnswer(
                 "Referência simples de vendas",
-                "Ativa o Gestor económico e introduz pelo menos quatro vendas líquidas semanais comparáveis, da mais antiga para a mais recente. A referência calculada é a média das últimas quatro semanas, não um modelo que conhece sazonalidade, eventos, meteorologia ou tendências. Confirma que os períodos são comparáveis antes de a usar num orçamento.",
-                "Assistente"
+                "Abre Gestão económica e ativa o gestor para introduz pelo menos quatro vendas líquidas semanais comparáveis, da mais antiga para a mais recente. A referência calculada é a média das últimas quatro semanas, não um modelo que conhece sazonalidade, eventos, meteorologia ou tendências. Confirma que os períodos são comparáveis antes de a usar num orçamento.",
+                "Gestão económica"
             )
         }
 
         return StudioMesaAssistantAnswer(
             "Gestor económico (opcional)",
-            "Ativa o Gestor económico nesta página para analisar indicadores mensais, ponto de equilíbrio, tesouraria a 30 dias, custo de receitas, desperdício, comparação de fornecedores, orçamento vs. realizado, consumo teórico vs. real, reposição e cenários de custo de pessoal. Os cálculos usam os valores que o proprietário introduz nesta sessão; não consultam bancos ou fornecedores, não alteram preços, não movimentam stock nem enviam encomendas.",
-            "Assistente"
+            "Abre a secção Gestão económica e ativa o gestor para analisar indicadores mensais, ponto de equilíbrio, tesouraria a 30 dias, custo de receitas, desperdício, comparação de fornecedores, orçamento vs. realizado, consumo teórico vs. real, reposição e cenários de custo de pessoal. Os cálculos usam os valores que o proprietário introduz e, se escolher, guarda cifrados neste dispositivo; não consultam bancos ou fornecedores, não alteram preços, não movimentam stock nem enviam encomendas.",
+            "Gestão económica"
         )
     }
 

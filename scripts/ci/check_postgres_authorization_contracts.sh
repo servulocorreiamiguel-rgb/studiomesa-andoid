@@ -203,6 +203,33 @@ COMMIT;
 SQL
 }
 
+create_customer_reservation_request() {
+  local user_id="$1" request_id="$2" member_id="$3" party_size="$4" reservation_at="$5" phone="$6" notes="$7"
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT public.create_customer_reservation_request(
+  '$request_id'::uuid, '$member_id'::uuid, '$party_size'::integer,
+  '$reservation_at'::timestamptz, '$phone', '$notes'
+);
+COMMIT;
+SQL
+}
+
+assign_reservation_table() {
+  local user_id="$1" reservation_id="$2" table_number="$3"
+  psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT public.assign_restaurant_reservation_table(
+  '$reservation_id'::uuid, '$table_number'::integer
+);
+COMMIT;
+SQL
+}
+
 RESTAURANT_A="$(create_restaurant "$USER_A" "CI Restaurant A" "SMOKEAA001")"
 RESTAURANT_B="$(create_restaurant "$USER_B" "CI Restaurant B" "SMOKEBB001")"
 test -n "$RESTAURANT_A"
@@ -238,6 +265,211 @@ if [ "$STAFF_C_RESTAURANT" != "$RESTAURANT_A" ]; then
   exit 1
 fi
 echo "PASS: staff join RPC works, repeated joins are idempotent, and a staff account cannot join a second restaurant."
+
+# A new order must reference the stable menu UUID and retain its own name,
+# sale-price and known-cost snapshots if the menu is edited or its row is deleted.
+ORDER_MENU_ITEM_A="aaaaaaaa-1111-4111-8111-111111111111"
+ORDER_MENU_ITEM_B="bbbbbbbb-2222-4222-8222-222222222222"
+ORDER_MENU_ITEM_ARCHIVED="abababab-3333-4333-8333-333333333333"
+ORDER_SNAPSHOT_ID="cccccccc-3333-4333-8333-333333333333"
+ORDER_LEGACY_ID="dddddddd-4444-4444-8444-444444444444"
+ORDER_FOREIGN_ID="eeeeeeee-5555-4555-8555-555555555555"
+ORDER_INVALID_COST_ID="ffffffff-6666-4666-8666-666666666666"
+ORDER_ARCHIVED_ORDER_ID="99999999-7777-4777-8777-777777777777"
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+INSERT INTO public.menu_items
+  (id, restaurant_id, name, category, description, price, cost, allergens, is_active)
+VALUES
+  ('$ORDER_MENU_ITEM_A'::uuid, '$RESTAURANT_A'::uuid, 'Bitoque original',
+   'Prato principal', '', 13.50, 4.25, '', true),
+  ('$ORDER_MENU_ITEM_ARCHIVED'::uuid, '$RESTAURANT_A'::uuid, 'Prato arquivado',
+   'Prato principal', '', 8.00, 2.00, '', false);
+INSERT INTO public.restaurant_orders
+  (id, restaurant_id, table_number, item_name, amount, quantity,
+   service_course, notes, status, menu_item_id, unit_cost_snapshot)
+VALUES
+  ('$ORDER_SNAPSHOT_ID'::uuid, '$RESTAURANT_A'::uuid, 1,
+   'Preço e custo forjados pelo cliente', 0.01, 2, 'Principal', '', 'Aberto',
+   '$ORDER_MENU_ITEM_A'::uuid, -0.01);
+COMMIT;
+SQL
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL
+UPDATE public.menu_items
+SET name = 'Bitoque atualizado', price = 15.00, cost = 5.50
+WHERE id = '$ORDER_MENU_ITEM_A'::uuid
+  AND restaurant_id = '$RESTAURANT_A'::uuid;
+SQL
+
+order_snapshot_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT menu_item_id = '$ORDER_MENU_ITEM_A'::uuid
+         AND item_name = 'Bitoque original'
+         AND amount = 13.50
+         AND unit_cost_snapshot = 4.25
+      FROM public.restaurant_orders WHERE id = '$ORDER_SNAPSHOT_ID'::uuid;")"
+# A new order without an active menu UUID cannot enter the API,
+# even when the client supplies an apparently complete manual line.
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+INSERT INTO public.restaurant_orders
+  (id, restaurant_id, table_number, item_name, amount, quantity,
+   service_course, notes, status, menu_item_id, unit_cost_snapshot)
+VALUES
+  ('$ORDER_LEGACY_ID'::uuid, '$RESTAURANT_A'::uuid, 2,
+   'Pedido novo sem UUID', 7.00, 1, 'Principal', '', 'Aberto', NULL, 4.25);
+COMMIT;
+SQL
+then
+  echo "ERROR: a new order without a menu item was accepted." >&2
+  exit 1
+fi
+legacy_insert_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*)::text FROM public.restaurant_orders WHERE id = '$ORDER_LEGACY_ID'::uuid;")"
+if [ "$order_snapshot_ok" != "t" ] || [ "$legacy_insert_count" != "0" ]; then
+  echo "ERROR: menu editing changed an order snapshot or unlinked order insertion was not rejected." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+UPDATE public.restaurant_orders
+SET item_name = 'Nome alterado pelo cliente',
+    amount = 0.01,
+    unit_cost_snapshot = 0.01
+WHERE id = '$ORDER_SNAPSHOT_ID'::uuid;
+COMMIT;
+SQL
+then
+  echo "ERROR: a client unexpectedly changed immutable order name/price/cost snapshots." >&2
+  exit 1
+fi
+
+expect_order_detail_update_rejected() {
+  local assignment="$1"
+  local description="$2"
+  if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+UPDATE public.restaurant_orders
+SET $assignment
+WHERE id = '$ORDER_SNAPSHOT_ID'::uuid;
+COMMIT;
+SQL
+  then
+    echo "ERROR: a client unexpectedly changed $description on an existing order." >&2
+    exit 1
+  fi
+}
+
+expect_order_detail_update_rejected "table_number = 9" "the table number"
+expect_order_detail_update_rejected "quantity = 9" "the quantity"
+expect_order_detail_update_rejected "service_course = 'Sobremesa'" "the service course"
+expect_order_detail_update_rejected "notes = 'Nota falsificada'" "the kitchen notes"
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+INSERT INTO public.restaurant_orders
+  (id, restaurant_id, table_number, item_name, amount, quantity,
+   service_course, notes, status, menu_item_id, unit_cost_snapshot)
+VALUES
+  ('$ORDER_ARCHIVED_ORDER_ID'::uuid, '$RESTAURANT_A'::uuid, 1,
+   'Prato arquivado', 8.00, 1, 'Principal', '', 'Aberto',
+   '$ORDER_MENU_ITEM_ARCHIVED'::uuid, 2.00);
+COMMIT;
+SQL
+then
+  echo "ERROR: order creation accepted an archived menu item." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+INSERT INTO public.menu_items
+  (id, restaurant_id, name, category, price, cost, allergens, is_active)
+VALUES
+  ('$ORDER_MENU_ITEM_B'::uuid, '$RESTAURANT_B'::uuid, 'Dish restaurant B',
+   'Prato principal', 9.00, 2.00, '', true);
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+INSERT INTO public.restaurant_orders
+  (id, restaurant_id, table_number, item_name, amount, quantity,
+   service_course, notes, status, menu_item_id, unit_cost_snapshot)
+VALUES
+  ('$ORDER_FOREIGN_ID'::uuid, '$RESTAURANT_A'::uuid, 1,
+   'Dish restaurant B', 9.00, 1, 'Principal', '', 'Aberto',
+   '$ORDER_MENU_ITEM_B'::uuid, 2.00);
+COMMIT;
+SQL
+then
+  echo "ERROR: order A accepted a menu item belonging to restaurant B." >&2
+  exit 1
+fi
+
+# An open ticket must retain its menu UUID until it is prepared or cancelled.
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+-- Use the migration-test database owner for DELETE: authenticated clients
+-- cannot delete menu rows directly, so this isolates the trigger's safeguard.
+DELETE FROM public.menu_items
+WHERE id = '$ORDER_MENU_ITEM_A'::uuid
+  AND restaurant_id = '$RESTAURANT_A'::uuid;
+COMMIT;
+SQL
+then
+  echo "ERROR: a menu item linked to an open order was deleted." >&2
+  exit 1
+fi
+open_order_link_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT menu_item_id = '$ORDER_MENU_ITEM_A'::uuid FROM public.restaurant_orders WHERE id = '$ORDER_SNAPSHOT_ID'::uuid;")"
+if [ "$open_order_link_ok" != "t" ]; then
+  echo "ERROR: a failed deletion detached the open order from its menu item." >&2
+  exit 1
+fi
+
+# Preparing, completing or cancelling a ticket does not make the linked
+# menu row disposable: closed tickets can be reopened, so the stable UUID must
+# remain available. The product UI archives items instead of deleting them.
+psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+UPDATE public.restaurant_orders SET status = 'Em preparação'
+WHERE id = '$ORDER_SNAPSHOT_ID'::uuid;
+UPDATE public.restaurant_orders SET status = 'Pronto'
+WHERE id = '$ORDER_SNAPSHOT_ID'::uuid;
+COMMIT;
+SQL
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+DELETE FROM public.menu_items
+WHERE id = '$ORDER_MENU_ITEM_A'::uuid
+  AND restaurant_id = '$RESTAURANT_A'::uuid;
+SQL
+then
+  echo "ERROR: a menu item with historical orders was deleted after preparation." >&2
+  exit 1
+fi
+historical_menu_link_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT menu_item_id = '$ORDER_MENU_ITEM_A'::uuid
+         AND item_name = 'Bitoque original'
+         AND amount = 13.50
+         AND unit_cost_snapshot = 4.25
+      FROM public.restaurant_orders WHERE id = '$ORDER_SNAPSHOT_ID'::uuid;")"
+if [ "$historical_menu_link_ok" != "t" ]; then
+  echo "ERROR: a rejected menu deletion changed the historical order link or snapshots." >&2
+  exit 1
+fi
+echo "PASS: new orders require an active menu UUID; order details/snapshots are immutable; menu items with any historical order must be archived, not deleted."
 
 PRICE_MENU_ITEM_A="99999999-1111-4111-8111-111111111111"
 PRICE_MENU_ITEM_B="99999999-2222-4222-8222-222222222222"
@@ -613,13 +845,31 @@ SELECT * FROM public.adjust_inventory_stock_idempotent(
 COMMIT;
 SQL
 
+# Change the live stock unit only after movements exist. Historical movements
+# must retain the unit used when each quantity was recorded.
+psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.save_inventory_item_with_cost(
+  '$RESTAURANT_A'::uuid, '$COST_ITEM'::uuid,
+  'Flour with cost', 'g', 9.500::numeric, 1.000::numeric,
+  'Unit change after historical losses', 20.0000::numeric
+);
+COMMIT;
+SQL
+
 cost_snapshot_history="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
   -c "SELECT string_agg(unit_cost_at_movement::numeric(12,4)::text, ',' ORDER BY created_at) FROM public.restaurant_inventory_movements WHERE item_id = '$COST_ITEM'::uuid AND note = 'Desperdício · Deterioração';")"
+unit_snapshot_history="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT string_agg(unit_at_movement, ',' ORDER BY created_at) FROM public.restaurant_inventory_movements WHERE item_id = '$COST_ITEM'::uuid AND note = 'Desperdício · Deterioração';")"
 current_cost_and_quantity="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
-  -c "SELECT unit_cost_per_unit::numeric(12,4)::text || '|' || quantity::numeric(12,3)::text FROM public.restaurant_inventory_items WHERE id = '$COST_ITEM'::uuid;")"
-if [ "$cost_snapshot_history" != "12.3456,20.0000" ] || [ "$current_cost_and_quantity" != "20.0000|9.500" ]; then
-  echo "ERROR: waste movements did not preserve the unit cost that was active at each movement." >&2
-  printf 'Snapshots: %s; current item: %s\n' "$cost_snapshot_history" "$current_cost_and_quantity" >&2
+  -c "SELECT unit_cost_per_unit::numeric(12,4)::text || '|' || quantity::numeric(12,3)::text || '|' || unit FROM public.restaurant_inventory_items WHERE id = '$COST_ITEM'::uuid;")"
+if [ "$cost_snapshot_history" != "12.3456,20.0000" ] || \
+   [ "$unit_snapshot_history" != "kg,kg" ] || \
+   [ "$current_cost_and_quantity" != "20.0000|9.500|g" ]; then
+  echo "ERROR: waste movements did not preserve the historical cost and unit after the current stock unit changed." >&2
+  printf 'Cost snapshots: %s; unit snapshots: %s; current item: %s\n' "$cost_snapshot_history" "$unit_snapshot_history" "$current_cost_and_quantity" >&2
   exit 1
 fi
 
@@ -823,6 +1073,153 @@ if [ "$reservation_status_ok" != "t" ]; then
 fi
 echo "PASS: reservation status changes are idempotent and cross-restaurant updates are rejected."
 
+# Customer-originated reservations are private to the linked loyalty member.
+# The restaurant team can see the same row through its existing staff-read policy.
+CUSTOMER_RESERVATION_REQUEST="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+CUSTOMER_RESERVATION_FOREIGN_REQUEST="f1f1f1f1-f1f1-41f1-81f1-f1f1f1f1f1f1"
+CUSTOMER_RESERVATION_AT="$(date -u -d '+45 days' '+%Y-%m-%d %H:%M:%S+00:00')"
+CUSTOMER_RESERVATION_A="$(create_customer_reservation_request "$USER_E" "$CUSTOMER_RESERVATION_REQUEST" "$MEMBER_A" 3 "$CUSTOMER_RESERVATION_AT" "910000000" "Customer app CI request")"
+CUSTOMER_RESERVATION_RETRY="$(create_customer_reservation_request "$USER_E" "$CUSTOMER_RESERVATION_REQUEST" "$MEMBER_A" 3 "$CUSTOMER_RESERVATION_AT" "910000000" "Customer app CI request")"
+if [ -z "$CUSTOMER_RESERVATION_A" ] || [ "$CUSTOMER_RESERVATION_A" != "$CUSTOMER_RESERVATION_RETRY" ]; then
+  echo "ERROR: repeating the same customer reservation did not return the original request." >&2
+  exit 1
+fi
+customer_reservation_row_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*) = 1 FROM public.restaurant_reservations WHERE id = '$CUSTOMER_RESERVATION_A'::uuid AND restaurant_id = '$RESTAURANT_A'::uuid AND loyalty_member_id = '$MEMBER_A'::uuid AND created_by = '$USER_E'::uuid AND status = 'Pendente' AND table_number IS NULL AND duration_minutes = 90;")"
+if [ "$customer_reservation_row_ok" != "t" ]; then
+  echo "ERROR: customer reservation was not linked to the member as a pending, unassigned request." >&2
+  exit 1
+fi
+
+if create_customer_reservation_request "$USER_E" "$CUSTOMER_RESERVATION_FOREIGN_REQUEST" "$MEMBER_B" 2 "$CUSTOMER_RESERVATION_AT" "" "" >/dev/null 2>&1; then
+  echo "ERROR: customer A unexpectedly created a reservation using customer B's membership." >&2
+  exit 1
+fi
+
+foreign_customer_read_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_F', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*) FROM public.restaurant_reservations WHERE id = '$CUSTOMER_RESERVATION_A'::uuid;
+ROLLBACK;
+SQL
+)"
+if [ "$foreign_customer_read_count" != "0" ]; then
+  echo "ERROR: customer B could read customer A's reservation." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_F', true);
+SET LOCAL ROLE authenticated;
+SELECT public.cancel_my_customer_reservation('$CUSTOMER_RESERVATION_A'::uuid);
+COMMIT;
+SQL
+then
+  echo "ERROR: customer B unexpectedly cancelled customer A's reservation." >&2
+  exit 1
+fi
+
+customer_reservation_staff_visibility="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*) FROM public.restaurant_reservations
+WHERE id = '$CUSTOMER_RESERVATION_A'::uuid AND loyalty_member_id = '$MEMBER_A'::uuid;
+ROLLBACK;
+SQL
+)"
+if [ "$customer_reservation_staff_visibility" != "1" ]; then
+  echo "ERROR: restaurant owner could not see the customer's pending reservation." >&2
+  exit 1
+fi
+
+# Give the synthetic restaurant two tables: one with capacity four and one with
+# capacity two. The assignment RPC must serialize against table creation/booking.
+psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO public.restaurant_tables (restaurant_id, table_number, seats, area)
+VALUES ('$RESTAURANT_A'::uuid, 97, 4, 'CI reservations'),
+       ('$RESTAURANT_A'::uuid, 98, 2, 'CI reservations')
+ON CONFLICT (restaurant_id, table_number) DO NOTHING;
+SQL
+
+assign_reservation_table "$USER_A" "$CUSTOMER_RESERVATION_A" 97
+assign_reservation_table "$USER_A" "$CUSTOMER_RESERVATION_A" 97
+assigned_customer_table="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT table_number = 97 FROM public.restaurant_reservations WHERE id = '$CUSTOMER_RESERVATION_A'::uuid;")"
+if [ "$assigned_customer_table" != "t" ]; then
+  echo "ERROR: restaurant owner could not assign a suitable table to the customer request." >&2
+  exit 1
+fi
+CUSTOMER_RESERVATION_AFTER_ASSIGNMENT="$(create_customer_reservation_request "$USER_E" "$CUSTOMER_RESERVATION_REQUEST" "$MEMBER_A" 3 "$CUSTOMER_RESERVATION_AT" "910000000" "Customer app CI request")"
+if [ "$CUSTOMER_RESERVATION_AFTER_ASSIGNMENT" != "$CUSTOMER_RESERVATION_A" ]; then
+  echo "ERROR: customer retry after staff assigned a table did not return the original reservation." >&2
+  exit 1
+fi
+psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 -c \
+  "UPDATE public.loyalty_members SET display_name = 'CI Customer A renamed' WHERE id = '$MEMBER_A'::uuid;" >/dev/null
+CUSTOMER_RESERVATION_AFTER_RENAME="$(create_customer_reservation_request "$USER_E" "$CUSTOMER_RESERVATION_REQUEST" "$MEMBER_A" 3 "$CUSTOMER_RESERVATION_AT" "910000000" "Customer app CI request")"
+if [ "$CUSTOMER_RESERVATION_AFTER_RENAME" != "$CUSTOMER_RESERVATION_A" ]; then
+  echo "ERROR: customer retry after a membership-name change did not return the original reservation." >&2
+  exit 1
+fi
+customer_reservation_name_snapshot_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT guest_name = 'CI Customer A' FROM public.restaurant_reservations WHERE id = '$CUSTOMER_RESERVATION_A'::uuid;")"
+if [ "$customer_reservation_name_snapshot_ok" != "t" ]; then
+  echo "ERROR: a later loyalty-card name change rewrote the historical reservation name." >&2
+  exit 1
+fi
+
+CUSTOMER_RESERVATION_SECOND_REQUEST="dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+CUSTOMER_RESERVATION_SECOND="$(create_customer_reservation_request "$USER_E" "$CUSTOMER_RESERVATION_SECOND_REQUEST" "$MEMBER_A" 3 "$CUSTOMER_RESERVATION_AT" "" "Second CI request")"
+if [ -z "$CUSTOMER_RESERVATION_SECOND" ]; then
+  echo "ERROR: could not create the second customer reservation conflict fixture." >&2
+  exit 1
+fi
+if assign_reservation_table "$USER_A" "$CUSTOMER_RESERVATION_SECOND" 97 >/dev/null 2>&1; then
+  echo "ERROR: server assigned the same table to overlapping active reservations." >&2
+  exit 1
+fi
+if assign_reservation_table "$USER_A" "$CUSTOMER_RESERVATION_SECOND" 98 >/dev/null 2>&1; then
+  echo "ERROR: server assigned a table with insufficient seating capacity." >&2
+  exit 1
+fi
+if assign_reservation_table "$USER_E" "$CUSTOMER_RESERVATION_A" 97 >/dev/null 2>&1; then
+  echo "ERROR: customer was able to assign their own table." >&2
+  exit 1
+fi
+psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT public.cancel_my_customer_reservation('$CUSTOMER_RESERVATION_SECOND'::uuid);
+COMMIT;
+SQL
+echo "PASS: restaurant staff can safely assign tables; overlapping bookings, insufficient capacity and customer-side assignment are rejected."
+
+psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT public.cancel_my_customer_reservation('$CUSTOMER_RESERVATION_A'::uuid);
+SELECT public.cancel_my_customer_reservation('$CUSTOMER_RESERVATION_A'::uuid);
+COMMIT;
+SQL
+customer_reservation_cancelled="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT status = 'Cancelada' FROM public.restaurant_reservations WHERE id = '$CUSTOMER_RESERVATION_A'::uuid;")"
+if [ "$customer_reservation_cancelled" != "t" ]; then
+  echo "ERROR: customer could not safely cancel their own pending reservation or retry the cancellation." >&2
+  exit 1
+fi
+
+if create_customer_reservation_request "$USER_E" "$CUSTOMER_RESERVATION_REQUEST" "$MEMBER_A" 4 "$CUSTOMER_RESERVATION_AT" "910000000" "Changed payload" >/dev/null 2>&1; then
+  echo "ERROR: customer reservation idempotency key was accepted with a changed payload." >&2
+  exit 1
+fi
+echo "PASS: customer reservation requests are idempotent, private to their linked member, visible to restaurant staff, and only cancellable by the owner."
+
+
 
 expect_prepare_account_deletion_rejection() {
   local user_id="$1"
@@ -869,6 +1266,443 @@ COMMIT;
 SQL
 }
 
+
+# Recipe and order-to-stock contracts run only in this disposable PostgreSQL database.
+# They verify tenant isolation, owner-controlled activation, atomic deductions,
+# conservative three-decimal rounding, idempotency and legacy-order compatibility.
+RECIPE_ITEM_C_REQUEST="dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+RECIPE_ITEM_D_REQUEST="cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd"
+RECIPE_ORDER_ID="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee1"
+RECIPE_INSUFFICIENT_ORDER_ID="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee2"
+RECIPE_CANCELLED_ORDER_ID="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee3"
+RECIPE_LEGACY_ORDER_ID="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee4"
+RECIPE_REVIEW_REQUIRED_ORDER_ID="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee5"
+RECIPE_UNIT_CHANGE_ORDER_ID="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee6"
+RECIPE_DELETE_CHANGE_ORDER_ID="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee7"
+RECIPE_INITIAL_PREPARING_ORDER_ID="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee8"
+RECIPE_UNLINK_ORDER_ID="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee9"
+
+RECIPE_ITEM_C="$(create_inventory_item "$USER_A" "$RESTAURANT_A" "$RECIPE_ITEM_C_REQUEST" "CI Butter A" "5")"
+RECIPE_ITEM_D="$(create_inventory_item "$USER_A" "$RESTAURANT_A" "$RECIPE_ITEM_D_REQUEST" "CI Cream A" "5")"
+test -n "$RECIPE_ITEM_C"
+test -n "$RECIPE_ITEM_D"
+
+save_recipe_ingredient() {
+  local user_id="$1" restaurant_id="$2" menu_item_id="$3" inventory_item_id="$4"
+  local quantity="$5" waste="$6"
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT public.save_restaurant_recipe_ingredient(
+  '$restaurant_id'::uuid, '$menu_item_id'::uuid, '$inventory_item_id'::uuid,
+  '$quantity'::numeric, '$waste'::numeric
+);
+COMMIT;
+SQL
+}
+
+set_recipe_active() {
+  local user_id="$1" restaurant_id="$2" menu_item_id="$3" enabled="$4"
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_recipe_active(
+  '$restaurant_id'::uuid, '$menu_item_id'::uuid, '$enabled'::boolean
+)::text;
+COMMIT;
+SQL
+}
+
+create_recipe_order() {
+  local user_id="$1" order_id="$2" menu_item_id="$3" quantity="$4"
+  local status="${5:-Aberto}"
+  psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+INSERT INTO public.restaurant_orders (
+  id, restaurant_id, table_number, item_name, amount, status,
+  quantity, service_course, notes, menu_item_id
+) VALUES (
+  '$order_id'::uuid, '$RESTAURANT_A'::uuid, 1, 'CI Price Dish A',
+  13.33, '$status', '$quantity'::integer, 'Principal', '', '$menu_item_id'::uuid
+);
+COMMIT;
+SQL
+}
+
+set_recipe_order_status() {
+  local user_id="$1" order_id="$2" status="$3"
+  psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+UPDATE public.restaurant_orders SET status = '$status'
+WHERE id = '$order_id'::uuid;
+COMMIT;
+SQL
+}
+
+# Recipe writes are scoped to the restaurant. Saving lines does not activate
+# consumption; only the restaurant owner can enable a completed recipe.
+RECIPE_ID_A="$(save_recipe_ingredient "$USER_A" "$RESTAURANT_A" "$PRICE_MENU_ITEM_A" "$ITEM_A" "0.300" "5.00")"
+RECIPE_ID_A_RETRY="$(save_recipe_ingredient "$USER_A" "$RESTAURANT_A" "$PRICE_MENU_ITEM_A" "$ITEM_A" "0.300" "5.00")"
+if [ -z "$RECIPE_ID_A" ] || [ "$RECIPE_ID_A" != "$RECIPE_ID_A_RETRY" ]; then
+  echo "ERROR: recipe ingredient retry did not resolve to the same recipe." >&2
+  exit 1
+fi
+save_recipe_ingredient "$USER_A" "$RESTAURANT_A" "$PRICE_MENU_ITEM_A" "$RECIPE_ITEM_C" "0.100" "0.00" >/dev/null
+recipe_default_active="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1   -c "SELECT is_active::text FROM public.restaurant_recipes WHERE id = '$RECIPE_ID_A'::uuid;")"
+if [ "$recipe_default_active" != "false" ]; then
+  echo "ERROR: recipe consumption was not disabled by default." >&2
+  exit 1
+fi
+
+if set_recipe_active "$USER_C" "$RESTAURANT_A" "$PRICE_MENU_ITEM_A" "true" >/dev/null 2>&1; then
+  echo "ERROR: staff unexpectedly activated automatic ingredient consumption." >&2
+  exit 1
+fi
+if save_recipe_ingredient "$USER_A" "$RESTAURANT_B" "$PRICE_MENU_ITEM_B" "$ITEM_B" "0.100" "0" >/dev/null 2>&1; then
+  echo "ERROR: owner A unexpectedly wrote a recipe in restaurant B." >&2
+  exit 1
+fi
+foreign_recipe_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text FROM public.restaurant_recipes WHERE restaurant_id = '$RESTAURANT_A'::uuid;
+ROLLBACK;
+SQL
+)"
+if [ "$foreign_recipe_rows" != "0" ]; then
+  echo "ERROR: restaurant B could read restaurant A recipe rows." >&2
+  exit 1
+fi
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+INSERT INTO public.restaurant_recipes (restaurant_id, menu_item_id)
+VALUES ('$RESTAURANT_A'::uuid, '$PRICE_MENU_ITEM_A'::uuid);
+COMMIT;
+SQL
+then
+  echo "ERROR: authenticated client unexpectedly wrote directly to recipe tables." >&2
+  exit 1
+fi
+
+owner_recipe_activated="$(set_recipe_active "$USER_A" "$RESTAURANT_A" "$PRICE_MENU_ITEM_A" "true")"
+if [ "$owner_recipe_activated" != "true" ]; then
+  echo "ERROR: restaurant owner could not activate a configured recipe." >&2
+  exit 1
+fi
+
+# A client cannot skip the Open state, detach a linked order or skip the
+# preparation stage to avoid the automatic recipe-stock trigger.
+if create_recipe_order "$USER_A" "$RECIPE_INITIAL_PREPARING_ORDER_ID" "$PRICE_MENU_ITEM_A" "1" "Em preparação" >/dev/null 2>&1; then
+  echo "ERROR: a new order was accepted directly in preparation." >&2
+  exit 1
+fi
+premature_order_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*)::text FROM public.restaurant_orders WHERE id = '$RECIPE_INITIAL_PREPARING_ORDER_ID'::uuid;")"
+if [ "$premature_order_count" != "0" ]; then
+  echo "ERROR: a rejected initial-preparation order was not rolled back." >&2
+  exit 1
+fi
+
+create_recipe_order "$USER_A" "$RECIPE_UNLINK_ORDER_ID" "$PRICE_MENU_ITEM_A" "1"
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+UPDATE public.restaurant_orders SET menu_item_id = NULL
+WHERE id = '$RECIPE_UNLINK_ORDER_ID'::uuid;
+COMMIT;
+SQL
+then
+  echo "ERROR: a client unexpectedly detached a linked order from its menu item." >&2
+  exit 1
+fi
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+UPDATE public.restaurant_orders
+SET menu_item_id = NULL, status = 'Em preparação'
+WHERE id = '$RECIPE_UNLINK_ORDER_ID'::uuid;
+COMMIT;
+SQL
+then
+  echo "ERROR: a client detached a linked order while advancing it to preparation." >&2
+  exit 1
+fi
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+UPDATE public.restaurant_orders SET status = 'Pronto'
+WHERE id = '$RECIPE_UNLINK_ORDER_ID'::uuid;
+COMMIT;
+SQL
+then
+  echo "ERROR: a client skipped the preparation stage." >&2
+  exit 1
+fi
+recipe_bypass_state="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT status || '|' || menu_item_id::text || '|' || (SELECT count(*)::text FROM public.restaurant_inventory_movements WHERE source_order_id = '$RECIPE_UNLINK_ORDER_ID'::uuid) FROM public.restaurant_orders WHERE id = '$RECIPE_UNLINK_ORDER_ID'::uuid;")"
+if [ "$recipe_bypass_state" != "Aberto|$PRICE_MENU_ITEM_A|0" ]; then
+  echo "ERROR: a rejected order-bypass attempt changed the order or consumed stock." >&2
+  printf 'State: %s\n' "$recipe_bypass_state" >&2
+  exit 1
+fi
+echo "PASS: new orders must start open; linked menu identity cannot be cleared by clients; invalid stage jumps are rejected."
+
+# An ingredient edit by a staff member invalidates the owner's previous approval;
+# reactivation must be explicit and owner-only.
+save_recipe_ingredient "$USER_C" "$RESTAURANT_A" "$PRICE_MENU_ITEM_A" "$ITEM_A" "0.300" "5.00" >/dev/null
+recipe_after_staff_edit="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT is_active::text FROM public.restaurant_recipes WHERE id = '$RECIPE_ID_A'::uuid;")"
+if [ "$recipe_after_staff_edit" != "false" ]; then
+  echo "ERROR: changing ingredients unexpectedly retained owner approval." >&2
+  exit 1
+fi
+staff_edit_review_required="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT requires_review::text FROM public.restaurant_recipes WHERE id = '$RECIPE_ID_A'::uuid;")"
+if [ "$staff_edit_review_required" != "true" ]; then
+  echo "ERROR: editing an active recipe did not record a mandatory owner review." >&2
+  exit 1
+fi
+create_recipe_order "$USER_A" "$RECIPE_REVIEW_REQUIRED_ORDER_ID" "$PRICE_MENU_ITEM_A" "1"
+if set_recipe_order_status "$USER_A" "$RECIPE_REVIEW_REQUIRED_ORDER_ID" "Em preparação" >/dev/null 2>&1; then
+  echo "ERROR: a ticket entered preparation while its previously active recipe required review." >&2
+  exit 1
+fi
+review_required_order_status="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT status FROM public.restaurant_orders WHERE id = '$RECIPE_REVIEW_REQUIRED_ORDER_ID'::uuid;")"
+review_required_order_movements="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*)::text FROM public.restaurant_inventory_movements WHERE source_order_id = '$RECIPE_REVIEW_REQUIRED_ORDER_ID'::uuid;")"
+if [ "$review_required_order_status" != "Aberto" ] || [ "$review_required_order_movements" != "0" ]; then
+  echo "ERROR: a recipe needing review changed the order or stock before approval." >&2
+  exit 1
+fi
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_recipe_active('$RESTAURANT_A'::uuid, '$PRICE_MENU_ITEM_A'::uuid, NULL::boolean);
+COMMIT;
+SQL
+then
+  echo "ERROR: a NULL recipe activation value was accepted." >&2
+  exit 1
+fi
+owner_recipe_reactivated="$(set_recipe_active "$USER_A" "$RESTAURANT_A" "$PRICE_MENU_ITEM_A" "true")"
+if [ "$owner_recipe_reactivated" != "true" ]; then
+  echo "ERROR: restaurant owner could not reapprove the edited recipe." >&2
+  exit 1
+fi
+
+# Changing a stock unit must invalidate approval and block reactivation until
+# the owner explicitly saves that ingredient line again with the new unit.
+psql --no-psqlrc --set ON_ERROR_STOP=1 -c \
+  "UPDATE public.restaurant_inventory_items SET unit = 'g' WHERE id = '$RECIPE_ITEM_C'::uuid;" >/dev/null
+unit_change_active="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT is_active::text FROM public.restaurant_recipes WHERE id = '$RECIPE_ID_A'::uuid;")"
+if [ "$unit_change_active" != "false" ]; then
+  echo "ERROR: changing an ingredient unit retained recipe approval." >&2
+  exit 1
+fi
+unit_change_review_required="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT requires_review::text FROM public.restaurant_recipes WHERE id = '$RECIPE_ID_A'::uuid;")"
+if [ "$unit_change_review_required" != "true" ]; then
+  echo "ERROR: changing a previously approved ingredient unit did not require owner review." >&2
+  exit 1
+fi
+create_recipe_order "$USER_A" "$RECIPE_UNIT_CHANGE_ORDER_ID" "$PRICE_MENU_ITEM_A" "1"
+if set_recipe_order_status "$USER_A" "$RECIPE_UNIT_CHANGE_ORDER_ID" "Em preparação" >/dev/null 2>&1; then
+  echo "ERROR: an order entered preparation after an approved recipe's unit changed." >&2
+  exit 1
+fi
+if set_recipe_active "$USER_A" "$RESTAURANT_A" "$PRICE_MENU_ITEM_A" "true" >/dev/null 2>&1; then
+  echo "ERROR: a recipe with a stale unit snapshot was reactivated." >&2
+  exit 1
+fi
+save_recipe_ingredient "$USER_A" "$RESTAURANT_A" "$PRICE_MENU_ITEM_A" "$RECIPE_ITEM_C" "0.100" "0.00" >/dev/null
+if [ "$(set_recipe_active "$USER_A" "$RESTAURANT_A" "$PRICE_MENU_ITEM_A" "true")" != "true" ]; then
+  echo "ERROR: owner could not reapprove a recipe after explicitly refreshing its unit snapshot." >&2
+  exit 1
+fi
+
+# Restoring the old unit is another unit change and must invalidate approval.
+psql --no-psqlrc --set ON_ERROR_STOP=1 -c \
+  "UPDATE public.restaurant_inventory_items SET unit = 'kg' WHERE id = '$RECIPE_ITEM_C'::uuid;" >/dev/null
+if set_recipe_active "$USER_A" "$RESTAURANT_A" "$PRICE_MENU_ITEM_A" "true" >/dev/null 2>&1; then
+  echo "ERROR: a recipe was reactivated after its ingredient unit changed back without review." >&2
+  exit 1
+fi
+save_recipe_ingredient "$USER_A" "$RESTAURANT_A" "$PRICE_MENU_ITEM_A" "$RECIPE_ITEM_C" "0.100" "0.00" >/dev/null
+if [ "$(set_recipe_active "$USER_A" "$RESTAURANT_A" "$PRICE_MENU_ITEM_A" "true")" != "true" ]; then
+  echo "ERROR: owner could not reapprove a recipe after refreshing the restored unit." >&2
+  exit 1
+fi
+
+# Removing an ingredient from inventory cascades its recipe line, but must
+# invalidate the remaining recipe until the owner reviews and reapproves it.
+save_recipe_ingredient "$USER_A" "$RESTAURANT_A" "$PRICE_MENU_ITEM_A" "$RECIPE_ITEM_D" "0.050" "0.00" >/dev/null
+if [ "$(set_recipe_active "$USER_A" "$RESTAURANT_A" "$PRICE_MENU_ITEM_A" "true")" != "true" ]; then
+  echo "ERROR: owner could not activate a recipe after adding a second test ingredient." >&2
+  exit 1
+fi
+psql --no-psqlrc --set ON_ERROR_STOP=1 -c \
+  "DELETE FROM public.restaurant_inventory_items WHERE id = '$RECIPE_ITEM_D'::uuid;" >/dev/null
+delete_change_active="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT is_active::text FROM public.restaurant_recipes WHERE id = '$RECIPE_ID_A'::uuid;")"
+deleted_recipe_line_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*)::text FROM public.restaurant_recipe_ingredients WHERE recipe_id = '$RECIPE_ID_A'::uuid AND inventory_item_id = '$RECIPE_ITEM_D'::uuid;")"
+if [ "$delete_change_active" != "false" ] || [ "$deleted_recipe_line_count" != "0" ]; then
+  echo "ERROR: deleting a stock ingredient did not invalidate the recipe and remove its cascaded line." >&2
+  exit 1
+fi
+delete_change_review_required="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT requires_review::text FROM public.restaurant_recipes WHERE id = '$RECIPE_ID_A'::uuid;")"
+if [ "$delete_change_review_required" != "true" ]; then
+  echo "ERROR: deleting an ingredient from an approved recipe did not require owner review." >&2
+  exit 1
+fi
+create_recipe_order "$USER_A" "$RECIPE_DELETE_CHANGE_ORDER_ID" "$PRICE_MENU_ITEM_A" "1"
+if set_recipe_order_status "$USER_A" "$RECIPE_DELETE_CHANGE_ORDER_ID" "Em preparação" >/dev/null 2>&1; then
+  echo "ERROR: an order entered preparation after a recipe ingredient was deleted." >&2
+  exit 1
+fi
+if [ "$(set_recipe_active "$USER_A" "$RESTAURANT_A" "$PRICE_MENU_ITEM_A" "true")" != "true" ]; then
+  echo "ERROR: owner could not explicitly reapprove the recipe after reviewing a deleted ingredient." >&2
+  exit 1
+fi
+
+echo "PASS: recipe lines are tenant-isolated and RPC-only; only the owner can activate; staff edits, unit changes and ingredient deletion require explicit review."
+
+# One two-portion order consumes 0.632 kg of ingredient A (0.300 kg per portion,
+# 5% preparation waste, rounded up to 0.001 kg) and 0.200 kg of ingredient C.
+# Give ingredient A a known purchase cost so the cost-snapshot trigger is
+# verified for automatic recipe-consumption movements.
+psql --no-psqlrc --set ON_ERROR_STOP=1 -c \
+  "UPDATE public.restaurant_inventory_items SET unit_cost_per_unit = 3.5000 WHERE id = '$ITEM_A'::uuid;" >/dev/null
+create_recipe_order "$USER_A" "$RECIPE_ORDER_ID" "$PRICE_MENU_ITEM_A" "2"
+set_recipe_order_status "$USER_A" "$RECIPE_ORDER_ID" "Em preparação"
+
+recipe_stock_a="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1   -c "SELECT quantity::text FROM public.restaurant_inventory_items WHERE id = '$ITEM_A'::uuid;")"
+recipe_stock_c="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1   -c "SELECT quantity::text FROM public.restaurant_inventory_items WHERE id = '$RECIPE_ITEM_C'::uuid;")"
+recipe_movement_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1   -c "SELECT count(*)::text FROM public.restaurant_inventory_movements WHERE source_order_id = '$RECIPE_ORDER_ID'::uuid;")"
+if [ "$recipe_stock_a" != "7.368" ] || [ "$recipe_stock_c" != "4.800" ] || [ "$recipe_movement_count" != "2" ]; then
+  echo "ERROR: recipe preparation did not deduct all ingredients using conservative rounding." >&2
+  printf 'Stock A=%s, stock C=%s, movements=%s\n' "$recipe_stock_a" "$recipe_stock_c" "$recipe_movement_count" >&2
+  exit 1
+fi
+recipe_movement_cost_a="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT unit_cost_at_movement::text FROM public.restaurant_inventory_movements WHERE source_order_id = '$RECIPE_ORDER_ID'::uuid AND item_id = '$ITEM_A'::uuid;")"
+if [ "$recipe_movement_cost_a" != "3.5000" ]; then
+  echo "ERROR: recipe consumption did not snapshot the current ingredient purchase cost." >&2
+  exit 1
+fi
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+UPDATE public.restaurant_orders SET quantity = 3
+WHERE id = '$RECIPE_ORDER_ID'::uuid;
+COMMIT;
+SQL
+then
+  echo "ERROR: a client changed order quantity after recipe stock had been consumed." >&2
+  exit 1
+fi
+recipe_quantity_after_rejected_edit="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT quantity::text FROM public.restaurant_orders WHERE id = '$RECIPE_ORDER_ID'::uuid;")"
+if [ "$recipe_quantity_after_rejected_edit" != "2" ]; then
+  echo "ERROR: rejected quantity edit changed the historical number of portions." >&2
+  exit 1
+fi
+
+# Reopening and preparing the same ticket again must not deduct the ingredients twice.
+set_recipe_order_status "$USER_A" "$RECIPE_ORDER_ID" "Pronto"
+set_recipe_order_status "$USER_A" "$RECIPE_ORDER_ID" "Aberto"
+set_recipe_order_status "$USER_A" "$RECIPE_ORDER_ID" "Em preparação"
+recipe_replay_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1   -c "SELECT count(*)::text FROM public.restaurant_inventory_movements WHERE source_order_id = '$RECIPE_ORDER_ID'::uuid;")"
+recipe_stock_a_after_replay="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1   -c "SELECT quantity::text FROM public.restaurant_inventory_items WHERE id = '$ITEM_A'::uuid;")"
+if [ "$recipe_replay_count" != "2" ] || [ "$recipe_stock_a_after_replay" != "7.368" ]; then
+  echo "ERROR: reopening a consumed order deducted its recipe twice." >&2
+  exit 1
+fi
+# A later purchase-cost edit must not rewrite the historical cost of this
+# automatically consumed ingredient.
+psql --no-psqlrc --set ON_ERROR_STOP=1 -c \
+  "UPDATE public.restaurant_inventory_items SET unit_cost_per_unit = 4.2500 WHERE id = '$ITEM_A'::uuid;" >/dev/null
+recipe_historical_cost_a="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT unit_cost_at_movement::text FROM public.restaurant_inventory_movements WHERE source_order_id = '$RECIPE_ORDER_ID'::uuid AND item_id = '$ITEM_A'::uuid;")"
+if [ "$recipe_historical_cost_a" != "3.5000" ]; then
+  echo "ERROR: changing the current purchase cost rewrote the historical recipe-consumption cost." >&2
+  exit 1
+fi
+echo "PASS: recipe preparation consumes stock atomically, snapshots ingredient cost and cannot deduct/revalue the same ticket twice."
+
+# An insufficient ingredient rejects the whole status transition; no earlier
+# ingredient deduction or partial movement survives the failed transaction.
+create_recipe_order "$USER_A" "$RECIPE_INSUFFICIENT_ORDER_ID" "$PRICE_MENU_ITEM_A" "99"
+if set_recipe_order_status "$USER_A" "$RECIPE_INSUFFICIENT_ORDER_ID" "Em preparação" >/dev/null 2>&1; then
+  echo "ERROR: order preparation unexpectedly succeeded with insufficient stock." >&2
+  exit 1
+fi
+insufficient_status="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1   -c "SELECT status FROM public.restaurant_orders WHERE id = '$RECIPE_INSUFFICIENT_ORDER_ID'::uuid;")"
+insufficient_movements="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1   -c "SELECT count(*)::text FROM public.restaurant_inventory_movements WHERE source_order_id = '$RECIPE_INSUFFICIENT_ORDER_ID'::uuid;")"
+insufficient_stock_a="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1   -c "SELECT quantity::text FROM public.restaurant_inventory_items WHERE id = '$ITEM_A'::uuid;")"
+insufficient_stock_c="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT quantity::text FROM public.restaurant_inventory_items WHERE id = '$RECIPE_ITEM_C'::uuid;")"
+if [ "$insufficient_status" != "Aberto" ] || [ "$insufficient_movements" != "0" ] ||
+   [ "$insufficient_stock_a" != "7.368" ] || [ "$insufficient_stock_c" != "4.800" ]; then
+  echo "ERROR: failed preparation partially changed the order or stock." >&2
+  exit 1
+fi
+
+# Cancelling before preparation does not consume ingredients.
+create_recipe_order "$USER_A" "$RECIPE_CANCELLED_ORDER_ID" "$PRICE_MENU_ITEM_A" "1"
+set_recipe_order_status "$USER_A" "$RECIPE_CANCELLED_ORDER_ID" "Cancelado"
+cancelled_movements="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1   -c "SELECT count(*)::text FROM public.restaurant_inventory_movements WHERE source_order_id = '$RECIPE_CANCELLED_ORDER_ID'::uuid;")"
+if [ "$cancelled_movements" != "0" ]; then
+  echo "ERROR: an order cancelled before preparation consumed ingredients." >&2
+  exit 1
+fi
+
+# Legacy orders predating the menu UUID remain readable/updatable, but a new
+# authenticated INSERT without a menu item is rejected above. Seed a row as
+# pre-migration data with user triggers temporarily disabled.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+ALTER TABLE public.restaurant_orders DISABLE TRIGGER USER;
+INSERT INTO public.restaurant_orders (
+  id, restaurant_id, table_number, item_name, amount, status, quantity,
+  service_course, notes, created_by, menu_item_id, unit_cost_snapshot
+) VALUES (
+  '$RECIPE_LEGACY_ORDER_ID'::uuid, '$RESTAURANT_A'::uuid, 1, 'Legacy ticket',
+  5.00, 'Aberto', 1, 'Principal', '', '$USER_A'::uuid, NULL, NULL
+);
+ALTER TABLE public.restaurant_orders ENABLE TRIGGER USER;
+SQL
+psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+UPDATE public.restaurant_orders SET status = 'Em preparação'
+WHERE id = '$RECIPE_LEGACY_ORDER_ID'::uuid;
+COMMIT;
+SQL
+legacy_movements="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1   -c "SELECT count(*)::text FROM public.restaurant_inventory_movements WHERE source_order_id = '$RECIPE_LEGACY_ORDER_ID'::uuid;")"
+if [ "$legacy_movements" != "0" ]; then
+  echo "ERROR: a legacy order without a menu item unexpectedly consumed stock." >&2
+  exit 1
+fi
+echo "PASS: insufficient stock rolls back the whole preparation; cancellation before preparation consumes nothing; old unlinked orders remain compatible but new unlinked orders are rejected."
+
 # Account-deletion contract tests run only in the disposable PostgreSQL CI database.
 # They never connect to the hosted Supabase project or delete real accounts/data.
 expect_prepare_account_deletion_rejection \
@@ -912,11 +1746,16 @@ owner_auth_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ER
   -c "SELECT count(*) FROM auth.users WHERE id = '$USER_A'::uuid;")"
 owner_queue_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
   -c "SELECT count(*) FROM private.account_deletion_queue WHERE user_id = '$USER_A'::uuid;")"
-if [ "$owner_restaurant_rows" != "0" ] || [ "$owner_auth_rows" != "0" ] || [ "$owner_queue_rows" != "0" ]; then
-  echo "ERROR: confirmed owner deletion did not remove the account, restaurant and queue entry together." >&2
+owner_recipe_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*) FROM public.restaurant_recipes WHERE restaurant_id = '$RESTAURANT_A'::uuid;")"
+owner_recipe_line_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*) FROM public.restaurant_recipe_ingredients WHERE restaurant_id = '$RESTAURANT_A'::uuid;")"
+if [ "$owner_restaurant_rows" != "0" ] || [ "$owner_auth_rows" != "0" ] || [ "$owner_queue_rows" != "0" ] ||
+   [ "$owner_recipe_rows" != "0" ] || [ "$owner_recipe_line_rows" != "0" ]; then
+  echo "ERROR: confirmed owner deletion did not remove the account, restaurant, recipes and queue entry together." >&2
   exit 1
 fi
-echo "PASS: confirmed owner deletion removes the restaurant atomically in the disposable database."
+echo "PASS: confirmed owner deletion removes the restaurant, its recipe headers and ingredients atomically in the disposable database."
 
 add_staff_member "$USER_D" "$RESTAURANT_B"
 staff_preparation="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL
