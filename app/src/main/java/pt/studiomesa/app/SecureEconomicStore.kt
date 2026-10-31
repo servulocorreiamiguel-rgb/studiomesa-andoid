@@ -78,7 +78,7 @@ internal class SecureEconomicStore(context: Context) {
         }
         val file = scopedFile(scope)
         if (!file.isFile) return emptyMap()
-        require(file.length() in 1..(MAX_PAYLOAD_BYTES + MAX_HEADER_BYTES).toLong()) {
+        require(file.length() in 1..(MAX_PAYLOAD_BYTES + GCM_TAG_BYTES + MAX_HEADER_BYTES).toLong()) {
             "A cópia económica local tem um tamanho inválido."
         }
 
