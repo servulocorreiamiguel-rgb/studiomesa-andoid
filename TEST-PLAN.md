@@ -349,3 +349,20 @@ Estes casos ficam reservados à ronda final. O cliente só pode criar pedidos at
 | CRES-16 | Compatibilidade | Consultar reservas antigas sem loyalty_member_id | Continuam visíveis ao pessoal; não são mostradas à conta de cliente por associação presumida |
 
 A migração `20261031130000_customer_reservation_requests.sql` não deve ser aplicada ao Supabase alojado sem backup cifrado, ensaio de restauro, plano de reversão e rollout controlado. A CI usa uma base de dados descartável; a validação live e em dispositivos reais continua pendente.
+
+## Atribuição de mesas a pedidos de reserva
+
+Estes casos são executados na ronda final. A app do restaurante pode atribuir ou alterar a mesa de uma reserva futura pendente ou confirmada; o servidor é a autoridade final para capacidade e conflitos.
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| RTA-01 | Normal | Proprietário atribui uma mesa existente com lugares suficientes a uma reserva futura | O número da mesa fica associado à reserva e aparece atualizado na agenda |
+| RTA-02 | Idempotência | Repetir a atribuição da mesma mesa à mesma reserva | Termina sem erro e sem duplicar reservas |
+| RTA-03 | Capacidade | Reserva de 3 pessoas numa mesa com 2 lugares | Servidor rejeita; a mesa da reserva não é alterada |
+| RTA-04 | Conflito | Duas reservas pendentes/confirmadas sobrepostas tentam usar a mesma mesa | A segunda atribuição é rejeitada no servidor |
+| RTA-05 | Concorrência | Duas equipas tentam atribuir a mesma mesa em horários sobrepostos | O bloqueio da linha da mesa serializa as operações; no máximo uma atribuição incompatível é aceite |
+| RTA-06 | Permissões | Cliente ou utilizador de outro restaurante tenta atribuir uma mesa | RPC recusa antes de bloquear ou alterar a reserva |
+| RTA-07 | Estado | Tentar atribuir mesa a reserva cancelada, concluída, não compareceu ou passada | Operação recusada |
+| RTA-08 | Reatribuição | Alterar a mesa de uma reserva ativa para outra mesa livre e adequada | A nova mesa é atribuída se capacidade e horário forem válidos |
+| RTA-09 | Privacidade | Ler ou bloquear uma reserva de outro restaurante sem pertencer à equipa | Não é devolvida nem bloqueada por uma operação não autorizada |
+
