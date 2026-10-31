@@ -345,7 +345,7 @@ Estes casos ficam reservados à ronda final. O cliente só pode criar pedidos at
 | CRES-12 | Visibilidade do restaurante | Proprietário abre a agenda de reservas após pedido de cliente | Vê o pedido como Pendente, identifica que veio da aplicação de cliente e pode confirmar ou cancelar |
 | CRES-13 | Privacidade | Terminar sessão e iniciar sessão com outra conta no mesmo dispositivo | A lista em memória é limpa e não mostra pedidos da conta anterior |
 | CRES-14 | Rede | Perder a resposta após criar ou cancelar, recuperar ligação e atualizar a lista | Não duplica a criação; o estado final confirmado no servidor é apresentado |
-| CRES-15 | Migração | Reproduzir as 47 migrações desde uma base vazia | A coluna de membro, índice, políticas RLS e duas RPCs de cliente existem; funções não concedem execução a anon/PUBLIC |
+| CRES-15 | Migração | Reproduzir as 47 migrações desde uma base vazia | A coluna de membro, índice, política RLS, duas RPCs de cliente e RPC de atribuição de mesa existem; as funções não concedem execução a anon/PUBLIC |
 | CRES-16 | Compatibilidade | Consultar reservas antigas sem loyalty_member_id | Continuam visíveis ao pessoal; não são mostradas à conta de cliente por associação presumida |
 
 A migração `20261031130000_customer_reservation_requests.sql` não deve ser aplicada ao Supabase alojado sem backup cifrado, ensaio de restauro, plano de reversão e rollout controlado. A CI usa uma base de dados descartável; a validação live e em dispositivos reais continua pendente.
