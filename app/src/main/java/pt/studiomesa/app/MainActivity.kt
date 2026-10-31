@@ -3311,8 +3311,10 @@ class MainActivity : Activity() {
             datePicker.show()
         }
         val notes = multilineInputField("Notas ou pedidos especiais (opcional)")
-        val customerName = store.getCustomerProfileName().ifBlank { "Cartão de cliente" }
-        form.addView(label("Reserva em nome de " + customerName, 11f, true, forestSoft))
+        form.addView(label(
+            "A reserva usará o nome associado ao teu cartão de cliente.",
+            11f, true, forestSoft
+        ))
         addGap(form, 5)
         listOf(
             "Número de pessoas" to party,
