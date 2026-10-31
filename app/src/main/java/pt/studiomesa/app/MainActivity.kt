@@ -5359,7 +5359,7 @@ class MainActivity : Activity() {
 
         addGap(container, 6)
         val recipe = makeCard(15)
-        recipe.addView(label("2 · Custo por receita e dose", 17f, true, forestDeep))
+        recipe.addView(label("3 · Custo por receita e dose", 17f, true, forestDeep))
         addGap(recipe, 4)
         recipe.addView(label("Cada linha: ingrediente | quantidade por dose | preço por unidade | desperdício %. As unidades têm de ser compatíveis, por exemplo kg e €/kg.", 11.5f, false, muted))
         economicTextField(recipe, "recipe", "Farinha | 0,2 | 2,50 | 5\nMolho | 0,1 | 4,00 | 0")
@@ -5388,7 +5388,7 @@ class MainActivity : Activity() {
 
         addGap(container, 6)
         val reorder = makeCard(15)
-        reorder.addView(label("3 · Reposição de stock", 17f, true, forestDeep))
+        reorder.addView(label("4 · Reposição de stock", 17f, true, forestDeep))
         addGap(reorder, 4)
         reorder.addView(label("Formato: stock atual | consumo médio/dia | prazo do fornecedor em dias | dias de segurança. Só calcula uma quantidade; não faz encomendas.", 11.5f, false, muted))
         economicTextField(reorder, "reorder", "Ex.: 5 | 3 | 4 | 2")
@@ -5415,7 +5415,7 @@ class MainActivity : Activity() {
 
         addGap(container, 6)
         economicLogCard(
-            container, "4 · Registo de desperdício por artigo", 
+            container, "5 · Registo de desperdício por artigo", 
             "Formato: artigo | quantidade desperdiçada | custo por unidade | motivo. Regista apenas quantidades e custos compatíveis.",
             "wasteLog", "Frango | 2 | 6,50 | Validade\nSopa | 1 | 4,00 | Produção",
             "Calcular custo do desperdício", wasteReportText,
@@ -5435,7 +5435,7 @@ class MainActivity : Activity() {
 
         addGap(container, 6)
         economicLogCard(
-            container, "5 · Comparar preços de fornecedores",
+            container, "6 · Comparar preços de fornecedores",
             "Formato: artigo | fornecedor | unidade | quantidade na embalagem | preço da embalagem. Compara apenas a mesma unidade (por exemplo, €/kg).",
             "supplierQuotes", "Tomate | Fornecedor A | kg | 10 | 16,00\nTomate | Fornecedor B | kg | 5 | 7,50",
             "Comparar custo por unidade", supplierReportText,
@@ -5460,7 +5460,7 @@ class MainActivity : Activity() {
 
         addGap(container, 6)
         economicLogCard(
-            container, "6 · Orçamento versus valor real",
+            container, "7 · Orçamento versus valor real",
             "Formato: categoria | orçamento do período | valor real. Usa o mesmo período. Uma diferença positiva não é automaticamente boa nem má.",
             "budgetComparison", "Vendas | 15000 | 14200\nPessoal | 5200 | 5300\nRenda | 1800 | 1800",
             "Comparar orçamento e realizado", budgetReportText,
@@ -5482,7 +5482,7 @@ class MainActivity : Activity() {
 
         addGap(container, 6)
         economicLogCard(
-            container, "7 · Consumo teórico versus real",
+            container, "8 · Consumo teórico versus real",
             "Formato: artigo | consumo teórico | consumo real | custo por unidade. Quantidades e unidade de custo têm de coincidir e referir-se ao mesmo período.",
             "usageVariance", "Frango | 20 | 23 | 6,50\nQueijo | 5 | 4 | 8,00",
             "Analisar diferenças de consumo", usageReportText,
@@ -5506,7 +5506,7 @@ class MainActivity : Activity() {
 
         addGap(container, 6)
         economicLogCard(
-            container, "8 · Custo de horas de equipa",
+            container, "9 · Custo de horas de equipa",
             "Formato: horas previstas | custo total por hora com encargos | vendas esperadas | objetivo de custo de pessoal %. É um cenário de custos, não um horário nem recomendação laboral.",
             "labourPlan", "120 | 12,50 | 8000 | 25",
             "Calcular custo de pessoal", labourReportText,
