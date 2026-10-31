@@ -42,6 +42,7 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [x] Os contactos/notas das reservas não são persistidos nas preferências locais e a cache legada é limpa no arranque/logout.
 - [x] A criação de reservas usa um identificador de tentativa único e índice composto para que uma repetição da mesma operação possa devolver a reserva original; teste real de perda de rede continua pendente.
 - [ ] A branch candidata acrescenta pedidos de reserva na aplicação de cliente, associados ao cartão de fidelização autenticado, com estado inicial pendente, consulta apenas das próprias reservas e cancelamento apenas pelo titular. A migração `20261031130000_customer_reservation_requests.sql` ainda não foi aplicada ao Supabase alojado nem validada por CI; todos os casos `CRES-*` em `TEST-PLAN.md` aguardam a ronda final.
+- [ ] A branch permite à equipa atribuir ou mudar a mesa de uma reserva futura através de uma RPC autenticada; o servidor valida restaurante, capacidade e sobreposição temporal. A migração ainda não foi reproduzida por CI; casos `RTA-*` em `TEST-PLAN.md` aguardam a ronda final.
 - [ ] Definir minimização de dados pessoais no servidor, acesso, conservação e eliminação.
 
 ## Pedidos e serviço
