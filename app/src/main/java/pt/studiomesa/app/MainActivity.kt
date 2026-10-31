@@ -107,6 +107,7 @@ class MainActivity : Activity() {
     // Reservation contacts are kept in memory only, not persisted to SharedPreferences.
     private var reservationCache = JSONArray()
     private var reservationsLoaded = false
+    private var selectedReservationFilter = "Todas"
     private var customerReservationsCache = JSONArray()
     private var customerReservationsLoaded = false
     private var customerReservationsLoading = false
@@ -3973,15 +3974,81 @@ class MainActivity : Activity() {
         }
 
         val reservations = remoteReservations()
-        if (reservations.length() == 0) {
+        val allReservations = (0 until reservations.length()).mapNotNull { reservations.optJSONObject(it) }
+        if (allReservations.isEmpty()) {
             container.addView(emptyCard("Ainda não há reservas. Usa «Nova reserva» para registar a primeira."))
+            return
+        }
+
+        val now = System.currentTimeMillis()
+        val todayStart = Calendar.getInstance().apply {
+            timeInMillis = now
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        val tomorrowStart = todayStart + 24L * 60L * 60L * 1000L
+        val pendingCount = allReservations.count { it.optString("status") == "Pendente" }
+        val confirmedCount = allReservations.count { it.optString("status") == "Confirmada" }
+        val todayCount = allReservations.count {
+            val timestamp = parseOrderTimestamp(it.optString("reservation_at"))
+            timestamp in todayStart until tomorrowStart
+        }
+
+        val overview = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        overview.addView(statCard("PENDENTES", pendingCount.toString(), if (pendingCount > 0) copper else forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(4), 0) })
+        overview.addView(statCard("CONFIRMADAS", confirmedCount.toString(), if (confirmedCount > 0) green else forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(2), 0, dp(2), 0) })
+        overview.addView(statCard("HOJE", todayCount.toString(), if (todayCount > 0) copper else forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(4), 0, 0, 0) })
+        container.addView(overview, LinearLayout.LayoutParams(-1, -2).apply {
+            setMargins(0, 0, 0, dp(10))
+        })
+
+        val filters = listOf("Todas", "Pendentes", "Confirmadas", "Hoje")
+        container.addView(secondaryButton("Filtro: $selectedReservationFilter  ▾") {
+            AlertDialog.Builder(this)
+                .setTitle("Filtrar reservas")
+                .setItems(filters.toTypedArray()) { _, selected ->
+                    selectedReservationFilter = filters[selected]
+                    renderApp()
+                }
+                .show()
+        }, LinearLayout.LayoutParams(-1, dp(44)))
+        addGap(container, 10)
+
+        val filteredReservations = when (selectedReservationFilter) {
+            "Pendentes" -> allReservations.filter { it.optString("status") == "Pendente" }
+            "Confirmadas" -> allReservations.filter { it.optString("status") == "Confirmada" }
+            "Hoje" -> allReservations.filter {
+                val timestamp = parseOrderTimestamp(it.optString("reservation_at"))
+                timestamp in todayStart until tomorrowStart
+            }
+            else -> allReservations
+        }
+        if (filteredReservations.isEmpty()) {
+            container.addView(
+                emptyCard(
+                    when (selectedReservationFilter) {
+                        "Pendentes" -> "Não há reservas pendentes neste momento."
+                        "Confirmadas" -> "Não há reservas confirmadas neste momento."
+                        "Hoje" -> "Não há reservas para hoje."
+                        else -> "Não existem reservas para apresentar."
+                    }
+                ),
+                cardParams()
+            )
             return
         }
 
         val displayFormat = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "PT"))
         val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US)
-        for (index in 0 until reservations.length()) {
-            val reservation = reservations.optJSONObject(index) ?: continue
+        filteredReservations.forEach { reservation ->
             val id = reservation.optString("id")
             val guest = reservation.optString("guest_name", "Cliente")
             val status = reservation.optString("status", "Pendente")
