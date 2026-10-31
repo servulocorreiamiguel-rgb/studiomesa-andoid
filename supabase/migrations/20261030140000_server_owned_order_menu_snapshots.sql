@@ -71,28 +71,26 @@ BEGIN
 
   NEW.created_by := (SELECT auth.uid());
 
-  IF NEW.menu_item_id IS NOT NULL THEN
-    SELECT mi.name, mi.price, mi.cost, mi.is_active
-      INTO v_name, v_price, v_cost, v_is_active
-    FROM public.menu_items AS mi
-    WHERE mi.id = NEW.menu_item_id
-      AND mi.restaurant_id = NEW.restaurant_id
-    FOR SHARE;
+  SELECT mi.name, mi.price, mi.cost, mi.is_active
+    INTO v_name, v_price, v_cost, v_is_active
+  FROM public.menu_items AS mi
+  WHERE mi.id = NEW.menu_item_id
+    AND mi.restaurant_id = NEW.restaurant_id
+  FOR SHARE;
 
-    IF NOT FOUND THEN
-      RAISE EXCEPTION 'O artigo selecionado não existe neste restaurante.';
-    END IF;
-
-    IF NOT v_is_active THEN
-      RAISE EXCEPTION 'O artigo selecionado está arquivado e não pode receber novos pedidos.';
-    END IF;
-
-    -- Server-authoritative immutable snapshots; cost zero means unknown,
-    -- never a known zero-cost ingredient/meal.
-    NEW.item_name := v_name;
-    NEW.amount := v_price;
-    NEW.unit_cost_snapshot := NULLIF(v_cost, 0);
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'O artigo selecionado não existe neste restaurante.';
   END IF;
+
+  IF NOT v_is_active THEN
+    RAISE EXCEPTION 'O artigo selecionado está arquivado e não pode receber novos pedidos.';
+  END IF;
+
+  -- Server-authoritative immutable snapshots; cost zero means unknown,
+  -- never a known zero-cost ingredient/meal.
+  NEW.item_name := v_name;
+  NEW.amount := v_price;
+  NEW.unit_cost_snapshot := NULLIF(v_cost, 0);
 
   RETURN NEW;
 END;
