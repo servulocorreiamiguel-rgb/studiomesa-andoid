@@ -411,31 +411,38 @@ if [ "$open_order_link_ok" != "t" ]; then
   exit 1
 fi
 
-# Once an order has entered preparation, its stock transition has already been
-# transactionally handled; the historical ticket may safely outlive the menu row.
-psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
+# Preparing, completing or cancelling a ticket does not make the linked
+# menu row disposable: closed tickets can be reopened, so the stable UUID must
+# remain available. The product UI archives items instead of deleting them.
+psql --psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
 UPDATE public.restaurant_orders SET status = 'Em preparação'
 WHERE id = '$ORDER_SNAPSHOT_ID'::uuid;
 UPDATE public.restaurant_orders SET status = 'Pronto'
 WHERE id = '$ORDER_SNAPSHOT_ID'::uuid;
+COMMIT;
+SQL
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
 DELETE FROM public.menu_items
 WHERE id = '$ORDER_MENU_ITEM_A'::uuid
   AND restaurant_id = '$RESTAURANT_A'::uuid;
-COMMIT;
 SQL
-deleted_menu_snapshot_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
-  -c "SELECT menu_item_id IS NULL
+then
+  echo "ERROR: a menu item with historical orders was deleted after preparation." >&2
+  exit 1
+fi
+historical_menu_link_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT menu_item_id = '$ORDER_MENU_ITEM_A'::uuid
          AND item_name = 'Bitoque original'
          AND amount = 13.50
          AND unit_cost_snapshot = 4.25
       FROM public.restaurant_orders WHERE id = '$ORDER_SNAPSHOT_ID'::uuid;")"
-if [ "$deleted_menu_snapshot_ok" != "t" ]; then
-  echo "ERROR: deleting a menu row did not preserve the order's historical snapshots." >&2
+if [ "$historical_menu_link_ok" != "t" ]; then
+  echo "ERROR: a rejected menu deletion changed the historical order link or snapshots." >&2
   exit 1
 fi
-echo "PASS: new orders require an active menu UUID; order details/snapshots are immutable; open orders prevent menu deletion; historical values survive menu edits and deletion after preparation."
+echo "PASS: new orders require an active menu UUID; order details/snapshots are immutable; menu items with any historical order must be archived, not deleted."
 
 PRICE_MENU_ITEM_A="99999999-1111-4111-8111-111111111111"
 PRICE_MENU_ITEM_B="99999999-2222-4222-8222-222222222222"
