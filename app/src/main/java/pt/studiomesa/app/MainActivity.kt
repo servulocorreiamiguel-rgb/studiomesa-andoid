@@ -92,6 +92,7 @@ class MainActivity : Activity() {
     private var economicScopeKey: String? = null
     private val economicInputs = mutableMapOf<String, String>()
     private var economicReportText = ""
+    private var scenarioReportText = ""
     private var recipeReportText = ""
     private var reorderReportText = ""
     private var wasteReportText = ""
@@ -5162,6 +5163,7 @@ class MainActivity : Activity() {
         economicScopeKey = null
         economicInputs.clear()
         economicReportText = ""
+        scenarioReportText = ""
         recipeReportText = ""
         reorderReportText = ""
         wasteReportText = ""
@@ -5284,6 +5286,76 @@ class MainActivity : Activity() {
             monthly.addView(label(economicReportText, 12f, false, ink))
         }
         container.addView(monthly, cardParams())
+
+        addGap(container, 6)
+        val scenario = makeCard(15)
+        scenario.addView(label("2 · Simulador de cenários", 17f, true, forestDeep))
+        addGap(scenario, 4)
+        scenario.addView(label(
+            "Testa hipóteses sem alterar os registos: define como podem variar as vendas e os custos em relação ao mês-base acima.",
+            11.5f, false, muted
+        ))
+        addGap(scenario, 7)
+        economicNumberField(scenario, "scenarioSalesChange", "Variação das vendas (%)", "Ex.: -10 para uma quebra de 10%", "0")
+        economicNumberField(scenario, "scenarioFoodChange", "Variação do custo alimentar (%)", "Ex.: 5 para um aumento de 5%", "0")
+        economicNumberField(scenario, "scenarioPayrollChange", "Variação do custo de pessoal (%)", "Ex.: 2 para um aumento de 2%", "0")
+        economicNumberField(scenario, "scenarioVariableChange", "Variação de outros custos variáveis (%)", "Ex.: -3 para uma redução de 3%", "0")
+        addGap(scenario, 4)
+        scenario.addView(primaryButton("Simular impacto no resultado") {
+            scenarioReportText = try {
+                val baselineInput = EconomicManagerInput(
+                    monthlyNetSales = economicRequiredAmount("sales", "vendas mensais"),
+                    foodCostConsumedIncludingWaste = economicRequiredAmount("food", "custo alimentar"),
+                    monthlyPayroll = economicRequiredAmount("payroll", "custo de pessoal"),
+                    otherFixedCosts = economicRequiredAmount("fixed", "custos fixos"),
+                    otherVariableCosts = economicRequiredAmount("variable", "outros custos variáveis"),
+                    targetFoodCostPercent = economicRequiredAmount("foodTarget", "objetivo de custo alimentar")
+                )
+                val result = RestaurantEconomicManager.simulateScenario(
+                    baselineInput = baselineInput,
+                    salesChangePercent = RestaurantEconomicManager.parseScenarioPercent(
+                        economicInputs["scenarioSalesChange"].orEmpty(), "variação das vendas"
+                    ),
+                    foodCostChangePercent = RestaurantEconomicManager.parseScenarioPercent(
+                        economicInputs["scenarioFoodChange"].orEmpty(), "variação do custo alimentar"
+                    ),
+                    payrollChangePercent = RestaurantEconomicManager.parseScenarioPercent(
+                        economicInputs["scenarioPayrollChange"].orEmpty(), "variação do custo de pessoal"
+                    ),
+                    otherVariableCostChangePercent = RestaurantEconomicManager.parseScenarioPercent(
+                        economicInputs["scenarioVariableChange"].orEmpty(), "variação dos outros custos variáveis"
+                    )
+                )
+                val difference = result.operatingResultChange
+                buildString {
+                    append("Resultado operacional base: ").append(money(result.baseline.estimatedOperatingResult)).append('\n')
+                    append("Resultado no cenário: ").append(money(result.scenario.estimatedOperatingResult)).append('\n')
+                    append(
+                        when {
+                            difference > BigDecimal.ZERO -> "Melhoria estimada: "
+                            difference < BigDecimal.ZERO -> "Redução estimada: "
+                            else -> "Variação estimada: "
+                        }
+                    ).append(money(difference.abs())).append('\n')
+                    append("Vendas no cenário: ").append(money(baselineInput.monthlyNetSales.add(result.salesChange))).append('\n')
+                    result.scenario.estimatedBreakEvenSales?.let {
+                        append("Ponto de equilíbrio no cenário: ").append(money(it)).append('\n')
+                    }
+                    result.scenario.warnings.filterNot {
+                        it.startsWith("Estimativa simplificada:")
+                    }.forEach { append("Atenção: ").append(it).append('\n') }
+                    append("A simulação altera apenas as rubricas percentuais indicadas e mantém os custos fixos. Não é uma previsão.")
+                }.trim()
+            } catch (e: IllegalArgumentException) {
+                "Não foi possível simular: ${e.message ?: "confirma os valores do mês-base e as percentagens"}"
+            }
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(46)))
+        if (scenarioReportText.isNotBlank()) {
+            addGap(scenario, 8)
+            scenario.addView(label(scenarioReportText, 12f, false, ink))
+        }
+        container.addView(scenario, cardParams())
 
         addGap(container, 6)
         val recipe = makeCard(15)
