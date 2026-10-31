@@ -336,7 +336,7 @@ Estes casos ficam reservados à ronda final. O cliente só pode criar pedidos at
 | CRES-03 | Permissões | Cliente altera manualmente o UUID do cartão para o cartão de outra pessoa | RPC recusa a criação; nenhum pedido é criado |
 | CRES-04 | Isolamento | Cliente A consulta o UUID da reserva de Cliente B através da REST API | RLS não devolve os dados de B |
 | CRES-05 | Isolamento | Cliente A tenta cancelar uma reserva pertencente a Cliente B | RPC recusa; a reserva de B mantém o estado original |
-| CRES-06 | Idempotência | Repetir a mesma criação depois de perder a resposta HTTP | Devolve o ID original; existe apenas uma reserva |
+| CRES-06 | Idempotência | Repetir a mesma criação depois de perder a resposta HTTP, incluindo depois de a equipa atribuir mesa ou alterar o nome do cartão | Devolve o ID original; existe apenas uma reserva e a atribuição/estado já atualizados mantêm-se |
 | CRES-07 | Idempotência / payload diferente | Reutilizar a chave de criação com data, pessoas, contacto ou notas diferentes | RPC rejeita a tentativa; a reserva original não é alterada |
 | CRES-08 | Dados inválidos | Pessoas fora de 1–60, data passada, data superior a um ano, contacto acima de 40 ou notas acima de 1000 caracteres | App e servidor rejeitam sem criar reservas |
 | CRES-09 | Cancelamento | Titular cancela o próprio pedido Pendente ou Confirmado com data futura | Estado passa a Cancelada; a lista do cliente e a agenda do restaurante refletem o estado |
