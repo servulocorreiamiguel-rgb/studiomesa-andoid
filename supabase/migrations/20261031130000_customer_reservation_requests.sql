@@ -160,19 +160,17 @@ BEGIN
     INTO v_member_id, v_restaurant_id, v_status, v_reservation_at
   FROM public.restaurant_reservations AS r
   WHERE r.id = p_reservation_id
+    AND EXISTS (
+      SELECT 1
+      FROM public.loyalty_members AS lm
+      WHERE lm.id = r.loyalty_member_id
+        AND lm.restaurant_id = r.restaurant_id
+        AND lm.auth_user_id = v_user_id
+    )
   FOR UPDATE;
 
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'Pedido de reserva não encontrado.';
-  END IF;
-  IF v_member_id IS NULL OR NOT EXISTS (
-    SELECT 1
-    FROM public.loyalty_members AS lm
-    WHERE lm.id = v_member_id
-      AND lm.restaurant_id = v_restaurant_id
-      AND lm.auth_user_id = v_user_id
-  ) THEN
-    RAISE EXCEPTION 'Não tens autorização para cancelar este pedido de reserva.';
+    RAISE EXCEPTION 'Pedido de reserva não encontrado ou não pertence à tua conta.';
   END IF;
   -- A retry after a lost HTTP response is harmless once cancellation committed.
   IF v_status = 'Cancelada' THEN
@@ -219,21 +217,15 @@ BEGIN
          v_status, v_current_table_number
   FROM public.restaurant_reservations AS r
   WHERE r.id = p_reservation_id
+    AND private.is_restaurant_staff(r.restaurant_id)
   FOR UPDATE;
 
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'Reserva não encontrada.';
-  END IF;
-  IF NOT private.is_restaurant_staff(v_restaurant_id) THEN
-    RAISE EXCEPTION 'Sem autorização para atribuir uma mesa a esta reserva.';
+    RAISE EXCEPTION 'Reserva não encontrada ou sem autorização para a gerir.';
   END IF;
   IF v_status NOT IN ('Pendente', 'Confirmada') OR v_reservation_at <= now() THEN
     RAISE EXCEPTION 'Só podes atribuir mesas a reservas pendentes ou confirmadas com data futura.';
   END IF;
-  IF v_current_table_number = p_table_number THEN
-    RETURN;
-  END IF;
-
   SELECT t.seats
     INTO v_seats
   FROM public.restaurant_tables AS t
@@ -259,6 +251,9 @@ BEGIN
       AND v_reservation_at < r.reservation_at + (r.duration_minutes * interval '1 minute')
   ) THEN
     RAISE EXCEPTION 'Esta mesa já tem uma reserva pendente ou confirmada nesse horário.';
+  END IF;
+  IF v_current_table_number = p_table_number THEN
+    RETURN;
   END IF;
 
   UPDATE public.restaurant_reservations
