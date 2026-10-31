@@ -1983,6 +1983,7 @@ class MainActivity : Activity() {
             val member = SupabaseApi.getMyLoyaltyMembership(token)
             if (member == null) {
                 customerReservationsCache = JSONArray()
+                selectedCustomerReservationFilter = "Todas"
                 customerReservationsLoaded = false
                 customerReservationsLoading = false
                 customerReservationsLoadError = false
@@ -1998,6 +1999,7 @@ class MainActivity : Activity() {
 
             val memberId = member.optString("member_id")
             customerReservationsCache = JSONArray()
+            selectedCustomerReservationFilter = "Todas"
             customerReservationsLoaded = false
             customerReservationsLoading = false
             customerReservationsLoadError = false
@@ -2025,6 +2027,7 @@ class MainActivity : Activity() {
     private fun prepareForAuthenticatedUser(newUserId: String) {
         clearEconomicManagerState()
         customerReservationsCache = JSONArray()
+        selectedCustomerReservationFilter = "Todas"
         customerReservationsLoaded = false
         customerReservationsLoading = false
         customerReservationsLoadError = false
@@ -3053,6 +3056,7 @@ class MainActivity : Activity() {
                             val member = SupabaseApi.joinRestaurant(token, code, name)
                             val memberId = member.optString("member_id")
                             customerReservationsCache = JSONArray()
+                            selectedCustomerReservationFilter = "Todas"
                             customerReservationsLoaded = false
                             customerReservationsLoading = false
                             customerReservationsLoadError = false
@@ -3849,6 +3853,7 @@ class MainActivity : Activity() {
                     .remove("customer_menu_json")
                     .apply()
                 customerReservationsCache = JSONArray()
+                selectedCustomerReservationFilter = "Todas"
                 customerReservationsLoaded = false
                 customerReservationsLoading = false
                 customerReservationsLoadError = false
