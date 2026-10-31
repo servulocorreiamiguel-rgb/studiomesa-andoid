@@ -9,7 +9,6 @@ import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
-import java.io.IOException
 import java.security.KeyStore
 import java.security.MessageDigest
 import javax.crypto.Cipher
@@ -83,9 +82,7 @@ internal class SecureEconomicStore(context: Context) {
             "A cópia económica local tem um tamanho inválido."
         }
 
-        val encryptedPayload: ByteArray
-        val iv: ByteArray
-        DataInputStream(file.inputStream().buffered()).use { input ->
+        val (iv, encryptedPayload) = DataInputStream(file.inputStream().buffered()).use { input ->
             require(input.readInt() == FILE_MAGIC) {
                 "O formato da cópia económica não é reconhecido."
             }
@@ -96,9 +93,9 @@ internal class SecureEconomicStore(context: Context) {
             require(ivLength in MIN_GCM_IV_BYTES..MAX_GCM_IV_BYTES) {
                 "A cópia económica contém dados de cifragem inválidos."
             }
-            iv = ByteArray(ivLength)
-            input.readFully(iv)
-            encryptedPayload = input.readBytes()
+            val decodedIv = ByteArray(ivLength)
+            input.readFully(decodedIv)
+            decodedIv to input.readBytes()
         }
         require(encryptedPayload.isNotEmpty() && encryptedPayload.size <= MAX_PAYLOAD_BYTES + GCM_TAG_BYTES) {
             "A cópia económica está incompleta ou excede o limite permitido."
