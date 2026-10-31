@@ -217,6 +217,19 @@ COMMIT;
 SQL
 }
 
+assign_reservation_table() {
+  local user_id="$1" reservation_id="$2" table_number="$3"
+  psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT public.assign_restaurant_reservation_table(
+  '$reservation_id'::uuid, '$table_number'::integer
+);
+COMMIT;
+SQL
+}
+
 RESTAURANT_A="$(create_restaurant "$USER_A" "CI Restaurant A" "SMOKEAA001")"
 RESTAURANT_B="$(create_restaurant "$USER_B" "CI Restaurant B" "SMOKEBB001")"
 test -n "$RESTAURANT_A"
@@ -1121,6 +1134,51 @@ if [ "$customer_reservation_staff_visibility" != "1" ]; then
   echo "ERROR: restaurant owner could not see the customer's pending reservation." >&2
   exit 1
 fi
+
+# Give the synthetic restaurant two tables: one with capacity four and one with
+# capacity two. The assignment RPC must serialize against table creation/booking.
+psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO public.restaurant_tables (restaurant_id, table_number, seats, area)
+VALUES ('$RESTAURANT_A'::uuid, 97, 4, 'CI reservations'),
+       ('$RESTAURANT_A'::uuid, 98, 2, 'CI reservations')
+ON CONFLICT (restaurant_id, table_number) DO NOTHING;
+SQL
+
+assign_reservation_table "$USER_A" "$CUSTOMER_RESERVATION_A" 97
+assign_reservation_table "$USER_A" "$CUSTOMER_RESERVATION_A" 97
+assigned_customer_table="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT table_number = 97 FROM public.restaurant_reservations WHERE id = '$CUSTOMER_RESERVATION_A'::uuid;")"
+if [ "$assigned_customer_table" != "t" ]; then
+  echo "ERROR: restaurant owner could not assign a suitable table to the customer request." >&2
+  exit 1
+fi
+
+CUSTOMER_RESERVATION_SECOND_REQUEST="dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+CUSTOMER_RESERVATION_SECOND="$(create_customer_reservation_request "$USER_E" "$CUSTOMER_RESERVATION_SECOND_REQUEST" "$MEMBER_A" 3 "$CUSTOMER_RESERVATION_AT" "" "Second CI request")"
+if [ -z "$CUSTOMER_RESERVATION_SECOND" ]; then
+  echo "ERROR: could not create the second customer reservation conflict fixture." >&2
+  exit 1
+fi
+if assign_reservation_table "$USER_A" "$CUSTOMER_RESERVATION_SECOND" 97 >/dev/null 2>&1; then
+  echo "ERROR: server assigned the same table to overlapping active reservations." >&2
+  exit 1
+fi
+if assign_reservation_table "$USER_A" "$CUSTOMER_RESERVATION_SECOND" 98 >/dev/null 2>&1; then
+  echo "ERROR: server assigned a table with insufficient seating capacity." >&2
+  exit 1
+fi
+if assign_reservation_table "$USER_E" "$CUSTOMER_RESERVATION_A" 97 >/dev/null 2>&1; then
+  echo "ERROR: customer was able to assign their own table." >&2
+  exit 1
+fi
+psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT public.cancel_my_customer_reservation('$CUSTOMER_RESERVATION_SECOND'::uuid);
+COMMIT;
+SQL
+echo "PASS: restaurant staff can safely assign tables; overlapping bookings, insufficient capacity and customer-side assignment are rejected."
 
 psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
 BEGIN;
