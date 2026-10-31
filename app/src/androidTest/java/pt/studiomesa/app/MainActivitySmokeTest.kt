@@ -462,7 +462,7 @@ class MainActivitySmokeTest {
     }
 
     @Test
-    fun customerNavigationDrawerIsAvailableOnCustomerVariants() {
+    fun customerNavigationDrawerOpensMenuAndReservationRequestArea() {
         assumeTrue("Restaurant variant uses the management navigation.", isCustomerVariant())
 
         ActivityScenario.launch(MainActivity::class.java).use {
@@ -470,6 +470,13 @@ class MainActivitySmokeTest {
             onView(withText("A MINHA EXPERIÊNCIA")).check(matches(isDisplayed()))
             onView(withContentDescription("Abrir secção Carta")).perform(click())
             onView(withText("Descobre o menu.")).check(matches(isDisplayed()))
+
+            onView(withContentDescription("Abrir menu de navegação")).perform(click())
+            onView(withContentDescription("Abrir secção Reservas")).perform(click())
+            onView(withText("As minhas reservas.")).check(matches(isDisplayed()))
+            onView(withText(containsString("Inicia sessão para pedir uma reserva")))
+                .check(matches(isDisplayed()))
+            onView(withText("Criar conta / iniciar sessão")).check(matches(isDisplayed()))
         }
     }
 
@@ -513,13 +520,14 @@ class MainActivitySmokeTest {
 
 
     @Test
-    fun restaurantEconomicManagerIsOptionalAndCalculatesMonthlyIndicators() {
+    fun restaurantEconomicManagerIsOptionalAndCalculatesMonthlyIndicatorsOnDedicatedPage() {
         assumeFalse("Customer variant has its own customer navigation.", isCustomerVariant())
 
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
-            onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            onView(withContentDescription("Abrir secção Gestão económica")).perform(scrollTo(), click())
 
+            onView(withText("Gestão económica")).check(matches(isDisplayed()))
             onView(withText("Gestor económico · opcional"))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
