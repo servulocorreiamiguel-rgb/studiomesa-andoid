@@ -1146,10 +1146,73 @@ object SupabaseApi {
         val encoded = URLEncoder.encode(restaurantId, "UTF-8")
         return JSONArray(call(
             "GET",
-            "/rest/v1/restaurant_reservations?select=id,guest_name,guest_phone,party_size,reservation_at,duration_minutes,table_number,status,notes,created_at&restaurant_id=eq.$encoded&order=reservation_at.asc&limit=200",
+            "/rest/v1/restaurant_reservations?select=id,guest_name,guest_phone,party_size,reservation_at,duration_minutes,table_number,status,notes,created_at,loyalty_member_id&restaurant_id=eq.$encoded&order=reservation_at.asc&limit=200",
             null,
             token
         ))
+    }
+
+    fun listCustomerReservations(token: String, memberId: String): JSONArray {
+        require(runCatching { java.util.UUID.fromString(memberId).toString() == memberId }.getOrDefault(false)) {
+            "O cartão de cliente não é válido."
+        }
+        val encoded = URLEncoder.encode(memberId, "UTF-8")
+        return JSONArray(call(
+            "GET",
+            "/rest/v1/restaurant_reservations?select=id,guest_name,guest_phone,party_size,reservation_at,duration_minutes,table_number,status,notes,created_at,loyalty_member_id&loyalty_member_id=eq.$encoded&order=reservation_at.asc&limit=100",
+            null,
+            token
+        ))
+    }
+
+    fun createCustomerReservationRequest(
+        token: String,
+        requestId: String,
+        memberId: String,
+        partySize: Int,
+        reservationAt: String,
+        guestPhone: String,
+        notes: String
+    ): String {
+        require(runCatching { java.util.UUID.fromString(requestId).toString() == requestId }.getOrDefault(false)) {
+            "O identificador da tentativa de reserva não é válido."
+        }
+        require(runCatching { java.util.UUID.fromString(memberId).toString() == memberId }.getOrDefault(false)) {
+            "O cartão de cliente não é válido."
+        }
+        require(partySize in 1..60) { "O número de pessoas deve estar entre 1 e 60." }
+        require(guestPhone.length <= 40 && notes.length <= 1000) {
+            "O contacto ou as notas excedem o limite permitido."
+        }
+        val body = JSONObject()
+            .put("p_client_request_id", requestId)
+            .put("p_member_id", memberId)
+            .put("p_party_size", partySize)
+            .put("p_reservation_at", reservationAt)
+            .put("p_guest_phone", guestPhone.trim())
+            .put("p_notes", notes.trim())
+        val reservationId = call(
+            "POST",
+            "/rest/v1/rpc/create_customer_reservation_request",
+            body,
+            token
+        ).trim().trim('"')
+        require(runCatching { java.util.UUID.fromString(reservationId).toString() == reservationId }.getOrDefault(false)) {
+            "O servidor não confirmou o pedido de reserva. Atualiza a lista antes de voltar a tentar."
+        }
+        return reservationId
+    }
+
+    fun cancelMyCustomerReservation(token: String, reservationId: String) {
+        require(runCatching { java.util.UUID.fromString(reservationId).toString() == reservationId }.getOrDefault(false)) {
+            "O pedido de reserva não é válido."
+        }
+        call(
+            "POST",
+            "/rest/v1/rpc/cancel_my_customer_reservation",
+            JSONObject().put("p_reservation_id", reservationId),
+            token
+        )
     }
 
     fun createReservation(
