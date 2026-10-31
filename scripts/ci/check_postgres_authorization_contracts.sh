@@ -325,6 +325,29 @@ then
   exit 1
 fi
 
+expect_order_detail_update_rejected() {
+  local assignment="$1"
+  local description="$2"
+  if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+UPDATE public.restaurant_orders
+SET $assignment
+WHERE id = '$ORDER_SNAPSHOT_ID'::uuid;
+COMMIT;
+SQL
+  then
+    echo "ERROR: a client unexpectedly changed $description on an existing order." >&2
+    exit 1
+  fi
+}
+
+expect_order_detail_update_rejected "table_number = 9" "the table number"
+expect_order_detail_update_rejected "quantity = 9" "the quantity"
+expect_order_detail_update_rejected "service_course = 'Sobremesa'" "the service course"
+expect_order_detail_update_rejected "notes = 'Nota falsificada'" "the kitchen notes"
+
 if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
@@ -366,8 +389,42 @@ then
   exit 1
 fi
 
-psql --no-psqlrc --set ON_ERROR_STOP=1 -c \
-  "DELETE FROM public.menu_items WHERE id = '$ORDER_MENU_ITEM_A'::uuid AND restaurant_id = '$RESTAURANT_A'::uuid;" >/dev/null
+# An open ticket must retain its menu UUID until it is prepared or cancelled.
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+DELETE FROM public.menu_items
+WHERE id = '$ORDER_MENU_ITEM_A'::uuid
+  AND restaurant_id = '$RESTAURANT_A'::uuid;
+COMMIT;
+SQL
+then
+  echo "ERROR: a menu item linked to an open order was deleted." >&2
+  exit 1
+fi
+open_order_link_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT menu_item_id = '$ORDER_MENU_ITEM_A'::uuid FROM public.restaurant_orders WHERE id = '$ORDER_SNAPSHOT_ID'::uuid;")"
+if [ "$open_order_link_ok" != "t" ]; then
+  echo "ERROR: a failed deletion detached the open order from its menu item." >&2
+  exit 1
+fi
+
+# Once an order has entered preparation, its stock transition has already been
+# transactionally handled; the historical ticket may safely outlive the menu row.
+psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+UPDATE public.restaurant_orders SET status = 'Em preparação'
+WHERE id = '$ORDER_SNAPSHOT_ID'::uuid;
+UPDATE public.restaurant_orders SET status = 'Pronto'
+WHERE id = '$ORDER_SNAPSHOT_ID'::uuid;
+DELETE FROM public.menu_items
+WHERE id = '$ORDER_MENU_ITEM_A'::uuid
+  AND restaurant_id = '$RESTAURANT_A'::uuid;
+COMMIT;
+SQL
 deleted_menu_snapshot_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
   -c "SELECT menu_item_id IS NULL
          AND item_name = 'Bitoque original'
@@ -378,7 +435,7 @@ if [ "$deleted_menu_snapshot_ok" != "t" ]; then
   echo "ERROR: deleting a menu row did not preserve the order's historical snapshots." >&2
   exit 1
 fi
-echo "PASS: new orders require an active menu UUID; server-owned snapshots override forged values, archived/cross-restaurant menu items are rejected, and historical values survive menu edits/deletes."
+echo "PASS: new orders require an active menu UUID; order details/snapshots are immutable; open orders prevent menu deletion; historical values survive menu edits and deletion after preparation."
 
 PRICE_MENU_ITEM_A="99999999-1111-4111-8111-111111111111"
 PRICE_MENU_ITEM_B="99999999-2222-4222-8222-222222222222"
