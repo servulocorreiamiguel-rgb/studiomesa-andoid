@@ -107,6 +107,10 @@ class MainActivity : Activity() {
     // Reservation contacts are kept in memory only, not persisted to SharedPreferences.
     private var reservationCache = JSONArray()
     private var reservationsLoaded = false
+    private var customerReservationsCache = JSONArray()
+    private var customerReservationsLoaded = false
+    private var customerReservationsLoading = false
+    private var customerReservationsLoadError = false
 
     private val flavor = BuildConfig.FLAVOR.lowercase(Locale.ROOT)
     private val isCustomerApp = flavor.contains("cliente")
@@ -427,7 +431,7 @@ class MainActivity : Activity() {
             setPadding(dp(20), dp(13), dp(14), dp(7))
             letterSpacing = 0.08f
         }, LinearLayout.LayoutParams(-1, -2))
-        listOf("Cartão", "Carta", "Conta").forEach { page ->
+        listOf("Cartão", "Carta", "Reservas", "Conta").forEach { page ->
             val selected = activeCustomerPage == page
             val item = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -1975,6 +1979,10 @@ class MainActivity : Activity() {
         try {
             val member = SupabaseApi.getMyLoyaltyMembership(token)
             if (member == null) {
+                customerReservationsCache = JSONArray()
+                customerReservationsLoaded = false
+                customerReservationsLoading = false
+                customerReservationsLoadError = false
                 backendPrefs.edit()
                     .remove("member_id")
                     .remove("member_code")
@@ -1986,6 +1994,10 @@ class MainActivity : Activity() {
             }
 
             val memberId = member.optString("member_id")
+            customerReservationsCache = JSONArray()
+            customerReservationsLoaded = false
+            customerReservationsLoading = false
+            customerReservationsLoadError = false
             val menu = if (memberId.isNotBlank()) SupabaseApi.listCustomerMenu(token, memberId) else org.json.JSONArray()
             backendPrefs.edit()
                 .putString("member_id", memberId)
@@ -3033,6 +3045,10 @@ class MainActivity : Activity() {
                             val token = backendToken()
                             val member = SupabaseApi.joinRestaurant(token, code, name)
                             val memberId = member.optString("member_id")
+                            customerReservationsCache = JSONArray()
+                            customerReservationsLoaded = false
+                            customerReservationsLoading = false
+                            customerReservationsLoadError = false
                             val menu = SupabaseApi.listCustomerMenu(token, memberId)
                             backendPrefs.edit().putString("member_id", memberId)
                                 .putString("member_code", member.optString("member_code"))
@@ -3068,8 +3084,315 @@ class MainActivity : Activity() {
         }) { renderCustomerApp() }
     }
 
+    private fun refreshCustomerReservations() {
+        val memberId = backendMemberId()
+        if (backendToken().isBlank() || memberId.isBlank()) return
+        if (customerReservationsLoading) return
+        customerReservationsLoading = true
+        customerReservationsLoadError = false
+        runBackend(
+            task = {
+                SupabaseApi.listCustomerReservations(backendToken(), memberId).toString()
+            },
+            onError = { error ->
+                customerReservationsLoading = false
+                customerReservationsLoadError = true
+                if (activeCustomerPage == "Reservas") renderCustomerApp()
+                AlertDialog.Builder(this)
+                    .setTitle("Não foi possível atualizar as reservas")
+                    .setMessage(friendlyBackendError(error.message))
+                    .setPositiveButton("OK", null)
+                    .show()
+            },
+            onSuccess = { raw ->
+                customerReservationsCache = JSONArray(raw)
+                customerReservationsLoaded = true
+                customerReservationsLoading = false
+                customerReservationsLoadError = false
+                if (activeCustomerPage == "Reservas") renderCustomerApp()
+            }
+        )
+    }
+
+    private fun renderCustomerReservationsPage(container: LinearLayout) {
+        container.addView(label("A MINHA CONTA", 10f, true, forestSoft))
+        addGap(container, 4)
+        container.addView(label("As minhas reservas.", 25f, true, forestDeep))
+        addGap(container, 4)
+        container.addView(label(
+            "Pede uma mesa ao restaurante e acompanha a confirmação nesta página.",
+            13.5f, false, muted
+        ))
+        addGap(container, 12)
+
+        when {
+            backendToken().isBlank() -> {
+                container.addView(emptyCard("Inicia sessão para pedir uma reserva e acompanhar o estado."), cardParams())
+                container.addView(primaryButton("Criar conta / iniciar sessão") {
+                    showAuthChooser { renderCustomerApp() }
+                }, LinearLayout.LayoutParams(-1, dp(48)))
+                return
+            }
+            backendMemberId().isBlank() -> {
+                container.addView(emptyCard("Associa primeiro a tua conta ao restaurante com o código de adesão fornecido pela equipa."), cardParams())
+                container.addView(primaryButton("Associar ao restaurante") {
+                    showCustomerJoinDialog()
+                }, LinearLayout.LayoutParams(-1, dp(48)))
+                return
+            }
+        }
+
+        val requestCard = makeCard(14, copperPale)
+        requestCard.addView(label("PEDIDO DE RESERVA", 9.5f, true, forestSoft))
+        addGap(requestCard, 4)
+        requestCard.addView(label(
+            "O pedido fica pendente até o restaurante o confirmar. Enviar o pedido não garante uma mesa.",
+            12f, false, ink
+        ))
+        addGap(requestCard, 8)
+        requestCard.addView(primaryButton("Pedir uma reserva") {
+            showCustomerReservationDialog()
+        }, LinearLayout.LayoutParams(-1, dp(46)))
+        container.addView(requestCard, cardParams())
+
+        container.addView(secondaryButton("Atualizar as minhas reservas") {
+            refreshCustomerReservations()
+        }, LinearLayout.LayoutParams(-1, dp(44)).apply { setMargins(0, 0, 0, dp(10)) })
+
+        if (!customerReservationsLoaded) {
+            container.addView(
+                emptyCard(
+                    if (customerReservationsLoading) "A carregar os teus pedidos de reserva…"
+                    else if (customerReservationsLoadError) "Não foi possível carregar os pedidos. Tenta atualizar novamente."
+                    else "A preparar a lista de reservas."
+                ),
+                cardParams()
+            )
+            if (!customerReservationsLoading) refreshCustomerReservations()
+            return
+        }
+
+        if (customerReservationsCache.length() == 0) {
+            container.addView(emptyCard("Ainda não tens pedidos de reserva. Quando enviares um, o estado aparece aqui."), cardParams())
+            return
+        }
+
+        val displayFormat = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "PT"))
+        val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US)
+        for (index in 0 until customerReservationsCache.length()) {
+            val reservation = customerReservationsCache.optJSONObject(index) ?: continue
+            val reservationId = reservation.optString("id")
+            val status = reservation.optString("status", "Pendente")
+            val rawDate = reservation.optString("reservation_at")
+            val parsedDate = runCatching { isoFormat.parse(rawDate) }.getOrNull()
+            val dateText = parsedDate?.let { displayFormat.format(it) }
+                ?: rawDate.replace('T', ' ').take(16)
+            val card = makeCard(15)
+            val top = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            top.addView(label(dateText, 14f, true, forestDeep), LinearLayout.LayoutParams(0, -2, 1f))
+            val statusColor = when (status) {
+                "Confirmada" -> green
+                "Cancelada", "Concluída", "Não compareceu" -> muted
+                else -> forestSoft
+            }
+            val statusBackground = when (status) {
+                "Confirmada" -> paleGreen
+                "Cancelada", "Concluída", "Não compareceu" -> paper
+                else -> copperPale
+            }
+            top.addView(label(status, 10f, true, statusColor).apply {
+                setPadding(dp(8), dp(6), dp(8), dp(6))
+                background = rounded(statusBackground, 12)
+            })
+            card.addView(top)
+            addGap(card, 7)
+            card.addView(label(
+                "${reservation.optInt("party_size", 1)} pessoa(s) · Duração prevista: 90 minutos",
+                12f, false, muted
+            ))
+            val phone = reservation.optString("guest_phone").trim()
+            if (phone.isNotBlank()) card.addView(label("Contacto: $phone", 11.5f, false, muted))
+            val notes = reservation.optString("notes").trim()
+            if (notes.isNotBlank()) card.addView(label("Notas: $notes", 11.5f, false, muted))
+            addGap(card, 5)
+            card.addView(label(
+                when (status) {
+                    "Confirmada" -> "O restaurante confirmou o teu pedido."
+                    "Cancelada" -> "Este pedido foi cancelado."
+                    "Concluída" -> "Esta reserva foi concluída."
+                    "Não compareceu" -> "O restaurante registou a falta."
+                    else -> "À espera de confirmação do restaurante."
+                },
+                11.5f, false, muted
+            ))
+            if (status in setOf("Pendente", "Confirmada") &&
+                parsedDate != null && parsedDate.time > System.currentTimeMillis()
+            ) {
+                addGap(card, 8)
+                card.addView(secondaryButton("Cancelar pedido") {
+                    confirmCancelCustomerReservation(reservationId, dateText)
+                }, LinearLayout.LayoutParams(-1, dp(44)))
+            }
+            container.addView(card, cardParams())
+        }
+    }
+
+    private fun showCustomerReservationDialog() {
+        if (backendToken().isBlank() || backendMemberId().isBlank()) {
+            showCustomerJoinDialog()
+            return
+        }
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(10))
+        }
+        val party = inputField("Número de pessoas", InputType.TYPE_CLASS_NUMBER).apply { setText("2") }
+        val phone = inputField("Contacto telefónico (opcional)", InputType.TYPE_CLASS_PHONE)
+        val date = inputField("dd/MM/aaaa HH:mm", InputType.TYPE_CLASS_DATETIME).apply {
+            val defaultDate = Date(System.currentTimeMillis() + 24L * 60L * 60L * 1000L)
+            setText(SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "PT")).format(defaultDate))
+        }
+        val notes = multilineInputField("Notas ou pedidos especiais (opcional)")
+        form.addView(label("Reserva em nome de " + store.getCustomerProfileName(), 11f, true, forestSoft))
+        addGap(form, 5)
+        listOf(
+            "Número de pessoas" to party,
+            "Contacto telefónico" to phone,
+            "Data e hora (dd/MM/aaaa HH:mm)" to date,
+            "Notas" to notes
+        ).forEach { (caption, field) ->
+            form.addView(label(caption, 11f, true, forestSoft))
+            form.addView(field, if (field === notes) multilineFieldParams() else fieldParams())
+            addGap(form, 4)
+        }
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Pedir uma reserva")
+            .setMessage("O restaurante receberá o pedido como pendente. A confirmação é feita pela equipa.")
+            .setView(ScrollView(this).apply { addView(form) })
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Enviar pedido", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val partySize = party.text.toString().trim().toIntOrNull()
+                val parsedDate = runCatching {
+                    SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "PT")).apply { isLenient = false }
+                        .parse(date.text.toString().trim())
+                }.getOrNull()
+                val normalizedPhone = phone.text.toString().trim()
+                val normalizedNotes = notes.text.toString().trim()
+                when {
+                    partySize == null || partySize !in 1..60 ->
+                        party.error = "Usa um número entre 1 e 60."
+                    parsedDate == null || parsedDate.time <= System.currentTimeMillis() ->
+                        date.error = "Indica uma data futura válida."
+                    parsedDate.time > System.currentTimeMillis() + 365L * 24L * 60L * 60L * 1000L ->
+                        date.error = "A reserva não pode estar a mais de um ano de distância."
+                    normalizedPhone.length > 40 ->
+                        phone.error = "Máximo de 40 caracteres."
+                    normalizedNotes.length > 1000 ->
+                        notes.error = "Máximo de 1000 caracteres."
+                    else -> {
+                        val reservationAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).format(parsedDate)
+                        val memberId = backendMemberId()
+                        val requestAccountId = backendPrefs.getString("user_id", "").orEmpty()
+                        val signature = JSONObject()
+                            .put("member_id", memberId)
+                            .put("party_size", partySize)
+                            .put("reservation_at", reservationAt)
+                            .put("guest_phone", normalizedPhone)
+                            .put("notes", normalizedNotes)
+                            .put("duration_minutes", 90)
+                            .toString()
+                        val requestOperation = "customer_reservation_create"
+                        val requestId = try {
+                            pendingRequestIds.getOrCreate(requestOperation, requestAccountId, signature)
+                        } catch (_: Exception) {
+                            notes.error = "Não foi possível guardar a referência segura. Tenta novamente."
+                            return@setOnClickListener
+                        }
+                        runBackend(
+                            task = {
+                                val token = backendToken()
+                                val createdId = SupabaseApi.createCustomerReservationRequest(
+                                    token, requestId, memberId, partySize, reservationAt, normalizedPhone, normalizedNotes
+                                )
+                                val latest = SupabaseApi.listCustomerReservations(token, memberId)
+                                JSONObject()
+                                    .put("reservation_id", createdId)
+                                    .put("reservations", latest)
+                                    .toString()
+                            },
+                            onError = { error ->
+                                AlertDialog.Builder(this)
+                                    .setTitle("Pedido não confirmado")
+                                    .setMessage(
+                                        friendlyBackendError(error.message) +
+                                            "
+
+Os dados continuam no formulário. Podes repetir o envio com segurança."
+                                    )
+                                    .setPositiveButton("OK", null)
+                                    .show()
+                            },
+                            onSuccess = { raw ->
+                                val result = JSONObject(raw)
+                                customerReservationsCache = result.optJSONArray("reservations") ?: JSONArray()
+                                customerReservationsLoaded = true
+                                customerReservationsLoading = false
+                                customerReservationsLoadError = false
+                                dialog.dismiss()
+                                pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
+                                Toast.makeText(this, "Pedido enviado. Aguarda a confirmação do restaurante.", Toast.LENGTH_LONG).show()
+                                renderCustomerApp()
+                            }
+                        )
+                    }
+                }
+            }
+        }
+        dialog.show()
+        dialog.window?.setLayout(-1, dp(620))
+    }
+
+    private fun confirmCancelCustomerReservation(reservationId: String, dateText: String) {
+        if (reservationId.isBlank()) return
+        AlertDialog.Builder(this)
+            .setTitle("Cancelar pedido de reserva?")
+            .setMessage("Queres cancelar o pedido de $dateText? O restaurante deixará de o tratar como ativo.")
+            .setNegativeButton("Manter pedido", null)
+            .setPositiveButton("Cancelar pedido") { _, _ ->
+                runBackend(
+                    task = {
+                        SupabaseApi.cancelMyCustomerReservation(backendToken(), reservationId)
+                        SupabaseApi.listCustomerReservations(backendToken(), backendMemberId()).toString()
+                    },
+                    onError = { error ->
+                        AlertDialog.Builder(this)
+                            .setTitle("Não foi possível cancelar")
+                            .setMessage(friendlyBackendError(error.message))
+                            .setPositiveButton("OK", null)
+                            .show()
+                    },
+                    onSuccess = { raw ->
+                        customerReservationsCache = JSONArray(raw)
+                        customerReservationsLoaded = true
+                        customerReservationsLoading = false
+                        customerReservationsLoadError = false
+                        Toast.makeText(this, "Pedido de reserva cancelado.", Toast.LENGTH_SHORT).show()
+                        renderCustomerApp()
+                    }
+                )
+            }
+            .show()
+    }
+
     private fun renderCustomerApp() {
-        if (activeCustomerPage !in setOf("Cartão", "Carta", "Conta")) activeCustomerPage = "Cartão"
+        if (activeCustomerPage !in setOf("Cartão", "Carta", "Reservas", "Conta")) activeCustomerPage = "Cartão"
         appRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(paper)
@@ -3154,6 +3477,7 @@ class MainActivity : Activity() {
         when (activeCustomerPage) {
             "Cartão" -> renderCustomerLoyaltyPage(content)
             "Carta" -> renderCustomerMenuPage(content)
+            "Reservas" -> renderCustomerReservationsPage(content)
             "Conta" -> renderCustomerAccountPage(content)
         }
         scroll.addView(content)
@@ -3166,7 +3490,7 @@ class MainActivity : Activity() {
             setBackgroundColor(white)
             elevation = dp(6).toFloat()
         }
-        listOf("Cartão", "Carta", "Conta").forEach { page ->
+        listOf("Cartão", "Carta", "Reservas", "Conta").forEach { page ->
             val selected = activeCustomerPage == page
             val item = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
@@ -3424,6 +3748,10 @@ class MainActivity : Activity() {
                     .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
                     .remove("customer_menu_json")
                     .apply()
+                customerReservationsCache = JSONArray()
+                customerReservationsLoaded = false
+                customerReservationsLoading = false
+                customerReservationsLoadError = false
                 activeCustomerPage = "Cartão"
                 renderCustomerApp()
             }, LinearLayout.LayoutParams(-1, dp(48)))
@@ -3672,6 +4000,9 @@ class MainActivity : Activity() {
             val tableNo = reservation.optInt("table_number", 0)
             card.addView(label("$dateText · ${reservation.optInt("party_size", 1)} pessoa(s)", 12.5f, true, ink))
             card.addView(label(if (tableNo > 0) "Mesa $tableNo · ${reservation.optInt("duration_minutes", 90)} min" else "Mesa por atribuir · ${reservation.optInt("duration_minutes", 90)} min", 11.5f, false, muted))
+            if (reservation.optString("loyalty_member_id").isNotBlank()) {
+                card.addView(label("Pedido enviado pela aplicação de cliente", 10.5f, true, forestSoft))
+            }
             val phone = reservation.optString("guest_phone").trim()
             if (phone.isNotBlank()) card.addView(label("Contacto: $phone", 11.5f, false, muted))
             val notes = reservation.optString("notes").trim()
