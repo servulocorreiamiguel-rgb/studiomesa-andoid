@@ -366,3 +366,13 @@ Estes casos são executados na ronda final. A app do restaurante pode atribuir o
 | RTA-08 | Reatribuição | Alterar a mesa de uma reserva ativa para outra mesa livre e adequada | A nova mesa é atribuída se capacidade e horário forem válidos |
 | RTA-09 | Privacidade | Ler ou bloquear uma reserva de outro restaurante sem pertencer à equipa | Não é devolvida nem bloqueada por uma operação não autorizada |
 
+## Filtros e resumo da agenda de reservas
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| RFL-01 | Resumo | Abrir a agenda com reservas pendentes, confirmadas e terminadas | Os três indicadores mostram as contagens correspondentes aos dados recebidos |
+| RFL-02 | Pendentes | Selecionar o filtro Pendentes | Só aparecem reservas com estado Pendente |
+| RFL-03 | Confirmadas | Selecionar o filtro Confirmadas | Só aparecem reservas Confirmadas |
+| RFL-04 | Hoje | Selecionar o filtro Hoje perto da mudança de dia e nas datas de mudança de horário de verão | Mostra as reservas do dia local correto sem perder ou duplicar reservas na fronteira do dia |
+| RFL-05 | Sem resultados | Escolher um filtro sem reservas correspondentes | Mostra uma mensagem específica e mantém disponível a escolha de outro filtro |
+| RFL-06 | Atualização | Atualizar a agenda depois de confirmar, cancelar ou atribuir mesa | Os indicadores e a lista correspondem à resposta mais recente do servidor |
