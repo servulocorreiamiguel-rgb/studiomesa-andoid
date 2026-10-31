@@ -93,6 +93,7 @@ class MainActivity : Activity() {
     private val economicInputs = mutableMapOf<String, String>()
     private var economicReportText = ""
     private var scenarioReportText = ""
+    private var breakEvenTargetReportText = ""
     private var recipeReportText = ""
     private var reorderReportText = ""
     private var wasteReportText = ""
@@ -5164,6 +5165,7 @@ class MainActivity : Activity() {
         economicInputs.clear()
         economicReportText = ""
         scenarioReportText = ""
+        breakEvenTargetReportText = ""
         recipeReportText = ""
         reorderReportText = ""
         wasteReportText = ""
@@ -5358,8 +5360,64 @@ class MainActivity : Activity() {
         container.addView(scenario, cardParams())
 
         addGap(container, 6)
+        val breakEvenTarget = makeCard(15)
+        breakEvenTarget.addView(label("3 · Meta diária para atingir o equilíbrio", 17f, true, forestDeep))
+        addGap(breakEvenTarget, 4)
+        breakEvenTarget.addView(label(
+            "Transforma o ponto de equilíbrio mensal estimado numa referência diária e num número aproximado de clientes. Usa vendas e ticket médio sem IVA.",
+            11.5f, false, muted
+        ))
+        addGap(breakEvenTarget, 7)
+        economicNumberField(breakEvenTarget, "breakEvenDays", "Dias de abertura no mês", "Ex.: 26", "26")
+        economicNumberField(breakEvenTarget, "breakEvenTicket", "Ticket médio líquido por cliente (€)", "Ex.: 22,50")
+        breakEvenTarget.addView(primaryButton("Calcular meta diária") {
+            breakEvenTargetReportText = try {
+                val daysValue = economicRequiredAmount("breakEvenDays", "dias de abertura")
+                val days = try {
+                    daysValue.intValueExact()
+                } catch (_: ArithmeticException) {
+                    throw IllegalArgumentException("Os dias de abertura têm de ser um número inteiro.")
+                }
+                require(days in 1..31) { "Indica entre 1 e 31 dias de abertura." }
+                val averageTicket = economicRequiredAmount("breakEvenTicket", "ticket médio líquido")
+                require(averageTicket > BigDecimal.ZERO) { "O ticket médio tem de ser superior a zero." }
+                val baseline = RestaurantEconomicManager.analyze(EconomicManagerInput(
+                    monthlyNetSales = economicRequiredAmount("sales", "vendas mensais"),
+                    foodCostConsumedIncludingWaste = economicRequiredAmount("food", "custo alimentar"),
+                    monthlyPayroll = economicRequiredAmount("payroll", "custo de pessoal"),
+                    otherFixedCosts = economicRequiredAmount("fixed", "custos fixos"),
+                    otherVariableCosts = economicRequiredAmount("variable", "outros custos variáveis"),
+                    targetFoodCostPercent = economicRequiredAmount("foodTarget", "objetivo de custo alimentar")
+                ))
+                val breakEven = baseline.estimatedBreakEvenSales
+                    ?: throw IllegalArgumentException("Com esta estrutura de custos não é possível calcular um ponto de equilíbrio positivo.")
+                val dailySalesTarget = breakEven.divide(
+                    BigDecimal.valueOf(days.toLong()), 2, java.math.RoundingMode.CEILING
+                )
+                val customersPerDay = dailySalesTarget.divide(
+                    averageTicket, 0, java.math.RoundingMode.CEILING
+                )
+                buildString {
+                    append("Ponto de equilíbrio mensal: ").append(money(breakEven)).append('\n')
+                    append("Meta de vendas por dia aberto: ").append(money(dailySalesTarget)).append('\n')
+                    append("Clientes estimados por dia: ").append(customersPerDay.toPlainString()).append('\n')
+                    append("Ticket médio líquido utilizado: ").append(money(averageTicket)).append('\n')
+                    append("É uma média matemática. Não considera dias da semana, sazonalidade, capacidade, reservas ou variação do consumo.")
+                }.trim()
+            } catch (e: IllegalArgumentException) {
+                "Não foi possível calcular a meta: ${e.message ?: "confirma os valores introduzidos"}"
+            }
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(46)))
+        if (breakEvenTargetReportText.isNotBlank()) {
+            addGap(breakEvenTarget, 8)
+            breakEvenTarget.addView(label(breakEvenTargetReportText, 12f, false, ink))
+        }
+        container.addView(breakEvenTarget, cardParams())
+
+        addGap(container, 6)
         val recipe = makeCard(15)
-        recipe.addView(label("3 · Custo por receita e dose", 17f, true, forestDeep))
+        recipe.addView(label("4 · Custo por receita e dose", 17f, true, forestDeep))
         addGap(recipe, 4)
         recipe.addView(label("Cada linha: ingrediente | quantidade por dose | preço por unidade | desperdício %. As unidades têm de ser compatíveis, por exemplo kg e €/kg.", 11.5f, false, muted))
         economicTextField(recipe, "recipe", "Farinha | 0,2 | 2,50 | 5\nMolho | 0,1 | 4,00 | 0")
@@ -5388,7 +5446,7 @@ class MainActivity : Activity() {
 
         addGap(container, 6)
         val reorder = makeCard(15)
-        reorder.addView(label("4 · Reposição de stock", 17f, true, forestDeep))
+        reorder.addView(label("5 · Reposição de stock", 17f, true, forestDeep))
         addGap(reorder, 4)
         reorder.addView(label("Formato: stock atual | consumo médio/dia | prazo do fornecedor em dias | dias de segurança. Só calcula uma quantidade; não faz encomendas.", 11.5f, false, muted))
         economicTextField(reorder, "reorder", "Ex.: 5 | 3 | 4 | 2")
@@ -5415,7 +5473,7 @@ class MainActivity : Activity() {
 
         addGap(container, 6)
         economicLogCard(
-            container, "5 · Registo de desperdício por artigo", 
+            container, "6 · Registo de desperdício por artigo", 
             "Formato: artigo | quantidade desperdiçada | custo por unidade | motivo. Regista apenas quantidades e custos compatíveis.",
             "wasteLog", "Frango | 2 | 6,50 | Validade\nSopa | 1 | 4,00 | Produção",
             "Calcular custo do desperdício", wasteReportText,
@@ -5435,7 +5493,7 @@ class MainActivity : Activity() {
 
         addGap(container, 6)
         economicLogCard(
-            container, "6 · Comparar preços de fornecedores",
+            container, "7 · Comparar preços de fornecedores",
             "Formato: artigo | fornecedor | unidade | quantidade na embalagem | preço da embalagem. Compara apenas a mesma unidade (por exemplo, €/kg).",
             "supplierQuotes", "Tomate | Fornecedor A | kg | 10 | 16,00\nTomate | Fornecedor B | kg | 5 | 7,50",
             "Comparar custo por unidade", supplierReportText,
@@ -5460,7 +5518,7 @@ class MainActivity : Activity() {
 
         addGap(container, 6)
         economicLogCard(
-            container, "7 · Orçamento versus valor real",
+            container, "8 · Orçamento versus valor real",
             "Formato: categoria | orçamento do período | valor real. Usa o mesmo período. Uma diferença positiva não é automaticamente boa nem má.",
             "budgetComparison", "Vendas | 15000 | 14200\nPessoal | 5200 | 5300\nRenda | 1800 | 1800",
             "Comparar orçamento e realizado", budgetReportText,
@@ -5482,7 +5540,7 @@ class MainActivity : Activity() {
 
         addGap(container, 6)
         economicLogCard(
-            container, "8 · Consumo teórico versus real",
+            container, "9 · Consumo teórico versus real",
             "Formato: artigo | consumo teórico | consumo real | custo por unidade. Quantidades e unidade de custo têm de coincidir e referir-se ao mesmo período.",
             "usageVariance", "Frango | 20 | 23 | 6,50\nQueijo | 5 | 4 | 8,00",
             "Analisar diferenças de consumo", usageReportText,
@@ -5506,7 +5564,7 @@ class MainActivity : Activity() {
 
         addGap(container, 6)
         economicLogCard(
-            container, "9 · Custo de horas de equipa",
+            container, "10 · Custo de horas de equipa",
             "Formato: horas previstas | custo total por hora com encargos | vendas esperadas | objetivo de custo de pessoal %. É um cenário de custos, não um horário nem recomendação laboral.",
             "labourPlan", "120 | 12,50 | 8000 | 25",
             "Calcular custo de pessoal", labourReportText,
