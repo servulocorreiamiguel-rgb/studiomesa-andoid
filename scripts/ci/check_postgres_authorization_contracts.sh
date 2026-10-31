@@ -414,7 +414,7 @@ fi
 # Preparing, completing or cancelling a ticket does not make the linked
 # menu row disposable: closed tickets can be reopened, so the stable UUID must
 # remain available. The product UI archives items instead of deleting them.
-psql --psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
+psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
 UPDATE public.restaurant_orders SET status = 'Em preparação'
