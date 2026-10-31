@@ -112,6 +112,7 @@ class MainActivity : Activity() {
     private var customerReservationsLoaded = false
     private var customerReservationsLoading = false
     private var customerReservationsLoadError = false
+    private var selectedCustomerReservationFilter = "Todas"
 
     private val flavor = BuildConfig.FLAVOR.lowercase(Locale.ROOT)
     private val isCustomerApp = flavor.contains("cliente")
@@ -3178,15 +3179,55 @@ class MainActivity : Activity() {
             return
         }
 
-        if (customerReservationsCache.length() == 0) {
+        val allCustomerReservations = (0 until customerReservationsCache.length())
+            .mapNotNull { customerReservationsCache.optJSONObject(it) }
+        if (allCustomerReservations.isEmpty()) {
             container.addView(emptyCard("Ainda não tens pedidos de reserva. Quando enviares um, o estado aparece aqui."), cardParams())
+            return
+        }
+
+        val activeCount = allCustomerReservations.count {
+            it.optString("status") in setOf("Pendente", "Confirmada")
+        }
+        val historyCount = allCustomerReservations.size - activeCount
+        val customerFilters = listOf("Todas", "Ativas", "Histórico")
+        container.addView(label(
+            "$activeCount reserva(s) ativa(s) · $historyCount no histórico",
+            11f, true, forestSoft
+        ))
+        addGap(container, 7)
+        container.addView(secondaryButton("Mostrar: $selectedCustomerReservationFilter  ▾") {
+            AlertDialog.Builder(this)
+                .setTitle("Filtrar as minhas reservas")
+                .setItems(customerFilters.toTypedArray()) { _, selected ->
+                    selectedCustomerReservationFilter = customerFilters[selected]
+                    renderCustomerApp()
+                }
+                .show()
+        }, LinearLayout.LayoutParams(-1, dp(44)))
+        addGap(container, 10)
+
+        val filteredCustomerReservations = when (selectedCustomerReservationFilter) {
+            "Ativas" -> allCustomerReservations.filter { it.optString("status") in setOf("Pendente", "Confirmada") }
+            "Histórico" -> allCustomerReservations.filter { it.optString("status") !in setOf("Pendente", "Confirmada") }
+            else -> allCustomerReservations
+        }
+        if (filteredCustomerReservations.isEmpty()) {
+            container.addView(
+                emptyCard(
+                    if (selectedCustomerReservationFilter == "Ativas")
+                        "Não tens reservas ativas."
+                    else
+                        "Ainda não há reservas no histórico."
+                ),
+                cardParams()
+            )
             return
         }
 
         val displayFormat = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "PT"))
         val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US)
-        for (index in 0 until customerReservationsCache.length()) {
-            val reservation = customerReservationsCache.optJSONObject(index) ?: continue
+        filteredCustomerReservations.forEach { reservation ->
             val reservationId = reservation.optString("id")
             val status = reservation.optString("status", "Pendente")
             val rawDate = reservation.optString("reservation_at")
