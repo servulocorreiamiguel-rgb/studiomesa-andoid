@@ -3190,6 +3190,12 @@ class MainActivity : Activity() {
         loyalty.addView(label("Código de cliente", 11f, false, copperPale))
         addGap(loyalty, 3)
         loyalty.addView(label(code, 20f, true, white))
+        addGap(loyalty, 8)
+        loyalty.addView(primaryButton("Copiar código do cartão") {
+            val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("Código de cliente StudioMesa", code))
+            Toast.makeText(this, "Código de cliente copiado.", Toast.LENGTH_SHORT).show()
+        }, LinearLayout.LayoutParams(-1, dp(42)))
         addGap(loyalty, 9)
         loyalty.addView(label(if (backendMemberId().isBlank()) "Este é um cartão demonstrativo. Cria sessão e associa-o ao código do restaurante para consultar os pontos reais." else "Saldo obtido do sistema de fidelização partilhado. A atribuição de pontos é controlada pelo restaurante.", 12f, false, Color.rgb(229, 235, 228)))
         container.addView(loyalty, cardParams())
