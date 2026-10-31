@@ -17,6 +17,9 @@ import org.hamcrest.Matchers.containsString
 import org.hamcrest.Matchers.not
 import org.junit.Assume.assumeFalse
 import org.junit.Assume.assumeTrue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -24,6 +27,38 @@ import org.junit.Test
  * Keep these independent of production credentials: all actions use fresh local demo data.
  */
 class MainActivitySmokeTest {
+    @Test
+    fun encryptedEconomicStorePersistsOnlyWithinTheSameOwnerScope() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val store = SecureEconomicStore(context)
+        val ownerScope = "restaurant:ci-${java.util.UUID.randomUUID()}:owner-a"
+        val otherOwnerScope = "restaurant:ci-${java.util.UUID.randomUUID()}:owner-b"
+        val values = mapOf(
+            "sales" to "12000,50",
+            "food" to "3600",
+            "scenarioSalesChange" to "-5",
+            "supplierQuotes" to "Tomate | Fornecedor A | kg | 10 | 16,00",
+            "not-an-approved-key" to "must-not-be-stored"
+        )
+
+        try {
+            store.save(ownerScope, values)
+
+            assertTrue(store.hasSaved(ownerScope))
+            assertFalse(store.hasSaved(otherOwnerScope))
+            assertEquals(
+                values.filterKeys { it in setOf("sales", "food", "scenarioSalesChange", "supplierQuotes") },
+                store.load(ownerScope)
+            )
+            assertTrue(store.load(otherOwnerScope).isEmpty())
+            assertTrue(store.delete(ownerScope))
+            assertFalse(store.hasSaved(ownerScope))
+        } finally {
+            store.delete(ownerScope)
+            store.delete(otherOwnerScope)
+        }
+    }
+
     private fun isCustomerVariant(): Boolean =
         InstrumentationRegistry.getInstrumentation()
             .targetContext.packageName.endsWith(".cliente")
