@@ -46,6 +46,7 @@ class MainActivity : Activity() {
     private lateinit var appRoot: LinearLayout
     private var activePage = "Início"
     private var activeCustomerPage = "Cartão"
+    private var customerMenuSearch = ""
 
     private var activityResumed = false
     private var kitchenAutoRefreshScheduled = false
@@ -3198,15 +3199,63 @@ class MainActivity : Activity() {
     }
 
     private fun renderCustomerMenuPage(container: LinearLayout) {
+        data class CustomerMenuDisplayItem(
+            val category: String,
+            val name: String,
+            val description: String,
+            val allergens: String,
+            val price: Double
+        )
+
         container.addView(label("CARTA DO RESTAURANTE", 10.5f, true, forestSoft))
         addGap(container, 4)
         container.addView(label("Descobre o menu.", 25f, true, forestDeep))
         addGap(container, 4)
-        container.addView(label("Consulta os artigos, descrições e preços disponíveis.", 13.5f, false, muted))
+        container.addView(label("Pesquisa pratos, categorias ou informação sobre alergénios.", 13.5f, false, muted))
         addGap(container, 12)
-        val menuCard = makeCard(16)
+
         val isLinkedToRestaurant = backendMemberId().isNotBlank()
-        menuCard.addView(label(if (isLinkedToRestaurant) "Carta do restaurante" else "Carta de demonstração", 10f, true, forestSoft))
+        val menuItems = mutableListOf<CustomerMenuDisplayItem>()
+        if (isLinkedToRestaurant) {
+            val publishedMenu = savedRemoteArray("customer_menu_json")
+            for (index in 0 until publishedMenu.length()) {
+                val item = publishedMenu.optJSONObject(index) ?: continue
+                menuItems.add(
+                    CustomerMenuDisplayItem(
+                        category = item.optString("category", "Prato principal"),
+                        name = item.optString("name"),
+                        description = item.optString("description").trim(),
+                        allergens = item.optString("allergens").trim(),
+                        price = item.optDouble("price", 0.0)
+                    )
+                )
+            }
+        } else {
+            store.getMenu().forEach { item ->
+                menuItems.add(
+                    CustomerMenuDisplayItem(
+                        category = item.category,
+                        name = item.name,
+                        description = item.description,
+                        allergens = item.allergens,
+                        price = item.price
+                    )
+                )
+            }
+        }
+
+        val query = normalizeCustomerMenuSearch(customerMenuSearch)
+        val filteredItems = if (query.isBlank()) menuItems else menuItems.filter { item ->
+            normalizeCustomerMenuSearch(
+                "${item.category} ${item.name} ${item.description} ${item.allergens}"
+            ).contains(query)
+        }
+
+        val menuCard = makeCard(16)
+        menuCard.addView(label(
+            if (isLinkedToRestaurant) "Carta do restaurante" else "Carta de demonstração",
+            10f, true, forestSoft
+        ))
         addGap(menuCard, 7)
         menuCard.addView(label(if (isLinkedToRestaurant) "A nossa carta" else "Exemplos de artigos", 18f, true, forestDeep))
         addGap(menuCard, 4)
@@ -3216,46 +3265,50 @@ class MainActivity : Activity() {
             12f, false, muted
         ))
         addGap(menuCard, 10)
-        if (isLinkedToRestaurant) {
-            val publishedMenu = savedRemoteArray("customer_menu_json")
-            if (publishedMenu.length() == 0) {
-                menuCard.addView(label("O restaurante ainda não publicou artigos ativos na carta.", 13f, false, muted))
-            } else {
-                for (index in 0 until publishedMenu.length()) {
-                    val item = publishedMenu.optJSONObject(index) ?: continue
-                    val itemCard = makeCard(12, paper)
-                    itemCard.addView(label(item.optString("category", "Prato principal"), 10f, true, forestSoft))
-                    addGap(itemCard, 3)
-                    itemCard.addView(label(item.optString("name"), 16f, true, forestDeep))
-                    val description = item.optString("description").trim()
-                    if (description.isNotBlank()) {
-                        addGap(itemCard, 5)
-                        itemCard.addView(label(description, 12.5f, false, ink))
-                    }
-                    addGap(itemCard, 7)
-                    val priceRow = LinearLayout(this).apply {
-                        orientation = LinearLayout.HORIZONTAL
-                        gravity = Gravity.CENTER_VERTICAL
-                    }
-                    priceRow.addView(label("Preço", 11f, false, muted), LinearLayout.LayoutParams(0, -2, 1f))
-                    priceRow.addView(label(money(item.optDouble("price", 0.0)), 15f, true, forest))
-                    itemCard.addView(priceRow)
-                    addGap(itemCard, 5)
-                    val allergens = item.optString("allergens").trim()
-                    itemCard.addView(label(
-                        if (allergens.isBlank()) "Alergénios não indicados. Confirma com a equipa antes de encomendar."
-                        else "Alergénios declarados: $allergens. Confirma com a equipa se tiveres uma alergia.",
-                        11f, false, muted
-                    ))
-                    menuCard.addView(itemCard, cardParams())
-                }
-            }
-        } else {
-            store.getMenu().forEach { item ->
+
+        val searchPanel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        val searchField = inputField("Pesquisar nome, categoria ou alergénios", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+        searchField.setText(customerMenuSearch)
+        searchPanel.addView(searchField, fieldParams())
+        val searchActions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        searchActions.addView(
+            primaryButton("Pesquisar") {
+                customerMenuSearch = searchField.text.toString().trim()
+                renderCustomerApp()
+            },
+            LinearLayout.LayoutParams(0, dp(44), 1f).apply { setMargins(0, 0, dp(5), 0) }
+        )
+        searchActions.addView(
+            secondaryButton("Limpar") {
+                customerMenuSearch = ""
+                renderCustomerApp()
+            },
+            LinearLayout.LayoutParams(0, dp(44), 1f).apply { setMargins(dp(5), 0, 0, 0) }
+        )
+        searchPanel.addView(searchActions)
+        menuCard.addView(searchPanel, cardParams())
+        menuCard.addView(label(
+            if (query.isBlank()) "${menuItems.size} artigo(s) disponíveis"
+            else "${filteredItems.size} resultado(s) para «${customerMenuSearch.trim()}»",
+            11f, true, forestSoft
+        ))
+        addGap(menuCard, 9)
+
+        when {
+            menuItems.isEmpty() && isLinkedToRestaurant ->
+                menuCard.addView(emptyCard("O restaurante ainda não publicou artigos ativos na carta."), cardParams())
+            filteredItems.isEmpty() ->
+                menuCard.addView(emptyCard("Não encontrámos artigos com esse termo. Experimenta outro nome ou categoria."), cardParams())
+            else -> filteredItems.forEach { item ->
                 val itemCard = makeCard(12, paper)
                 itemCard.addView(label(item.category, 10f, true, forestSoft))
                 addGap(itemCard, 3)
-                itemCard.addView(label(item.name, 15f, true, forestDeep))
+                itemCard.addView(label(item.name, 16f, true, forestDeep))
                 if (item.description.isNotBlank()) {
                     addGap(itemCard, 5)
                     itemCard.addView(label(item.description, 12.5f, false, ink))
@@ -3271,7 +3324,7 @@ class MainActivity : Activity() {
                 addGap(itemCard, 5)
                 itemCard.addView(label(
                     if (item.allergens.isBlank()) "Alergénios não indicados. Confirma com a equipa antes de encomendar."
-                    else "Alergénios declarados: " + item.allergens + ". Confirma com a equipa se tiveres uma alergia.",
+                    else "Alergénios declarados: ${item.allergens}. Confirma com a equipa se tiveres uma alergia.",
                     11f, false, muted
                 ))
                 menuCard.addView(itemCard, cardParams())
@@ -3279,6 +3332,12 @@ class MainActivity : Activity() {
         }
         container.addView(menuCard, cardParams())
     }
+
+    private fun normalizeCustomerMenuSearch(value: String): String =
+        java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{M}+"), "")
+            .lowercase(Locale.ROOT)
+            .trim()
 
     private fun renderCustomerAccountPage(container: LinearLayout) {
         container.addView(label("A tua conta", 25f, true, forestDeep))
