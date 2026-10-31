@@ -258,6 +258,9 @@ class MainActivity : Activity() {
 
     private fun availablePages(): List<String> {
         val pages = mutableListOf("Início", "Mesas", "Pedidos", "Cozinha", "Carta", "Pontos", "Assistente", "Conta")
+        if (!hasRemoteRestaurant() || backendPrefs.getString("restaurant_role", "").orEmpty() == "owner") {
+            pages.add("Gestão económica")
+        }
         if (hasCalculator) {
             pages.add("Reservas")
             pages.add("Preço Justo")
@@ -320,7 +323,7 @@ class MainActivity : Activity() {
         }
         val pageGroups = listOf(
             "OPERAÇÃO" to listOf("Início", "Mesas", "Pedidos", "Cozinha"),
-            "GESTÃO DO RESTAURANTE" to listOf("Carta", "Pontos", "Reservas", "Preço Justo", "Stock", "Análise"),
+            "GESTÃO DO RESTAURANTE" to listOf("Carta", "Pontos", "Reservas", "Preço Justo", "Gestão económica", "Stock", "Análise"),
             "ASSISTÊNCIA" to listOf("Assistente"),
             "CONTA" to listOf("Conta")
         )
@@ -481,6 +484,7 @@ class MainActivity : Activity() {
         "Conta" -> "⚙"
         "Reservas" -> "◷"
         "Preço Justo" -> "€"
+        "Gestão económica" -> "∑"
         "Stock" -> "▣"
         "Análise" -> "↗"
         "Assistente" -> "✦"
@@ -675,6 +679,7 @@ class MainActivity : Activity() {
             "Stock" -> renderStock(container)
             "Análise" -> renderAnalysis(container)
             "Assistente" -> renderAssistant(container)
+            "Gestão económica" -> renderEconomicDashboard(container)
             else -> renderHome(container)
         }
     }
@@ -823,7 +828,12 @@ class MainActivity : Activity() {
                 activePage = "Análise"; renderApp()
             }
         }
-        actionCard(container, "IA", "Assistente StudioMesa", "Sugestões de operação e preços com os dados disponíveis.", "ABRIR ASSISTENTE") {
+        if ("Gestão económica" in availablePages()) {
+            actionCard(container, "€", "Gestão económica", "Simula cenários, calcula metas e analisa os custos do restaurante.", "ABRIR GESTOR") {
+                activePage = "Gestão económica"; renderApp()
+            }
+        }
+        actionCard(container, "IA", "Assistente StudioMesa", "Sugestões de operação, engenharia da carta e ideias de conteúdo.", "ABRIR ASSISTENTE") {
             activePage = "Assistente"; renderApp()
         }
 
@@ -4944,6 +4954,20 @@ class MainActivity : Activity() {
             }
         }
 
+    private fun renderEconomicDashboard(container: LinearLayout) {
+        pageIntro(
+            container,
+            "Gestão económica",
+            "Ferramentas privadas para o proprietário analisar custos, preços e equilíbrio financeiro."
+        )
+        addGap(container, 8)
+        renderEconomicManager(container)
+        if (isPremium && (!hasRemoteRestaurant() || backendPrefs.getString("restaurant_role", "").orEmpty() == "owner")) {
+            addGap(container, 9)
+            renderRestaurantPriceAdvisor(container)
+        }
+    }
+
     private fun renderAssistant(container: LinearLayout) {
         val snapshot = assistantSnapshot()
         pageIntro(container, "Assistente StudioMesa", "O teu apoio à gestão do restaurante, numa conversa.")
@@ -5080,12 +5104,19 @@ class MainActivity : Activity() {
         container.addView(composer, cardParams())
 
         addGap(container, 8)
-        sectionHeading(container, "Ferramentas de gestão", "Módulos detalhados para análise económica e controlo do restaurante.")
-        renderEconomicManager(container)
-        if (isPremium) {
-            addGap(container, 9)
-            renderRestaurantPriceAdvisor(container)
-        }
+        val economicLink = makeCard(13, copperPale)
+        economicLink.addView(label("GESTÃO ECONÓMICA", 9.5f, true, forestSoft))
+        addGap(economicLink, 4)
+        economicLink.addView(label(
+            "Abre a área do proprietário para simular cenários, calcular metas e consultar ferramentas financeiras.",
+            12f, false, ink
+        ))
+        addGap(economicLink, 8)
+        economicLink.addView(secondaryButton("Abrir gestão económica") {
+            activePage = "Gestão económica"
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(44)))
+        container.addView(economicLink, cardParams())
 
         addGap(container, 5)
         sectionHeading(container, "Sugestões para rever", "Prioridades estimadas. Confirma os dados e decide antes de alterar qualquer coisa.")
