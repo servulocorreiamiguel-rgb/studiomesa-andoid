@@ -103,9 +103,9 @@ CREATE TRIGGER restaurant_order_snapshot_immutable
   BEFORE INSERT OR UPDATE ON public.restaurant_orders
   FOR EACH ROW EXECUTE FUNCTION private.prepare_restaurant_order();
 
--- Deleting a menu row must not detach an order that is still waiting to enter
--- preparation. Otherwise a client could delete the row and bypass recipe stock
--- consumption by advancing the now-unlinked order.
+-- Menu identity is part of every order's durable history. Even cancelled
+-- or completed tickets can be reopened, so any linked historical order means
+-- the menu item must be archived rather than physically deleted.
 CREATE OR REPLACE FUNCTION private.prevent_menu_item_delete_with_orders()
 RETURNS trigger
 LANGUAGE plpgsql
