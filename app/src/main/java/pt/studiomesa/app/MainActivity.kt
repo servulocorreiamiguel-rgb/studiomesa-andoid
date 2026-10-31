@@ -3337,9 +3337,7 @@ class MainActivity : Activity() {
                                     .setTitle("Pedido não confirmado")
                                     .setMessage(
                                         friendlyBackendError(error.message) +
-                                            "
-
-Os dados continuam no formulário. Podes repetir o envio com segurança."
+                                            "\n\nOs dados continuam no formulário. Podes repetir o envio com segurança."
                                     )
                                     .setPositiveButton("OK", null)
                                     .show()
