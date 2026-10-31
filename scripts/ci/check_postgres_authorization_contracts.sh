@@ -393,7 +393,8 @@ fi
 if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
-SET LOCAL ROLE authenticated;
+-- Use the migration-test database owner for DELETE: authenticated clients
+-- cannot delete menu rows directly, so this isolates the trigger's safeguard.
 DELETE FROM public.menu_items
 WHERE id = '$ORDER_MENU_ITEM_A'::uuid
   AND restaurant_id = '$RESTAURANT_A'::uuid;
@@ -415,7 +416,6 @@ fi
 psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
-SET LOCAL ROLE authenticated;
 UPDATE public.restaurant_orders SET status = 'Em preparação'
 WHERE id = '$ORDER_SNAPSHOT_ID'::uuid;
 UPDATE public.restaurant_orders SET status = 'Pronto'
