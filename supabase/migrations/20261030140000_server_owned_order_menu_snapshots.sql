@@ -126,6 +126,9 @@ BEGIN
 END;
 $function$;
 
+REVOKE ALL ON FUNCTION private.prevent_menu_item_delete_with_open_orders()
+  FROM PUBLIC, anon, authenticated;
+
 DROP TRIGGER IF EXISTS menu_item_delete_requires_no_open_orders ON public.menu_items;
 CREATE TRIGGER menu_item_delete_requires_no_open_orders
   BEFORE DELETE ON public.menu_items
