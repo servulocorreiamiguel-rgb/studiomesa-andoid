@@ -65,6 +65,10 @@ BEGIN
     RAISE EXCEPTION 'Um pedido novo tem de começar no estado Aberto.';
   END IF;
 
+  IF NEW.menu_item_id IS NULL THEN
+    RAISE EXCEPTION 'Um pedido novo tem de estar ligado a um artigo ativo da carta.';
+  END IF;
+
   NEW.created_by := (SELECT auth.uid());
 
   IF NEW.menu_item_id IS NOT NULL THEN
@@ -88,10 +92,6 @@ BEGIN
     NEW.item_name := v_name;
     NEW.amount := v_price;
     NEW.unit_cost_snapshot := NULLIF(v_cost, 0);
-  ELSE
-    -- Manual/legacy lines have no authoritative menu cost; never accept a
-    -- client-supplied value as a real unit-cost snapshot.
-    NEW.unit_cost_snapshot := NULL;
   END IF;
 
   RETURN NEW;
