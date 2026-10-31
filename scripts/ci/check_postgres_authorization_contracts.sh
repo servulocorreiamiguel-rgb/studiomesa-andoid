@@ -1436,18 +1436,24 @@ if [ "$cancelled_movements" != "0" ]; then
   exit 1
 fi
 
-# Legacy/manual tickets without menu_item_id keep the old workflow and never
-# trigger automatic stock consumption.
+# Legacy orders predating the menu UUID remain readable/updatable, but a new
+# authenticated INSERT without a menu item is rejected above. Seed a row as
+# pre-migration data with user triggers temporarily disabled.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+ALTER TABLE public.restaurant_orders DISABLE TRIGGER USER;
+INSERT INTO public.restaurant_orders (
+  id, restaurant_id, table_number, item_name, amount, status, quantity,
+  service_course, notes, created_by, menu_item_id, unit_cost_snapshot
+) VALUES (
+  '$RECIPE_LEGACY_ORDER_ID'::uuid, '$RESTAURANT_A'::uuid, 1, 'Legacy ticket',
+  5.00, 'Aberto', 1, 'Principal', '', '$USER_A'::uuid, NULL, NULL
+);
+ALTER TABLE public.restaurant_orders ENABLE TRIGGER USER;
+SQL
 psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
 SET LOCAL ROLE authenticated;
-INSERT INTO public.restaurant_orders (
-  id, restaurant_id, table_number, item_name, amount, status, quantity, service_course, notes
-) VALUES (
-  '$RECIPE_LEGACY_ORDER_ID'::uuid, '$RESTAURANT_A'::uuid, 1, 'Legacy ticket',
-  5.00, 'Aberto', 1, 'Principal', ''
-);
 UPDATE public.restaurant_orders SET status = 'Em preparação'
 WHERE id = '$RECIPE_LEGACY_ORDER_ID'::uuid;
 COMMIT;
@@ -1457,7 +1463,7 @@ if [ "$legacy_movements" != "0" ]; then
   echo "ERROR: a legacy order without a menu item unexpectedly consumed stock." >&2
   exit 1
 fi
-echo "PASS: insufficient stock rolls back the whole preparation, cancellation before preparation consumes nothing, and legacy orders remain compatible."
+echo "PASS: insufficient stock rolls back the whole preparation; cancellation before preparation consumes nothing; old unlinked orders remain compatible but new unlinked orders are rejected."
 
 # Account-deletion contract tests run only in the disposable PostgreSQL CI database.
 # They never connect to the hosted Supabase project or delete real accounts/data.
