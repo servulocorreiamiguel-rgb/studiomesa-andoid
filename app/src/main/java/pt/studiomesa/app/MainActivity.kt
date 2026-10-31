@@ -79,6 +79,11 @@ class MainActivity : Activity() {
     }
     private var assistantQuestion = ""
     private var assistantAnswer: StudioMesaAssistantAnswer? = null
+    private data class AssistantChatTurn(
+        val question: String,
+        val answer: StudioMesaAssistantAnswer
+    )
+    private val assistantConversation = mutableListOf<AssistantChatTurn>()
     private var selectedAnalysisPeriod = SalesAnalysisPeriod.ALL_TIME
 
     // Owner-controlled economic tools: session-only until persistent authorization is designed.
@@ -262,6 +267,10 @@ class MainActivity : Activity() {
     }
 
     private fun showNavigationDrawer() {
+        if (isCustomerApp) {
+            showCustomerNavigationDrawer()
+            return
+        }
         val dialog = Dialog(this)
         val drawerRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -355,6 +364,95 @@ class MainActivity : Activity() {
         drawerRoot.addView(View(this).apply { setBackgroundColor(line) },
             LinearLayout.LayoutParams(-1, dp(1)))
         drawerRoot.addView(label("StudioMesa · Gestão de sala", 10.5f, false, muted).apply {
+            setPadding(dp(20), dp(12), dp(20), dp(16))
+        }, LinearLayout.LayoutParams(-1, -2))
+
+        dialog.setContentView(drawerRoot)
+        dialog.show()
+        val drawerWidth = minOf(resources.displayMetrics.widthPixels - dp(48), dp(340))
+        dialog.window?.apply {
+            setBackgroundDrawableResource(android.R.color.transparent)
+            setDimAmount(0.42f)
+            setGravity(Gravity.START)
+            setLayout(drawerWidth, -1)
+        }
+    }
+
+    private fun showCustomerNavigationDrawer() {
+        val dialog = Dialog(this)
+        val drawerRoot = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(white)
+        }
+        val drawerHeader = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(20), dp(24), dp(14), dp(22))
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(forestDeep, forest, forestSoft)
+            ).apply { cornerRadius = dp(18).toFloat() }
+        }
+        val titleStack = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        titleStack.addView(label("StudioMesa", 24f, true, white))
+        titleStack.addView(label(displayCustomerRestaurantName(), 14f, true, copperPale).apply {
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        })
+        titleStack.addView(label("ÁREA DE CLIENTE · " + planTitle, 10.5f, false, copperPale))
+        drawerHeader.addView(titleStack, LinearLayout.LayoutParams(0, -2, 1f))
+        drawerHeader.addView(label("×", 27f, false, white).apply {
+            gravity = Gravity.CENTER
+            contentDescription = "Fechar menu"
+            background = rippleBackground(Color.argb(40, 255, 255, 255), 12, Color.argb(70, 255, 255, 255))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { dialog.dismiss() }
+        }, LinearLayout.LayoutParams(dp(48), dp(48)))
+        drawerRoot.addView(drawerHeader, LinearLayout.LayoutParams(-1, -2).apply {
+            setMargins(dp(8), dp(8), dp(8), dp(6))
+        })
+
+        val list = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(8), 0, dp(12))
+        }
+        list.addView(label("A MINHA EXPERIÊNCIA", 10f, true, forestSoft).apply {
+            setPadding(dp(20), dp(13), dp(14), dp(7))
+            letterSpacing = 0.08f
+        }, LinearLayout.LayoutParams(-1, -2))
+        listOf("Cartão", "Carta", "Conta").forEach { page ->
+            val selected = activeCustomerPage == page
+            val item = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(9), dp(3), dp(12), dp(3))
+                background = rippleBackground(if (selected) paleGreen else white, 12)
+                contentDescription = "Abrir secção " + page
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    dialog.dismiss()
+                    activeCustomerPage = page
+                    renderCustomerApp()
+                }
+            }
+            item.addView(TextView(this).apply {
+                text = pageGlyph(page)
+                textSize = 19f
+                gravity = Gravity.CENTER
+                setTextColor(if (selected) forestDeep else forestSoft)
+            }, LinearLayout.LayoutParams(dp(36), -1))
+            item.addView(label(page, 14.5f, selected, if (selected) forestDeep else ink),
+                LinearLayout.LayoutParams(0, -2, 1f))
+            list.addView(item, LinearLayout.LayoutParams(-1, dp(48)).apply {
+                setMargins(dp(10), dp(2), dp(10), dp(2))
+            })
+        }
+        drawerRoot.addView(list, LinearLayout.LayoutParams(-1, 0, 1f))
+        drawerRoot.addView(View(this).apply { setBackgroundColor(line) },
+            LinearLayout.LayoutParams(-1, dp(1)))
+        drawerRoot.addView(label("StudioMesa · Cartão de cliente", 10.5f, false, muted).apply {
             setPadding(dp(20), dp(12), dp(20), dp(16))
         }, LinearLayout.LayoutParams(-1, -2))
 
@@ -2876,12 +2974,53 @@ class MainActivity : Activity() {
                 intArrayOf(forestDeep, forest, forestSoft)
             ).apply { cornerRadius = dp(22).toFloat() }
         }
-        header.addView(label(displayCustomerRestaurantName(), 23f, true, white).apply {
+        val brandRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val menuButton = TextView(this).apply {
+            text = "☰"
+            textSize = 23f
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setTextColor(white)
+            contentDescription = "Abrir menu de navegação"
+            background = rippleBackground(Color.argb(42, 255, 255, 255), 12, Color.argb(70, 255, 255, 255))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { showNavigationDrawer() }
+        }
+        brandRow.addView(menuButton, LinearLayout.LayoutParams(dp(48), dp(48)).apply {
+            setMargins(0, 0, dp(8), 0)
+        })
+        val mark = TextView(this).apply {
+            text = "SM"
+            textSize = 14f
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setTextColor(forestDeep)
+            background = rounded(copper, 14)
+        }
+        brandRow.addView(mark, LinearLayout.LayoutParams(dp(42), dp(42)))
+        val brandText = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(10), 0, dp(4), 0)
+        }
+        brandText.addView(label(displayCustomerRestaurantName(), 20f, true, white).apply {
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
         })
-        addGap(header, 4)
-        header.addView(label("Cartão digital de cliente · " + planTitle, 10.5f, true, copperPale))
+        brandText.addView(label("StudioMesa · Área de cliente", 10f, true, copperPale))
+        brandRow.addView(brandText, LinearLayout.LayoutParams(0, -2, 1f))
+        brandRow.addView(label("CLIENTE", 9f, true, forestDeep).apply {
+            gravity = Gravity.CENTER
+            setPadding(dp(9), dp(8), dp(9), dp(8))
+            background = rounded(copper, 18)
+        })
+        header.addView(brandRow)
+        addGap(header, 10)
+        header.addView(View(this).apply { setBackgroundColor(Color.argb(65, 255, 255, 255)) },
+            LinearLayout.LayoutParams(-1, dp(1)))
         addGap(header, 9)
         header.addView(label("A tua experiência, num só lugar.", 16f, true, white))
         header.addView(label(
@@ -4605,62 +4744,185 @@ class MainActivity : Activity() {
     private fun formatAdvicePercent(value: java.math.BigDecimal): String =
         value.stripTrailingZeros().toPlainString().replace('.', ',')
 
+    private fun sendAssistantMessage(rawQuestion: String) {
+        val question = rawQuestion.trim().take(400)
+        if (question.isBlank()) {
+            Toast.makeText(this, "Escreve uma pergunta primeiro.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val answer = StudioMesaAdvisor.answerQuestion(question, assistantSnapshot())
+        assistantConversation.add(AssistantChatTurn(question, answer))
+        while (assistantConversation.size > 8) assistantConversation.removeAt(0)
+        assistantQuestion = ""
+        assistantAnswer = answer
+        renderApp()
+    }
+
+    private fun sendAssistantBriefing() {
+        val answer = StudioMesaAdvisor.dailyBriefing(assistantSnapshot())
+        assistantConversation.add(AssistantChatTurn("Faz um resumo da operação.", answer))
+        while (assistantConversation.size > 8) assistantConversation.removeAt(0)
+        assistantQuestion = ""
+        assistantAnswer = answer
+        renderApp()
+    }
+
+    private fun assistantPromptButton(title: String, question: String, briefing: Boolean = false): TextView =
+        label(title, 11.5f, true, forest).apply {
+            gravity = Gravity.CENTER
+            setPadding(dp(8), dp(9), dp(8), dp(9))
+            background = rippleBackground(paleGreen, 13)
+            contentDescription = title
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                if (briefing) sendAssistantBriefing() else sendAssistantMessage(question)
+            }
+        }
+
     private fun renderAssistant(container: LinearLayout) {
         val snapshot = assistantSnapshot()
-        pageIntro(container, "Assistente StudioMesa", "Apoio à operação com os dados que já estão disponíveis.")
+        pageIntro(container, "Assistente StudioMesa", "O teu apoio à gestão do restaurante, numa conversa.")
         addGap(container, 8)
 
-        val privacyCard = makeCard(15, forest)
-        privacyCard.addView(label("ASSISTENTE LOCAL · SEM API PAGA", 10f, true, copper))
-        addGap(privacyCard, 5)
-        privacyCard.addView(label(
-            "As análises são calculadas neste dispositivo. As perguntas não são enviadas nem guardadas como histórico. Esta versão usa regras e cálculos locais, não um modelo generativo; não altera registos por ti.",
+        val hero = makeCard(17, forest)
+        val heroRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        heroRow.addView(label("✦", 28f, true, copper), LinearLayout.LayoutParams(dp(42), dp(42)))
+        val heroText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        heroText.addView(label("Assistente StudioMesa", 18f, true, white))
+        heroText.addView(label("Gestão, operação e decisões com dados.", 11.5f, false, copperPale))
+        heroRow.addView(heroText, LinearLayout.LayoutParams(0, -2, 1f))
+        hero.addView(heroRow)
+        addGap(hero, 10)
+        hero.addView(label(
+            "Pergunta em linguagem natural. O assistente analisa os dados disponíveis e indica o que deves confirmar.",
             12.5f, false, white
         ))
-        container.addView(privacyCard, cardParams())
+        container.addView(hero, cardParams())
 
-        addGap(container, 9)
+        val chatPanel = makeCard(13, Color.rgb(242, 244, 239))
+        if (assistantConversation.isEmpty()) {
+            val welcome = makeCard(14, white)
+            welcome.addView(label("STUDIOMESA", 9f, true, forestSoft))
+            addGap(welcome, 5)
+            welcome.addView(label(
+                "Olá! Posso ajudar-te a analisar preços, margens, pedidos, reservas, stock e organização do serviço. Começa por escolher uma sugestão ou escreve a tua pergunta.",
+                13f, false, ink
+            ))
+            chatPanel.addView(welcome, cardParams())
+        } else {
+            val bubbleWidth = maxOf(dp(180), minOf(dp(310), resources.displayMetrics.widthPixels - dp(76)))
+            assistantConversation.forEach { turn ->
+                val userRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.END
+                }
+                val userBubble = makeCard(12, paleGreen)
+                userBubble.addView(label("TU", 9f, true, forestSoft))
+                addGap(userBubble, 4)
+                userBubble.addView(label(turn.question, 13f, false, ink))
+                userRow.addView(userBubble, LinearLayout.LayoutParams(bubbleWidth, -2))
+                chatPanel.addView(userRow, LinearLayout.LayoutParams(-1, -2).apply {
+                    setMargins(0, 0, 0, dp(8))
+                })
+
+                val assistantRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.START
+                }
+                val assistantBubble = makeCard(13, white)
+                assistantBubble.addView(label("✦  ASSISTENTE STUDIOMESA", 9f, true, forestSoft))
+                addGap(assistantBubble, 5)
+                assistantBubble.addView(label(turn.answer.title, 15f, true, forestDeep))
+                addGap(assistantBubble, 5)
+                assistantBubble.addView(label(turn.answer.response, 12.5f, false, ink))
+                assistantActionTarget(turn.answer.actionPage)?.let { target ->
+                    addGap(assistantBubble, 8)
+                    assistantBubble.addView(secondaryButton("Abrir " + target) {
+                        activePage = target
+                        renderApp()
+                    }, LinearLayout.LayoutParams(-1, dp(42)))
+                }
+                assistantRow.addView(assistantBubble, LinearLayout.LayoutParams(bubbleWidth, -2))
+                chatPanel.addView(assistantRow, LinearLayout.LayoutParams(-1, -2).apply {
+                    setMargins(0, 0, 0, dp(10))
+                })
+            }
+        }
+        container.addView(chatPanel, cardParams())
+
+        sectionHeading(container, "Sugestões rápidas", "Toca numa opção para iniciar a conversa.")
+        val quickRowOne = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        quickRowOne.addView(assistantPromptButton("Resumo da operação", "", true),
+            LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(0, 0, dp(5), 0) })
+        quickRowOne.addView(assistantPromptButton("Rever margens", "Quais artigos têm melhor margem e quais têm a margem mais baixa?"),
+            LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(dp(5), 0, 0, 0) })
+        container.addView(quickRowOne, LinearLayout.LayoutParams(-1, -2).apply {
+            setMargins(0, 0, 0, dp(6))
+        })
+        val quickRowTwo = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        quickRowTwo.addView(assistantPromptButton("Stock baixo", "Que artigos de stock estão baixos ou esgotados?"),
+            LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(0, 0, dp(5), 0) })
+        quickRowTwo.addView(assistantPromptButton("Reservas pendentes", "Há reservas pendentes por confirmar?"),
+            LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(dp(5), 0, 0, 0) })
+        container.addView(quickRowTwo, LinearLayout.LayoutParams(-1, -2))
+
+        val composer = makeCard(10, white)
+        val composerRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val questionField = EditText(this).apply {
+            hint = "Escreve a tua pergunta…"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            textSize = 14f
+            setTextColor(ink)
+            setHintTextColor(muted)
+            setPadding(dp(13), dp(10), dp(13), dp(10))
+            background = rounded(paper, 15)
+            minLines = 1
+            maxLines = 3
+            setText(assistantQuestion)
+        }
+        composerRow.addView(questionField, LinearLayout.LayoutParams(0, dp(52), 1f).apply {
+            setMargins(0, 0, dp(8), 0)
+        })
+        val sendButton = TextView(this).apply {
+            text = "↑"
+            textSize = 25f
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setTextColor(forestDeep)
+            background = rippleBackground(copper, 15)
+            contentDescription = "Enviar pergunta ao assistente"
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { sendAssistantMessage(questionField.text.toString()) }
+        }
+        composerRow.addView(sendButton, LinearLayout.LayoutParams(dp(52), dp(52)))
+        composer.addView(composerRow)
+        addGap(composer, 6)
+        composer.addView(label("As respostas são calculadas localmente com regras e dados disponíveis. Não é um modelo generativo e não altera registos por ti.", 10.5f, false, muted))
+        container.addView(composer, cardParams())
+
+        addGap(container, 8)
+        sectionHeading(container, "Ferramentas de gestão", "Módulos detalhados para análise económica e controlo do restaurante.")
         renderEconomicManager(container)
-
         if (isPremium) {
             addGap(container, 9)
             renderRestaurantPriceAdvisor(container)
         }
 
         addGap(container, 5)
-        sectionHeading(container, "Pergunta ao assistente", "Experimenta perguntar sobre custos, preços, pedidos, stock, reservas ou um problema de sincronização.")
-        val questionField = multilineInputField("Ex.: Como posso melhorar o preço dos pratos?")
-        questionField.setText(assistantQuestion)
-        container.addView(questionField, multilineFieldParams())
-        container.addView(primaryButton("Analisar pergunta") {
-            assistantQuestion = questionField.text.toString().trim().take(400)
-            assistantAnswer = StudioMesaAdvisor.answerQuestion(assistantQuestion, snapshot)
-            renderApp()
-        }, LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(container, 5)
-        container.addView(secondaryButton("Gerar resumo da operação") {
-            // Keep the user's question intact; the briefing is a separate action.
-            assistantAnswer = StudioMesaAdvisor.dailyBriefing(assistantSnapshot())
-            renderApp()
-        }, LinearLayout.LayoutParams(-1, dp(46)))
-        addGap(container, 12)
-
-        assistantAnswer?.let { answer ->
-            val answerCard = makeCard(16, copperPale)
-            answerCard.addView(label(answer.title, 17f, true, forestDeep))
-            addGap(answerCard, 7)
-            answerCard.addView(label(answer.response, 12.5f, false, ink))
-            assistantActionTarget(answer.actionPage)?.let { target ->
-                addGap(answerCard, 10)
-                answerCard.addView(secondaryButton("Abrir " + target) {
-                    activePage = target
-                    renderApp()
-                }, LinearLayout.LayoutParams(-1, dp(44)))
-            }
-            container.addView(answerCard, cardParams())
-            addGap(container, 6)
-        }
-
         sectionHeading(container, "Sugestões para rever", "Prioridades estimadas. Confirma os dados e decide antes de alterar qualquer coisa.")
         StudioMesaAdvisor.recommendations(snapshot).forEach { recommendation ->
             val (priorityText, textColor, backColor) = when (recommendation.priority) {
