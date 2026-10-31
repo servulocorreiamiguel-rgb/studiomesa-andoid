@@ -3256,9 +3256,58 @@ class MainActivity : Activity() {
         }
         val party = inputField("Número de pessoas", InputType.TYPE_CLASS_NUMBER).apply { setText("2") }
         val phone = inputField("Contacto telefónico (opcional)", InputType.TYPE_CLASS_PHONE)
-        val date = inputField("dd/MM/aaaa HH:mm", InputType.TYPE_CLASS_DATETIME).apply {
-            val defaultDate = Date(System.currentTimeMillis() + 24L * 60L * 60L * 1000L)
-            setText(SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "PT")).format(defaultDate))
+        val selectedReservationDate = Calendar.getInstance().apply {
+            add(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val dateFormat = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "PT"))
+        val dateButton = TextView(this).apply {
+            text = "Selecionar data e hora  ▾"
+            textSize = 14f
+            setTextColor(ink)
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(13), dp(11), dp(13), dp(11))
+            background = rounded(paper, 12)
+            contentDescription = "Selecionar data e hora da reserva"
+            isClickable = true
+            isFocusable = true
+        }
+        fun refreshSelectedDateLabel() {
+            dateButton.text = dateFormat.format(selectedReservationDate.time) + "  ▾"
+        }
+        refreshSelectedDateLabel()
+        dateButton.setOnClickListener {
+            val maximumDate = Calendar.getInstance().apply { add(Calendar.YEAR, 1) }.timeInMillis
+            val datePicker = android.app.DatePickerDialog(
+                this,
+                { _, year, month, day ->
+                    selectedReservationDate.set(Calendar.YEAR, year)
+                    selectedReservationDate.set(Calendar.MONTH, month)
+                    selectedReservationDate.set(Calendar.DAY_OF_MONTH, day)
+                    android.app.TimePickerDialog(
+                        this,
+                        { _, hour, minute ->
+                            selectedReservationDate.set(Calendar.HOUR_OF_DAY, hour)
+                            selectedReservationDate.set(Calendar.MINUTE, minute)
+                            selectedReservationDate.set(Calendar.SECOND, 0)
+                            selectedReservationDate.set(Calendar.MILLISECOND, 0)
+                            dateButton.error = null
+                            refreshSelectedDateLabel()
+                        },
+                        selectedReservationDate.get(Calendar.HOUR_OF_DAY),
+                        selectedReservationDate.get(Calendar.MINUTE),
+                        true
+                    ).show()
+                },
+                selectedReservationDate.get(Calendar.YEAR),
+                selectedReservationDate.get(Calendar.MONTH),
+                selectedReservationDate.get(Calendar.DAY_OF_MONTH)
+            )
+            datePicker.datePicker.minDate = System.currentTimeMillis()
+            datePicker.datePicker.maxDate = maximumDate
+            datePicker.show()
         }
         val notes = multilineInputField("Notas ou pedidos especiais (opcional)")
         val customerName = store.getCustomerProfileName().ifBlank { "Cartão de cliente" }
@@ -3266,14 +3315,18 @@ class MainActivity : Activity() {
         addGap(form, 5)
         listOf(
             "Número de pessoas" to party,
-            "Contacto telefónico" to phone,
-            "Data e hora (dd/MM/aaaa HH:mm)" to date,
-            "Notas" to notes
+            "Contacto telefónico" to phone
         ).forEach { (caption, field) ->
             form.addView(label(caption, 11f, true, forestSoft))
-            form.addView(field, if (field === notes) multilineFieldParams() else fieldParams())
+            form.addView(field, fieldParams())
             addGap(form, 4)
         }
+        form.addView(label("Data e hora", 11f, true, forestSoft))
+        form.addView(dateButton, fieldParams())
+        addGap(form, 4)
+        form.addView(label("Notas ou pedidos especiais", 11f, true, forestSoft))
+        form.addView(notes, multilineFieldParams())
+        addGap(form, 4)
 
         val dialog = AlertDialog.Builder(this)
             .setTitle("Pedir uma reserva")
@@ -3285,19 +3338,16 @@ class MainActivity : Activity() {
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val partySize = party.text.toString().trim().toIntOrNull()
-                val parsedDate = runCatching {
-                    SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "PT")).apply { isLenient = false }
-                        .parse(date.text.toString().trim())
-                }.getOrNull()
+                val parsedDate = selectedReservationDate.time
                 val normalizedPhone = phone.text.toString().trim()
                 val normalizedNotes = notes.text.toString().trim()
                 when {
                     partySize == null || partySize !in 1..60 ->
                         party.error = "Usa um número entre 1 e 60."
-                    parsedDate == null || parsedDate.time <= System.currentTimeMillis() ->
-                        date.error = "Indica uma data futura válida."
-                    parsedDate.time > System.currentTimeMillis() + 365L * 24L * 60L * 60L * 1000L ->
-                        date.error = "A reserva não pode estar a mais de um ano de distância."
+                    parsedDate.time <= System.currentTimeMillis() ->
+                        dateButton.error = "Indica uma hora futura."
+                    parsedDate.time > Calendar.getInstance().apply { add(Calendar.YEAR, 1) }.timeInMillis ->
+                        dateButton.error = "A reserva não pode estar a mais de um ano de distância."
                     normalizedPhone.length > 40 ->
                         phone.error = "Máximo de 40 caracteres."
                     normalizedNotes.length > 1000 ->
