@@ -267,10 +267,7 @@ INSERT INTO public.restaurant_orders
 VALUES
   ('$ORDER_SNAPSHOT_ID'::uuid, '$RESTAURANT_A'::uuid, 1,
    'Preço e custo forjados pelo cliente', 0.01, 2, 'Principal', '', 'Aberto',
-   '$ORDER_MENU_ITEM_A'::uuid, 0.01),
-  ('$ORDER_LEGACY_ID'::uuid, '$RESTAURANT_A'::uuid, 2,
-   'Pedido antigo sem ID', 7.00, 1, 'Principal', '', 'Aberto',
-   NULL, 4.25);
+   '$ORDER_MENU_ITEM_A'::uuid, -0.01);
 COMMIT;
 SQL
 
@@ -287,11 +284,28 @@ order_snapshot_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_
          AND amount = 13.50
          AND unit_cost_snapshot = 4.25
       FROM public.restaurant_orders WHERE id = '$ORDER_SNAPSHOT_ID'::uuid;")"
-legacy_order_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
-  -c "SELECT menu_item_id IS NULL AND unit_cost_snapshot IS NULL
-      FROM public.restaurant_orders WHERE id = '$ORDER_LEGACY_ID'::uuid;")"
-if [ "$order_snapshot_ok" != "t" ] || [ "$legacy_order_ok" != "t" ]; then
-  echo "ERROR: editing the menu changed an order snapshot or legacy orders were not preserved." >&2
+# A new order without an active menu UUID cannot enter the API,
+# even when the client supplies an apparently complete manual line.
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+INSERT INTO public.restaurant_orders
+  (id, restaurant_id, table_number, item_name, amount, quantity,
+   service_course, notes, status, menu_item_id, unit_cost_snapshot)
+VALUES
+  ('$ORDER_LEGACY_ID'::uuid, '$RESTAURANT_A'::uuid, 2,
+   'Pedido novo sem UUID', 7.00, 1, 'Principal', '', 'Aberto', NULL, 4.25);
+COMMIT;
+SQL
+then
+  echo "ERROR: a new order without a menu item was accepted." >&2
+  exit 1
+fi
+legacy_insert_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*)::text FROM public.restaurant_orders WHERE id = '$ORDER_LEGACY_ID'::uuid;")"
+if [ "$order_snapshot_ok" != "t" ] || [ "$legacy_insert_count" != "0" ]; then
+  echo "ERROR: menu editing changed an order snapshot or unlinked order insertion was not rejected." >&2
   exit 1
 fi
 
@@ -352,28 +366,6 @@ then
   exit 1
 fi
 
-# A manual/legacy order must discard any client-supplied cost, including
-# negative values; NULL means the cost is genuinely unknown.
-psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
-BEGIN;
-SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
-SET LOCAL ROLE authenticated;
-INSERT INTO public.restaurant_orders
-  (id, restaurant_id, table_number, item_name, amount, quantity,
-   service_course, notes, status, menu_item_id, unit_cost_snapshot)
-VALUES
-  ('$ORDER_INVALID_COST_ID'::uuid, '$RESTAURANT_A'::uuid, 1,
-   'Manual order with forged cost', 9.00, 1, 'Principal', '', 'Aberto',
-   NULL, -0.01);
-COMMIT;
-SQL
-manual_forged_cost_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
-  -c "SELECT unit_cost_snapshot IS NULL FROM public.restaurant_orders WHERE id = '$ORDER_INVALID_COST_ID'::uuid;")"
-if [ "$manual_forged_cost_ok" != "t" ]; then
-  echo "ERROR: a client-supplied negative cost was not discarded for a manual order." >&2
-  exit 1
-fi
-
 psql --no-psqlrc --set ON_ERROR_STOP=1 -c \
   "DELETE FROM public.menu_items WHERE id = '$ORDER_MENU_ITEM_A'::uuid AND restaurant_id = '$RESTAURANT_A'::uuid;" >/dev/null
 deleted_menu_snapshot_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
@@ -386,7 +378,7 @@ if [ "$deleted_menu_snapshot_ok" != "t" ]; then
   echo "ERROR: deleting a menu row did not preserve the order's historical snapshots." >&2
   exit 1
 fi
-echo "PASS: order snapshots are server-owned and immutable, archived/cross-restaurant menu items are rejected, legacy orders remain valid, and historical values survive menu edits/deletes."
+echo "PASS: new orders require an active menu UUID; server-owned snapshots override forged values, archived/cross-restaurant menu items are rejected, and historical values survive menu edits/deletes."
 
 PRICE_MENU_ITEM_A="99999999-1111-4111-8111-111111111111"
 PRICE_MENU_ITEM_B="99999999-2222-4222-8222-222222222222"
