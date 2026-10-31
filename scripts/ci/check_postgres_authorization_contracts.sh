@@ -270,7 +270,7 @@ VALUES
    '$ORDER_MENU_ITEM_A'::uuid, 0.01),
   ('$ORDER_LEGACY_ID'::uuid, '$RESTAURANT_A'::uuid, 2,
    'Pedido antigo sem ID', 7.00, 1, 'Principal', '', 'Aberto',
-   NULL, NULL);
+   NULL, 4.25);
 COMMIT;
 SQL
 
@@ -1045,6 +1045,8 @@ RECIPE_LEGACY_ORDER_ID="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee4"
 RECIPE_REVIEW_REQUIRED_ORDER_ID="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee5"
 RECIPE_UNIT_CHANGE_ORDER_ID="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee6"
 RECIPE_DELETE_CHANGE_ORDER_ID="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee7"
+RECIPE_INITIAL_PREPARING_ORDER_ID="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee8"
+RECIPE_UNLINK_ORDER_ID="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee9"
 
 RECIPE_ITEM_C="$(create_inventory_item "$USER_A" "$RESTAURANT_A" "$RECIPE_ITEM_C_REQUEST" "CI Butter A" "5")"
 RECIPE_ITEM_D="$(create_inventory_item "$USER_A" "$RESTAURANT_A" "$RECIPE_ITEM_D_REQUEST" "CI Cream A" "5")"
@@ -1162,6 +1164,66 @@ if [ "$owner_recipe_activated" != "true" ]; then
   echo "ERROR: restaurant owner could not activate a configured recipe." >&2
   exit 1
 fi
+
+# A client cannot skip the Open state, detach a linked order or skip the
+# preparation stage to avoid the automatic recipe-stock trigger.
+if create_recipe_order "$USER_A" "$RECIPE_INITIAL_PREPARING_ORDER_ID" "$PRICE_MENU_ITEM_A" "1" "Em preparação" >/dev/null 2>&1; then
+  echo "ERROR: a new order was accepted directly in preparation." >&2
+  exit 1
+fi
+premature_order_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*)::text FROM public.restaurant_orders WHERE id = '$RECIPE_INITIAL_PREPARING_ORDER_ID'::uuid;")"
+if [ "$premature_order_count" != "0" ]; then
+  echo "ERROR: a rejected initial-preparation order was not rolled back." >&2
+  exit 1
+fi
+
+create_recipe_order "$USER_A" "$RECIPE_UNLINK_ORDER_ID" "$PRICE_MENU_ITEM_A" "1"
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+UPDATE public.restaurant_orders SET menu_item_id = NULL
+WHERE id = '$RECIPE_UNLINK_ORDER_ID'::uuid;
+COMMIT;
+SQL
+then
+  echo "ERROR: a client unexpectedly detached a linked order from its menu item." >&2
+  exit 1
+fi
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+UPDATE public.restaurant_orders
+SET menu_item_id = NULL, status = 'Em preparação'
+WHERE id = '$RECIPE_UNLINK_ORDER_ID'::uuid;
+COMMIT;
+SQL
+then
+  echo "ERROR: a client detached a linked order while advancing it to preparation." >&2
+  exit 1
+fi
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+UPDATE public.restaurant_orders SET status = 'Pronto'
+WHERE id = '$RECIPE_UNLINK_ORDER_ID'::uuid;
+COMMIT;
+SQL
+then
+  echo "ERROR: a client skipped the preparation stage." >&2
+  exit 1
+fi
+recipe_bypass_state="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT status || '|' || menu_item_id::text || '|' || (SELECT count(*)::text FROM public.restaurant_inventory_movements WHERE source_order_id = '$RECIPE_UNLINK_ORDER_ID'::uuid) FROM public.restaurant_orders WHERE id = '$RECIPE_UNLINK_ORDER_ID'::uuid;")"
+if [ "$recipe_bypass_state" != "Aberto|$PRICE_MENU_ITEM_A|0" ]; then
+  echo "ERROR: a rejected order-bypass attempt changed the order or consumed stock." >&2
+  printf 'State: %s\\n' "$recipe_bypass_state" >&2
+  exit 1
+fi
+echo "PASS: new orders must start open; linked menu identity cannot be cleared by clients; invalid stage jumps are rejected."
 
 # An ingredient edit by a staff member invalidates the owner's previous approval;
 # reactivation must be explicit and owner-only.
@@ -1308,6 +1370,24 @@ recipe_movement_cost_a="$(psql --no-psqlrc --quiet --tuples-only --no-align --se
   -c "SELECT unit_cost_at_movement::text FROM public.restaurant_inventory_movements WHERE source_order_id = '$RECIPE_ORDER_ID'::uuid AND item_id = '$ITEM_A'::uuid;")"
 if [ "$recipe_movement_cost_a" != "3.5000" ]; then
   echo "ERROR: recipe consumption did not snapshot the current ingredient purchase cost." >&2
+  exit 1
+fi
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+UPDATE public.restaurant_orders SET quantity = 3
+WHERE id = '$RECIPE_ORDER_ID'::uuid;
+COMMIT;
+SQL
+then
+  echo "ERROR: a client changed order quantity after recipe stock had been consumed." >&2
+  exit 1
+fi
+recipe_quantity_after_rejected_edit="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT quantity::text FROM public.restaurant_orders WHERE id = '$RECIPE_ORDER_ID'::uuid;")"
+if [ "$recipe_quantity_after_rejected_edit" != "2" ]; then
+  echo "ERROR: rejected quantity edit changed the historical number of portions." >&2
   exit 1
 fi
 
