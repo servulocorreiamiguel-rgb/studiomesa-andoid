@@ -292,3 +292,35 @@ Os valores de stock são estimativas ao custo de compra atual e não incluem por
 | ORD-11 | Imutabilidade | Tentar actualizar nome, preço ou custo de um pedido existente via REST | Trigger recusa a alteração; a eliminação do artigo da carta pode apenas desligar o UUID, sem mudar as fotografias |
 
 As migrações `20261030130000_order_menu_item_and_cost_snapshots.sql` e `20261030140000_server_owned_order_menu_snapshots.sql` tem de ser aplicada antes de disponibilizar esta versão Android. Esta fase ainda **não desconta ingredientes**. A ligação de fichas técnicas e o consumo automático só podem avançar depois de revisão das unidades, receitas, transações e testes de concorrência descritos em `RECIPE-INVENTORY-LINK-DESIGN-2026-10-30.md`.
+
+## Revisão final de experiência, painel e gestão económica
+
+Estes casos ficam reservados à ronda final, depois de o design e as funcionalidades estarem fechados. Não são considerados executados por terem sido documentados.
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| UX-01 | Painel | Abrir Início em modo demonstração | Mostra indicadores locais, identifica claramente dados de demonstração e não apresenta uma sincronização inexistente |
+| UX-02 | Sincronização | Atualizar mesas, carta e pedidos com conta de teste | Mostra a hora da última sincronização concluída; não afirma atualização em tempo real |
+| UX-03 | Isolamento | Mudar de conta para um restaurante diferente no mesmo dispositivo | Remove a cache operacional do restaurante anterior antes de apresentar dados do novo |
+| UX-04 | Navegação | Abrir e fechar o menu lateral em todas as variantes de restaurante e cliente | Secções visíveis e selecionadas correspondem ao perfil; nenhuma opção fica cortada num ecrã de telemóvel |
+| CUS-01 | Pesquisa da carta | Pesquisar por nome, categoria e descrição | Apresenta apenas os artigos correspondentes e conserva os preços publicados |
+| CUS-02 | Pesquisa sem acentos | Pesquisar pao para encontrar pão; repetir com maiúsculas/minúsculas | Correspondência sem distinção de acentos ou capitalização |
+| CUS-03 | Alergénios | Pesquisar um alergénio declarado e consultar o texto de segurança | Mostra artigos correspondentes; continua a instruir o cliente a confirmar com a equipa |
+| CUS-04 | Sem resultados | Pesquisar texto inexistente e depois limpar | Mostra estado vazio claro; Limpar repõe a carta completa |
+| CUS-05 | Fidelização | Copiar o código de cliente a partir do cartão | Copia exatamente o código apresentado, sem alterar pontos ou associação |
+| ECON-11 | Simulador | Base: vendas 10 000 €, alimentação 3 000 €, pessoal 2 500 €, fixos 2 000 €, variáveis 500 €; simular vendas -10%, alimentação +5%, pessoal 0%, variáveis 0% | Resultado base e cenário são apresentados, com diferença de resultado claramente identificada; nenhum registo é alterado |
+| ECON-12 | Simulador / limites | Introduzir variações abaixo de -100%, acima de 300%, texto ou mais de duas casas decimais | Rejeição controlada com indicação do campo; sem resultados parciais ou alterações |
+| ECON-13 | Simulador / zero | Reduzir vendas exatamente 100% | Rejeitado porque não há vendas positivas para calcular rácios e ponto de equilíbrio |
+| ECON-14 | Meta diária | Introduzir ponto de equilíbrio válido, 26 dias e ticket médio líquido de 20 € | Apresenta vendas diárias necessárias e arredonda clientes por dia para cima |
+| ECON-15 | Meta diária / limites | Introduzir 0, 32 ou 2,5 dias; ticket médio zero/negativo | Rejeita os valores e explica os limites |
+| ECON-16 | Permissões | Abrir Gestão económica com funcionário autenticado | A secção não é apresentada no menu e o acesso direto é recusado pela interface; o servidor continua a ser a autoridade para operações financeiras |
+| ECON-17 | Cópia cifrada | Proprietário guarda valores, fecha/reabre a aplicação e carrega a cópia no mesmo dispositivo/conta/restaurante | Recupera apenas os campos permitidos; relatórios são recalculados, não são tratados como dados guardados |
+| ECON-18 | Isolamento da cópia | Tentar carregar a cópia com outro utilizador ou outro restaurante | Não devolve os valores de outra conta/restaurante |
+| ECON-19 | Integridade | Alterar bytes do ficheiro cifrado ou usar uma cópia truncada | A autenticação AES-GCM falha de forma controlada; não apresenta valores corrompidos |
+| ECON-20 | Eliminação | Apagar a cópia cifrada no ecrã de confirmação | O ficheiro da conta/restaurante é removido; os dados do servidor não são alterados |
+| ECON-21 | Privacidade | Inspecionar armazenamento e configuração de backup Android | O identificador de conta não aparece no nome do ficheiro, os valores não estão em texto simples e o ficheiro está em noBackupFilesDir |
+| ECON-22 | Demonstração | Ativar o gestor em modo de demonstração | A cópia persistente não é oferecida; os valores continuam apenas na sessão |
+| UX-05 | Separação funcional | Abrir Assistente e Gestão económica através do menu e do painel | Conversa, recomendações e engenharia da carta ficam separadas dos formulários e ferramentas financeiras |
+| UX-06 | Regressão de planos | Abrir as cinco variantes e confirmar a navegação conforme o plano e tipo de aplicação | Cliente só vê Cartão, Carta e Conta; versões de restaurante mostram as suas secções permitidas |
+
+A aprovação final exige CI completa nas cinco variantes, testes instrumentados nos emuladores Android 8 e 16, e validação manual em dispositivos reais. Os fluxos financeiros e a cópia cifrada devem usar contas e valores fictícios.
