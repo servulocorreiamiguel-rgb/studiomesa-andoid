@@ -337,6 +337,7 @@ jobs:
               OR to_regprocedure('public.create_restaurant_reservation_idempotent(uuid,uuid,text,text,integer,timestamp with time zone,integer,integer,text)') IS NULL
               OR to_regprocedure('public.create_customer_reservation_request(uuid,uuid,integer,timestamp with time zone,text,text)') IS NULL
               OR to_regprocedure('public.cancel_my_customer_reservation(uuid)') IS NULL
+              OR to_regprocedure('public.assign_restaurant_reservation_table(uuid,integer)') IS NULL
               OR to_regprocedure('public.adjust_inventory_stock_idempotent(uuid,uuid,numeric,text)') IS NULL
               OR to_regprocedure('public.save_restaurant_recipe_ingredient(uuid,uuid,uuid,numeric,numeric)') IS NULL
               OR to_regprocedure('public.remove_restaurant_recipe_ingredient(uuid,uuid)') IS NULL
