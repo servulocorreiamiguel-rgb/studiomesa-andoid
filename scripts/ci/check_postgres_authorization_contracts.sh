@@ -1157,6 +1157,13 @@ if [ "$CUSTOMER_RESERVATION_AFTER_ASSIGNMENT" != "$CUSTOMER_RESERVATION_A" ]; th
   echo "ERROR: customer retry after staff assigned a table did not return the original reservation." >&2
   exit 1
 fi
+psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 -c \
+  "UPDATE public.loyalty_members SET display_name = 'CI Customer A renamed' WHERE id = '$MEMBER_A'::uuid;" >/dev/null
+CUSTOMER_RESERVATION_AFTER_RENAME="$(create_customer_reservation_request "$USER_E" "$CUSTOMER_RESERVATION_REQUEST" "$MEMBER_A" 3 "$CUSTOMER_RESERVATION_AT" "910000000" "Customer app CI request")"
+if [ "$CUSTOMER_RESERVATION_AFTER_RENAME" != "$CUSTOMER_RESERVATION_A" ]; then
+  echo "ERROR: customer retry after a membership-name change did not return the original reservation." >&2
+  exit 1
+fi
 
 CUSTOMER_RESERVATION_SECOND_REQUEST="dddddddd-dddd-4ddd-8ddd-dddddddddddd"
 CUSTOMER_RESERVATION_SECOND="$(create_customer_reservation_request "$USER_E" "$CUSTOMER_RESERVATION_SECOND_REQUEST" "$MEMBER_A" 3 "$CUSTOMER_RESERVATION_AT" "" "Second CI request")"
