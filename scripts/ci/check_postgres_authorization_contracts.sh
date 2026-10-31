@@ -1164,6 +1164,12 @@ if [ "$CUSTOMER_RESERVATION_AFTER_RENAME" != "$CUSTOMER_RESERVATION_A" ]; then
   echo "ERROR: customer retry after a membership-name change did not return the original reservation." >&2
   exit 1
 fi
+customer_reservation_name_snapshot_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT guest_name = 'CI Customer A' FROM public.restaurant_reservations WHERE id = '$CUSTOMER_RESERVATION_A'::uuid;")"
+if [ "$customer_reservation_name_snapshot_ok" != "t" ]; then
+  echo "ERROR: a later loyalty-card name change rewrote the historical reservation name." >&2
+  exit 1
+fi
 
 CUSTOMER_RESERVATION_SECOND_REQUEST="dddddddd-dddd-4ddd-8ddd-dddddddddddd"
 CUSTOMER_RESERVATION_SECOND="$(create_customer_reservation_request "$USER_E" "$CUSTOMER_RESERVATION_SECOND_REQUEST" "$MEMBER_A" 3 "$CUSTOMER_RESERVATION_AT" "" "Second CI request")"
