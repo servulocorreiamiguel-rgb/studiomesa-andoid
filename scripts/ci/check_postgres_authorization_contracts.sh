@@ -1152,6 +1152,11 @@ if [ "$assigned_customer_table" != "t" ]; then
   echo "ERROR: restaurant owner could not assign a suitable table to the customer request." >&2
   exit 1
 fi
+CUSTOMER_RESERVATION_AFTER_ASSIGNMENT="$(create_customer_reservation_request "$USER_E" "$CUSTOMER_RESERVATION_REQUEST" "$MEMBER_A" 3 "$CUSTOMER_RESERVATION_AT" "910000000" "Customer app CI request")"
+if [ "$CUSTOMER_RESERVATION_AFTER_ASSIGNMENT" != "$CUSTOMER_RESERVATION_A" ]; then
+  echo "ERROR: customer retry after staff assigned a table did not return the original reservation." >&2
+  exit 1
+fi
 
 CUSTOMER_RESERVATION_SECOND_REQUEST="dddddddd-dddd-4ddd-8ddd-dddddddddddd"
 CUSTOMER_RESERVATION_SECOND="$(create_customer_reservation_request "$USER_E" "$CUSTOMER_RESERVATION_SECOND_REQUEST" "$MEMBER_A" 3 "$CUSTOMER_RESERVATION_AT" "" "Second CI request")"
