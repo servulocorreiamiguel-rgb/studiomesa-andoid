@@ -141,13 +141,12 @@ internal class SecureEconomicStore(context: Context) {
 
     private fun writeAtomically(file: File, bytes: ByteArray) {
         val atomicFile = AtomicFile(file)
-        var stream: java.io.FileOutputStream? = null
+        val stream = atomicFile.startWrite()
         try {
-            stream = atomicFile.startWrite()
             stream.write(bytes)
             atomicFile.finishWrite(stream)
         } catch (error: Exception) {
-            stream?.let { atomicFile.failWrite(it) }
+            atomicFile.failWrite(stream)
             throw IllegalStateException("Não foi possível guardar a cópia económica cifrada.", error)
         }
     }
