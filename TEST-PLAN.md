@@ -386,3 +386,6 @@ Estes casos são executados na ronda final. A app do restaurante pode atribuir o
 | ID | Categoria | Ação / dados | Resultado esperado |
 |---|---|---|---|
 | CRES-20 | Plano / navegação | Abrir a aplicação de cliente nos pacotes Essencial, Profissional e Premium | Essencial não apresenta Reservas; Profissional e Premium apresentam a área de pedidos de reserva, em linha com a disponibilidade da gestão no restaurante |
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| CRES-21 | Histórico do cliente | Consultar várias reservas pendentes, confirmadas, canceladas e concluídas; alternar entre Todas, Ativas e Histórico | Os contadores e filtros mostram apenas o grupo selecionado; a mudança de conta repõe o filtro e não mantém dados da conta anterior |
