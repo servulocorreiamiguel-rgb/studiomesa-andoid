@@ -383,3 +383,6 @@ Estes casos são executados na ronda final. A app do restaurante pode atribuir o
 | CRES-18 | Data/hora / limites | Tentar escolher dia passado ou mais de um ano no futuro; escolher hoje com uma hora já passada | O calendário limita os dias disponíveis e a validação final impede uma hora passada |
 | CRES-19 | Fuso horário | Selecionar data/hora local e consultar a reserva no cliente e na agenda do restaurante | A mesma hora é apresentada no fuso local dos dispositivos, sem deslocamento indevido no formato ISO |
 
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| CRES-20 | Plano / navegação | Abrir a aplicação de cliente nos pacotes Essencial, Profissional e Premium | Essencial não apresenta Reservas; Profissional e Premium apresentam a área de pedidos de reserva, em linha com a disponibilidade da gestão no restaurante |
