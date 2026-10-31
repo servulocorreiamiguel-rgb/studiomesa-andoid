@@ -92,7 +92,6 @@ BEGIN
        AND v_existing.party_size = p_party_size
        AND v_existing.reservation_at = p_reservation_at
        AND v_existing.duration_minutes = 90
-       AND v_existing.table_number IS NULL
        AND v_existing.notes = v_notes THEN
       RETURN v_existing.id;
     END IF;
@@ -127,7 +126,6 @@ BEGIN
        AND v_existing.party_size = p_party_size
        AND v_existing.reservation_at = p_reservation_at
        AND v_existing.duration_minutes = 90
-       AND v_existing.table_number IS NULL
        AND v_existing.notes = v_notes THEN
       RETURN v_existing.id;
     END IF;
