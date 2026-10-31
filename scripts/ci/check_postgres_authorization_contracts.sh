@@ -203,6 +203,20 @@ COMMIT;
 SQL
 }
 
+create_customer_reservation_request() {
+  local user_id="$1" request_id="$2" member_id="$3" party_size="$4" reservation_at="$5" phone="$6" notes="$7"
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT public.create_customer_reservation_request(
+  '$request_id'::uuid, '$member_id'::uuid, '$party_size'::integer,
+  '$reservation_at'::timestamptz, '$phone', '$notes'
+);
+COMMIT;
+SQL
+}
+
 RESTAURANT_A="$(create_restaurant "$USER_A" "CI Restaurant A" "SMOKEAA001")"
 RESTAURANT_B="$(create_restaurant "$USER_B" "CI Restaurant B" "SMOKEBB001")"
 test -n "$RESTAURANT_A"
@@ -1045,6 +1059,90 @@ if [ "$reservation_status_ok" != "t" ]; then
   exit 1
 fi
 echo "PASS: reservation status changes are idempotent and cross-restaurant updates are rejected."
+
+# Customer-originated reservations are private to the linked loyalty member.
+# The restaurant team can see the same row through its existing staff-read policy.
+CUSTOMER_RESERVATION_REQUEST="eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+CUSTOMER_RESERVATION_FOREIGN_REQUEST="f1f1f1f1-f1f1-41f1-81f1-f1f1f1f1f1f1"
+CUSTOMER_RESERVATION_AT="$(date -u -d '+45 days' '+%Y-%m-%d %H:%M:%S+00:00')"
+CUSTOMER_RESERVATION_A="$(create_customer_reservation_request "$USER_E" "$CUSTOMER_RESERVATION_REQUEST" "$MEMBER_A" 3 "$CUSTOMER_RESERVATION_AT" "910000000" "Customer app CI request")"
+CUSTOMER_RESERVATION_RETRY="$(create_customer_reservation_request "$USER_E" "$CUSTOMER_RESERVATION_REQUEST" "$MEMBER_A" 3 "$CUSTOMER_RESERVATION_AT" "910000000" "Customer app CI request")"
+if [ -z "$CUSTOMER_RESERVATION_A" ] || [ "$CUSTOMER_RESERVATION_A" != "$CUSTOMER_RESERVATION_RETRY" ]; then
+  echo "ERROR: repeating the same customer reservation did not return the original request." >&2
+  exit 1
+fi
+customer_reservation_row_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*) = 1 FROM public.restaurant_reservations WHERE id = '$CUSTOMER_RESERVATION_A'::uuid AND restaurant_id = '$RESTAURANT_A'::uuid AND loyalty_member_id = '$MEMBER_A'::uuid AND created_by = '$USER_E'::uuid AND status = 'Pendente' AND table_number IS NULL AND duration_minutes = 90;")"
+if [ "$customer_reservation_row_ok" != "t" ]; then
+  echo "ERROR: customer reservation was not linked to the member as a pending, unassigned request." >&2
+  exit 1
+fi
+
+if create_customer_reservation_request "$USER_E" "$CUSTOMER_RESERVATION_FOREIGN_REQUEST" "$MEMBER_B" 2 "$CUSTOMER_RESERVATION_AT" "" "" >/dev/null 2>&1; then
+  echo "ERROR: customer A unexpectedly created a reservation using customer B's membership." >&2
+  exit 1
+fi
+
+foreign_customer_read_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_F', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*) FROM public.restaurant_reservations WHERE id = '$CUSTOMER_RESERVATION_A'::uuid;
+ROLLBACK;
+SQL
+)"
+if [ "$foreign_customer_read_count" != "0" ]; then
+  echo "ERROR: customer B could read customer A's reservation." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_F', true);
+SET LOCAL ROLE authenticated;
+SELECT public.cancel_my_customer_reservation('$CUSTOMER_RESERVATION_A'::uuid);
+COMMIT;
+SQL
+then
+  echo "ERROR: customer B unexpectedly cancelled customer A's reservation." >&2
+  exit 1
+fi
+
+customer_reservation_staff_visibility="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*) FROM public.restaurant_reservations
+WHERE id = '$CUSTOMER_RESERVATION_A'::uuid AND loyalty_member_id = '$MEMBER_A'::uuid;
+ROLLBACK;
+SQL
+)"
+if [ "$customer_reservation_staff_visibility" != "1" ]; then
+  echo "ERROR: restaurant owner could not see the customer's pending reservation." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT public.cancel_my_customer_reservation('$CUSTOMER_RESERVATION_A'::uuid);
+SELECT public.cancel_my_customer_reservation('$CUSTOMER_RESERVATION_A'::uuid);
+COMMIT;
+SQL
+customer_reservation_cancelled="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT status = 'Cancelada' FROM public.restaurant_reservations WHERE id = '$CUSTOMER_RESERVATION_A'::uuid;")"
+if [ "$customer_reservation_cancelled" != "t" ]; then
+  echo "ERROR: customer could not safely cancel their own pending reservation or retry the cancellation." >&2
+  exit 1
+fi
+
+if create_customer_reservation_request "$USER_E" "$CUSTOMER_RESERVATION_REQUEST" "$MEMBER_A" 4 "$CUSTOMER_RESERVATION_AT" "910000000" "Changed payload" >/dev/null 2>&1; then
+  echo "ERROR: customer reservation idempotency key was accepted with a changed payload." >&2
+  exit 1
+fi
+echo "PASS: customer reservation requests are idempotent, private to their linked member, visible to restaurant staff, and only cancellable by the owner."
+
 
 
 expect_prepare_account_deletion_rejection() {
