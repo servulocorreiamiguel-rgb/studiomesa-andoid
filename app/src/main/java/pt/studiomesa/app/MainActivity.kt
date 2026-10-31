@@ -432,7 +432,8 @@ class MainActivity : Activity() {
             setPadding(dp(20), dp(13), dp(14), dp(7))
             letterSpacing = 0.08f
         }, LinearLayout.LayoutParams(-1, -2))
-        listOf("Cartão", "Carta", "Reservas", "Conta").forEach { page ->
+        val customerPages = if (hasCalculator) listOf("Cartão", "Carta", "Reservas", "Conta") else listOf("Cartão", "Carta", "Conta")
+        customerPages.forEach { page ->
             val selected = activeCustomerPage == page
             val item = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -3446,7 +3447,8 @@ class MainActivity : Activity() {
     }
 
     private fun renderCustomerApp() {
-        if (activeCustomerPage !in setOf("Cartão", "Carta", "Reservas", "Conta")) activeCustomerPage = "Cartão"
+        val allowedCustomerPages = if (hasCalculator) setOf("Cartão", "Carta", "Reservas", "Conta") else setOf("Cartão", "Carta", "Conta")
+        if (activeCustomerPage !in allowedCustomerPages) activeCustomerPage = "Cartão"
         appRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(paper)
@@ -3544,7 +3546,8 @@ class MainActivity : Activity() {
             setBackgroundColor(white)
             elevation = dp(6).toFloat()
         }
-        listOf("Cartão", "Carta", "Reservas", "Conta").forEach { page ->
+        val customerPages = if (hasCalculator) listOf("Cartão", "Carta", "Reservas", "Conta") else listOf("Cartão", "Carta", "Conta")
+        customerPages.forEach { page ->
             val selected = activeCustomerPage == page
             val item = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
