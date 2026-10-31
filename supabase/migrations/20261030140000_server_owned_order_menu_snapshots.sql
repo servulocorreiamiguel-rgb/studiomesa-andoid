@@ -25,6 +25,13 @@ BEGIN
       RAISE EXCEPTION 'A identidade, o restaurante, o autor e a data original do pedido são imutáveis.';
     END IF;
 
+    IF NEW.table_number IS DISTINCT FROM OLD.table_number
+       OR NEW.quantity IS DISTINCT FROM OLD.quantity
+       OR NEW.service_course IS DISTINCT FROM OLD.service_course
+       OR NEW.notes IS DISTINCT FROM OLD.notes THEN
+      RAISE EXCEPTION 'A mesa, quantidade, fase de serviço e notas originais do pedido são imutáveis.';
+    END IF;
+
     IF NEW.item_name IS DISTINCT FROM OLD.item_name
        OR NEW.amount IS DISTINCT FROM OLD.amount
        OR NEW.unit_cost_snapshot IS DISTINCT FROM OLD.unit_cost_snapshot THEN
@@ -36,14 +43,6 @@ BEGIN
     IF NEW.menu_item_id IS DISTINCT FROM OLD.menu_item_id
        AND NOT (NEW.menu_item_id IS NULL AND pg_trigger_depth() > 1) THEN
       RAISE EXCEPTION 'A associação do pedido à carta só pode ser removida quando o artigo é eliminado.';
-    END IF;
-
-    IF NEW.quantity IS DISTINCT FROM OLD.quantity
-       AND EXISTS (
-         SELECT 1 FROM public.restaurant_inventory_movements AS m
-         WHERE m.source_order_id = OLD.id
-       ) THEN
-      RAISE EXCEPTION 'A quantidade de um pedido não pode mudar depois de o stock ter sido consumido.';
     END IF;
 
     -- Enforce the same kitchen workflow on the server as in the Android UI.
@@ -103,5 +102,33 @@ DROP TRIGGER IF EXISTS restaurant_order_snapshot_immutable ON public.restaurant_
 CREATE TRIGGER restaurant_order_snapshot_immutable
   BEFORE INSERT OR UPDATE ON public.restaurant_orders
   FOR EACH ROW EXECUTE FUNCTION private.prepare_restaurant_order();
+
+-- Deleting a menu row must not detach an order that is still waiting to enter
+-- preparation. Otherwise a client could delete the row and bypass recipe stock
+-- consumption by advancing the now-unlinked order.
+CREATE OR REPLACE FUNCTION private.prevent_menu_item_delete_with_open_orders()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path TO ''
+AS $function$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM public.restaurant_orders AS o
+    WHERE o.restaurant_id = OLD.restaurant_id
+      AND o.menu_item_id = OLD.id
+      AND o.status = 'Aberto'
+  ) THEN
+    RAISE EXCEPTION 'Não é possível eliminar um artigo ligado a pedidos ainda abertos. Arquiva-o ou conclui/cancela primeiro os pedidos.';
+  END IF;
+
+  RETURN OLD;
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS menu_item_delete_requires_no_open_orders ON public.menu_items;
+CREATE TRIGGER menu_item_delete_requires_no_open_orders
+  BEFORE DELETE ON public.menu_items
+  FOR EACH ROW EXECUTE FUNCTION private.prevent_menu_item_delete_with_open_orders();
 
 COMMIT;
