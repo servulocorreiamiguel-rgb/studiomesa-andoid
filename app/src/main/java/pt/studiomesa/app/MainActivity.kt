@@ -5221,9 +5221,12 @@ class MainActivity : Activity() {
         val toggle = makeCard(14)
         toggle.addView(label(if (economicManagerEnabled) "Gestor ativo nesta sessão" else "Gestor desativado", 15f, true, forestDeep))
         addGap(toggle, 5)
-        toggle.addView(label("Os valores ficam só em memória nesta sessão: não são guardados, sincronizados nem enviados para a Internet.", 11.5f, false, muted))
+        toggle.addView(label(
+            "Por defeito, os valores ficam apenas na memória desta sessão. Só são guardados neste dispositivo quando pedires uma cópia cifrada.",
+            11.5f, false, muted
+        ))
         addGap(toggle, 8)
-        toggle.addView(secondaryButton(if (economicManagerEnabled) "Desativar e limpar valores" else "Ativar gestão económica") {
+        toggle.addView(secondaryButton(if (economicManagerEnabled) "Desativar e limpar valores da sessão" else "Ativar gestão económica") {
             if (economicManagerEnabled) {
                 clearEconomicManagerState()
             } else {
@@ -5231,6 +5234,8 @@ class MainActivity : Activity() {
                 economicScopeKey = scope
                 economicInputs.clear()
                 economicReportText = ""
+                scenarioReportText = ""
+                breakEvenTargetReportText = ""
                 recipeReportText = ""
                 reorderReportText = ""
             }
@@ -5238,6 +5243,85 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(-1, dp(44)))
         container.addView(toggle, cardParams())
         if (!economicManagerEnabled) return
+
+        if (hasRemoteRestaurant()) {
+            val encryptedStore = SecureEconomicStore(this)
+            val savedCopyExists = encryptedStore.hasSaved(scope)
+            val savedCard = makeCard(14)
+            savedCard.addView(label("Cópia privada neste dispositivo", 15f, true, forestDeep))
+            addGap(savedCard, 4)
+            savedCard.addView(label(
+                if (savedCopyExists) "Existe uma cópia cifrada para esta conta e este restaurante."
+                else "Ainda não existe uma cópia guardada para esta conta e este restaurante.",
+                11.5f, false, muted
+            ))
+            addGap(savedCard, 8)
+            savedCard.addView(primaryButton("Guardar valores atuais cifrados") {
+                try {
+                    encryptedStore.save(scope, economicInputs)
+                    Toast.makeText(this, "Cópia económica cifrada guardada neste dispositivo.", Toast.LENGTH_LONG).show()
+                } catch (error: Exception) {
+                    Toast.makeText(this, error.message ?: "Não foi possível guardar a cópia económica.", Toast.LENGTH_LONG).show()
+                }
+                renderApp()
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+            addGap(savedCard, 5)
+            savedCard.addView(secondaryButton("Carregar cópia guardada") {
+                try {
+                    val restoredInputs = encryptedStore.load(scope)
+                    if (restoredInputs.isEmpty()) {
+                        Toast.makeText(this, "Não foram encontrados valores guardados para esta conta.", Toast.LENGTH_LONG).show()
+                    } else {
+                        economicInputs.clear()
+                        economicInputs.putAll(restoredInputs)
+                        economicReportText = ""
+                        scenarioReportText = ""
+                        breakEvenTargetReportText = ""
+                        recipeReportText = ""
+                        reorderReportText = ""
+                        wasteReportText = ""
+                        supplierReportText = ""
+                        budgetReportText = ""
+                        usageReportText = ""
+                        labourReportText = ""
+                        Toast.makeText(this, "Valores económicos carregados.", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (error: Exception) {
+                    Toast.makeText(this, error.message ?: "Não foi possível abrir a cópia económica.", Toast.LENGTH_LONG).show()
+                }
+                renderApp()
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+            if (savedCopyExists) {
+                addGap(savedCard, 5)
+                savedCard.addView(secondaryButton("Apagar cópia cifrada") {
+                    AlertDialog.Builder(this)
+                        .setTitle("Apagar cópia económica?")
+                        .setMessage("Apenas a cópia cifrada deste restaurante neste dispositivo será eliminada. Os dados do servidor não são alterados.")
+                        .setNegativeButton("Manter", null)
+                        .setPositiveButton("Apagar") { _, _ ->
+                            val deleted = runCatching { encryptedStore.delete(scope) }.getOrDefault(false)
+                            Toast.makeText(
+                                this,
+                                if (deleted) "Cópia cifrada eliminada." else "Não foi possível eliminar a cópia.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                            renderApp()
+                        }
+                        .show()
+                }, LinearLayout.LayoutParams(-1, dp(44)))
+            }
+            addGap(savedCard, 6)
+            savedCard.addView(label(
+                "A cópia usa a chave do Android Keystore, fica no armazenamento privado excluído das cópias automáticas e não é sincronizada. Só pode ser aberta nesta instalação com a mesma conta de proprietário e restaurante.",
+                10.5f, false, muted
+            ))
+            container.addView(savedCard, cardParams())
+        } else {
+            container.addView(
+                emptyCard("Na demonstração, os valores continuam apenas nesta sessão. A cópia cifrada só fica disponível depois de ligares uma conta de proprietário a um restaurante."),
+                cardParams()
+            )
+        }
 
         addGap(container, 6)
         val monthly = makeCard(15)
