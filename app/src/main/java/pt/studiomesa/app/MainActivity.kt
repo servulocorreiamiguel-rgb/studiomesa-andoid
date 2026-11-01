@@ -1198,10 +1198,12 @@ class MainActivity : Activity() {
                 }
                 top.addView(label("Mesa " + order.optInt("table_number", 1).toString().padStart(2, '0'), 10f, true, forestSoft),
                     LinearLayout.LayoutParams(0, -2, 1f))
-                top.addView(label(status.uppercase(Locale("pt", "PT")), 9f, true, if (closed) green else forestSoft).apply {
-                    setPadding(dp(8), dp(6), dp(8), dp(6))
-                    background = rounded(if (closed) paleGreen else copperPale, 12)
-                })
+                top.addView(statusBadge(
+                    status.uppercase(Locale("pt", "PT")),
+                    if (closed) green else forestSoft,
+                    if (closed) paleGreen else copperPale,
+                    9f
+                ))
                 card.addView(top)
                 addGap(card, 10)
                 val itemName = order.optString("item_name", "Artigo")
@@ -1265,10 +1267,12 @@ class MainActivity : Activity() {
                 gravity = Gravity.CENTER_VERTICAL
             }
             top.addView(label("Mesa " + order.table.toString().padStart(2, '0'), 10f, true, forestSoft), LinearLayout.LayoutParams(0, -2, 1f))
-            top.addView(label(if (done) "CONCLUÍDO" else "EM ABERTO", 9f, true, if (done) green else forestSoft).apply {
-                setPadding(dp(8), dp(6), dp(8), dp(6))
-                background = rounded(if (done) paleGreen else copperPale, 12)
-            })
+            top.addView(statusBadge(
+                if (done) "CONCLUÍDO" else "EM ABERTO",
+                if (done) green else forestSoft,
+                if (done) paleGreen else copperPale,
+                9f
+            ))
             card.addView(top)
             addGap(card, 10)
             card.addView(label((if (order.quantity > 1) "${order.quantity} × " else "") + order.itemName, 17f, true, ink))
@@ -1555,10 +1559,12 @@ class MainActivity : Activity() {
         }
         top.addView(label("MESA ${tableNumber.toString().padStart(2, '0')}", 12f, true, forestSoft),
             LinearLayout.LayoutParams(0, -2, 1f))
-        top.addView(label(status.uppercase(Locale("pt", "PT")), 10f, true, statusColor).apply {
-            setPadding(dp(8), dp(6), dp(8), dp(6))
-            background = rounded(statusBackground, 12)
-        })
+        top.addView(statusBadge(
+            status.uppercase(Locale("pt", "PT")),
+            statusColor,
+            statusBackground,
+            10f
+        ))
         card.addView(top)
         addGap(card, 8)
         card.addView(label((if (quantity > 1) "$quantity × " else "") + itemName, 19f, true, forestDeep))
@@ -4135,10 +4141,11 @@ class MainActivity : Activity() {
                 gravity = Gravity.CENTER_VERTICAL
             }
             top.addView(label(guest, 17f, true, forestDeep), LinearLayout.LayoutParams(0, -2, 1f))
-            top.addView(label(status, 10f, true, if (status == "Confirmada") green else if (status == "Cancelada" || status == "Concluída" || status == "Não compareceu") muted else forestSoft).apply {
-                setPadding(dp(8), dp(6), dp(8), dp(6))
-                background = rounded(if (status == "Confirmada") paleGreen else copperPale, 12)
-            })
+            top.addView(statusBadge(
+                status,
+                if (status == "Confirmada") green else if (status == "Cancelada" || status == "Concluída" || status == "Não compareceu") muted else forestSoft,
+                if (status == "Confirmada") paleGreen else copperPale
+            ))
             card.addView(top)
             addGap(card, 6)
             val rawDate = reservation.optString("reservation_at")
@@ -4422,10 +4429,11 @@ class MainActivity : Activity() {
             }
             top.addView(label(name, 16f, true, forestDeep), LinearLayout.LayoutParams(0, -2, 1f))
             if (isLow) {
-                top.addView(label(if (quantity <= 0.0) "Esgotado" else "Stock baixo", 9.5f, true, red).apply {
-                    setPadding(dp(8), dp(6), dp(8), dp(6))
-                    background = rounded(paleRed, 10)
-                })
+                top.addView(statusBadge(
+                    if (quantity <= 0.0) "Esgotado" else "Stock baixo",
+                    red,
+                    paleRed
+                ))
             }
             card.addView(top)
             addGap(card, 8)
@@ -7192,6 +7200,20 @@ class MainActivity : Activity() {
             }
         }
         dialog.show()
+    }
+
+    private fun statusBadge(
+        text: String,
+        foreground: Int,
+        backgroundColor: Int,
+        textSize: Float = 9.5f
+    ): TextView = label(text, textSize, true, foreground).apply {
+        gravity = Gravity.CENTER
+        maxLines = 1
+        ellipsize = android.text.TextUtils.TruncateAt.END
+        letterSpacing = 0.02f
+        setPadding(dp(8), dp(6), dp(8), dp(6))
+        background = rounded(backgroundColor, 11)
     }
 
     private fun bottomNavigationItem(
