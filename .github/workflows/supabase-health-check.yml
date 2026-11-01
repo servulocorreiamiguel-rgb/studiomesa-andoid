@@ -1,0 +1,49 @@
+name: StudioMesa Supabase health check
+
+on:
+  # Supabase Free evaluates low database activity over a rolling 7-day window.
+  # Three lightweight, read-only checks per day are intentionally spaced apart.
+  schedule:
+    - cron: "0 */8 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: studiomes-supabase-health-check
+  cancel-in-progress: false
+
+jobs:
+  database-health-check:
+    name: Read-only database check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Install PostgreSQL client when needed
+        shell: bash
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes postgresql-client
+          fi
+
+      - name: Run a read-only database query
+        shell: bash
+        env:
+          SUPABASE_HEALTHCHECK_DB_URL: ${{ secrets.SUPABASE_HEALTHCHECK_DB_URL }}
+          PGCONNECT_TIMEOUT: "15"
+          PGSSLMODE: require
+          PGAPPNAME: studiomesa-health-check
+        run: |
+          set -euo pipefail
+          if [[ -z "${SUPABASE_HEALTHCHECK_DB_URL:-}" ]]; then
+            echo "::error::Configure the SUPABASE_HEALTHCHECK_DB_URL repository secret."
+            exit 1
+          fi
+          result="$(psql "$SUPABASE_HEALTHCHECK_DB_URL" --no-psqlrc --set=ON_ERROR_STOP=1 --tuples-only --no-align --command='SELECT 1;')"
+          if [[ "$result" != "1" ]]; then
+            echo "::error::Supabase did not return the expected health-check result."
+            exit 1
+          fi
+          echo "Supabase database connection and read-only query succeeded."
