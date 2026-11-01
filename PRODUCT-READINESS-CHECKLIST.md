@@ -165,3 +165,8 @@ Os valores de referência atuais são 890 €, 1 490 € e 1 690 €. Ainda não
 - [x] A conversão é feita para a unidade base do artigo de stock antes de chamar a API existente; não foi necessária alteração do esquema Supabase.
 - [x] A conversão rejeita quantidades que exigiriam arredondamento para além de três casas decimais na unidade de stock.
 - [ ] Executar os testes unitários `InventoryUnitConverterTest` e os casos ponta a ponta `UNIT-01..12`; verificar em Android real os seletores e o impacto no custo por dose/consumo automático.
+
+
+- [x] A mesma conversão é usada também nas entradas/saídas de stock e registo de desperdício; os valores são convertidos para a unidade armazenada antes da operação idempotente.
+- [x] Os formulários de ficha técnica, movimento e desperdício usam área rolável para ecrãs pequenos.
+- [ ] Executar os casos UNIT-01..16 em Android físico e confirmar o histórico de movimentos, idempotência, stock remanescente e ausência de deduções duplicadas.
