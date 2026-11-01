@@ -348,6 +348,16 @@ object SupabaseApi {
         ))
     }
 
+    fun listMenuItemsForEconomicAnalysis(token: String, restaurantId: String): JSONArray {
+        val encoded = URLEncoder.encode(restaurantId, "UTF-8")
+        return JSONArray(call(
+            "GET",
+            "/rest/v1/menu_items?select=id,name,price,cost,is_active&restaurant_id=eq.$encoded&is_active=eq.true&order=name.asc&limit=501",
+            null,
+            token
+        ))
+    }
+
     /**
      * Uses the client-generated row ID as the retry key. If a POST committed but its
      * response was lost, a retry can verify the same row instead of creating a duplicate.
