@@ -152,7 +152,7 @@ class MenuCostComparisonAnalyzerTest {
 
         val row = result.rankedItems.single()
         assertEquals(BigDecimal("20.0"), row.costToPricePercent)
-        assertEquals("Custo manual · ficha técnica por aprovar", row.costSourceLabel)
+        assertEquals("Custo manual · ficha técnica inativa", row.costSourceLabel)
         assertEquals(0, result.recipesAwaitingApproval)
         assertEquals(1, result.recipesInactive)
         assertEquals(1, result.menuItemsUsingManualCost)
