@@ -82,11 +82,14 @@ GRANT SELECT (
 
 REVOKE SELECT ON TABLE public.restaurant_inventory_movements FROM authenticated;
 GRANT SELECT (
+  id,
   restaurant_id,
   item_id,
   delta,
   quantity_after,
   note,
+  created_by,
+  client_request_id,
   created_at,
   unit_at_movement
 ) ON TABLE public.restaurant_inventory_movements TO authenticated;
