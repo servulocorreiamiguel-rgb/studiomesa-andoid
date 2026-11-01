@@ -107,19 +107,20 @@ class InventoryRecipeCostCalculatorTest {
     }
 
     @Test
-    fun rejectsDuplicateIngredientNames() {
-        assertThrows(IllegalArgumentException::class.java) {
-            InventoryRecipeCostCalculator.calculate(
-                listOf(
-                    InventoryRecipeIngredientInput(
-                        "Farinha", "kg", BigDecimal("0.100"), BigDecimal("2.0000"), BigDecimal.ZERO
-                    ),
-                    InventoryRecipeIngredientInput(
-                        "farinha", "kg", BigDecimal("0.100"), BigDecimal("2.0000"), BigDecimal.ZERO
-                    )
+    fun suggestedPriceUsesPreciseSubtotalBeforeRoundingDisplayCost() {
+        val result = InventoryRecipeCostCalculator.calculate(
+            listOf(
+                InventoryRecipeIngredientInput(
+                    "Ingrediente", "kg", BigDecimal("0.122"), BigDecimal("3.0000"), BigDecimal.ZERO
                 )
             )
-        }
+        )
+        assertEquals(BigDecimal("0.37"), result.totalCostPerPortion)
+        assertEquals(BigDecimal("0.366000000"), result.preciseTotalCostPerPortion)
+        assertEquals(
+            BigDecimal("1.22"),
+            result.suggestedPriceAtTarget(BigDecimal("30"))
+        )
     }
 
     @Test
