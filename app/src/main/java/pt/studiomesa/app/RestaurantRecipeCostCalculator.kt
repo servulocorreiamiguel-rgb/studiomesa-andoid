@@ -35,6 +35,8 @@ internal data class RestaurantRecipeCostEstimate(
  * deducts for one portion. Unknown purchase costs are excluded, never treated as zero.
  */
 internal object RestaurantRecipeCostCalculator {
+    private val maxMoney = BigDecimal("999999999.99")
+
     fun estimate(inputs: List<RestaurantRecipeCostInput>): RestaurantRecipeCostEstimate {
         require(inputs.isNotEmpty()) { "A receita não tem ingredientes." }
         require(inputs.map { it.inventoryItemId }.toSet().size == inputs.size) {
@@ -62,7 +64,13 @@ internal object RestaurantRecipeCostCalculator {
                     "O custo unitário do ingrediente não é válido."
                 }
                 val lineCost = stockQuantity.multiply(unitCost).stripTrailingZeros()
+                require(lineCost <= maxMoney) {
+                    "O custo calculado do ingrediente ultrapassa o limite monetário suportado."
+                }
                 knownCost = knownCost.add(lineCost)
+                require(knownCost <= maxMoney) {
+                    "O custo total conhecido da receita ultrapassa o limite monetário suportado."
+                }
                 lineCosts[input.inventoryItemId] = lineCost
             }
         }
