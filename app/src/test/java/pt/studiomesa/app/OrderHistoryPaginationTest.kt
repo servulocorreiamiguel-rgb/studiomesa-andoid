@@ -83,4 +83,38 @@ class OrderHistoryPaginationTest {
             OrderHistoryPagination.collect(pageSize = 1, maxPages = 1) { _, _ -> listOf("a", "b") }
         }
     }
+    @Test
+    fun reservationHistoryOverflowIsReportedAsReservationsRatherThanOrders() {
+        val error = assertThrows(IllegalStateException::class.java) {
+            OrderHistoryPagination.collect(
+                pageSize = 2,
+                maxPages = 1,
+                recordLabel = "reservas"
+            ) { offset, _ ->
+                when (offset) {
+                    0 -> listOf("a", "b")
+                    2 -> listOf("c")
+                    else -> emptyList()
+                }
+            }
+        }
+
+        assertTrue(error.message.orEmpty().contains("mais de 2 reservas"))
+        assertTrue(error.message.orEmpty().contains("evitar apresentar uma análise parcial"))
+    }
+
+    @Test
+    fun rejectsBlankOrOverlongHistoryLabels() {
+        assertThrows(IllegalArgumentException::class.java) {
+            OrderHistoryPagination.collect(pageSize = 1, maxPages = 1, recordLabel = " ") { _, _ ->
+                emptyList<String>()
+            }
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            OrderHistoryPagination.collect(pageSize = 1, maxPages = 1, recordLabel = "x".repeat(31)) { _, _ ->
+                emptyList<String>()
+            }
+        }
+    }
+
 }
