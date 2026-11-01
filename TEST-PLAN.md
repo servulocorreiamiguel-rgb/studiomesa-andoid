@@ -393,3 +393,14 @@ Estes casos são executados na ronda final. A app do restaurante pode atribuir o
 | CRES-23 | Atualização automática / ciclo de vida | Sair da agenda, mudar de página ou colocar a app em segundo plano | A consulta periódica é interrompida; ao regressar à agenda, a sincronização volta a ficar agendada |
 | CRES-24 | Atualização automática / falha de rede | Interromper a rede durante uma atualização periódica e restabelecê-la | A última agenda válida permanece visível; a atualização seguinte recupera os dados sem duplicar reservas |
 | CRES-25 | Concorrência / pedidos simultâneos | Dois clientes enviam pedidos para o mesmo restaurante enquanto a agenda está aberta | Ambos os pedidos ficam visíveis, cada um com o seu identificador e estado Pendente |
+
+
+## Health check do alojamento
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| HCH-01 | Privacidade | Executar o workflow agendado | Apenas executa uma consulta de leitura; não cria nem altera reservas, pedidos, clientes, vendas ou stock |
+| HCH-02 | Permissões | Verificar o utilizador PostgreSQL dedicado | Só consegue ligar à base de dados e executar a consulta de saúde; sem acesso às tabelas e esquemas operacionais |
+| HCH-03 | Falha de ligação | Remover temporariamente o segredo ou usar credenciais inválidas num ensaio controlado | O workflow falha com mensagem genérica; não imprime a cadeia de ligação, palavra-passe ou chaves |
+| HCH-04 | Visibilidade | Consultar a app de restaurante e os relatórios antes/depois da execução | Não surge pedido, notificação, movimento ou alteração operacional |
+| HCH-05 | Agendamento | Confirmar execução manual e agendada depois de integrado em `main` | A execução manual funciona e o agendamento corre aproximadamente de 8 em 8 horas; a disponibilidade continuada não é garantida pelo plano Free |
