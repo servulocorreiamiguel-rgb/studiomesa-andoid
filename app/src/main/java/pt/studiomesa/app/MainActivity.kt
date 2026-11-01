@@ -8113,7 +8113,19 @@ class MainActivity : Activity() {
             val token = backendToken()
             val restaurantId = backendRestaurantId()
             val recipe = SupabaseApi.getRestaurantRecipe(token, restaurantId, menuItemId)
-            val stock = loadInventoryItemsForCurrentRole(token, restaurantId)
+            // Operational stock remains available even if the owner-only financial
+            // endpoint is temporarily unavailable or the owner's role was revoked.
+            val stock = SupabaseApi.listInventoryItems(token, restaurantId)
+            val ownerCostsAvailable = if (isCurrentRestaurantOwner()) {
+                runCatching {
+                    loadInventoryItemsForCurrentRole(token, restaurantId)
+                    inventoryUnitCostCacheLoaded &&
+                        inventoryUnitCostCacheScope == currentInventoryCostScope(restaurantId)
+                }.getOrElse {
+                    clearInventoryUnitCostCache()
+                    false
+                }
+            } else false
             val recipeId = recipe?.optString("id").orEmpty()
             val ingredients = if (recipeId.isNotBlank()) {
                 SupabaseApi.listRecipeIngredients(token, recipeId)
@@ -8121,7 +8133,8 @@ class MainActivity : Activity() {
             JSONObject()
                 .put("recipe", recipe ?: JSONObject.NULL)
                 .put("ingredients", ingredients)
-                .put("stock", inventoryItemsWithOwnerCosts(stock))
+                .put("stock", if (ownerCostsAvailable) inventoryItemsWithOwnerCosts(stock) else stock)
+                .put("owner_costs_available", ownerCostsAvailable)
                 .toString()
         }) { raw ->
             showRecipeDialogContent(menuItemId, menuItemName, JSONObject(raw))
@@ -8188,7 +8201,11 @@ class MainActivity : Activity() {
         // Purchase-cost data is private to the restaurant owner.
         val ownerCanSeeRecipeCost = !hasRemoteRestaurant() ||
             backendPrefs.getString("restaurant_role", "").orEmpty() == "owner"
-        val recipeCostInputs = if (ownerCanSeeRecipeCost) {
+        val ownerCostsAvailable = data.optBoolean(
+            "owner_costs_available",
+            !hasRemoteRestaurant() && ownerCanSeeRecipeCost
+        )
+        val recipeCostInputs = if (ownerCanSeeRecipeCost && ownerCostsAvailable) {
             runCatching {
                 (0 until ingredients.length()).map { index ->
                     val line = ingredients.optJSONObject(index)
@@ -8268,6 +8285,12 @@ class MainActivity : Activity() {
             costCard.addView(label("Custo da receita", 14f, true, forestDeep))
             addGap(costCard, 4)
             when {
+                !ownerCostsAvailable -> {
+                    costCard.addView(label(
+                        "A ficha técnica e o stock estão disponíveis, mas não foi possível validar o acesso aos custos de compra. Atualiza o stock ou confirma as permissões do proprietário.",
+                        11.5f, false, muted
+                    ))
+                }
                 recipeCostAnalysis == null -> {
                     costCard.addView(label(
                         "Não foi possível calcular o custo. Confirma se todos os ingredientes e quantidades da ficha técnica estão válidos.",
