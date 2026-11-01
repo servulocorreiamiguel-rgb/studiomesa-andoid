@@ -389,3 +389,7 @@ Estes casos são executados na ronda final. A app do restaurante pode atribuir o
 | ID | Categoria | Ação / dados | Resultado esperado |
 |---|---|---|---|
 | CRES-21 | Histórico do cliente | Consultar várias reservas pendentes, confirmadas, canceladas e concluídas; alternar entre Todas, Ativas e Histórico | Os contadores e filtros mostram apenas o grupo selecionado; a mudança de conta repõe o filtro e não mantém dados da conta anterior |
+| CRES-22 | Atualização automática / restaurante | Manter a agenda do restaurante aberta em primeiro plano e criar um pedido através de outra conta de cliente | O pedido aparece na agenda sem ação manual, no ciclo de atualização de até 30 segundos |
+| CRES-23 | Atualização automática / ciclo de vida | Sair da agenda, mudar de página ou colocar a app em segundo plano | A consulta periódica é interrompida; ao regressar à agenda, a sincronização volta a ficar agendada |
+| CRES-24 | Atualização automática / falha de rede | Interromper a rede durante uma atualização periódica e restabelecê-la | A última agenda válida permanece visível; a atualização seguinte recupera os dados sem duplicar reservas |
+| CRES-25 | Concorrência / pedidos simultâneos | Dois clientes enviam pedidos para o mesmo restaurante enquanto a agenda está aberta | Ambos os pedidos ficam visíveis, cada um com o seu identificador e estado Pendente |
