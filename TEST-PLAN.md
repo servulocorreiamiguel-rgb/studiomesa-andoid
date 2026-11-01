@@ -422,3 +422,9 @@ Estes casos são executados na ronda final. A app do restaurante pode atribuir o
 | UNIT-10 | Custo por dose | Comparar a mesma receita introduzida em g e em kg para o mesmo artigo | O custo calculado é idêntico após conversão |
 | UNIT-11 | Consumo automático | Aprovar uma ficha técnica em kg com quantidades inicialmente introduzidas em g | O servidor desconta stock em kg, sem alteração do cálculo de desperdício |
 | UNIT-12 | Regressão | Editar receita existente sem converter unidade | Os valores já guardados continuam a ser interpretados na unidade do artigo de stock |
+
+
+| UNIT-13 | Movimento de stock | Artigo em kg; registar entrada de 150 g | O movimento no servidor acrescenta 0,150 kg e o histórico apresenta a unidade do artigo |
+| UNIT-14 | Desperdício | Artigo em L; registar perda de 250 ml | O movimento de desperdício retira 0,250 L e preserva o motivo e observação |
+| UNIT-15 | Idempotência | Repetir uma operação depois de perda de resposta usando a mesma quantidade introduzida noutra unidade equivalente | A assinatura usa o valor já convertido para unidade de stock; a mesma operação não duplica o movimento |
+| UNIT-16 | Interface | Abrir os formulários de receita, movimento e desperdício num ecrã pequeno | Os campos ficam acessíveis por scroll; nenhum controlo fica cortado |
