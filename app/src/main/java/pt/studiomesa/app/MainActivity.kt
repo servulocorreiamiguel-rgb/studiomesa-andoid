@@ -5566,13 +5566,17 @@ class MainActivity : Activity() {
             "Unidade" to unit,
             "Quantidade" to quantity,
             "Limite mínimo" to threshold,
-            "Custo por unidade (€ por kg, L ou unidade)" to unitCost,
+            "Custo por unidade de stock (€)" to unitCost,
             "Nota do movimento" to note
         ).forEach { (caption, field) ->
             form.addView(label(caption, 11f, true, forestSoft))
             form.addView(field, fieldParams())
             addGap(form, 5)
         }
+        form.addView(label(
+            "Indica o custo usando a unidade definida para este artigo (por exemplo, €/kg quando a unidade é kg).",
+            10.5f, false, muted
+        ))
         val dialog = AlertDialog.Builder(this)
             .setTitle(if (item == null) "Novo artigo de stock" else "Editar artigo de stock")
             .setView(form)
