@@ -178,5 +178,7 @@ Os valores de referência atuais são 890 €, 1 490 € e 1 690 €. Ainda não
 - [ ] Testar atualização de papel, logout, mudança de restaurante, cache de processo e chamadas REST/RPC diretas em Android real.
 
 - [x] A falha da RPC financeira não bloqueia a leitura operacional da ficha técnica; custos deixam de ser apresentados e a interface não repete pedidos em ciclo após autorização negada.
-- [x] O logout e a eliminação de conta limpam a cache de custos em memória.
+- [x] O logout limpa a cache de custos em memória; a cópia económica cifrada opt-in mantém-se para recuperação na mesma conta.
+- [x] A eliminação definitiva da conta tenta eliminar também o ficheiro económico cifrado associado à conta/restaurante.
+- [ ] Testar a eliminação do ficheiro cifrado em Android real e confirmar o comportamento após falha de armazenamento ou ficheiro em falta.
 - [ ] Testar revogação real do papel owner enquanto a app está aberta, sem rede, e após recuperar ligação; confirmar que os custos desaparecem e que a operação de receitas continua disponível.
