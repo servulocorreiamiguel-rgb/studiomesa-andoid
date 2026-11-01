@@ -7477,6 +7477,40 @@ class MainActivity : Activity() {
         form.addView(label("Quantidade", 10f, true, forestSoft))
         val quantityField = inputField("1–99 unidades", InputType.TYPE_CLASS_NUMBER).apply { setText("1") }
         form.addView(quantityField, fieldParams())
+        val pricePreview = label("", 11.5f, true, forest)
+        fun refreshPricePreview() {
+            val selectedItem = items.getOrNull(itemSpinner.selectedItemPosition)
+            val selectedQuantity = quantityField.text.toString().trim().toIntOrNull()
+                ?.takeIf { it in 1..99 }
+            pricePreview.text = when {
+                selectedItem == null -> "Seleciona um artigo para consultar o preço."
+                selectedQuantity == null -> "Preço unitário: ${money(selectedItem.price)} · Introduz uma quantidade válida para calcular o subtotal."
+                else -> "Preço unitário: ${money(selectedItem.price)} · Subtotal: ${money(selectedItem.price * selectedQuantity)}"
+            }
+        }
+        itemSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(
+                parent: android.widget.AdapterView<*>?,
+                view: View?,
+                position: Int,
+                id: Long
+            ) {
+                refreshPricePreview()
+            }
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {
+                refreshPricePreview()
+            }
+        }
+        quantityField.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                refreshPricePreview()
+            }
+            override fun afterTextChanged(s: android.text.Editable?) = Unit
+        })
+        form.addView(pricePreview)
+        addGap(form, 5)
+        refreshPricePreview()
         addGap(form, 3)
 
         form.addView(label("Momento do serviço", 10f, true, forestSoft))
