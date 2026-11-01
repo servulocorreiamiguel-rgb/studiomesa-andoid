@@ -844,10 +844,20 @@ object SupabaseApi {
         val encoded = URLEncoder.encode(restaurantId, "UTF-8")
         return JSONArray(call(
             "GET",
-            "/rest/v1/restaurant_inventory_items?select=id,name,unit,quantity,low_stock_threshold,unit_cost_per_unit,updated_at&restaurant_id=eq.$encoded&order=name.asc",
+            "/rest/v1/restaurant_inventory_items?select=id,name,unit,quantity,low_stock_threshold,updated_at&restaurant_id=eq.$encoded&order=name.asc",
             null,
             token
         ))
+    }
+
+    fun listInventoryItemsWithCosts(token: String, restaurantId: String): JSONArray {
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/list_inventory_items_with_costs",
+            JSONObject().put("p_restaurant_id", restaurantId),
+            token
+        )
+        return JSONArray(response)
     }
 
     fun getRestaurantRecipe(
@@ -1120,7 +1130,7 @@ object SupabaseApi {
         val encoded = URLEncoder.encode(itemId, "UTF-8")
         return JSONArray(call(
             "GET",
-            "/rest/v1/restaurant_inventory_movements?select=delta,quantity_after,note,created_at,unit_at_movement,unit_cost_at_movement&item_id=eq.$encoded&order=created_at.desc&limit=30",
+            "/rest/v1/restaurant_inventory_movements?select=delta,quantity_after,note,created_at,unit_at_movement&item_id=eq.$encoded&order=created_at.desc&limit=30",
             null,
             token
         ))
@@ -1132,14 +1142,15 @@ object SupabaseApi {
         limit: Int = 100
     ): JSONArray {
         require(limit in 1..200) { "O limite de perdas deve estar entre 1 e 200." }
-        val encodedRestaurant = URLEncoder.encode(restaurantId, "UTF-8")
-        val encodedWastePrefix = URLEncoder.encode(InventoryWasteNotes.PREFIX + "%", "UTF-8")
-        return JSONArray(call(
-            "GET",
-            "/rest/v1/restaurant_inventory_movements?select=item_id,delta,note,created_at,unit_at_movement,unit_cost_at_movement&restaurant_id=eq.$encodedRestaurant&delta=lt.0&note=like.$encodedWastePrefix&order=created_at.desc&limit=$limit",
-            null,
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/list_inventory_waste_movements_with_costs",
+            JSONObject()
+                .put("p_restaurant_id", restaurantId)
+                .put("p_limit", limit),
             token
-        ))
+        )
+        return JSONArray(response)
     }
 
     fun listReservations(token: String, restaurantId: String): JSONArray {
