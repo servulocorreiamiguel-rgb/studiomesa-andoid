@@ -96,3 +96,9 @@ Não aplicar as migrações pendentes ao Supabase de produção nesta fase.
 **Validação pendente:** os ficheiros foram revistos no GitHub após a gravação, mas não foi possível executar Gradle/Android Lint nem GitHub Actions nesta sessão. O workflow Android está configurado para correr em pushes para `main` ou por `workflow_dispatch`; não foi disponibilizada uma ação de disparo manual nesta ligação. A tentativa de clonar o repositório para uma execução local também falhou por indisponibilidade de ligação ao GitHub. Não declarar estes testes como aprovados até à execução efetiva.
 
 **Nota de produto:** este é um custo estimado de ingredientes por dose, não o custo total de produção nem uma margem líquida. Não atualizar automaticamente o preço de venda.
+
+- A ficha técnica também recebe o preço de venda atual do artigo da carta e apresenta o peso conhecido/completo dos ingredientes no preço. Quando todos os custos estão definidos, mostra o valor que resta depois dos ingredientes para pagar os restantes custos; identifica expressamente que esse valor não é lucro líquido. Com custos em falta, só mostra uma percentagem parcial e avisa que o valor real pode ser superior.
+- O resumo económico mantém o preço atual do artigo ao voltar a carregar a ficha depois de adicionar/remover ingredientes ou aprovar/desativar a receita.
+- O conjunto `RestaurantRecipeCostCalculatorTest.kt` passou a ter seis testes escritos, incluindo a percentagem do preço de venda, valor após ingredientes e rejeição de preço zero para o cálculo percentual.
+
+A validação de compilação e execução dos seis testes continua pendente; os resultados acima descrevem o código e os testes adicionados, não testes executados.
