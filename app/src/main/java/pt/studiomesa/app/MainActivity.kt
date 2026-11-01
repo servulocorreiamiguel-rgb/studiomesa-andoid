@@ -8106,7 +8106,6 @@ class MainActivity : Activity() {
                             10.5f, false, muted
                         ))
                     }
-                    }
                 }
                 else -> {
                     costCard.addView(label(
