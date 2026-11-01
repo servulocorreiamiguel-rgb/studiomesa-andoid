@@ -118,3 +118,18 @@ A validação de compilação e execução dos seis testes continua pendente; os
 **Validação pendente:** os oito testes foram escritos e os ficheiros foram confirmados no GitHub, mas ainda não foram executados. Também não foi feita compilação Android nem Lint nesta etapa.
 
 **Estado da branch após a comparação:** a PR #72 continua aberta e em rascunho. Na última comparação, a branch estava 155 commits à frente e 1 atrás de `main`. Não foi feito rebase, merge ou alteração da base de dados de produção. A consulta ao GitHub para o último commit não devolveu execuções de workflow nem status checks; não declarar a compilação ou os testes como aprovados.
+
+### Continuação agrupada — integração das fichas técnicas e fiabilidade do comparador
+
+- A leitura económica passa a obter a carta ativa, as fichas técnicas, as linhas de ingredientes e o inventário do mesmo restaurante. A carta e as fichas técnicas são paginadas até 500 registos; os ingredientes até 3000; o inventário até 2000. Se algum limite for excedido, a análise falha explicitamente em vez de comparar um conjunto truncado.
+- As consultas usam ordenação estável com identificadores como desempate. As consultas de inventário e ingredientes usam paginação por blocos de 500.
+- Cada artigo da carta é associado à ficha pelo identificador estável do artigo, nunca pelo nome. Os custos unitários atuais do inventário são multiplicados pelas quantidades por dose e desperdício da receita, seguindo o arredondamento de consumo já usado no projeto.
+- Só uma ficha ativa, aprovada, completa e com todos os ingredientes presentes e unidades iguais às guardadas na ficha pode substituir o custo manual da carta. Uma ficha em revisão ou inativa mantém o custo manual; uma ficha ativa mas incompleta ou com unidade incompatível fica fora do ranking em vez de subestimar o custo.
+- O comparador distingue fichas que exigem revisão de fichas simplesmente inativas. Cada linha do ranking identifica a fonte do custo e, na versão Premium ligada a um restaurante, permite abrir diretamente a ficha técnica do prato.
+- A análise guarda a versão do último conjunto de dados operacionais recebido. Alterações locais à carta, inventário, movimentos de stock ou receitas avançam essa versão. Uma comparação anterior é então identificada como desatualizada e não é usada como se fosse atual; mantém-se visível o aviso até o proprietário carregar uma nova análise. Alterações feitas noutro dispositivo só são refletidas após atualização manual.
+- A análise de carta, receitas e inventário exige perfil de proprietário e conta/restaurante correspondentes. Não altera preços, stock, fichas ou encomendas.
+- Criado `MenuRecipeCostSnapshotVersion.kt` com três testes escritos para versão igual, versão alterada e versão em falta.
+- `MenuCostComparisonAnalyzerTest.kt` passou a ter 12 testes escritos, incluindo prioridade da ficha aprovada, manutenção do custo manual quando a ficha está inativa ou precisa de revisão, rejeição de fichas incompletas e distinção entre estados de receita.
+- Melhorias de inventário/receitas e paginação foram revistas nos ficheiros do GitHub. Não foi executada CI, Gradle, Lint nem a bateria de testes nesta etapa; os testes estão escritos, não aprovados.
+
+**Limites desta integração:** ainda não há ligação automática a faturas de fornecedores ou custo histórico por lote. A análise usa o custo unitário atual registado no inventário; se esse valor não estiver atualizado, a estimativa também não estará.
