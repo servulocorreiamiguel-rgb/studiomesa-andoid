@@ -12,13 +12,15 @@ class StudioMesaAdvisorTest {
         stockAvailable: Boolean = false, stockLoaded: Boolean = false,
         stockItems: List<AssistantStockItem> = emptyList(),
         reservationsAvailable: Boolean = false, reservationsLoaded: Boolean = false, pendingReservations: Int = 0,
-        salesLines: List<AssistantSaleLine> = emptyList()
+        salesLines: List<AssistantSaleLine> = emptyList(),
+        operationsFresh: Boolean = true
     ) = StudioMesaAssistantSnapshot(
         isDemo = demo, restaurantConfigured = configured, menuItems = menu,
         activeOrderCount = activeOrders, preparationOrderCount = activeOrders.coerceAtMost(1),
         stockFeatureAvailable = stockAvailable, stockLoaded = stockLoaded, stockItems = stockItems,
         reservationsFeatureAvailable = reservationsAvailable, reservationsLoaded = reservationsLoaded,
-        pendingReservations = pendingReservations, salesLines = salesLines
+        pendingReservations = pendingReservations, salesLines = salesLines,
+        operationsSnapshotFresh = operationsFresh
     )
 
     @Test fun suggestedSellingPriceUsesChosenCostShareAndRoundsToCents() {
@@ -52,6 +54,37 @@ class StudioMesaAdvisorTest {
         assertFalse(AssistantStockSnapshotPolicy.isFresh(now, now - AssistantStockSnapshotPolicy.MAX_AGE_MILLIS - 1))
         assertFalse(AssistantStockSnapshotPolicy.isFresh(now, 0L))
         assertFalse(AssistantStockSnapshotPolicy.isFresh(now, now + 1))
+    }
+
+    @Test fun assistantOperationsSnapshotPolicyAcceptsOnlyRecentNonFutureReads() {
+        val now = 2_000_000L
+        assertTrue(AssistantOperationsSnapshotPolicy.isFresh(now, now))
+        assertTrue(AssistantOperationsSnapshotPolicy.isFresh(now, now - AssistantOperationsSnapshotPolicy.MAX_AGE_MILLIS))
+        assertFalse(AssistantOperationsSnapshotPolicy.isFresh(now, now - AssistantOperationsSnapshotPolicy.MAX_AGE_MILLIS - 1))
+        assertFalse(AssistantOperationsSnapshotPolicy.isFresh(now, 0L))
+        assertFalse(AssistantOperationsSnapshotPolicy.isFresh(now, now + 1))
+    }
+
+    @Test fun assistantWarnsBeforeUsingOldOperationalCacheForDecisions() {
+        val stale = snapshot(operationsFresh = false)
+        val warning = StudioMesaAdvisor.recommendations(stale).first { it.id == "operations-data-stale" }
+        assertEquals(AssistantPriority.ATTENTION, warning.priority)
+        assertEquals("Início", warning.actionPage)
+        assertTrue(warning.detail.contains("dados antigos"))
+
+        val answer = StudioMesaAdvisor.answerQuestion("Que preço devo cobrar?", stale)
+        assertTrue(answer.response.startsWith("Aviso de atualização:"))
+        assertTrue(answer.response.contains("atualiza a carta e os pedidos"))
+
+        val freshAnswer = StudioMesaAdvisor.answerQuestion("Que preço devo cobrar?", snapshot())
+        assertFalse(freshAnswer.response.startsWith("Aviso de atualização:"))
+    }
+
+    @Test fun dailyBriefingIdentifiesOperationalCacheThatIsNotConfirmedRecent() {
+        val answer = StudioMesaAdvisor.dailyBriefing(snapshot(operationsFresh = false))
+        assertTrue(answer.response.contains("cache da aplicação"))
+        assertTrue(answer.response.contains("cinco minutos"))
+        assertTrue(answer.response.contains("Atualiza as operações"))
     }
 
     @Test fun namedStockQuestionIncludesUnitCostStockValueAndMinimumReplenishmentEstimate() {
