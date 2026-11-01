@@ -5644,11 +5644,16 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(8), dp(18), dp(10))
         }
+        val isOwner = isCurrentRestaurantOwner()
         val name = inputField("Nome do artigo", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES).apply {
             setText(item?.optString("name", "").orEmpty())
         }
         val unit = inputField("Unidade (kg, L, unidades…)", InputType.TYPE_CLASS_TEXT).apply {
             setText(item?.optString("unit", "unidades") ?: "unidades")
+            if (item != null && !isOwner) {
+                isEnabled = false
+                contentDescription = "Unidade base do artigo. Só o proprietário pode alterá-la."
+            }
         }
         val quantity = inputField("Quantidade atual", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL).apply {
             setText(formatQuantity(item?.optDouble("quantity", 0.0) ?: 0.0))
@@ -5662,20 +5667,26 @@ class MainActivity : Activity() {
         val note = inputField("Motivo (opcional)", InputType.TYPE_CLASS_TEXT).apply { setText(if (item == null) "Stock inicial" else "Correção de inventário") }
         listOf(
             "Nome" to name,
-            "Unidade" to unit,
+            "Unidade base" to unit,
             "Quantidade" to quantity,
-            "Limite mínimo" to threshold,
-            "Custo por unidade de stock (€)" to unitCost,
-            "Nota do movimento" to note
+            "Limite mínimo" to threshold
         ).forEach { (caption, field) ->
             form.addView(label(caption, 11f, true, forestSoft))
             form.addView(field, fieldParams())
             addGap(form, 5)
         }
-        form.addView(label(
-            "Indica o custo usando a unidade definida para este artigo (por exemplo, €/kg quando a unidade é kg).",
-            10.5f, false, muted
-        ))
+        if (isOwner) {
+            form.addView(label("Custo de compra por unidade de stock (€)", 11f, true, forestSoft))
+            form.addView(unitCost, fieldParams())
+            addGap(form, 4)
+            form.addView(label(
+                "Indica o custo usando a unidade definida para este artigo (por exemplo, €/kg quando a unidade é kg). Este valor só é visível ao proprietário.",
+                10.5f, false, muted
+            ))
+            addGap(form, 5)
+        }
+        form.addView(label("Nota do movimento", 11f, true, forestSoft))
+        form.addView(note, fieldParams())
         val dialog = AlertDialog.Builder(this)
             .setTitle(if (item == null) "Novo artigo de stock" else "Editar artigo de stock")
             .setView(form)
@@ -5690,12 +5701,14 @@ class MainActivity : Activity() {
                 val lowText = threshold.text.toString().trim().replace(',', '.')
                 val qty = qtyText.toDoubleOrNull()
                 val low = lowText.toDoubleOrNull()
-                val parsedUnitCost = try {
-                    InventoryUnitCostValidator.parseOrNull(unitCost.text.toString())
-                } catch (error: IllegalArgumentException) {
-                    unitCost.error = error.message ?: "Custo unitário inválido."
-                    return@setOnClickListener
-                }
+                val parsedUnitCost = if (isOwner) {
+                    try {
+                        InventoryUnitCostValidator.parseOrNull(unitCost.text.toString())
+                    } catch (error: IllegalArgumentException) {
+                        unitCost.error = error.message ?: "Custo unitário inválido."
+                        return@setOnClickListener
+                    }
+                } else null
                 when {
                     itemName.isBlank() || itemName.length > 100 -> name.error = "Indica um nome até 100 caracteres."
                     itemUnit.isBlank() || itemUnit.length > 24 -> unit.error = "Indica uma unidade até 24 caracteres."
