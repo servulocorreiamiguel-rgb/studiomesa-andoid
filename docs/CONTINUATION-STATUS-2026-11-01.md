@@ -104,3 +104,15 @@ Não aplicar as migrações pendentes ao Supabase de produção nesta fase.
 A validação de compilação e execução dos seis testes continua pendente; os resultados acima descrevem o código e os testes adicionados, não testes executados.
 
 **Estado do PR após esta etapa:** PR #72 continua aberta em rascunho. A branch contém 147 commits a mais e está 1 commit atrás de `main`; não foi feito rebase nem integração nesta etapa. A consulta ao GitHub não devolveu execuções de workflow nem status checks para o último commit. O código e os testes foram confirmados nos ficheiros da branch, mas a validação executável continua pendente.
+
+### Continuação — comparação económica dos artigos da carta
+
+- Criado `MenuCostComparisonAnalyzer.kt`: compara cada artigo ativo pelo custo unitário que o restaurante registou na carta relativamente ao preço de venda atual.
+- O ranking apresenta primeiro os artigos com maior relação custo/preço e compara-os com o objetivo percentual que o proprietário definiu no gestor económico (30% é apenas o valor inicial editável).
+- Para cada artigo apresenta preço, custo registado, percentagem e diferença após esse custo. Se o custo for superior ao preço, o caso fica visível como valor negativo; não é ocultado.
+- Artigos sem custo, sem preço positivo ou com valores inválidos ficam fora do ranking e são contados separadamente. O custo zero explicitamente registado é aceite como valor conhecido.
+- O painel apresenta os oito artigos com maior relação custo/preço, permite atualizar os dados do restaurante e tem um atalho para abrir a carta e rever os artigos.
+- A interface esclarece que o custo usado é o valor atualmente registado na carta/cache, não uma valorização contabilística nem necessariamente a composição completa da ficha técnica. A diferença preço-custo não é apresentada como lucro líquido e não é alterado qualquer preço automaticamente.
+- Criado `MenuCostComparisonAnalyzerTest.kt` com oito testes escritos: ordenação, comparação com o objetivo, igualdade exata com o objetivo, custo superior ao preço, custo zero válido, dados em falta, custos inválidos e limites/nomes de entrada.
+
+**Validação pendente:** os oito testes foram escritos e os ficheiros foram confirmados no GitHub, mas ainda não foram executados. Também não foi feita compilação Android nem Lint nesta etapa.
