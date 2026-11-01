@@ -6050,6 +6050,13 @@ class MainActivity : Activity() {
     }
 
     private fun showInventoryWasteHistory() {
+        if (!isCurrentRestaurantOwner()) {
+            AlertDialog.Builder(this)
+                .setMessage("O histórico de custos do desperdício está disponível apenas ao proprietário.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
         runBackend({
             SupabaseApi.listInventoryWasteMovements(
                 backendToken(), backendRestaurantId(), 100
