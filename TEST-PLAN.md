@@ -462,3 +462,5 @@ Estes casos são executados na ronda final. A app do restaurante pode atribuir o
 | ICOST-08 | Cache local | Proprietário carrega custos e termina sessão; outra conta staff usa o mesmo dispositivo | O custo não existe em `remote_inventory_json`, a cache em memória é limpa e a interface staff não o apresenta |
 | ICOST-09 | Mudança de papel | A conta passa de owner para staff e volta a abrir Stock/Assistente | A cache de custos é limpa e nenhuma ferramenta staff recebe custos anteriores |
 | ICOST-10 | Regressão de movimentos | Staff consulta histórico normal de movimentos | Quantidades, datas, notas e unidades continuam acessíveis; custos financeiros não são incluídos |
+
+| ICOST-11 | Recuperação de rede | Staff conclui um movimento, perde a resposta e a app tenta confirmar a mesma tentativa | A consulta de confirmação usa apenas as colunas operacionais explicitamente autorizadas; a repetição não cria um segundo movimento |
