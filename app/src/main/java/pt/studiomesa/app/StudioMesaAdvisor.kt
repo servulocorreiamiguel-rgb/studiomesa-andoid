@@ -455,10 +455,11 @@ internal object StudioMesaAdvisor {
             !snapshot.isDemo &&
             snapshot.restaurantConfigured &&
             !snapshot.operationsSnapshotFresh &&
-            intentMatch.intent !in setOf(
-                RestaurantAssistantIntent.TROUBLESHOOTING,
-                RestaurantAssistantIntent.ACCESS,
-                RestaurantAssistantIntent.GENERAL
+            intentMatch.intent in setOf(
+                RestaurantAssistantIntent.MENU_ENGINEERING,
+                RestaurantAssistantIntent.MARKETING,
+                RestaurantAssistantIntent.PRICING,
+                RestaurantAssistantIntent.ORDERS
             )
         ) {
             answer.copy(
