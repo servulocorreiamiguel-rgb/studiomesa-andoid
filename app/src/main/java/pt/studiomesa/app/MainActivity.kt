@@ -6592,8 +6592,10 @@ class MainActivity : Activity() {
                 it.optString("account_id") == accountId
         }
         val snapshotIsStale = scopedRecipeSnapshot != null &&
-            scopedRecipeSnapshot.optLong("operations_version", -1L) !=
+            !MenuRecipeCostSnapshotVersion.isCurrent(
+                scopedRecipeSnapshot.optLong("operations_version", -1L),
                 backendPrefs.getLong("remote_operations_updated_at", 0L)
+            )
         val recipeSnapshot = scopedRecipeSnapshot?.takeUnless { snapshotIsStale }
         val entries = if (hasRemoteRestaurant()) {
             val currentMenu = recipeSnapshot?.optJSONArray("menu") ?: remoteMenuItems()
