@@ -153,8 +153,6 @@ internal object MenuCostComparisonAnalyzer {
                 when {
                     entry.recipeExists && entry.recipeRequiresReview ->
                         MenuCostRecipeIssue(entry.itemName, entry.menuItemId, "A ficha foi alterada e precisa de revisão do proprietário.")
-                    entry.recipeExists && !entry.recipeIsActive && !entry.recipeRequiresReview ->
-                        MenuCostRecipeIssue(entry.itemName, entry.menuItemId, "A ficha está inativa. O custo manual da carta continua a ser usado.")
                     entry.recipeExists && entry.recipeIsActiveApproved &&
                         (!entry.recipeCostComplete || entry.recipeCostPerPortion == null) ->
                         MenuCostRecipeIssue(entry.itemName, entry.menuItemId, "A ficha aprovada tem custos em falta ou unidades incompatíveis.")
