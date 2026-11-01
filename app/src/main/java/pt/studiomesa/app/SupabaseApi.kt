@@ -372,12 +372,11 @@ object SupabaseApi {
 
     fun listMenuItemsForEconomicAnalysis(token: String, restaurantId: String): JSONArray {
         val encoded = URLEncoder.encode(restaurantId, "UTF-8")
-        return JSONArray(call(
-            "GET",
-            "/rest/v1/menu_items?select=id,name,price,cost,is_active&restaurant_id=eq.$encoded&is_active=eq.true&order=name.asc&limit=501",
-            null,
-            token
-        ))
+        return pagedArray(
+            token,
+            "/rest/v1/menu_items?select=id,name,price,cost,is_active&restaurant_id=eq.$encoded&is_active=eq.true&order=name.asc,id.asc",
+            maxRows = 500
+        )
     }
 
     /**
@@ -899,12 +898,11 @@ object SupabaseApi {
 
     fun listRestaurantRecipes(token: String, restaurantId: String): JSONArray {
         val encoded = URLEncoder.encode(restaurantId, "UTF-8")
-        return JSONArray(call(
-            "GET",
-            "/rest/v1/restaurant_recipes?select=id,menu_item_id,is_active,requires_review&restaurant_id=eq.$encoded&order=menu_item_id.asc&limit=501",
-            null,
-            token
-        ))
+        return pagedArray(
+            token,
+            "/rest/v1/restaurant_recipes?select=id,menu_item_id,is_active,requires_review&restaurant_id=eq.$encoded&order=menu_item_id.asc,id.asc",
+            maxRows = 500
+        )
     }
 
     fun listRestaurantRecipeIngredients(token: String, restaurantId: String): JSONArray {
