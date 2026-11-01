@@ -134,7 +134,9 @@ internal object MenuCostComparisonAnalyzer {
             menuItemsUsingRecipeCost = ranked.count { it.costSourceLabel == "Ficha técnica aprovada" },
             menuItemsUsingManualCost = ranked.count { it.costSourceLabel != "Ficha técnica aprovada" },
             recipesAwaitingApproval = entries.count { it.recipeExists && it.recipeRequiresReview },
-            recipesInactive = entries.count { it.recipeExists && !it.recipeIsActive },
+            recipesInactive = entries.count {
+                it.recipeExists && !it.recipeIsActive && !it.recipeRequiresReview
+            },
             approvedRecipesIncomplete = entries.count {
                 it.recipeExists && it.recipeIsActiveApproved && (!it.recipeCostComplete || it.recipeCostPerPortion == null)
             }
