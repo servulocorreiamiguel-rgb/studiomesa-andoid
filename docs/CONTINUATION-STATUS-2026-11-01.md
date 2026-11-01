@@ -84,3 +84,15 @@ Não aplicar as migrações pendentes ao Supabase de produção nesta fase.
 - A mensagem de erro da criação foi melhorada: explica que o servidor pode ter recebido o pedido antes de a ligação falhar e pede ao funcionário que mantenha os mesmos dados ao repetir. O formulário permanece aberto; a referência da tentativa não é marcada como concluída enquanto a operação e a atualização da cache não terminarem.
 - Esta alteração é apenas uma melhoria de orientação e não substitui o teste de perda de rede depois do servidor confirmar a gravação.
 - Não foi executada CI, compilação, Lint ou testes unitários após esta alteração.
+
+### Continuação — custo estimado por dose nas fichas técnicas
+
+- Criado `RestaurantRecipeCostCalculator.kt`: calcula o custo conhecido por dose a partir dos custos unitários atuais do inventário.
+- O cálculo usa a quantidade de stock arredondada para cima a três casas decimais, a mesma regra que a função de consumo usa por dose, incluindo a percentagem de desperdício.
+- A ficha técnica mostra agora o custo de cada ingrediente e o custo estimado da dose. Quando falta um custo de compra, mostra apenas o custo conhecido e declara que o total está incompleto; um ingrediente sem custo nunca é tratado como custo zero. Um custo explicitamente igual a zero continua a ser um custo conhecido.
+- O ecrã esclarece que a estimativa não inclui mão de obra, energia, embalagem nem outros custos indiretos e que usa os custos unitários atuais, não uma valorização contabilística.
+- Criado `RestaurantRecipeCostCalculatorTest.kt` com quatro testes escritos para desperdício/arredondamento, custos em falta, custo zero válido e entradas duplicadas ou inválidas.
+
+**Validação pendente:** os ficheiros foram revistos no GitHub após a gravação, mas não foi possível executar Gradle/Android Lint nem GitHub Actions nesta sessão. O workflow Android está configurado para correr em pushes para `main` ou por `workflow_dispatch`; não foi disponibilizada uma ação de disparo manual nesta ligação. A tentativa de clonar o repositório para uma execução local também falhou por indisponibilidade de ligação ao GitHub. Não declarar estes testes como aprovados até à execução efetiva.
+
+**Nota de produto:** este é um custo estimado de ingredientes por dose, não o custo total de produção nem uma margem líquida. Não atualizar automaticamente o preço de venda.
