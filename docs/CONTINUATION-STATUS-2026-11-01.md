@@ -77,3 +77,10 @@ Continuar a revisão dos fluxos de pedidos e inventário, sobretudo:
 - manter os estados vazios, de carregamento e de erro claros sem apagar dados úteis em cache.
 
 Não aplicar as migrações pendentes ao Supabase de produção nesta fase.
+
+### Continuação — pedidos e repetição segura
+
+- A criação de pedidos na aplicação de gestão usa uma referência persistente por conta e conteúdo do pedido. O backend verifica a tentativa repetida pelo mesmo identificador e pelos dados/snapshots guardados, para evitar criar um segundo pedido quando a primeira resposta HTTP se perde.
+- A mensagem de erro da criação foi melhorada: explica que o servidor pode ter recebido o pedido antes de a ligação falhar e pede ao funcionário que mantenha os mesmos dados ao repetir. O formulário permanece aberto; a referência da tentativa não é marcada como concluída enquanto a operação e a atualização da cache não terminarem.
+- Esta alteração é apenas uma melhoria de orientação e não substitui o teste de perda de rede depois do servidor confirmar a gravação.
+- Não foi executada CI, compilação, Lint ou testes unitários após esta alteração.
