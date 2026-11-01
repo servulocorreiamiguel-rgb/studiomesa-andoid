@@ -77,6 +77,10 @@ class MainActivity : Activity() {
     private var inventoryUpdatedAtMillis = 0L
     private var inventoryRefreshFailed = false
     private var inventoryPageContainer: LinearLayout? = null
+    // Purchase costs are never persisted in the ordinary inventory cache.
+    private val inventoryUnitCostCache = mutableMapOf<String, BigDecimal?>()
+    private var inventoryUnitCostCacheScope: String? = null
+    private var inventoryUnitCostCacheLoaded = false
     private val inventoryRefreshHandler = Handler(Looper.getMainLooper())
     private val inventoryRefreshRunnable = object : Runnable {
         override fun run() {
@@ -4534,9 +4538,99 @@ class MainActivity : Activity() {
     }
 
 
-    private fun remoteInventoryItems(): JSONArray =
-        runCatching { JSONArray(backendPrefs.getString("remote_inventory_json", "[]") ?: "[]") }
-            .getOrElse { JSONArray() }
+    private fun currentInventoryCostScope(restaurantId: String = backendRestaurantId()): String =
+        restaurantId + ":" + backendPrefs.getString("user_id", "").orEmpty()
+
+    private fun isCurrentRestaurantOwner(): Boolean =
+        hasRemoteRestaurant() &&
+            backendPrefs.getString("restaurant_role", "").orEmpty() == "owner"
+
+    private fun clearInventoryUnitCostCache() {
+        inventoryUnitCostCache.clear()
+        inventoryUnitCostCacheScope = null
+        inventoryUnitCostCacheLoaded = false
+    }
+
+    private fun inventoryItemsWithoutPurchaseCosts(items: JSONArray): JSONArray {
+        val safeItems = JSONArray()
+        val safeFields = listOf(
+            "id", "name", "unit", "quantity", "low_stock_threshold", "updated_at"
+        )
+        for (index in 0 until items.length()) {
+            val source = items.optJSONObject(index) ?: continue
+            val safe = JSONObject()
+            safeFields.forEach { field ->
+                if (source.has(field)) safe.put(field, source.opt(field))
+            }
+            safeItems.put(safe)
+        }
+        return safeItems
+    }
+
+    private fun inventoryItemsWithOwnerCosts(items: JSONArray): JSONArray {
+        val safeItems = inventoryItemsWithoutPurchaseCosts(items)
+        if (!isCurrentRestaurantOwner() ||
+            inventoryUnitCostCacheScope != currentInventoryCostScope()
+        ) return safeItems
+
+        for (index in 0 until safeItems.length()) {
+            val item = safeItems.optJSONObject(index) ?: continue
+            val itemId = item.optString("id")
+            if (inventoryUnitCostCache.containsKey(itemId)) {
+                item.put(
+                    "unit_cost_per_unit",
+                    inventoryUnitCostCache[itemId] ?: JSONObject.NULL
+                )
+            }
+        }
+        return safeItems
+    }
+
+    private fun loadInventoryItemsForCurrentRole(
+        token: String,
+        restaurantId: String
+    ): JSONArray {
+        if (!isCurrentRestaurantOwner()) {
+            clearInventoryUnitCostCache()
+            return SupabaseApi.listInventoryItems(token, restaurantId)
+        }
+
+        val rows = SupabaseApi.listInventoryItemsWithCosts(token, restaurantId)
+        val newCosts = mutableMapOf<String, BigDecimal?>()
+        for (index in 0 until rows.length()) {
+            val item = rows.optJSONObject(index) ?: continue
+            val itemId = item.optString("id").trim()
+            if (itemId.isBlank()) continue
+            val cost = if (item.isNull("unit_cost_per_unit")) {
+                null
+            } else {
+                try {
+                    BigDecimal(item.get("unit_cost_per_unit").toString())
+                } catch (_: NumberFormatException) {
+                    throw IllegalStateException(
+                        "O servidor devolveu um custo de compra inválido para um artigo de stock."
+                    )
+                }
+            }
+            newCosts[itemId] = cost
+        }
+        inventoryUnitCostCache.clear()
+        inventoryUnitCostCache.putAll(newCosts)
+        inventoryUnitCostCacheScope = currentInventoryCostScope(restaurantId)
+        inventoryUnitCostCacheLoaded = true
+        return inventoryItemsWithoutPurchaseCosts(rows)
+    }
+
+    private fun remoteInventoryItems(): JSONArray {
+        val stored = backendPrefs.getString("remote_inventory_json", "[]") ?: "[]"
+        val parsed = runCatching { JSONArray(stored) }.getOrElse { JSONArray() }
+        val safeItems = inventoryItemsWithOwnerCosts(parsed)
+        val safeJson = inventoryItemsWithoutPurchaseCosts(parsed).toString()
+        if (safeJson != stored) {
+            backendPrefs.edit().putString("remote_inventory_json", safeJson).apply()
+        }
+        return safeItems
+    }
 
     private fun remoteReservations(): JSONArray = reservationCache
 
@@ -4617,7 +4711,7 @@ class MainActivity : Activity() {
                 if (token.isBlank() || backendRestaurantId() != restaurantId) {
                     throw IllegalStateException("A sessão ou o restaurante já não estão disponíveis.")
                 }
-                freshItems = SupabaseApi.listInventoryItems(token, restaurantId)
+                freshItems = loadInventoryItemsForCurrentRole(token, restaurantId)
             } catch (_: Exception) {
                 // Retain the last verified stock snapshot and show a non-blocking warning.
             }
@@ -4668,7 +4762,7 @@ class MainActivity : Activity() {
         if (inventoryRefreshInFlight) return
         inventoryRefreshInFlight = true
         runBackend({
-            val items = SupabaseApi.listInventoryItems(backendToken(), backendRestaurantId())
+            val items = loadInventoryItemsForCurrentRole(backendToken(), backendRestaurantId())
             backendPrefs.edit().putString("remote_inventory_json", items.toString())
                 .putBoolean("inventory_loaded", true).apply()
             "OK"
@@ -5642,7 +5736,7 @@ class MainActivity : Activity() {
                                     itemName, itemUnit, qty, low, itemNote, parsedUnitCost
                                 )
                             }
-                            val latest = SupabaseApi.listInventoryItems(token, restaurantId)
+                            val latest = loadInventoryItemsForCurrentRole(token, restaurantId)
                             backendPrefs.edit().putString("remote_inventory_json", latest.toString())
                                 .putBoolean("inventory_loaded", true).apply()
                             "OK"
@@ -5851,7 +5945,7 @@ class MainActivity : Activity() {
                     SupabaseApi.adjustInventoryStock(
                         token, restaurantId, itemId, delta, movementNote, requestId
                     )
-                    val latest = SupabaseApi.listInventoryItems(token, restaurantId)
+                    val latest = loadInventoryItemsForCurrentRole(token, restaurantId)
                     backendPrefs.edit()
                         .putString("remote_inventory_json", latest.toString())
                         .putBoolean("inventory_loaded", true)
@@ -7885,7 +7979,7 @@ class MainActivity : Activity() {
             val token = backendToken()
             val restaurantId = backendRestaurantId()
             val recipe = SupabaseApi.getRestaurantRecipe(token, restaurantId, menuItemId)
-            val stock = SupabaseApi.listInventoryItems(token, restaurantId)
+            val stock = loadInventoryItemsForCurrentRole(token, restaurantId)
             val recipeId = recipe?.optString("id").orEmpty()
             val ingredients = if (recipeId.isNotBlank()) {
                 SupabaseApi.listRecipeIngredients(token, recipeId)
@@ -7893,7 +7987,7 @@ class MainActivity : Activity() {
             JSONObject()
                 .put("recipe", recipe ?: JSONObject.NULL)
                 .put("ingredients", ingredients)
-                .put("stock", stock)
+                .put("stock", inventoryItemsWithOwnerCosts(stock))
                 .toString()
         }) { raw ->
             showRecipeDialogContent(menuItemId, menuItemName, JSONObject(raw))
