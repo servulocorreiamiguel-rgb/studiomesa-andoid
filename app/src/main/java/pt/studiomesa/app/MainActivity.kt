@@ -4622,6 +4622,7 @@ class MainActivity : Activity() {
     }
 
     private fun remoteInventoryItems(): JSONArray {
+        if (!isCurrentRestaurantOwner()) clearInventoryUnitCostCache()
         val stored = backendPrefs.getString("remote_inventory_json", "[]") ?: "[]"
         val parsed = runCatching { JSONArray(stored) }.getOrElse { JSONArray() }
         val safeItems = inventoryItemsWithOwnerCosts(parsed)
@@ -5348,7 +5349,11 @@ class MainActivity : Activity() {
     }
 
     private fun addInventoryFilters(container: LinearLayout) {
-        val filters = listOf("Todos", "Esgotados", "Stock baixo", "Sem custo")
+        val filters = if (isCurrentRestaurantOwner()) {
+            listOf("Todos", "Esgotados", "Stock baixo", "Sem custo")
+        } else {
+            listOf("Todos", "Esgotados", "Stock baixo")
+        }
         if (selectedInventoryFilter !in filters) selectedInventoryFilter = "Todos"
         val filterCard = makeCard(13)
         filterCard.addView(label("PESQUISAR E FILTRAR STOCK", 9.5f, true, forestSoft))
