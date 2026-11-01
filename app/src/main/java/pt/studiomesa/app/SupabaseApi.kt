@@ -1182,12 +1182,19 @@ object SupabaseApi {
 
     fun listReservations(token: String, restaurantId: String): JSONArray {
         val encoded = URLEncoder.encode(restaurantId, "UTF-8")
-        return JSONArray(call(
-            "GET",
-            "/rest/v1/restaurant_reservations?select=id,guest_name,guest_phone,party_size,reservation_at,duration_minutes,table_number,status,notes,created_at,loyalty_member_id&restaurant_id=eq.$encoded&order=reservation_at.asc&limit=200",
-            null,
-            token
-        ))
+        val loadedRows = OrderHistoryPagination.collect(recordLabel = "reservas") { offset, limit ->
+            val page = JSONArray(call(
+                "GET",
+                "/rest/v1/restaurant_reservations?select=id,guest_name,guest_phone,party_size,reservation_at,duration_minutes,table_number,status,notes,created_at,loyalty_member_id&restaurant_id=eq.$encoded&order=reservation_at.asc,id.asc&limit=$limit&offset=$offset",
+                null,
+                token
+            ))
+            (0 until page.length()).map { index ->
+                page.optJSONObject(index)
+                    ?: throw IllegalStateException("O servidor devolveu uma reserva com formato inválido.")
+            }
+        }
+        return JSONArray().also { result -> loadedRows.forEach(result::put) }
     }
 
     fun listCustomerReservations(token: String, memberId: String): JSONArray {
@@ -1195,12 +1202,19 @@ object SupabaseApi {
             "O cartão de cliente não é válido."
         }
         val encoded = URLEncoder.encode(memberId, "UTF-8")
-        return JSONArray(call(
-            "GET",
-            "/rest/v1/restaurant_reservations?select=id,guest_name,guest_phone,party_size,reservation_at,duration_minutes,table_number,status,notes,created_at,loyalty_member_id&loyalty_member_id=eq.$encoded&order=reservation_at.asc&limit=100",
-            null,
-            token
-        ))
+        val loadedRows = OrderHistoryPagination.collect(recordLabel = "reservas") { offset, limit ->
+            val page = JSONArray(call(
+                "GET",
+                "/rest/v1/restaurant_reservations?select=id,guest_name,guest_phone,party_size,reservation_at,duration_minutes,table_number,status,notes,created_at,loyalty_member_id&loyalty_member_id=eq.$encoded&order=reservation_at.asc,id.asc&limit=$limit&offset=$offset",
+                null,
+                token
+            ))
+            (0 until page.length()).map { index ->
+                page.optJSONObject(index)
+                    ?: throw IllegalStateException("O servidor devolveu uma reserva com formato inválido.")
+            }
+        }
+        return JSONArray().also { result -> loadedRows.forEach(result::put) }
     }
 
     fun createCustomerReservationRequest(
