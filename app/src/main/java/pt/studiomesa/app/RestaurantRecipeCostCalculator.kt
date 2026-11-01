@@ -17,6 +17,17 @@ internal data class RestaurantRecipeCostEstimate(
 ) {
     val isComplete: Boolean
         get() = totalIngredients > 0 && ingredientsWithoutCost == 0
+
+    fun knownIngredientCostPercent(sellingPrice: BigDecimal): BigDecimal {
+        require(sellingPrice.signum() > 0) { "O preço de venda tem de ser superior a zero." }
+        return knownCostPerPortion
+            .multiply(BigDecimal("100"))
+            .divide(sellingPrice, 6, java.math.RoundingMode.HALF_UP)
+            .setScale(1, java.math.RoundingMode.HALF_UP)
+    }
+
+    fun amountAfterIngredients(sellingPrice: BigDecimal): BigDecimal =
+        sellingPrice.subtract(knownCostPerPortion)
 }
 
 /**
