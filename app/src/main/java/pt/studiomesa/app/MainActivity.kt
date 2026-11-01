@@ -903,25 +903,28 @@ class MainActivity : Activity() {
             addGap(container, 10)
 
             val tableData = remoteTables()
-            if (tableData.length() == 0) {
+            val validTableIndices = (0 until tableData.length()).filter {
+                tableData.optJSONObject(it) != null
+            }
+            if (validTableIndices.isEmpty()) {
                 container.addView(emptyCard("Ainda não existem mesas sincronizadas. Atualiza os dados ou volta a iniciar sessão."))
                 return
             }
 
-            val occupiedTables = (0 until tableData.length()).count {
+            val occupiedTables = validTableIndices.count {
                 tableData.optJSONObject(it)?.optBoolean("is_occupied", false) == true
             }
             val tableOverview = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
             }
-            tableOverview.addView(statCard("MESAS LIVRES", (tableData.length() - occupiedTables).toString(), green),
+            tableOverview.addView(statCard("MESAS LIVRES", (validTableIndices.size - occupiedTables).toString(), green),
                 LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), dp(10)) })
             tableOverview.addView(statCard("MESAS OCUPADAS", occupiedTables.toString(), if (occupiedTables > 0) copper else forestSoft),
                 LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, dp(10)) })
             container.addView(tableOverview)
             addTableFilters(container)
-            val visibleTableIndices = (0 until tableData.length()).filter { index ->
+            val visibleTableIndices = validTableIndices.filter { index ->
                 val occupied = tableData.optJSONObject(index)?.optBoolean("is_occupied", false) == true
                 tableMatchesSelectedFilter(occupied)
             }
