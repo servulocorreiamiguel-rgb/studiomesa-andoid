@@ -103,6 +103,11 @@ class MainActivity : Activity() {
     private var budgetReportText = ""
     private var usageReportText = ""
     private var labourReportText = ""
+    private var menuRecipeCostSnapshot: JSONObject? = null
+    private var menuRecipeCostScopeKey: String? = null
+    private var menuRecipeCostUpdatedAtMillis = 0L
+    private var menuRecipeCostRefreshLoading = false
+    private var menuRecipeCostRefreshFailed = false
     private val backendPrefs by lazy { getSharedPreferences("studiomesa_backend", MODE_PRIVATE) }
     private val secureSession by lazy { SecureSessionStore(this) }
     private val pendingRequestIds by lazy { PendingRequestIds(this) }
@@ -5831,6 +5836,11 @@ class MainActivity : Activity() {
         budgetReportText = ""
         usageReportText = ""
         labourReportText = ""
+        menuRecipeCostSnapshot = null
+        menuRecipeCostScopeKey = null
+        menuRecipeCostUpdatedAtMillis = 0L
+        menuRecipeCostRefreshLoading = false
+        menuRecipeCostRefreshFailed = false
     }
 
     private fun renderEconomicManager(container: LinearLayout) {
