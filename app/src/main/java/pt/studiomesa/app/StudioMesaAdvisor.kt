@@ -23,6 +23,15 @@ internal object AssistantStockSnapshotPolicy {
             nowMillis - updatedAtMillis <= MAX_AGE_MILLIS
 }
 
+internal object AssistantOperationsSnapshotPolicy {
+    const val MAX_AGE_MILLIS = 5 * 60 * 1000L
+
+    fun isFresh(nowMillis: Long, updatedAtMillis: Long): Boolean =
+        updatedAtMillis > 0L &&
+            nowMillis >= updatedAtMillis &&
+            nowMillis - updatedAtMillis <= MAX_AGE_MILLIS
+}
+
 internal enum class MenuEngineeringClass { STAR, WORKHORSE, PUZZLE, DOG, MISSING_COST }
 internal data class AssistantMenuEngineeringItem(val itemName: String, val unitsSold: Int, val popularitySharePercent: BigDecimal, val contributionPerUnit: BigDecimal?, val classification: MenuEngineeringClass, val recommendation: String)
 internal data class AssistantMenuEngineeringReport(val hasEnoughSales: Boolean, val hasMarginData: Boolean, val completedUnits: Int, val requiredUnits: Int = 5, val items: List<AssistantMenuEngineeringItem> = emptyList())
@@ -39,7 +48,8 @@ internal data class StudioMesaAssistantSnapshot(
     val reservationsFeatureAvailable: Boolean = false,
     val reservationsLoaded: Boolean = false,
     val pendingReservations: Int = 0,
-    val salesLines: List<AssistantSaleLine> = emptyList()
+    val salesLines: List<AssistantSaleLine> = emptyList(),
+    val operationsSnapshotFresh: Boolean = true
 )
 internal enum class AssistantPriority { URGENT, ATTENTION, TIP }
 internal data class AssistantRecommendation(
@@ -69,6 +79,15 @@ internal object StudioMesaAdvisor {
                 "demo-mode", AssistantPriority.ATTENTION, "Confirma que estás a analisar os dados certos",
                 if (snapshot.isDemo) "A aplicação está em modo de demonstração. As sugestões usam exemplos locais e não representam a operação real de um restaurante."
                 else "Ainda não há um restaurante configurado. Liga a conta na secção Conta para trabalhar com dados partilhados.", "Conta"
+            )
+        }
+        if (!snapshot.isDemo && snapshot.restaurantConfigured && !snapshot.operationsSnapshotFresh) {
+            out += AssistantRecommendation(
+                "operations-data-stale",
+                AssistantPriority.ATTENTION,
+                "Atualiza a carta e os pedidos antes de decidir",
+                "A última sincronização das operações não está confirmada como recente. As conclusões sobre preços, pedidos e vendas podem refletir dados antigos. Abre Início e atualiza os dados antes de agir.",
+                "Início"
             )
         }
         if (snapshot.menuItems.isEmpty()) {
@@ -210,7 +229,11 @@ internal object StudioMesaAdvisor {
         val lowStock = if (snapshot.stockLoaded) snapshot.stockItems.count { it.quantity <= it.minimumQuantity } else null
         val report = menuEngineering(snapshot)
         val lines = mutableListOf<String>()
-        lines += "Fonte: " + if (snapshot.isDemo) "dados de demonstração locais." else "dados carregados pela aplicação."
+        lines += when {
+            snapshot.isDemo -> "Fonte: dados de demonstração locais."
+            snapshot.operationsSnapshotFresh -> "Fonte: dados operacionais carregados pela aplicação; a sincronização está dentro do limite de referência de cinco minutos."
+            else -> "Fonte: cache da aplicação; a última sincronização não está confirmada como recente (limite de referência: cinco minutos). Atualiza as operações antes de decidir."
+        }
         lines += "Carta: ${snapshot.menuItems.size} artigo(s); $missingCosts sem custo interno válido."
         lines += "Pedidos ativos: ${snapshot.activeOrderCount}; em preparação: ${snapshot.preparationOrderCount}."
         if (snapshot.stockFeatureAvailable) lines += if (lowStock == null) {
@@ -411,7 +434,7 @@ internal object StudioMesaAdvisor {
 
     fun answerQuestion(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
         val intentMatch = RestaurantAssistantIntentClassifier.classify(rawQuestion)
-        return when (intentMatch.intent) {
+        val answer = when (intentMatch.intent) {
             RestaurantAssistantIntent.ECONOMIC_MANAGER -> answerEconomicQuestion(rawQuestion, snapshot)
             RestaurantAssistantIntent.DAILY_BRIEFING -> dailyBriefing(snapshot)
             RestaurantAssistantIntent.MENU_ENGINEERING -> answerMenuEngineering(rawQuestion, snapshot)
@@ -428,6 +451,20 @@ internal object StudioMesaAdvisor {
             )
             RestaurantAssistantIntent.GENERAL -> answerGeneral(rawQuestion)
         }
+        return if (
+            !snapshot.isDemo &&
+            snapshot.restaurantConfigured &&
+            !snapshot.operationsSnapshotFresh &&
+            intentMatch.intent !in setOf(
+                RestaurantAssistantIntent.TROUBLESHOOTING,
+                RestaurantAssistantIntent.ACCESS,
+                RestaurantAssistantIntent.GENERAL
+            )
+        ) {
+            answer.copy(
+                response = "Aviso de atualização: a última sincronização das operações não está confirmada como recente (limite de referência: cinco minutos). A resposta abaixo pode usar dados antigos; atualiza a carta e os pedidos antes de tomar uma decisão.\n\n" + answer.response
+            )
+        } else answer
     }
 
     private fun answerPricing(rawQuestion: String, snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
