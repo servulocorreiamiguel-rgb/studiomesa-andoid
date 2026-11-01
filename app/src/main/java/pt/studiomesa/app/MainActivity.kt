@@ -6858,7 +6858,7 @@ class MainActivity : Activity() {
                 if (estimate.ingredientsWithoutCost > 0) {
                     addGap(costCard, 4)
                     costCard.addView(label(
-                        "\${estimate.ingredientsWithoutCost} de \${estimate.totalIngredients} ingrediente(s) sem custo de compra. O valor apresentado é parcial, não é o custo total da receita.",
+                        "${estimate.ingredientsWithoutCost} de ${estimate.totalIngredients} ingrediente(s) sem custo de compra. O valor apresentado é parcial, não é o custo total da receita.",
                         11f, false, ink
                     ))
                 } else {
@@ -6902,7 +6902,7 @@ class MainActivity : Activity() {
                     val lineCost = estimate.lineCostsPerPortion[inventoryItemId]
                     addGap(card, 3)
                     card.addView(label(
-                        lineCost?.let { "Custo estimado desta linha: \${formatEuro(it)} por dose" }
+                        lineCost?.let { "Custo estimado desta linha: ${formatEuro(it)} por dose" }
                             ?: "Custo desta linha por calcular: custo de compra não definido",
                         10.5f, false, if (lineCost == null) muted else forestSoft
                     ))
