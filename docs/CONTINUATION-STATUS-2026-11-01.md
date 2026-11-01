@@ -167,3 +167,14 @@ A validação de compilação e execução dos seis testes continua pendente; os
 - Foram escritos dois testes adicionais para a mensagem de excesso de reservas e validação do rótulo do histórico. Os testes anteriores de paginação já cobrem páginas múltiplas, página final curta, limite exato, excesso e limites inválidos.
 
 **Validação desta continuação:** as alterações foram gravadas e relidas no GitHub. Os testes de paginação estão escritos, mas não foram executados nesta sessão. Não houve CI, compilação Android, Lint, teste em dispositivos nem alterações ao Supabase alojado.
+
+
+### Continuação — isolamento das respostas de atualização de reservas
+
+- A agenda da equipa deixou de alterar a cache dentro da tarefa de rede. A resposta é convertida e aplicada à interface apenas no callback de sucesso, na thread principal.
+- Cada atualização captura o identificador do restaurante e da conta. Antes de iniciar a consulta e novamente antes de aplicar a resposta, confirma-se que ambos continuam a corresponder à sessão atual.
+- Na aplicação de cliente, a mesma proteção confirma o identificador do cartão de fidelização e a conta autenticada. Erros ou respostas de uma sessão anterior não alteram o estado de carregamento nem substituem a lista da nova conta.
+- Ao mudar de restaurante, a cache de reservas da equipa, o estado de carregamento e o filtro selecionado são reiniciados. A perda da associação ao restaurante também limpa esse estado.
+- Criado `ReservationRefreshScope.kt` e `ReservationRefreshScopeTest.kt`, com dois testes que cobrem conta/restaurante diferentes, cartões diferentes e identificadores ausentes.
+
+**Validação desta continuação:** os ficheiros foram gravados e relidos no GitHub. Os dois testes de isolamento e os dois testes de paginação acrescentados nesta fase ainda não foram executados. Não houve CI, Gradle, Lint, compilação APK/AAB, teste físico ou alteração ao Supabase alojado.
