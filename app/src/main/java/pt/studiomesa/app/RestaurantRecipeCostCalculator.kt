@@ -61,7 +61,7 @@ internal object RestaurantRecipeCostCalculator {
                     unitCost.scale() <= 4) {
                     "O custo unitário do ingrediente não é válido."
                 }
-                val lineCost = stockQuantity.multiply(unitCost)
+                val lineCost = stockQuantity.multiply(unitCost).stripTrailingZeros()
                 knownCost = knownCost.add(lineCost)
                 lineCosts[input.inventoryItemId] = lineCost
             }
