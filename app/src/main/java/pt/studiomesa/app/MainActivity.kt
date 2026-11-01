@@ -2234,6 +2234,7 @@ class MainActivity : Activity() {
             if (restaurant != null) {
                 val restaurantId = restaurant.optString("restaurant_id")
                 if (previousRestaurantId.isNotBlank() && previousRestaurantId != restaurantId) {
+                    clearInventoryUnitCostCache()
                     editor.remove("remote_members_json")
                         .remove("remote_tables_json")
                         .remove("remote_menu_json")
@@ -2249,6 +2250,9 @@ class MainActivity : Activity() {
                     .putString("restaurant_role", restaurant.optString("user_role", "staff"))
             }
             editor.apply()
+            if (backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") {
+                clearInventoryUnitCostCache()
+            }
             if (restaurant != null) {
                 cacheRemoteOperations(token, restaurant.optString("restaurant_id"))
             } else {
@@ -2393,6 +2397,7 @@ class MainActivity : Activity() {
      */
     private fun prepareForAuthenticatedUser(newUserId: String) {
         clearEconomicManagerState()
+        clearInventoryUnitCostCache()
         customerReservationsCache = JSONArray()
         selectedCustomerReservationFilter = "Todas"
         customerReservationsLoaded = false
