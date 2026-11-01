@@ -27,6 +27,12 @@ internal data class MenuCostComparisonRow(
     val costSourceLabel: String
 )
 
+internal data class MenuCostRecipeIssue(
+    val itemName: String,
+    val menuItemId: String?,
+    val description: String
+)
+
 internal data class MenuCostComparisonResult(
     val rankedItems: List<MenuCostComparisonRow>,
     val excludedMissingCost: Int,
@@ -38,7 +44,8 @@ internal data class MenuCostComparisonResult(
     val menuItemsUsingManualCost: Int,
     val recipesAwaitingApproval: Int,
     val recipesInactive: Int,
-    val approvedRecipesIncomplete: Int
+    val approvedRecipesIncomplete: Int,
+    val recipeIssues: List<MenuCostRecipeIssue>
 )
 
 /**
@@ -141,6 +148,18 @@ internal object MenuCostComparisonAnalyzer {
             },
             approvedRecipesIncomplete = entries.count {
                 it.recipeExists && it.recipeIsActiveApproved && (!it.recipeCostComplete || it.recipeCostPerPortion == null)
+            },
+            recipeIssues = entries.mapNotNull { entry ->
+                when {
+                    entry.recipeExists && entry.recipeRequiresReview ->
+                        MenuCostRecipeIssue(entry.itemName, entry.menuItemId, "A ficha foi alterada e precisa de revisão do proprietário.")
+                    entry.recipeExists && !entry.recipeIsActive && !entry.recipeRequiresReview ->
+                        MenuCostRecipeIssue(entry.itemName, entry.menuItemId, "A ficha está inativa. O custo manual da carta continua a ser usado.")
+                    entry.recipeExists && entry.recipeIsActiveApproved &&
+                        (!entry.recipeCostComplete || entry.recipeCostPerPortion == null) ->
+                        MenuCostRecipeIssue(entry.itemName, entry.menuItemId, "A ficha aprovada tem custos em falta ou unidades incompatíveis.")
+                    else -> null
+                }
             }
         )
     }
