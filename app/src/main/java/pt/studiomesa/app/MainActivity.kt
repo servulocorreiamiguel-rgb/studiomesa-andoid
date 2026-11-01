@@ -5483,7 +5483,8 @@ class MainActivity : Activity() {
         if (isOwner &&
             (!inventoryUnitCostCacheLoaded ||
                 inventoryUnitCostCacheScope != currentInventoryCostScope()) &&
-            !inventoryRefreshInFlight
+            !inventoryRefreshInFlight &&
+            !inventoryRefreshFailed
         ) {
             // Load owner-only costs after a cold app start. Until they arrive,
             // show operational stock but do not imply that missing data is zero.
@@ -5585,7 +5586,11 @@ class MainActivity : Activity() {
             }
             if (!ownerCostsLoaded) {
                 valuation.addView(label(
-                    "A atualizar os custos de compra do servidor…",
+                    if (inventoryRefreshFailed) {
+                        "Não foi possível validar o acesso aos custos. Usa «Atualizar» para tentar novamente."
+                    } else {
+                        "A atualizar os custos de compra do servidor…"
+                    },
                     10.5f, false, muted
                 ))
             } else {
@@ -5658,7 +5663,11 @@ class MainActivity : Activity() {
             card.addView(label("Alerta a ${formatQuantity(threshold)} $unit", 11.5f, false, muted))
             if (isOwner) {
                 val costLabel = if (!ownerCostsLoaded) {
-                    "A carregar custo de compra…"
+                    if (inventoryRefreshFailed) {
+                        "Custo de compra indisponível até confirmar as permissões"
+                    } else {
+                        "A carregar custo de compra…"
+                    }
                 } else {
                     unitCost?.let { "Custo de compra: ${formatUnitCost(it)} / $unit" }
                         ?: "Custo de compra por unidade não definido"
