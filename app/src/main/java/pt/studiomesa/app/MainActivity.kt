@@ -3244,6 +3244,13 @@ class MainActivity : Activity() {
             val restaurantDeleted = SupabaseApi.deleteAccount(backendToken(), deleteRestaurantData)
             if (restaurantDeleted) "DELETED_RESTAURANT" else "DELETED_ACCOUNT"
         }) { result ->
+            val economicScopeToDelete = if (hasRemoteRestaurant()) {
+                "restaurant:" + backendRestaurantId() + ":" +
+                    backendPrefs.getString("user_id", "").orEmpty()
+            } else null
+            economicScopeToDelete?.let { scope ->
+                runCatching { SecureEconomicStore(this).delete(scope) }
+            }
             clearInventoryUnitCostCache()
             clearEconomicManagerState()
             secureSession.clear()
