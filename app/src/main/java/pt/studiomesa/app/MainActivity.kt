@@ -8014,8 +8014,42 @@ class MainActivity : Activity() {
                 "${item.optString("name")} · ${item.optString("unit", "unidades")}"
             }
         )
+        val enteredUnitSpinner = Spinner(this)
+        var unitOptionsStockItemId = ""
+        fun updateIngredientUnitOptions(position: Int) {
+            val selectedItem = stockItems.getOrNull(position) ?: return
+            val stockItemId = selectedItem.optString("id")
+            if (stockItemId == unitOptionsStockItemId) return
+
+            val stockUnit = selectedItem.optString("unit", "unidades")
+                .trim()
+                .ifBlank { "unidades" }
+            val options = InventoryUnitConverter.compatibleUnits(stockUnit)
+            enteredUnitSpinner.adapter = ArrayAdapter(
+                this,
+                android.R.layout.simple_spinner_dropdown_item,
+                options
+            )
+            enteredUnitSpinner.setSelection(0, false)
+            unitOptionsStockItemId = stockItemId
+        }
+        updateIngredientUnitOptions(0)
+        ingredientSpinner.onItemSelectedListener =
+            object : android.widget.AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(
+                    parent: android.widget.AdapterView<*>?,
+                    view: View?,
+                    position: Int,
+                    id: Long
+                ) {
+                    updateIngredientUnitOptions(position)
+                }
+
+                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+            }
+
         val quantity = inputField(
-            "Quantidade por dose (ex.: 0,150)",
+            "Quantidade por dose (ex.: 150)",
             InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
         )
         val waste = inputField(
@@ -8026,6 +8060,9 @@ class MainActivity : Activity() {
         form.addView(label("Ingrediente do inventário", 11f, true, forestSoft))
         form.addView(ingredientSpinner, fieldParams())
         addGap(form, 5)
+        form.addView(label("Unidade da quantidade introduzida", 11f, true, forestSoft))
+        form.addView(enteredUnitSpinner, fieldParams())
+        addGap(form, 5)
         form.addView(label("Quantidade necessária por dose", 11f, true, forestSoft))
         form.addView(quantity, fieldParams())
         addGap(form, 5)
@@ -8033,7 +8070,7 @@ class MainActivity : Activity() {
         form.addView(waste, fieldParams())
         addGap(form, 7)
         form.addView(label(
-            "O valor é multiplicado pela quantidade de pratos do pedido. A percentagem de desperdício aumenta a quantidade retirada do stock.",
+            "A quantidade é convertida automaticamente para a unidade do inventário (por exemplo, 150 g = 0,150 kg). Só são aceites unidades compatíveis e conversões sem perda de precisão. O desperdício aumenta a quantidade retirada.",
             10.5f, false, muted
         ))
 
@@ -8046,12 +8083,26 @@ class MainActivity : Activity() {
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val selected = stockItems.getOrNull(ingredientSpinner.selectedItemPosition)
-                val quantityValue = try {
+                val enteredQuantity = try {
                     RestaurantRecipeInputValidator.parseQuantityPerPortion(
                         quantity.text.toString()
                     )
                 } catch (error: IllegalArgumentException) {
                     quantity.error = error.message ?: "Quantidade inválida."
+                    return@setOnClickListener
+                }
+                val stockUnit = selected.optString("unit", "unidades")
+                    .trim()
+                    .ifBlank { "unidades" }
+                val enteredUnit = enteredUnitSpinner.selectedItem?.toString().orEmpty()
+                val quantityValue = try {
+                    InventoryUnitConverter.convertToStockUnit(
+                        enteredQuantity,
+                        enteredUnit,
+                        stockUnit
+                    )
+                } catch (error: IllegalArgumentException) {
+                    quantity.error = error.message ?: "Não foi possível converter a unidade."
                     return@setOnClickListener
                 }
                 val wasteValue = try {
