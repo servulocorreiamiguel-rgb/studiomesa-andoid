@@ -7,6 +7,7 @@ internal data class MenuCostComparisonInput(
     val itemName: String,
     val sellingPrice: BigDecimal?,
     val recordedUnitCost: BigDecimal?,
+    val menuItemId: String? = null,
     val recipeExists: Boolean = false,
     val recipeIsActiveApproved: Boolean = false,
     val recipeCostPerPortion: BigDecimal? = null,
