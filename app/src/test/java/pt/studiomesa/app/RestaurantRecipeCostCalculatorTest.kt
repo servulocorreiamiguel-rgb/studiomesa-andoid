@@ -36,7 +36,7 @@ class RestaurantRecipeCostCalculatorTest {
             )
         )
 
-        assertEquals(BigDecimal("0.040"), result.knownCostPerPortion)
+        assertEquals(BigDecimal("0.04"), result.knownCostPerPortion)
         assertEquals(2, result.totalIngredients)
         assertEquals(1, result.ingredientsWithoutCost)
         assertFalse(result.isComplete)
@@ -65,7 +65,7 @@ class RestaurantRecipeCostCalculatorTest {
         )
 
         assertEquals(BigDecimal("8.0"), result.knownIngredientCostPercent(BigDecimal("10.00")))
-        assertEquals(BigDecimal("9.200"), result.amountAfterIngredients(BigDecimal("10.00")))
+        assertEquals(BigDecimal("9.20"), result.amountAfterIngredients(BigDecimal("10.00")))
     }
 
     @Test
