@@ -115,6 +115,7 @@ class MainActivity : Activity() {
     private var reservationCache = JSONArray()
     private var reservationsLoaded = false
     private var reservationRefreshInFlightScope: String? = null
+    private var reservationRefreshGeneration = 0L
     private var reservationUpdatedAtMillis = 0L
     private var reservationRefreshFailed = false
     private var selectedReservationFilter = "Todas"
@@ -4143,6 +4144,7 @@ class MainActivity : Activity() {
         val requestedScope = "$requestedRestaurantId:$requestedAccountId"
         if (reservationRefreshInFlightScope == requestedScope) return
         reservationRefreshInFlightScope = requestedScope
+        val requestedGeneration = ++reservationRefreshGeneration
         reservationRefreshFailed = false
 
         runBackend(
@@ -4160,7 +4162,9 @@ class MainActivity : Activity() {
                 SupabaseApi.listReservations(token, requestedRestaurantId).toString()
             },
             onError = { error ->
-                val ownsRefreshSlot = reservationRefreshInFlightScope == requestedScope
+                val ownsRefreshSlot =
+                    reservationRefreshInFlightScope == requestedScope &&
+                        reservationRefreshGeneration == requestedGeneration
                 if (ownsRefreshSlot) reservationRefreshInFlightScope = null
                 val currentRestaurantId = backendRestaurantId()
                 val currentAccountId = backendPrefs.getString("user_id", "").orEmpty()
@@ -4179,7 +4183,9 @@ class MainActivity : Activity() {
                 }
             },
             onSuccess = { raw ->
-                val ownsRefreshSlot = reservationRefreshInFlightScope == requestedScope
+                val ownsRefreshSlot =
+                    reservationRefreshInFlightScope == requestedScope &&
+                        reservationRefreshGeneration == requestedGeneration
                 if (ownsRefreshSlot) reservationRefreshInFlightScope = null
                 val currentRestaurantId = backendRestaurantId()
                 val currentAccountId = backendPrefs.getString("user_id", "").orEmpty()
