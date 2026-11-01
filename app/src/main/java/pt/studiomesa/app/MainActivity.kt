@@ -1650,8 +1650,10 @@ class MainActivity : Activity() {
                 }, LinearLayout.LayoutParams(-1, dp(48)))
                 if (isPremium && item.optString("id").isNotBlank()) {
                     addGap(card, 5)
+                    val recipeMenuPrice = runCatching { BigDecimal(item.optString("price")) }
+                        .getOrNull()?.takeIf { it.signum() > 0 }
                     card.addView(secondaryButton("Configurar receita e ingredientes") {
-                        showRecipeDialog(item.optString("id"), item.optString("name"))
+                        showRecipeDialog(item.optString("id"), item.optString("name"), recipeMenuPrice)
                     }, LinearLayout.LayoutParams(-1, dp(48)))
                 }
                 addGap(card, 5)
@@ -6754,7 +6756,11 @@ class MainActivity : Activity() {
         dialog.show()
     }
 
-    private fun showRecipeDialog(menuItemId: String, menuItemName: String) {
+    private fun showRecipeDialog(
+        menuItemId: String,
+        menuItemName: String,
+        menuItemPrice: BigDecimal? = null
+    ) {
         if (!isPremium || !hasRemoteRestaurant() || menuItemId.isBlank()) return
         runBackend({
             val token = backendToken()
@@ -6771,14 +6777,15 @@ class MainActivity : Activity() {
                 .put("stock", stock)
                 .toString()
         }) { raw ->
-            showRecipeDialogContent(menuItemId, menuItemName, JSONObject(raw))
+            showRecipeDialogContent(menuItemId, menuItemName, JSONObject(raw), menuItemPrice)
         }
     }
 
     private fun showRecipeDialogContent(
         menuItemId: String,
         menuItemName: String,
-        data: JSONObject
+        data: JSONObject,
+        menuItemPrice: BigDecimal?
     ) {
         val recipe = data.optJSONObject("recipe")
         val recipeId = recipe?.optString("id").orEmpty()
@@ -6867,6 +6874,37 @@ class MainActivity : Activity() {
                         "Inclui as quantidades de stock arredondadas como no consumo automático e o desperdício definido na ficha técnica.",
                         10.5f, false, ink
                     ))
+                }
+                if (menuItemPrice != null && menuItemPrice.signum() > 0 &&
+                    estimate.ingredientsWithoutCost < estimate.totalIngredients) {
+                    val ratio = estimate.knownCostPerPortion
+                        .multiply(BigDecimal("100"))
+                        .divide(menuItemPrice, 4, java.math.RoundingMode.HALF_UP)
+                        .setScale(1, java.math.RoundingMode.HALF_UP)
+                    val ratioText = NumberFormat.getNumberInstance(Locale("pt", "PT")).apply {
+                        minimumFractionDigits = 1
+                        maximumFractionDigits = 1
+                    }.format(ratio)
+                    addGap(costCard, 5)
+                    costCard.addView(label(
+                        if (estimate.isComplete) {
+                            "Ingredientes: ${ratioText}% do preço de venda atual."
+                        } else {
+                            "Custo conhecido: ${ratioText}% do preço atual; o peso real pode ser superior porque faltam custos."
+                        },
+                        11f, true, forestDeep
+                    ))
+                    if (estimate.isComplete) {
+                        val afterIngredients = menuItemPrice.subtract(estimate.knownCostPerPortion)
+                        costCard.addView(label(
+                            if (afterIngredients.signum() >= 0) {
+                                "Depois dos ingredientes restam ${formatEuro(afterIngredients)} por dose para os restantes custos. Não é lucro líquido."
+                            } else {
+                                "O custo dos ingredientes excede o preço atual em ${formatEuro(afterIngredients.abs())} por dose. Revê a ficha técnica ou o preço."
+                            },
+                            10.5f, false, if (afterIngredients.signum() < 0) red else ink
+                        ))
+                    }
                 }
                 costCard.addView(label(
                     "Estimativa com base nos custos unitários atuais do inventário; não inclui mão de obra, energia, embalagem ou outros custos indiretos.",
