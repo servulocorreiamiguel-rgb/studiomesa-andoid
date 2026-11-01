@@ -3034,6 +3034,7 @@ class MainActivity : Activity() {
 
     private fun clearAccountScopedUiState() {
         clearEconomicManagerState()
+        clearInventoryUnitCostCache()
         assistantConversation.clear()
         assistantQuestion = ""
         assistantAnswer = null
