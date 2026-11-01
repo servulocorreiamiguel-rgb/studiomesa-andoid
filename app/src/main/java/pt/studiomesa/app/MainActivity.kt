@@ -869,6 +869,19 @@ class MainActivity : Activity() {
                 return
             }
 
+            val occupiedTables = (0 until tableData.length()).count {
+                tableData.optJSONObject(it)?.optBoolean("is_occupied", false) == true
+            }
+            val tableOverview = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            tableOverview.addView(statCard("MESAS LIVRES", (tableData.length() - occupiedTables).toString(), green),
+                LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), dp(10)) })
+            tableOverview.addView(statCard("MESAS OCUPADAS", occupiedTables.toString(), if (occupiedTables > 0) copper else forestSoft),
+                LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, dp(10)) })
+            container.addView(tableOverview)
+
             for (index in 0 until tableData.length() step 2) {
                 val first = tableData.optJSONObject(index) ?: continue
                 val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -915,7 +928,18 @@ class MainActivity : Activity() {
         legend.addView(statusDot(red), LinearLayout.LayoutParams(dp(8), dp(8)))
         legend.addView(label("  Ocupada", 12f, false, muted))
         container.addView(legend)
-        addGap(container, 14)
+        addGap(container, 8)
+
+        val localOccupiedTables = store.occupiedTableCount()
+        val localTableOverview = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        localTableOverview.addView(statCard("MESAS LIVRES", (12 - localOccupiedTables).toString(), green),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), dp(10)) })
+        localTableOverview.addView(statCard("MESAS OCUPADAS", localOccupiedTables.toString(), if (localOccupiedTables > 0) copper else forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, dp(10)) })
+        container.addView(localTableOverview)
 
         for (table in 1..12 step 2) {
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
