@@ -116,3 +116,5 @@ A validação de compilação e execução dos seis testes continua pendente; os
 - Criado `MenuCostComparisonAnalyzerTest.kt` com oito testes escritos: ordenação, comparação com o objetivo, igualdade exata com o objetivo, custo superior ao preço, custo zero válido, dados em falta, custos inválidos e limites/nomes de entrada.
 
 **Validação pendente:** os oito testes foram escritos e os ficheiros foram confirmados no GitHub, mas ainda não foram executados. Também não foi feita compilação Android nem Lint nesta etapa.
+
+**Estado da branch após a comparação:** a PR #72 continua aberta e em rascunho. Na última comparação, a branch estava 155 commits à frente e 1 atrás de `main`. Não foi feito rebase, merge ou alteração da base de dados de produção. A consulta ao GitHub para o último commit não devolveu execuções de workflow nem status checks; não declarar a compilação ou os testes como aprovados.
