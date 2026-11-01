@@ -1876,6 +1876,7 @@ class MainActivity : Activity() {
                         .remove("remote_inventory_json")
                         .remove("inventory_loaded")
                         .remove("remote_operations_updated_at")
+                        .remove("remote_operations_synced_at")
                 }
                 editor.putString("restaurant_id", restaurantId)
                     .putString("restaurant_name", restaurant.optString("restaurant_name"))
@@ -1895,6 +1896,7 @@ class MainActivity : Activity() {
                     .remove("remote_menu_json")
                     .remove("remote_orders_json")
                     .remove("remote_operations_updated_at")
+                        .remove("remote_operations_synced_at")
                     .remove("remote_inventory_json")
                     .remove("inventory_loaded")
                     .remove("remote_reservations_json")
@@ -1963,11 +1965,13 @@ class MainActivity : Activity() {
         val tables = SupabaseApi.listTables(token, restaurantId)
         val menu = SupabaseApi.listMenuItems(token, restaurantId)
         val orders = SupabaseApi.listOrders(token, restaurantId)
+        val syncedAtMillis = System.currentTimeMillis()
         backendPrefs.edit()
             .putString("remote_tables_json", tables.toString())
             .putString("remote_menu_json", menu.toString())
             .putString("remote_orders_json", orders.toString())
-            .putLong("remote_operations_updated_at", System.currentTimeMillis())
+            .putLong("remote_operations_updated_at", syncedAtMillis)
+            .putLong("remote_operations_synced_at", syncedAtMillis)
             .apply()
         remoteOperationsSyncFailed = false
     }
@@ -4965,7 +4969,7 @@ class MainActivity : Activity() {
         val remote = hasRemoteRestaurant()
         val operationsSnapshotFresh = !remote || AssistantOperationsSnapshotPolicy.isFresh(
             System.currentTimeMillis(),
-            backendPrefs.getLong("remote_operations_updated_at", 0L)
+            backendPrefs.getLong("remote_operations_synced_at", 0L)
         )
         val menu = (if (remote) remoteMenuEntries() else store.getMenu()).map { item ->
             AssistantMenuItem(
