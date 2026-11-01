@@ -62,4 +62,28 @@ class ReservationRefreshScopeTest {
             )
         )
     }
+    @Test
+    fun oldRefreshGenerationCannotOwnTheSlotAfterANewerSameScopeRequestStarts() {
+        assertTrue(
+            ReservationRefreshScope.ownsRefreshRequest(
+                "restaurant-a:account-a", "restaurant-a:account-a", 7L, 7L
+            )
+        )
+        assertFalse(
+            ReservationRefreshScope.ownsRefreshRequest(
+                "restaurant-a:account-a", "restaurant-a:account-a", 6L, 7L
+            )
+        )
+        assertFalse(
+            ReservationRefreshScope.ownsRefreshRequest(
+                "restaurant-a:account-a", "restaurant-a:account-a", 7L, 8L
+            )
+        )
+        assertFalse(
+            ReservationRefreshScope.ownsRefreshRequest(
+                "restaurant-a:account-a", null, 7L, 7L
+            )
+        )
+    }
+
 }
