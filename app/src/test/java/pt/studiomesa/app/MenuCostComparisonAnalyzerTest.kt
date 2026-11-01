@@ -110,6 +110,7 @@ class MenuCostComparisonAnalyzerTest {
             listOf(
                 MenuCostComparisonInput(
                     itemName = "Prato com receita",
+                    menuItemId = "menu-item-123",
                     sellingPrice = BigDecimal("10.00"),
                     recordedUnitCost = BigDecimal("2.00"),
                     recipeExists = true,
@@ -126,6 +127,7 @@ class MenuCostComparisonAnalyzerTest {
         val row = result.rankedItems.single()
         assertEquals(BigDecimal("35.0"), row.costToPricePercent)
         assertEquals("Ficha técnica aprovada", row.costSourceLabel)
+        assertEquals("menu-item-123", row.menuItemId)
         assertEquals(1, result.menuItemsUsingRecipeCost)
         assertEquals(0, result.menuItemsUsingManualCost)
         assertEquals(1, result.aboveTargetCount)
