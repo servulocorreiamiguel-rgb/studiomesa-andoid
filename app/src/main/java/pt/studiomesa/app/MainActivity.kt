@@ -1369,8 +1369,6 @@ class MainActivity : Activity() {
                 container.addView(emptyCard("A fila está vazia. Os novos pedidos de dispositivos ligados aparecerão automaticamente até 15 segundos depois de serem criados."))
                 return
             }
-            container.addView(label("${active.size} pedido(s) ativo(s)", 12f, true, forestSoft))
-            addGap(container, 8)
             for (order in active) {
                 val status = order.optString("status", "Aberto")
                 val createdAt = parseOrderTimestamp(order.optString("created_at"))
@@ -1413,8 +1411,6 @@ class MainActivity : Activity() {
                 container.addView(emptyCard("A fila está vazia. Cria um pedido para testar o fluxo da cozinha."))
                 return
             }
-            container.addView(label("${active.size} pedido(s) ativo(s)", 12f, true, forestSoft))
-            addGap(container, 8)
             active.forEach { order ->
                 val nextStatus = when (order.status) {
                     "Aberto" -> "Em preparação"
@@ -1628,6 +1624,13 @@ class MainActivity : Activity() {
             container.addView(primaryButton("+  Adicionar artigo") { showAddMenuItemDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
             addGap(container, 15)
             val items = remoteMenuItems()
+            val validRemoteCosts = (0 until items.length()).count { index ->
+                val item = items.optJSONObject(index) ?: return@count false
+                val price = item.optDouble("price", Double.NaN)
+                val cost = item.optDouble("cost", Double.NaN)
+                price.isFinite() && price > 0.0 && cost.isFinite() && cost >= 0.0
+            }
+            addMenuCostOverview(container, items.length(), validRemoteCosts)
             if (items.length() == 0) {
                 container.addView(emptyCard("A carta do servidor está vazia. Adiciona os primeiros artigos e preços aprovados pelo restaurante."))
                 return
@@ -1710,6 +1713,10 @@ class MainActivity : Activity() {
         addGap(container, 15)
 
         val items = store.getMenu()
+        val validLocalCosts = items.count {
+            it.price.isFinite() && it.price > 0.0 && it.cost.isFinite() && it.cost >= 0.0
+        }
+        addMenuCostOverview(container, items.size, validLocalCosts)
         if (items.isEmpty()) {
             container.addView(emptyCard("A carta está vazia. Adiciona o primeiro artigo de demonstração."))
         }
@@ -7264,6 +7271,26 @@ class MainActivity : Activity() {
             }
         }
         dialog.show()
+    }
+
+    private fun addMenuCostOverview(container: LinearLayout, itemCount: Int, validCostCount: Int) {
+        val needsReview = (itemCount - validCostCount).coerceAtLeast(0)
+        val overview = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        overview.addView(statCard("ARTIGOS", itemCount.toString(), forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(4), dp(8)) })
+        overview.addView(statCard("CUSTOS VÁLIDOS", validCostCount.toString(), green),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(2), 0, dp(2), dp(8)) })
+        overview.addView(statCard("A REVER", needsReview.toString(), if (needsReview > 0) copper else forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(4), 0, 0, dp(8)) })
+        container.addView(overview)
+        container.addView(label(
+            "Custo válido = preço positivo e custo não negativo registados. Os restantes artigos precisam de revisão antes de usar análises de margem.",
+            10.5f, false, muted
+        ))
+        addGap(container, 8)
     }
 
     private fun addOrderStatusOverview(container: LinearLayout, statuses: List<String>) {
