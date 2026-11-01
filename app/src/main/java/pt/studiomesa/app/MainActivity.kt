@@ -6758,6 +6758,39 @@ class MainActivity : Activity() {
                     10.5f, false, muted
                 ))
             }
+            if (analysis.recipeIssues.isNotEmpty()) {
+                addGap(card, 6)
+                val issuesCard = makeCard(12, copperPale)
+                issuesCard.addView(label("Fichas técnicas a rever", 13f, true, forestDeep))
+                addGap(issuesCard, 5)
+                analysis.recipeIssues.take(5).forEach { issue ->
+                    val issueRow = LinearLayout(this).apply {
+                        orientation = LinearLayout.VERTICAL
+                    }
+                    issueRow.addView(label(issue.itemName, 12f, true, forestDeep))
+                    addGap(issueRow, 2)
+                    issueRow.addView(label(issue.description, 10.5f, false, ink))
+                    if (isPremium && hasRemoteRestaurant() && !issue.menuItemId.isNullOrBlank()) {
+                        addGap(issueRow, 3)
+                        issueRow.addView(secondaryButton("Abrir ficha técnica") {
+                            showRecipeDialog(
+                                issue.menuItemId,
+                                issue.itemName,
+                                entries.firstOrNull { it.menuItemId == issue.menuItemId }?.sellingPrice
+                            )
+                        }, LinearLayout.LayoutParams(-1, dp(38)))
+                    }
+                    issuesCard.addView(issueRow, cardParams())
+                    addGap(issuesCard, 5)
+                }
+                if (analysis.recipeIssues.size > 5) {
+                    issuesCard.addView(label(
+                        "Mais ${analysis.recipeIssues.size - 5} ficha(s) não apresentadas nesta lista.",
+                        10.5f, false, muted
+                    ))
+                }
+                card.addView(issuesCard, cardParams())
+            }
             if (analysis.excludedMissingCost > 0 || analysis.excludedInvalidPrice > 0 || analysis.excludedInvalidCost > 0) {
                 addGap(card, 5)
                 card.addView(label(
