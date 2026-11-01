@@ -96,6 +96,28 @@ object SupabaseApi {
         return if (response.isBlank()) JSONObject() else JSONObject(response)
     }
 
+    private fun pagedArray(token: String, basePath: String, maxRows: Int): JSONArray {
+        require(maxRows in 1..10000) { "O limite da consulta não é válido." }
+        val combined = JSONArray()
+        var offset = 0
+        val pageSize = 500
+        while (offset <= maxRows) {
+            val requested = minOf(pageSize, maxRows + 1 - offset)
+            val page = JSONArray(call(
+                "GET",
+                "$basePath&limit=$requested&offset=$offset",
+                null,
+                token
+            ))
+            for (index in 0 until page.length()) {
+                combined.put(page.getJSONObject(index))
+            }
+            if (page.length() < requested) break
+            offset += page.length()
+        }
+        return combined
+    }
+
     fun signIn(email: String, password: String): Session {
         val result = jsonCall("POST", "/auth/v1/token?grant_type=password",
             JSONObject().put("email", email.trim()).put("password", password))
@@ -852,12 +874,11 @@ object SupabaseApi {
     }
     fun listInventoryItems(token: String, restaurantId: String): JSONArray {
         val encoded = URLEncoder.encode(restaurantId, "UTF-8")
-        return JSONArray(call(
-            "GET",
-            "/rest/v1/restaurant_inventory_items?select=id,name,unit,quantity,low_stock_threshold,unit_cost_per_unit,updated_at&restaurant_id=eq.$encoded&order=name.asc&limit=2001",
-            null,
-            token
-        ))
+        return pagedArray(
+            token,
+            "/rest/v1/restaurant_inventory_items?select=id,name,unit,quantity,low_stock_threshold,unit_cost_per_unit,updated_at&restaurant_id=eq.$encoded&order=name.asc,id.asc",
+            maxRows = 2000
+        )
     }
 
     fun getRestaurantRecipe(
@@ -888,12 +909,11 @@ object SupabaseApi {
 
     fun listRestaurantRecipeIngredients(token: String, restaurantId: String): JSONArray {
         val encoded = URLEncoder.encode(restaurantId, "UTF-8")
-        return JSONArray(call(
-            "GET",
-            "/rest/v1/restaurant_recipe_ingredients?select=recipe_id,inventory_item_id,quantity_per_portion,waste_percent,inventory_unit_snapshot&restaurant_id=eq.$encoded&order=recipe_id.asc,inventory_item_id.asc&limit=3001",
-            null,
-            token
-        ))
+        return pagedArray(
+            token,
+            "/rest/v1/restaurant_recipe_ingredients?select=recipe_id,inventory_item_id,quantity_per_portion,waste_percent,inventory_unit_snapshot&restaurant_id=eq.$encoded&order=recipe_id.asc,inventory_item_id.asc",
+            maxRows = 3000
+        )
     }
 
     fun saveRecipeIngredient(
