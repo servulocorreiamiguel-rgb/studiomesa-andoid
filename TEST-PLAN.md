@@ -463,7 +463,6 @@ Estes casos são executados na ronda final. A app do restaurante pode atribuir o
 | ICOST-09 | Mudança de papel | A conta passa de owner para staff e volta a abrir Stock/Assistente | A cache de custos é limpa e nenhuma ferramenta staff recebe custos anteriores |
 | ICOST-10 | Regressão de movimentos | Staff consulta histórico normal de movimentos | Quantidades, datas, notas e unidades continuam acessíveis; custos financeiros não são incluídos |
 | ICOST-11 | Recuperação de rede | Staff conclui um movimento, perde a resposta e a app tenta confirmar a mesma tentativa | A consulta de confirmação usa apenas as colunas operacionais explicitamente autorizadas; a repetição não cria um segundo movimento |
-
 | ICOST-12 | Falha da consulta financeira | Proprietário abre ficha técnica enquanto a RPC de custos falha ou devolve autorização negada | A ficha técnica e o stock operacional continuam visíveis; não mostra custos antigos e não entra em ciclo de pedidos |
 | ICOST-13 | Eliminação de conta | Proprietário elimina a conta depois de abrir stock com custos | Cache financeira em memória e dados económicos da sessão são limpos antes de apresentar o estado sem sessão |
 | ICOST-14 | Cópia cifrada local | Proprietário elimina definitivamente a conta depois de guardar a cópia económica cifrada | O ficheiro cifrado associado à conta/restaurante é eliminado; o logout normal não o elimina, para permitir recuperação quando a mesma conta regressa |
