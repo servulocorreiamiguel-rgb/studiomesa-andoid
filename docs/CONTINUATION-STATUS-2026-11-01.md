@@ -145,3 +145,14 @@ A validação de compilação e execução dos seis testes continua pendente; os
 - `MenuCostComparisonAnalyzerTest.kt` tem 12 testes escritos e `MenuRecipeCostSnapshotVersionTest.kt` tem três testes escritos. Nenhum destes testes foi executado nesta sessão.
 
 **Validação final desta ronda:** os ficheiros, chamadas de interface e contagens de testes foram relidos na branch. Continua sem existir resultado de CI para o commit mais recente; não foi executado Gradle, Android Lint, compilação APK/AAB ou teste em dispositivo. O comparador usa custos unitários atuais do inventário e dados carregados manualmente, sem histórico por lote ou leitura de faturas.
+
+
+### Continuação — proteção contra cache operacional desatualizada
+
+- O assistente passa a verificar a idade da última sincronização real da carta, mesas e pedidos. O limite de referência é cinco minutos; uma hora ausente, futura ou demasiado antiga é considerada não recente.
+- Quando os dados operacionais não estão confirmados como recentes, o assistente mostra um alerta nas recomendações, acrescenta um aviso às respostas sobre dados do restaurante e identifica a limitação no resumo diário. O atalho encaminha para **Início**, onde existe a navegação da operação.
+- Foi separado o carimbo de hora da sincronização real (\`remote_operations_synced_at\`) da versão usada para invalidar análises (\`remote_operations_updated_at\`). Esta distinção é necessária porque a invalidação de uma análise económica pode avançar a versão sem voltar a descarregar a carta e os pedidos.
+- A sincronização geral grava os dois carimbos; a mudança/perda de associação ao restaurante limpa ambos. O assistente usa exclusivamente o carimbo de sincronização real.
+- Foram acrescentados três testes unitários escritos: validade temporal do carimbo, aviso antes de responder com cache antiga e identificação da cache antiga no resumo diário.
+
+**Validação desta continuação:** os ficheiros foram escritos e relidos no GitHub. Os três novos testes e os testes existentes continuam por executar; não houve Gradle, Lint, CI, build APK/AAB nem teste em dispositivo. A PR #72 continua em rascunho e não houve alterações ao Supabase alojado.
