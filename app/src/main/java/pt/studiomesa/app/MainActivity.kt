@@ -6389,9 +6389,8 @@ class MainActivity : Activity() {
     }
 
     private fun invalidateMenuRecipeCostSnapshot() {
-        menuRecipeCostSnapshot = null
-        menuRecipeCostScopeKey = null
-        menuRecipeCostUpdatedAtMillis = 0L
+        // Keep the last successful snapshot so the UI can explain that it is stale,
+        // but advance the data version so it cannot be used as current analysis.
         backendPrefs.edit()
             .putLong("remote_operations_updated_at", System.currentTimeMillis())
             .apply()
