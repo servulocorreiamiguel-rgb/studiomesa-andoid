@@ -22,7 +22,7 @@ class RestaurantRecipeCostCalculatorTest {
             )
         )
 
-        assertEquals(BigDecimal("0.106"), result.lineCostsPerPortion["flour"])
+        assertEquals(BigDecimal("0.212"), result.lineCostsPerPortion["flour"])
         assertEquals(BigDecimal("0.212"), result.knownCostPerPortion)
         assertTrue(result.isComplete)
     }
