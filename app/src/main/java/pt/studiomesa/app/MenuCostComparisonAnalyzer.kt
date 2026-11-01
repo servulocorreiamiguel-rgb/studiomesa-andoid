@@ -49,8 +49,8 @@ internal data class MenuCostComparisonResult(
 )
 
 /**
- * Ranks menu items by their explicitly recorded per-unit cost relative to selling price.
- * This is a screening indicator, not a net-margin or accounting-profit calculation.
+ * Ranks menu items by the approved, complete recipe cost when available; otherwise it uses
+ * the explicitly recorded manual cost. This is a screening indicator, not net profit.
  */
 internal object MenuCostComparisonAnalyzer {
     private val hundred = BigDecimal("100")
