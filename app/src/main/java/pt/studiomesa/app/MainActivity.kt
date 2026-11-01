@@ -5505,6 +5505,39 @@ class MainActivity : Activity() {
     private fun formatQuantity(value: Double): String =
         String.format(Locale("pt", "PT"), "%.3f", value).trimEnd('0').trimEnd(',')
 
+    private fun inventoryUnitSpinner(stockUnit: String): Spinner {
+        val normalizedStockUnit = stockUnit.trim().ifBlank { "unidades" }
+        val options = InventoryUnitConverter.compatibleUnits(normalizedStockUnit)
+        return Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                options
+            )
+        }
+    }
+
+    private fun parseInventoryQuantityToStockUnit(
+        rawValue: String,
+        enteredUnit: String,
+        stockUnit: String
+    ): Double {
+        val normalized = rawValue.trim().replace(',', '.')
+        require(StockDecimalValidator.hasAtMostThreeDecimalPlaces(normalized)) {
+            "Usa uma quantidade positiva com no máximo três casas decimais."
+        }
+        val amount = try {
+            BigDecimal(normalized)
+        } catch (_: NumberFormatException) {
+            throw IllegalArgumentException("Indica uma quantidade numérica válida.")
+        }
+        return InventoryUnitConverter.convertToStockUnit(
+            amount,
+            enteredUnit,
+            stockUnit.trim().ifBlank { "unidades" }
+        ).toDouble()
+    }
+
     private fun showInventoryItemDialog(item: JSONObject?) {
         if (!hasRemoteRestaurant()) {
             AlertDialog.Builder(this).setMessage("Liga primeiro o restaurante na secção Conta.")
@@ -5632,15 +5665,23 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(8), dp(18), dp(10))
         }
+        val enteredUnitSpinner = inventoryUnitSpinner(unit)
         val amount = inputField("Quantidade", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
         val note = inputField("Nota (opcional)", InputType.TYPE_CLASS_TEXT).apply {
             setText(if (isInbound) "Entrada de stock" else "Consumo/quebra")
         }
         form.addView(label("Artigo: $itemName", 12f, true, forest))
         addGap(form, 8)
-        form.addView(label("Quantidade a ${if (isInbound) "adicionar" else "retirar"} ($unit)", 11f, true, forestSoft))
+        form.addView(label("Unidade da quantidade introduzida", 11f, true, forestSoft))
+        form.addView(enteredUnitSpinner, LinearLayout.LayoutParams(-1, dp(48)))
+        addGap(form, 5)
+        form.addView(label("Quantidade a ${if (isInbound) "adicionar" else "retirar"}", 11f, true, forestSoft))
         form.addView(amount, fieldParams())
         addGap(form, 5)
+        form.addView(label(
+            "O valor é convertido para $unit antes de atualizar o stock.",
+            10.5f, false, muted
+        ))
         form.addView(label("Regista a razão para manter um histórico útil.", 11f, false, muted))
         form.addView(note, fieldParams())
         val dialog = AlertDialog.Builder(this)
@@ -5651,15 +5692,26 @@ class MainActivity : Activity() {
             .create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val rawValue = amount.text.toString().trim().replace(',', '.')
-                val value = rawValue.toDoubleOrNull()
-                if (value == null || !value.isFinite() || value <= 0 || value > 999999999) {
-                    amount.error = "Indica uma quantidade positiva válida."
-                } else if (!StockDecimalValidator.hasAtMostThreeDecimalPlaces(rawValue)) {
-                    amount.error = "Usa no máximo três casas decimais."
-                } else if (note.text.toString().length > 500) {
+                val rawValue = amount.text.toString()
+                val value = try {
+                    parseInventoryQuantityToStockUnit(
+                        rawValue,
+                        enteredUnitSpinner.selectedItem?.toString().orEmpty(),
+                        unit
+                    )
+                } catch (error: IllegalArgumentException) {
+                    amount.error = error.message ?: "Quantidade ou unidade inválida."
+                    return@setOnClickListener
+                }
+                if (!value.isFinite() || value <= 0.0 || value > 999999999.0) {
+                    amount.error = "A quantidade convertida está fora dos limites."
+                    return@setOnClickListener
+                }
+                if (note.text.toString().length > 500) {
                     note.error = "Máximo de 500 caracteres."
-                } else {
+                    return@setOnClickListener
+                }
+                run {
                     val delta = if (isInbound) value else -value
                     val normalizedNote = note.text.toString().trim().take(500)
                     val restaurantId = backendRestaurantId()
@@ -5701,6 +5753,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(8), dp(18), dp(10))
         }
+        val enteredUnitSpinner = inventoryUnitSpinner(unit)
         val amount = inputField("Quantidade desperdiçada", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
         val reason = Spinner(this)
         val reasonAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, InventoryWasteNotes.reasons)
@@ -5710,8 +5763,13 @@ class MainActivity : Activity() {
 
         form.addView(label("Artigo: $itemName", 12f, true, forest))
         addGap(form, 7)
-        form.addView(label("Quantidade a retirar ($unit)", 11f, true, forestSoft))
+        form.addView(label("Unidade da quantidade introduzida", 11f, true, forestSoft))
+        form.addView(enteredUnitSpinner, LinearLayout.LayoutParams(-1, dp(48)))
+        addGap(form, 5)
+        form.addView(label("Quantidade desperdiçada", 11f, true, forestSoft))
         form.addView(amount, fieldParams())
+        addGap(form, 5)
+        form.addView(label("O valor é convertido para $unit antes de registar a perda.", 10.5f, false, muted))
         addGap(form, 5)
         form.addView(label("Motivo do desperdício", 11f, true, forestSoft))
         form.addView(reason, LinearLayout.LayoutParams(-1, dp(48)))
@@ -5732,14 +5790,19 @@ class MainActivity : Activity() {
             .create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val rawValue = amount.text.toString().trim().replace(',', '.')
-                val value = rawValue.toDoubleOrNull()
-                if (value == null || !value.isFinite() || value <= 0.0 || value > 999999999.0) {
-                    amount.error = "Indica uma quantidade positiva válida."
+                val rawValue = amount.text.toString()
+                val value = try {
+                    parseInventoryQuantityToStockUnit(
+                        rawValue,
+                        enteredUnitSpinner.selectedItem?.toString().orEmpty(),
+                        unit
+                    )
+                } catch (error: IllegalArgumentException) {
+                    amount.error = error.message ?: "Quantidade ou unidade inválida."
                     return@setOnClickListener
                 }
-                if (!StockDecimalValidator.hasAtMostThreeDecimalPlaces(rawValue)) {
-                    amount.error = "Usa no máximo três casas decimais."
+                if (!value.isFinite() || value <= 0.0 || value > 999999999.0) {
+                    amount.error = "A quantidade convertida está fora dos limites."
                     return@setOnClickListener
                 }
                 val movementNote = try {
