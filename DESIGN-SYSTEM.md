@@ -63,12 +63,12 @@ A interface usa uma identidade discreta, inspirada em restauração contemporân
 
 - **Início:** indicadores operacionais em grelha e acesso rápido em cartões compactos de duas colunas.
 - **Mesas:** cartões de mesa com estado, zona e capacidade.
-- **Pedidos:** estado destacado, detalhe do artigo e ações claramente separadas.
-- **Cozinha:** fila por estado, mesa, notas e tempo de espera.
-- **Carta:** artigos e custos organizados sem expor custos internos à aplicação de cliente.
-- **Reservas:** indicadores, filtros visíveis e cartões com data, pessoas, mesa e estado.
-- **Stock:** quantidade e alerta em destaque; ações de entrada, saída, edição e desperdício agrupadas.
-- **Gestão económica e análise:** valores e pressupostos identificados; estimativas não devem parecer valores contabilísticos certificados.
+- **Pedidos:** resumo por estado, detalhes do artigo, ações secundárias agrupadas e etiquetas consistentes.
+- **Cozinha:** resumo da fila por estado, mesa, notas e tempo de espera.
+- **Carta:** indicadores de artigos/custos a rever; custos organizados sem exposição na aplicação de cliente.
+- **Reservas:** indicadores, filtros horizontais e cartões com data, pessoas, mesa e estado.
+- **Stock:** resumo de artigos e alertas antes da lista; quantidade em destaque e ações de entrada, saída, edição e desperdício agrupadas.
+- **Gestão económica e análise:** atalhos horizontais para ferramentas e períodos; valores e pressupostos identificados, sem aparência de contabilidade certificada.
 - **Assistente:** conversa em primeiro plano; análises e recomendações adicionais recolhidas, mas acessíveis.
 - **Cliente:** cartão de fidelização, carta publicada, reservas e conta com a mesma identidade visual.
 
