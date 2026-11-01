@@ -156,3 +156,14 @@ A validação de compilação e execução dos seis testes continua pendente; os
 - Foram acrescentados três testes unitários escritos: validade temporal do carimbo, aviso antes de responder com cache antiga e identificação da cache antiga no resumo diário.
 
 **Validação desta continuação:** os ficheiros foram escritos e relidos no GitHub. Os três novos testes e os testes existentes continuam por executar; não houve Gradle, Lint, CI, build APK/AAB nem teste em dispositivo. A PR #72 continua em rascunho e não houve alterações ao Supabase alojado.
+
+
+### Continuação — paginação completa da agenda de reservas
+
+- A lista do restaurante deixava de consultar após 200 reservas e a lista do cliente após 100. Isso podia ocultar reservas mais recentes quando existia histórico suficiente para preencher a resposta inicial.
+- Ambas as consultas usam agora `OrderHistoryPagination`, com páginas de 500 e ordenação determinística por `reservation_at` e `id`. O carregamento continua até à primeira página incompleta e faz uma verificação adicional quando chega exatamente ao limite.
+- O limite atual é de 10 000 reservas por lista. Se existirem mais registos, a operação falha explicitamente e não substitui a cache por uma lista parcial. A mensagem identifica corretamente o histórico como reservas, não pedidos.
+- A paginação mantém os filtros e contagens atuais da agenda, porque continua a devolver o histórico completo suportado antes de a interface calcular os grupos.
+- Foram escritos dois testes adicionais para a mensagem de excesso de reservas e validação do rótulo do histórico. Os testes anteriores de paginação já cobrem páginas múltiplas, página final curta, limite exato, excesso e limites inválidos.
+
+**Validação desta continuação:** as alterações foram gravadas e relidas no GitHub. Os testes de paginação estão escritos, mas não foram executados nesta sessão. Não houve CI, compilação Android, Lint, teste em dispositivos nem alterações ao Supabase alojado.
