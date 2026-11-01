@@ -6383,7 +6383,178 @@ class MainActivity : Activity() {
         ))
     }
 
+    private fun refreshMenuRecipeCostSnapshot() {
+        if (!economicManagerEnabled || !isPremium || !hasRemoteRestaurant() ||
+            backendPrefs.getString("restaurant_role", "").orEmpty() != "owner" ||
+            menuRecipeCostRefreshLoading) return
+
+        val restaurantId = backendRestaurantId()
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        if (restaurantId.isBlank() || accountId.isBlank()) return
+        val requestedScope = "restaurant:$restaurantId:$accountId"
+
+        menuRecipeCostRefreshLoading = true
+        menuRecipeCostRefreshFailed = false
+        renderApp()
+
+        runBackend(
+            task = {
+                val token = backendToken()
+                if (token.isBlank() || backendRestaurantId() != restaurantId ||
+                    backendPrefs.getString("user_id", "").orEmpty() != accountId) {
+                    throw IllegalStateException("A conta ou o restaurante mudou. Atualiza novamente.")
+                }
+
+                val recipes = SupabaseApi.listRestaurantRecipes(token, restaurantId)
+                val ingredients = SupabaseApi.listRestaurantRecipeIngredients(token, restaurantId)
+                val inventory = SupabaseApi.listInventoryItems(token, restaurantId)
+                if (recipes.length() > 500 || ingredients.length() > 3000 || inventory.length() > 2000) {
+                    throw IllegalStateException(
+                        "O inventário ou as fichas técnicas excedem o limite desta análise. Divide a carta ou pede uma análise paginada."
+                    )
+                }
+                JSONObject()
+                    .put("restaurant_id", restaurantId)
+                    .put("account_id", accountId)
+                    .put("recipes", recipes)
+                    .put("ingredients", ingredients)
+                    .put("inventory", inventory)
+                    .toString()
+            },
+            showProgress = false,
+            onError = { error ->
+                menuRecipeCostRefreshLoading = false
+                menuRecipeCostRefreshFailed = true
+                renderApp()
+                Toast.makeText(
+                    this,
+                    friendlyBackendError(error.message),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        ) { raw ->
+            menuRecipeCostRefreshLoading = false
+            val currentScope = "restaurant:${backendRestaurantId()}:${backendPrefs.getString("user_id", "").orEmpty()}"
+            if (requestedScope != currentScope || !economicManagerEnabled) {
+                return@runBackend
+            }
+            menuRecipeCostSnapshot = JSONObject(raw)
+            menuRecipeCostScopeKey = requestedScope
+            menuRecipeCostUpdatedAtMillis = System.currentTimeMillis()
+            menuRecipeCostRefreshFailed = false
+            renderApp()
+        }
+    }
+
+    private fun buildMenuCostComparisonInputs(
+        entries: List<MenuEntry>,
+        snapshot: JSONObject?
+    ): List<MenuCostComparisonInput> {
+        val recipes = snapshot?.optJSONArray("recipes") ?: JSONArray()
+        val ingredients = snapshot?.optJSONArray("ingredients") ?: JSONArray()
+        val inventory = snapshot?.optJSONArray("inventory") ?: JSONArray()
+
+        val recipesByMenuItem = mutableMapOf<String, JSONObject>()
+        for (index in 0 until recipes.length()) {
+            val recipe = recipes.optJSONObject(index) ?: continue
+            val menuItemId = recipe.optString("menu_item_id")
+            if (menuItemId.isNotBlank()) recipesByMenuItem[menuItemId] = recipe
+        }
+
+        val ingredientsByRecipe = mutableMapOf<String, MutableList<JSONObject>>()
+        for (index in 0 until ingredients.length()) {
+            val line = ingredients.optJSONObject(index) ?: continue
+            val recipeId = line.optString("recipe_id")
+            if (recipeId.isNotBlank()) {
+                ingredientsByRecipe.getOrPut(recipeId) { mutableListOf() }.add(line)
+            }
+        }
+
+        val inventoryById = mutableMapOf<String, JSONObject>()
+        for (index in 0 until inventory.length()) {
+            val item = inventory.optJSONObject(index) ?: continue
+            val id = item.optString("id")
+            if (id.isNotBlank()) inventoryById[id] = item
+        }
+
+        return entries.map { entry ->
+            val recipe = entry.id?.let { recipesByMenuItem[it] }
+            val recipeExists = recipe != null
+            val recipeIsActiveApproved = recipe?.optBoolean("is_active", false) == true &&
+                recipe.optBoolean("requires_review", false).not()
+            var recipeEstimate: RestaurantRecipeCostEstimate? = null
+            var recipeUnitsCompatible = true
+
+            if (recipe != null) {
+                val recipeId = recipe.optString("id")
+                val recipeLines = ingredientsByRecipe[recipeId].orEmpty()
+                if (recipeLines.isEmpty()) {
+                    recipeUnitsCompatible = false
+                } else {
+                    val costInputs = mutableListOf<RestaurantRecipeCostInput>()
+                    recipeLines.forEach { line ->
+                        val inventoryItemId = line.optString("inventory_item_id")
+                        val stockItem = inventoryById[inventoryItemId]
+                        if (stockItem == null ||
+                            line.optString("inventory_unit_snapshot") != stockItem.optString("unit")) {
+                            recipeUnitsCompatible = false
+                        }
+                        val quantity = runCatching {
+                            BigDecimal(line.optString("quantity_per_portion"))
+                        }.getOrNull()
+                        val waste = runCatching {
+                            BigDecimal(line.optString("waste_percent", "0"))
+                        }.getOrNull()
+                        val unitCost = stockItem?.let { stock ->
+                            if (stock.isNull("unit_cost_per_unit")) null
+                            else runCatching {
+                                BigDecimal(stock.optString("unit_cost_per_unit"))
+                            }.getOrNull()
+                        }
+                        if (inventoryItemId.isBlank() || quantity == null || waste == null ||
+                            (stockItem != null && !stockItem.isNull("unit_cost_per_unit") && unitCost == null)) {
+                            recipeUnitsCompatible = false
+                        } else {
+                            costInputs += RestaurantRecipeCostInput(
+                                inventoryItemId = inventoryItemId,
+                                quantityPerPortion = quantity,
+                                wastePercent = waste,
+                                unitCostPerUnit = unitCost
+                            )
+                        }
+                    }
+                    if (recipeUnitsCompatible && costInputs.size == recipeLines.size) {
+                        recipeEstimate = runCatching {
+                            RestaurantRecipeCostCalculator.estimate(costInputs)
+                        }.getOrNull()
+                    }
+                }
+            }
+
+            val manualCost = entry.cost.takeIf { it.isFinite() }?.let { BigDecimal.valueOf(it) }
+            val price = entry.price.takeIf { it.isFinite() }?.let { BigDecimal.valueOf(it) }
+            val recipeIsComplete = recipeEstimate?.isComplete == true && recipeUnitsCompatible
+            MenuCostComparisonInput(
+                itemName = entry.name,
+                sellingPrice = price,
+                recordedUnitCost = manualCost,
+                recipeExists = recipeExists,
+                recipeIsActiveApproved = recipeIsActiveApproved,
+                recipeCostPerPortion = recipeEstimate?.knownCostPerPortion?.takeIf { recipeIsComplete },
+                recipeCostComplete = recipeIsComplete
+            )
+        }
+    }
+
     private fun renderMenuCostComparison(container: LinearLayout) {
+        val restaurantId = backendRestaurantId()
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        val currentScope = "restaurant:$restaurantId:$accountId"
+        val recipeSnapshot = menuRecipeCostSnapshot?.takeIf {
+            menuRecipeCostScopeKey == currentScope &&
+                it.optString("restaurant_id") == restaurantId &&
+                it.optString("account_id") == accountId
+        }
         val entries = if (hasRemoteRestaurant()) {
             val menu = remoteMenuItems()
             (0 until menu.length()).mapNotNull { index ->
