@@ -133,3 +133,15 @@ A validação de compilação e execução dos seis testes continua pendente; os
 - Melhorias de inventário/receitas e paginação foram revistas nos ficheiros do GitHub. Não foi executada CI, Gradle, Lint nem a bateria de testes nesta etapa; os testes estão escritos, não aprovados.
 
 **Limites desta integração:** ainda não há ligação automática a faturas de fornecedores ou custo histórico por lote. A análise usa o custo unitário atual registado no inventário; se esse valor não estiver atualizado, a estimativa também não estará.
+
+### Fecho da ronda — revisão dos estados e experiência do proprietário
+
+- A lista de problemas já não mistura fichas inativas por escolha do proprietário com fichas que precisam de revisão. O relatório distingue: ficha aprovada; ficha inativa; ficha bloqueada para revisão; ficha aprovada mas incompleta.
+- As fichas que exigem revisão ou têm custos/unidades incompletos aparecem numa lista de pratos identificados. No Premium remoto, o proprietário pode abrir a ficha técnica diretamente a partir dessa lista ou do ranking.
+- A comparação da carta foi colocada depois dos indicadores mensais, para que o objetivo percentual que o proprietário introduz esteja disponível antes de calcular o ranking. Foi adicionada à navegação rápida do gestor económico.
+- Uma atualização falhada depois de uma alteração é mostrada como falha com dados desatualizados; o ranking volta a usar apenas o custo manual da carta até carregar uma nova análise. A análise anterior não é apresentada como atual.
+- Respostas de uma atualização iniciada numa conta/restaurante anterior deixam de alterar o estado de uma sessão posterior.
+- O cálculo da ficha técnica rejeita custos por ingrediente ou totais de receita acima de **999 999 999,99 €**; foram acrescentados dois casos de teste para estes limites. `RestaurantRecipeCostCalculatorTest.kt` tem agora sete testes escritos.
+- `MenuCostComparisonAnalyzerTest.kt` tem 12 testes escritos e `MenuRecipeCostSnapshotVersionTest.kt` tem três testes escritos. Nenhum destes testes foi executado nesta sessão.
+
+**Validação final desta ronda:** os ficheiros, chamadas de interface e contagens de testes foram relidos na branch. Continua sem existir resultado de CI para o commit mais recente; não foi executado Gradle, Android Lint, compilação APK/AAB ou teste em dispositivo. O comparador usa custos unitários atuais do inventário e dados carregados manualmente, sem histórico por lote ou leitura de faturas.
