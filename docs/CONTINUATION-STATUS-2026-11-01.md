@@ -203,3 +203,7 @@ A validação de compilação e execução dos seis testes continua pendente; os
 - As chamadas de atualização feitas depois de criar/alterar mesas, pedidos ou artigos também beneficiam da validação final antes de substituir a cache partilhada.
 
 **Validação desta continuação:** revisão por leitura dos ficheiros e verificações de consistência no GitHub. Os testes continuam escritos e não executados; sem CI, compilação, Lint ou testes físicos. Não foi alterada a base de dados Supabase alojada.
+
+
+- Na aplicação de cliente, o envio e o cancelamento de reservas confirmam o cartão de fidelização e a conta antes da operação, depois da consulta e antes de aplicar a resposta. Uma resposta antiga não substitui a lista de outra sessão nem apresenta erros da sessão anterior.
+- Se a conta mudar enquanto o formulário de pedido está aberto, o formulário antigo é fechado quando chega a resposta atrasada; a referência idempotente só é concluída na sessão correspondente.
