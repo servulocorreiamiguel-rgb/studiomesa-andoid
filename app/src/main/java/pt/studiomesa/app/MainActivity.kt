@@ -3786,7 +3786,7 @@ class MainActivity : Activity() {
                 val item = publishedMenu.optJSONObject(index) ?: continue
                 menuItems.add(
                     CustomerMenuDisplayItem(
-                        category = item.optString("category", "Prato principal"),
+                        category = item.optString("category", "Prato principal").trim().ifBlank { "Outros" },
                         name = item.optString("name"),
                         description = item.optString("description").trim(),
                         allergens = item.optString("allergens").trim(),
@@ -3798,7 +3798,7 @@ class MainActivity : Activity() {
             store.getMenu().forEach { item ->
                 menuItems.add(
                     CustomerMenuDisplayItem(
-                        category = item.category,
+                        category = item.category.trim().ifBlank { "Outros" },
                         name = item.name,
                         description = item.description,
                         allergens = item.allergens,
@@ -3810,7 +3810,7 @@ class MainActivity : Activity() {
 
         val query = normalizeCustomerMenuSearch(customerMenuSearch)
         val categories = listOf("Todas") + menuItems.map { it.category }
-            .filter { it.isNotBlank() }.distinct().sorted()
+            .filter { it.isNotBlank() && it != "Todas" }.distinct().sorted()
         if (selectedCustomerMenuCategory !in categories) selectedCustomerMenuCategory = "Todas"
         val filteredItems = menuItems.filter { item ->
             (selectedCustomerMenuCategory == "Todas" || item.category == selectedCustomerMenuCategory) &&
@@ -3837,7 +3837,18 @@ class MainActivity : Activity() {
         val searchPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
-        val searchField = inputField("Pesquisar nome, categoria ou alergénios", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+        val searchField = inputField("Pesquisar nome, categoria ou alergénios", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES).apply {
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                    customerMenuSearch = text.toString().trim()
+                    renderCustomerApp()
+                    true
+                } else {
+                    false
+                }
+            }
+        }
         searchField.setText(customerMenuSearch)
         searchPanel.addView(searchField, fieldParams())
         val searchActions = LinearLayout(this).apply {
