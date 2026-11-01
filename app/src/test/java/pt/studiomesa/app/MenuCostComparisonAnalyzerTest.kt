@@ -183,6 +183,8 @@ class MenuCostComparisonAnalyzerTest {
         assertEquals(1, result.approvedRecipesIncomplete)
         assertEquals(0, result.menuItemsUsingManualCost)
         assertEquals(0, result.menuItemsUsingRecipeCost)
+        assertEquals("Prato incompleto", result.recipeIssues.single().itemName)
+        assertTrue(result.recipeIssues.single().description.contains("custos em falta"))
     }
 
     @Test
