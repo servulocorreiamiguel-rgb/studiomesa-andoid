@@ -446,3 +446,19 @@ Estes casos são executados na ronda final. A app do restaurante pode atribuir o
 | RCOST-12 | Limites | Quantidade, custo, desperdício ou número de ingredientes fora dos limites suportados | O cálculo é recusado com mensagem compreensível; não altera receita nem stock |
 | RCOST-13 | Dados históricos | Alterar custo de compra depois de uma venda já concluída | A estimativa da ficha usa o custo atual; os snapshots históricos de pedidos/movimentos mantêm os valores guardados na altura |
 | RCOST-14 | Contabilidade | Comparar preço indicativo com preço de venda | A interface explica que não inclui IVA, mão de obra, energia, renda ou outros custos indiretos |
+
+
+## Proteção dos custos de compra do inventário
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| ICOST-01 | Privilégios REST | Conta staff faz SELECT direto a `unit_cost_per_unit` em `restaurant_inventory_items` | A consulta é recusada por falta de privilégio de coluna; leituras das colunas operacionais continuam a funcionar |
+| ICOST-02 | RPC de proprietário | Conta staff chama `list_inventory_items_with_costs` para o seu restaurante | O servidor recusa a chamada; a interface nunca recebe os custos |
+| ICOST-03 | Isolamento de restaurante | Proprietário A chama a função de custos para restaurante B | O servidor recusa mesmo que seja enviado um UUID válido de outro restaurante |
+| ICOST-04 | Escrita por staff | Staff tenta criar um artigo com custo de compra | O trigger recusa a escrita de custo não autorizada |
+| ICOST-05 | Preservação de custo | Staff edita nome/quantidade de artigo que já tem custo definido | O custo existente mantém-se; o payload nulo da app não o apaga |
+| ICOST-06 | Unidade base | Staff tenta mudar a unidade base de um artigo existente | O servidor recusa; o proprietário pode alterar depois de rever receitas e quantidades |
+| ICOST-07 | Histórico de perdas | Staff tenta consultar `unit_cost_at_movement` diretamente ou a RPC de histórico financeiro | O acesso ao valor histórico é recusado; o proprietário autorizado recebe o snapshot |
+| ICOST-08 | Cache local | Proprietário carrega custos e termina sessão; outra conta staff usa o mesmo dispositivo | O custo não existe em `remote_inventory_json`, a cache em memória é limpa e a interface staff não o apresenta |
+| ICOST-09 | Mudança de papel | A conta passa de owner para staff e volta a abrir Stock/Assistente | A cache de custos é limpa e nenhuma ferramenta staff recebe custos anteriores |
+| ICOST-10 | Regressão de movimentos | Staff consulta histórico normal de movimentos | Quantidades, datas, notas e unidades continuam acessíveis; custos financeiros não são incluídos |
