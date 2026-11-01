@@ -6392,6 +6392,11 @@ class MainActivity : Activity() {
         val accountId = backendPrefs.getString("user_id", "").orEmpty()
         if (restaurantId.isBlank() || accountId.isBlank()) return
         val requestedScope = "restaurant:$restaurantId:$accountId"
+        val requestedOperationsVersion = backendPrefs.getLong("remote_operations_updated_at", 0L)
+        if (remoteOperationsSyncInFlight) {
+            Toast.makeText(this, "A sincronização geral está em curso. Atualiza as fichas técnicas depois.", Toast.LENGTH_LONG).show()
+            return
+        }
 
         menuRecipeCostRefreshLoading = true
         menuRecipeCostRefreshFailed = false
@@ -6415,9 +6420,13 @@ class MainActivity : Activity() {
                         "O inventário ou as fichas técnicas excedem o limite desta análise. Divide a carta ou pede uma análise paginada."
                     )
                 }
+                if (backendPrefs.getLong("remote_operations_updated_at", 0L) != requestedOperationsVersion) {
+                    throw IllegalStateException("A carta ou os dados operacionais mudaram durante a análise. Atualiza novamente para comparar dados do mesmo momento.")
+                }
                 JSONObject()
                     .put("restaurant_id", restaurantId)
                     .put("account_id", accountId)
+                    .put("operations_version", requestedOperationsVersion)
                     .put("menu", menu)
                     .put("recipes", recipes)
                     .put("ingredients", ingredients)
@@ -6564,11 +6573,15 @@ class MainActivity : Activity() {
         val restaurantId = backendRestaurantId()
         val accountId = backendPrefs.getString("user_id", "").orEmpty()
         val currentScope = "restaurant:$restaurantId:$accountId"
-        val recipeSnapshot = menuRecipeCostSnapshot?.takeIf {
+        val scopedRecipeSnapshot = menuRecipeCostSnapshot?.takeIf {
             menuRecipeCostScopeKey == currentScope &&
                 it.optString("restaurant_id") == restaurantId &&
                 it.optString("account_id") == accountId
         }
+        val snapshotIsStale = scopedRecipeSnapshot != null &&
+            scopedRecipeSnapshot.optLong("operations_version", -1L) !=
+                backendPrefs.getLong("remote_operations_updated_at", 0L)
+        val recipeSnapshot = scopedRecipeSnapshot?.takeUnless { snapshotIsStale }
         val entries = if (hasRemoteRestaurant()) {
             val currentMenu = recipeSnapshot?.optJSONArray("menu") ?: remoteMenuItems()
             buildMenuCostComparisonInputs(currentMenu, recipeSnapshot)
@@ -6599,6 +6612,7 @@ class MainActivity : Activity() {
             addGap(card, 6)
             val snapshotStatus = when {
                 menuRecipeCostRefreshLoading -> "A carregar a carta, fichas técnicas e inventário do servidor…"
+                snapshotIsStale -> "A carta ou o inventário foram alterados desde a última análise. Atualiza para voltar a comparar os custos."
                 menuRecipeCostRefreshFailed && recipeSnapshot != null ->
                     "A atualização falhou. Mantêm-se os últimos dados recebidos."
                 menuRecipeCostRefreshFailed ->
