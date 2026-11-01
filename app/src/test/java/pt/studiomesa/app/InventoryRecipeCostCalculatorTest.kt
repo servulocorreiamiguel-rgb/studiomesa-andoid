@@ -132,7 +132,7 @@ class InventoryRecipeCostCalculatorTest {
             )
         )
         assertEquals(BigDecimal("0.37"), result.totalCostPerPortion)
-        assertEquals(BigDecimal("0.366000000"), result.preciseTotalCostPerPortion)
+        assertEquals(BigDecimal("0.36600000"), result.preciseTotalCostPerPortion)
         assertEquals(
             BigDecimal("1.22"),
             result.suggestedPriceAtTarget(BigDecimal("30"))
