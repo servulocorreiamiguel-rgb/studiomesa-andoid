@@ -78,9 +78,10 @@ class MainActivity : Activity() {
     private var inventoryRefreshFailed = false
     private var inventoryPageContainer: LinearLayout? = null
     // Purchase costs are never persisted in the ordinary inventory cache.
+    private val inventoryUnitCostCacheLock = Any()
     private val inventoryUnitCostCache = mutableMapOf<String, BigDecimal?>()
-    private var inventoryUnitCostCacheScope: String? = null
-    private var inventoryUnitCostCacheLoaded = false
+    @Volatile private var inventoryUnitCostCacheScope: String? = null
+    @Volatile private var inventoryUnitCostCacheLoaded = false
     private val inventoryRefreshHandler = Handler(Looper.getMainLooper())
     private val inventoryRefreshRunnable = object : Runnable {
         override fun run() {
@@ -4551,9 +4552,11 @@ class MainActivity : Activity() {
             backendPrefs.getString("restaurant_role", "").orEmpty() == "owner"
 
     private fun clearInventoryUnitCostCache() {
-        inventoryUnitCostCache.clear()
-        inventoryUnitCostCacheScope = null
-        inventoryUnitCostCacheLoaded = false
+        synchronized(inventoryUnitCostCacheLock) {
+            inventoryUnitCostCache.clear()
+            inventoryUnitCostCacheScope = null
+            inventoryUnitCostCacheLoaded = false
+        }
     }
 
     private fun inventoryItemsWithoutPurchaseCosts(items: JSONArray): JSONArray {
@@ -4574,18 +4577,22 @@ class MainActivity : Activity() {
 
     private fun inventoryItemsWithOwnerCosts(items: JSONArray): JSONArray {
         val safeItems = inventoryItemsWithoutPurchaseCosts(items)
-        if (!isCurrentRestaurantOwner() ||
-            inventoryUnitCostCacheScope != currentInventoryCostScope()
-        ) return safeItems
+        if (!isCurrentRestaurantOwner()) return safeItems
+
+        val scope = currentInventoryCostScope()
+        val costs = synchronized(inventoryUnitCostCacheLock) {
+            if (!inventoryUnitCostCacheLoaded || inventoryUnitCostCacheScope != scope) {
+                null
+            } else {
+                inventoryUnitCostCache.toMap()
+            }
+        } ?: return safeItems
 
         for (index in 0 until safeItems.length()) {
             val item = safeItems.optJSONObject(index) ?: continue
             val itemId = item.optString("id")
-            if (inventoryUnitCostCache.containsKey(itemId)) {
-                item.put(
-                    "unit_cost_per_unit",
-                    inventoryUnitCostCache[itemId] ?: JSONObject.NULL
-                )
+            if (costs.containsKey(itemId)) {
+                item.put("unit_cost_per_unit", costs[itemId] ?: JSONObject.NULL)
             }
         }
         return safeItems
@@ -4619,10 +4626,12 @@ class MainActivity : Activity() {
             }
             newCosts[itemId] = cost
         }
-        inventoryUnitCostCache.clear()
-        inventoryUnitCostCache.putAll(newCosts)
-        inventoryUnitCostCacheScope = currentInventoryCostScope(restaurantId)
-        inventoryUnitCostCacheLoaded = true
+        synchronized(inventoryUnitCostCacheLock) {
+            inventoryUnitCostCache.clear()
+            inventoryUnitCostCache.putAll(newCosts)
+            inventoryUnitCostCacheScope = currentInventoryCostScope(restaurantId)
+            inventoryUnitCostCacheLoaded = true
+        }
         return inventoryItemsWithoutPurchaseCosts(rows)
     }
 
