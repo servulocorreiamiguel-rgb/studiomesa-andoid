@@ -6714,6 +6714,16 @@ class MainActivity : Activity() {
                         10.5f, true, red
                     ))
                 }
+                if (isPremium && hasRemoteRestaurant() && !item.menuItemId.isNullOrBlank()) {
+                    addGap(row, 5)
+                    row.addView(secondaryButton("Abrir ficha técnica") {
+                        showRecipeDialog(
+                            item.menuItemId,
+                            item.itemName,
+                            item.sellingPrice
+                        )
+                    }, LinearLayout.LayoutParams(-1, dp(40)))
+                }
                 card.addView(row, cardParams())
                 addGap(card, 5)
             }
