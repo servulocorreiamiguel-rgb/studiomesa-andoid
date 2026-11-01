@@ -169,6 +169,8 @@ Os valores de referência atuais são 890 €, 1 490 € e 1 690 €. Ainda não
 
 ## Confidencialidade dos custos de compra
 
+- [ ] A migração `20261101100000_inventory_purchase_cost_owner_only.sql` permanece apenas nesta branch; não foi aplicada ao Supabase alojado. A ativação depende da ronda de testes, backup, ensaio de restauro e rollout controlado.
+
 - [x] Preparada migração de privilégios por coluna: contas autenticadas podem ler dados operacionais de stock, mas não `unit_cost_per_unit` nem `unit_cost_at_movement` diretamente.
 - [x] Preparadas RPCs `SECURITY DEFINER` com verificação explícita de `restaurant_staff.role = 'owner'` para custos atuais e históricos; todas as funções têm `search_path` vazio e privilégios explícitos.
 - [x] Trigger de proteção impede que staff defina custo de compra ou altere a unidade base de um artigo existente; atualizações operacionais preservam o custo antigo.
