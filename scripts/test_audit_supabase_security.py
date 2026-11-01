@@ -241,6 +241,28 @@ class SupabaseSecurityAuditTests(unittest.TestCase):
         self.assertTrue(any("authenticated" in error for error in errors))
 
 
+    def test_inventory_purchase_cost_migration_is_owner_only(self):
+        migration = ROOT / "supabase" / "migrations" / "20261101100000_inventory_purchase_cost_owner_only.sql"
+        sql = migration.read_text(encoding="utf-8")
+
+        errors, function_count, table_count = audit_migration_sql(sql)
+        self.assertEqual([], errors)
+        self.assertEqual(4, function_count)
+        self.assertEqual(0, table_count)
+        self.assertIn("rs.role = 'owner'", sql)
+        self.assertIn(
+            "REVOKE SELECT ON TABLE public.restaurant_inventory_items FROM authenticated;",
+            sql,
+        )
+        self.assertIn(
+            "REVOKE SELECT ON TABLE public.restaurant_inventory_movements FROM authenticated;",
+            sql,
+        )
+        self.assertNotRegex(
+            sql,
+            r"GRANT SELECT\\s*\\([^)]*(?:unit_cost_per_unit|unit_cost_at_movement)",
+        )
+
     def test_detects_hardcoded_supabase_secret_in_android_source(self):
         with TemporaryDirectory(dir=ROOT) as tmp:
             source = Path(tmp) / "MainActivity.kt"
