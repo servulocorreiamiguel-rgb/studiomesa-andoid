@@ -7924,7 +7924,7 @@ class MainActivity : Activity() {
                 .replace(Regex("[\\r\\n]+"), " ")
                 .trim()
             val unitCost = ingredient.unitCostPerStockUnit
-                ?: throw IllegalStateException("Falta o custo de compra de «${ingredient.name)».")
+                ?: throw IllegalStateException("Falta o custo de compra de «${ingredient.name}».")
             "$safeName | ${ingredient.quantityPerPortion.toPlainString()} | " +
                 "${unitCost.toPlainString()} | " +
                 ingredient.wastePercent.toPlainString()
