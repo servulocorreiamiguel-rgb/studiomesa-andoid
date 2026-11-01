@@ -856,11 +856,13 @@ class MainActivity : Activity() {
         addGap(container, 8)
 
         if (hasRemoteRestaurant()) {
-            container.addView(primaryButton("+  Adicionar mesa") { showAddTableDialog() },
-                LinearLayout.LayoutParams(-1, dp(48)))
-            addGap(container, 6)
-            container.addView(secondaryButton("Atualizar do servidor") { refreshRemoteOperations() },
-                LinearLayout.LayoutParams(-1, dp(48)))
+            addActionPair(
+                container,
+                "+  Adicionar mesa",
+                { showAddTableDialog() },
+                "Atualizar",
+                { refreshRemoteOperations() }
+            )
             addGap(container, 10)
 
             val tableData = remoteTables()
@@ -1637,10 +1639,13 @@ class MainActivity : Activity() {
                 addGap(this, 4)
                 addView(label("A carta é partilhada pela equipa. Os custos e margens só são apresentados na aplicação de gestão, não no cartão de cliente.", 12.5f, false, ink))
             }, cardParams())
-            container.addView(secondaryButton("Atualizar do servidor") { refreshRemoteOperations() },
-                LinearLayout.LayoutParams(-1, dp(48)))
-            addGap(container, 6)
-            container.addView(primaryButton("+  Adicionar artigo") { showAddMenuItemDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
+            addActionPair(
+                container,
+                "+  Adicionar artigo",
+                { showAddMenuItemDialog() },
+                "Atualizar",
+                { refreshRemoteOperations() }
+            )
             addGap(container, 15)
             val items = remoteMenuItems()
             val validRemoteCosts = (0 until items.length()).count { index ->
@@ -4099,11 +4104,13 @@ class MainActivity : Activity() {
             container.addView(emptyCard("Para proteger os dados dos clientes e sincronizar as reservas, inicia sessão e configura o restaurante na secção Conta."))
             return
         }
-        container.addView(primaryButton("+  Nova reserva") { showReservationDialog() },
-            LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(container, 6)
-        container.addView(secondaryButton("Atualizar reservas") { refreshReservations() },
-            LinearLayout.LayoutParams(-1, dp(48)))
+        addActionPair(
+            container,
+            "+  Nova reserva",
+            { showReservationDialog() },
+            "Atualizar",
+            { refreshReservations() }
+        )
         addGap(container, 12)
 
         if (!reservationsLoaded) {
@@ -4444,11 +4451,13 @@ class MainActivity : Activity() {
             container.addView(emptyCard("O inventário partilhado exige uma conta autenticada e um restaurante configurado na secção Conta."))
             return
         }
-        container.addView(primaryButton("+  Adicionar artigo de stock") { showInventoryItemDialog(null) },
-            LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(container, 6)
-        container.addView(secondaryButton("Atualizar stock") { refreshInventoryItems() },
-            LinearLayout.LayoutParams(-1, dp(48)))
+        addActionPair(
+            container,
+            "+  Artigo de stock",
+            { showInventoryItemDialog(null) },
+            "Atualizar",
+            { refreshInventoryItems() }
+        )
         addGap(container, 6)
         container.addView(label(
             inventoryRefreshStatusMessage(),
