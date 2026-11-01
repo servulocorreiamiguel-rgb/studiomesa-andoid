@@ -4963,6 +4963,10 @@ class MainActivity : Activity() {
 
     private fun assistantSnapshot(): StudioMesaAssistantSnapshot {
         val remote = hasRemoteRestaurant()
+        val operationsSnapshotFresh = !remote || AssistantOperationsSnapshotPolicy.isFresh(
+            System.currentTimeMillis(),
+            backendPrefs.getLong("remote_operations_updated_at", 0L)
+        )
         val menu = (if (remote) remoteMenuEntries() else store.getMenu()).map { item ->
             AssistantMenuItem(
                 name = item.name,
@@ -5038,7 +5042,8 @@ class MainActivity : Activity() {
             reservationsFeatureAvailable = hasCalculator,
             reservationsLoaded = reservationsAreLoaded,
             pendingReservations = pendingReservations,
-            salesLines = salesLines
+            salesLines = salesLines,
+            operationsSnapshotFresh = operationsSnapshotFresh
         )
     }
 
