@@ -260,7 +260,7 @@ class SupabaseSecurityAuditTests(unittest.TestCase):
         )
         self.assertNotRegex(
             sql,
-            r"GRANT SELECT\\s*\\([^)]*(?:unit_cost_per_unit|unit_cost_at_movement)",
+            r"GRANT SELECT\s*\([^)]*(?:unit_cost_per_unit|unit_cost_at_movement)",
         )
 
     def test_detects_hardcoded_supabase_secret_in_android_source(self):
