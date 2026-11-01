@@ -114,6 +114,7 @@ class MainActivity : Activity() {
     // Reservation contacts are kept in memory only, not persisted to SharedPreferences.
     private var reservationCache = JSONArray()
     private var reservationsLoaded = false
+    private var reservationRefreshInFlightScope: String? = null
     private var selectedReservationFilter = "Todas"
     private var customerReservationsCache = JSONArray()
     private var customerReservationsLoaded = false
@@ -1871,6 +1872,7 @@ class MainActivity : Activity() {
                 if (previousRestaurantId.isNotBlank() && previousRestaurantId != restaurantId) {
                     reservationCache = JSONArray()
                     reservationsLoaded = false
+                    reservationRefreshInFlightScope = null
                     selectedReservationFilter = "Todas"
                     editor.remove("remote_members_json")
                         .remove("remote_tables_json")
@@ -1907,6 +1909,7 @@ class MainActivity : Activity() {
                     .apply()
                 reservationCache = JSONArray()
                 reservationsLoaded = false
+                reservationRefreshInFlightScope = null
                 selectedReservationFilter = "Todas"
             }
         } catch (_: Exception) {
@@ -4130,6 +4133,11 @@ class MainActivity : Activity() {
         }
         val requestedRestaurantId = backendRestaurantId()
         val requestedAccountId = backendPrefs.getString("user_id", "").orEmpty()
+        if (requestedRestaurantId.isBlank() || requestedAccountId.isBlank()) return
+        val requestedScope = "$requestedRestaurantId:$requestedAccountId"
+        if (reservationRefreshInFlightScope == requestedScope) return
+        reservationRefreshInFlightScope = requestedScope
+
         runBackend(
             task = {
                 val token = backendToken()
@@ -4145,9 +4153,11 @@ class MainActivity : Activity() {
                 SupabaseApi.listReservations(token, requestedRestaurantId).toString()
             },
             onError = { error ->
+                val ownsRefreshSlot = reservationRefreshInFlightScope == requestedScope
+                if (ownsRefreshSlot) reservationRefreshInFlightScope = null
                 val currentRestaurantId = backendRestaurantId()
                 val currentAccountId = backendPrefs.getString("user_id", "").orEmpty()
-                if (ReservationRefreshScope.matchesRestaurant(
+                if (ownsRefreshSlot && ReservationRefreshScope.matchesRestaurant(
                         requestedRestaurantId, currentRestaurantId,
                         requestedAccountId, currentAccountId
                     )
@@ -4159,10 +4169,13 @@ class MainActivity : Activity() {
                         .show()
                 }
             },
+            showProgress = false,
             onSuccess = { raw ->
+                val ownsRefreshSlot = reservationRefreshInFlightScope == requestedScope
+                if (ownsRefreshSlot) reservationRefreshInFlightScope = null
                 val currentRestaurantId = backendRestaurantId()
                 val currentAccountId = backendPrefs.getString("user_id", "").orEmpty()
-                if (ReservationRefreshScope.matchesRestaurant(
+                if (ownsRefreshSlot && ReservationRefreshScope.matchesRestaurant(
                         requestedRestaurantId, currentRestaurantId,
                         requestedAccountId, currentAccountId
                     )
