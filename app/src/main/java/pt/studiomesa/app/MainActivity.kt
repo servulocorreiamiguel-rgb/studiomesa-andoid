@@ -1907,24 +1907,15 @@ class MainActivity : Activity() {
         backendToken().isNotBlank() && backendRestaurantId().isNotBlank()
 
     private fun remoteOperationsSyncLabel(): String {
-        if (remoteOperationsSyncInFlight) return "A sincronizar mesas, carta e pedidos…"
-
         val lastSync = backendPrefs.getLong("remote_operations_updated_at", 0L)
-        val formattedLastSync = if (lastSync > 0L) {
-            SimpleDateFormat("HH:mm", Locale("pt", "PT")).format(Date(lastSync))
-        } else {
-            null
+        val formattedLastSync = lastSync.takeIf { it > 0L }?.let {
+            SimpleDateFormat("HH:mm", Locale("pt", "PT")).format(Date(it))
         }
-
-        if (remoteOperationsSyncFailed) {
-            return formattedLastSync?.let {
-                "Falha ao atualizar · a usar dados recebidos às $it"
-            } ?: "Falha ao sincronizar · sem dados confirmados neste dispositivo"
-        }
-
-        return formattedLastSync?.let {
-            "Última sincronização concluída às $it"
-        } ?: "Restaurante configurado · ainda sem sincronização concluída"
+        return RemoteOperationsSyncStatus.label(
+            isSyncing = remoteOperationsSyncInFlight,
+            hasFailed = remoteOperationsSyncFailed,
+            lastSuccessfulSync = formattedLastSync
+        )
     }
 
     private fun savedRemoteArray(key: String): org.json.JSONArray {
