@@ -7900,6 +7900,46 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun openRecipeInEconomicManager(analysis: InventoryRecipeCostAnalysis) {
+        if (!analysis.isComplete || (analysis.preciseTotalCostPerPortion?.signum() ?: 0) <= 0) {
+            Toast.makeText(
+                this,
+                "Confirma todos os custos de compra antes de transferir a receita.",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+
+        val scope = if (hasRemoteRestaurant()) {
+            "restaurant:" + backendRestaurantId() + ":" +
+                backendPrefs.getString("user_id", "").orEmpty()
+        } else "demo"
+        if (economicScopeKey != null && economicScopeKey != scope) {
+            clearEconomicManagerState()
+        }
+
+        val managerLines = analysis.ingredients.joinToString("\n") { ingredient ->
+            val safeName = ingredient.name
+                .replace("|", "/")
+                .replace(Regex("[\\r\\n]+"), " ")
+                .trim()
+            val unitCost = ingredient.unitCostPerStockUnit
+                ?: throw IllegalStateException("Falta o custo de compra de «${ingredient.name)».")
+            "$safeName | ${ingredient.quantityPerPortion.toPlainString()} | " +
+                "${unitCost.toPlainString()} | " +
+                ingredient.wastePercent.toPlainString()
+        }
+        economicManagerEnabled = true
+        economicScopeKey = scope
+        economicInputs["recipe"] = managerLines
+        if (economicInputs["foodTarget"].isNullOrBlank()) {
+            economicInputs["foodTarget"] = "30"
+        }
+        recipeReportText = ""
+        activePage = "Gestão económica"
+        renderApp()
+    }
+
     private fun showRecipeDialogContent(
         menuItemId: String,
         menuItemName: String,
@@ -8053,39 +8093,19 @@ class MainActivity : Activity() {
                         10.5f, false, muted
                     ))
                     addGap(costCard, 7)
-                    if (analysis.preciseTotalCostPerPortion?.signum() ?: 0 > 0) {
-                        costCard.addView(secondaryButton("Usar no Gestor económico") {
-                            val scope = if (hasRemoteRestaurant()) {
-                            "restaurant:" + backendRestaurantId() + ":" +
-                                backendPrefs.getString("user_id", "").orEmpty()
-                        } else "demo"
-                        if (economicScopeKey != null && economicScopeKey != scope) {
-                            clearEconomicManagerState()
-                        }
-                        val managerLines = analysis.ingredients.joinToString("\n") { ingredient ->
-                            val safeName = ingredient.name
-                                .replace("|", "/")
-                                .replace(Regex("[\\r\\n]+"), " ")
-                                .trim()
-                            "$safeName | ${ingredient.quantityPerPortion.toPlainString()} | " +
-                                "${ingredient.unitCostPerStockUnit!!.toPlainString()} | " +
-                                ingredient.wastePercent.toPlainString()
-                        }
-                        economicManagerEnabled = true
-                        economicScopeKey = scope
-                        economicInputs["recipe"] = managerLines
-                        if (economicInputs["foodTarget"].isNullOrBlank()) {
-                            economicInputs["foodTarget"] = "30"
-                        }
-                        recipeReportText = ""
-                        activePage = "Gestão económica"
-                            renderApp()
-                        }, LinearLayout.LayoutParams(-1, dp(44)))
+                    if ((analysis.preciseTotalCostPerPortion?.signum() ?: 0) > 0) {
+                        costCard.addView(
+                            secondaryButton("Usar no Gestor económico") {
+                                openRecipeInEconomicManager(analysis)
+                            },
+                            LinearLayout.LayoutParams(-1, dp(44))
+                        )
                     } else {
                         costCard.addView(label(
                             "O custo total registado é zero. Confirma se os custos de compra foram preenchidos antes de usar esta receita para sugerir um preço.",
                             10.5f, false, muted
                         ))
+                    }
                     }
                 }
                 else -> {
