@@ -6629,7 +6629,10 @@ class MainActivity : Activity() {
             addGap(card, 6)
             val snapshotStatus = when {
                 menuRecipeCostRefreshLoading -> "A carregar a carta, fichas técnicas e inventário do servidor…"
-                snapshotIsStale -> "A carta ou o inventário foram alterados desde a última análise. Atualiza para voltar a comparar os custos."
+                snapshotIsStale && menuRecipeCostRefreshFailed ->
+                    "A atualização falhou e a análise anterior ficou desatualizada. O ranking usa apenas os custos manuais da carta até conseguires atualizar."
+                snapshotIsStale ->
+                    "A carta ou o inventário foram alterados desde a última análise. Atualiza para voltar a comparar os custos."
                 menuRecipeCostRefreshFailed && recipeSnapshot != null ->
                     "A atualização falhou. Mantêm-se os últimos dados recebidos."
                 menuRecipeCostRefreshFailed ->
