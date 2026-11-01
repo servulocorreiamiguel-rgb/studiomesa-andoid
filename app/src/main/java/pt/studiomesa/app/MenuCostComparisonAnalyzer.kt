@@ -45,7 +45,6 @@ internal data class MenuCostComparisonResult(
  * This is a screening indicator, not a net-margin or accounting-profit calculation.
  */
 internal object MenuCostComparisonAnalyzer {
-    private val zero = BigDecimal.ZERO
     private val hundred = BigDecimal("100")
     private val maxAmount = BigDecimal("999999999.99")
 
@@ -87,12 +86,13 @@ internal object MenuCostComparisonAnalyzer {
                 cost = recipeCost
                 sourceLabel = "Ficha técnica aprovada"
             } else {
-                if (entry.recipeExists) {
-                    // An unapproved recipe must not replace the owner's recorded manual cost.
-                    // It is counted separately so the owner knows that review is still needed.
-                    sourceLabel = "Custo manual · ficha técnica por aprovar"
-                } else {
-                    sourceLabel = "Custo manual da carta"
+                sourceLabel = when {
+                    entry.recipeRequiresReview ->
+                        "Custo manual · ficha técnica por rever"
+                    entry.recipeExists && !entry.recipeIsActive ->
+                        "Custo manual · ficha técnica inativa"
+                    else ->
+                        "Custo manual da carta"
                 }
                 val manualCost = entry.recordedUnitCost
                 if (manualCost == null) {
