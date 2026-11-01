@@ -47,6 +47,11 @@ class MainActivity : Activity() {
     private var activePage = "Início"
     private var activeCustomerPage = "Cartão"
     private var customerMenuSearch = ""
+    private var selectedCustomerMenuCategory = "Todas"
+    private var managementMenuSearch = ""
+    private var selectedManagementMenuCategory = "Todas"
+    private var inventorySearch = ""
+    private var selectedInventoryFilter = "Todos"
 
     private var activityResumed = false
     private var kitchenAutoRefreshScheduled = false
@@ -79,6 +84,7 @@ class MainActivity : Activity() {
         }
     }
     private var assistantQuestion = ""
+    private var assistantInsightsExpanded = false
     private var assistantAnswer: StudioMesaAssistantAnswer? = null
     private data class AssistantChatTurn(
         val question: String,
@@ -86,6 +92,10 @@ class MainActivity : Activity() {
     )
     private val assistantConversation = mutableListOf<AssistantChatTurn>()
     private var selectedAnalysisPeriod = SalesAnalysisPeriod.ALL_TIME
+    private var selectedOrderFilter = "Todos"
+    private var selectedKitchenFilter = "Todos"
+    private var selectedTableFilter = "Todas"
+    private var customerSearchQuery = ""
 
     // Owner-controlled economic tools: session-only until persistent authorization is designed.
     private var economicManagerEnabled = false
@@ -108,11 +118,13 @@ class MainActivity : Activity() {
     private var reservationCache = JSONArray()
     private var reservationsLoaded = false
     private var selectedReservationFilter = "Todas"
+    private var reservationSearchQuery = ""
     private var customerReservationsCache = JSONArray()
     private var customerReservationsLoaded = false
     private var customerReservationsLoading = false
     private var customerReservationsLoadError = false
     private var selectedCustomerReservationFilter = "Todas"
+    private var customerReservationSearchQuery = ""
 
     private val flavor = BuildConfig.FLAVOR.lowercase(Locale.ROOT)
     private val isCustomerApp = flavor.contains("cliente")
@@ -627,45 +639,34 @@ class MainActivity : Activity() {
         appRoot.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         renderPage(content)
 
-        // Keep the three high-frequency destinations visible on phones.
-        // Secondary destinations remain available from the hamburger drawer above.
-        val nav = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(6), dp(4), dp(6), dp(4))
-            setBackgroundColor(white)
-            elevation = dp(6).toFloat()
-        }
-        listOf("Início", "Mesas", "Pedidos").forEach { page ->
-            val selected = activePage == page
-            val item = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
-                setPadding(dp(3), dp(3), dp(3), dp(3))
-                background = rounded(if (selected) copperPale else white, 12)
-                contentDescription = "Abrir secção " + page
-                isClickable = true
-                isFocusable = true
-                setOnClickListener {
-                    activePage = page
-                    renderApp()
-                }
+        if (activePage == "Assistente") {
+            appRoot.addView(renderAssistantComposer(), LinearLayout.LayoutParams(-1, -2))
+            if (assistantConversation.isNotEmpty()) {
+                scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
             }
-            item.addView(TextView(this).apply {
-                text = pageGlyph(page)
-                textSize = 17f
-                gravity = Gravity.CENTER
-                setTextColor(if (selected) forestDeep else muted)
-            }, LinearLayout.LayoutParams(-2, dp(21)))
-            item.addView(label(page, 10.5f, true, if (selected) forestDeep else muted).apply {
-                gravity = Gravity.CENTER
-                maxLines = 1
-            })
-            nav.addView(item, LinearLayout.LayoutParams(0, dp(52), 1f).apply {
-                setMargins(dp(3), 0, dp(3), 0)
-            })
+        } else {
+            // Keep the three high-frequency destinations visible on phones.
+            // Secondary destinations remain available from the hamburger drawer above.
+            val nav = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(6), dp(4), dp(6), dp(4))
+                setBackgroundColor(white)
+                elevation = dp(6).toFloat()
+            }
+            listOf("Início", "Mesas", "Pedidos").forEach { page ->
+                nav.addView(
+                    bottomNavigationItem(page, activePage == page) {
+                        activePage = page
+                        renderApp()
+                    },
+                    LinearLayout.LayoutParams(0, dp(54), 1f).apply {
+                        setMargins(dp(3), 0, dp(3), 0)
+                    }
+                )
+            }
+            appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(60)))
         }
-        appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(60)))
         setContentView(appRoot)
         updateKitchenAutoRefresh()
         updateInventoryAutoRefresh()
@@ -803,45 +804,46 @@ class MainActivity : Activity() {
             )
         }
 
-        sectionHeading(container, "Acesso rápido", "Escolhe uma área para continuar.")
-        actionCard(container, "01", "Mesas", "Consulta as $tableTotal mesas do restaurante.", "ABRIR MESAS") {
-            activePage = "Mesas"; renderApp()
-        }
-        actionCard(container, "02", "Pedidos", "Regista pedidos e acompanha a conclusão.", "ABRIR PEDIDOS") {
-            activePage = "Pedidos"; renderApp()
-        }
-        actionCard(container, "03", "Carta e custos",
-            if (remote) "Gere os artigos, preços e custos aprovados." else "Artigos de exemplo, preços e custos.",
-            "ABRIR CARTA"
-        ) {
-            activePage = "Carta"; renderApp()
-        }
-        actionCard(container, "04", "Pontos de fidelização", "Cria cartões de cliente e ajusta saldos de pontos.", "GERIR CLIENTES") {
-            activePage = "Pontos"; renderApp()
-        }
+        sectionHeading(container, "Acesso rápido", "As principais áreas do restaurante.")
+
+        val quickActions = mutableListOf<Triple<String, String, String>>()
+        quickActions += Triple("Mesas", "Mesas do restaurante", "$tableTotal mesas disponíveis para consultar e gerir.")
+        quickActions += Triple("Pedidos", "Pedidos e serviço", "Regista pedidos e acompanha cada estado.")
+        quickActions += Triple("Carta", "Carta e custos", if (remote) "Gere artigos, preços e custos internos." else "Artigos de exemplo, preços e custos.")
+        quickActions += Triple("Pontos", "Fidelização", "Consulta clientes e gere os respetivos pontos.")
         if (hasCalculator) {
-            actionCard(container, "05", "Reservas", "Regista reservas e acompanha confirmações.", "GERIR RESERVAS") {
-                activePage = "Reservas"; renderApp()
-            }
-            actionCard(container, "06", "Preço Justo", "Calcula preços indicativos a partir dos custos.", "ABRIR CALCULADORA") {
-                activePage = "Preço Justo"; renderApp()
-            }
+            quickActions += Triple("Reservas", "Reservas", "Organiza pedidos e confirmações.")
+            quickActions += Triple("Preço Justo", "Preço Justo", "Calcula preços indicativos a partir dos custos.")
         }
         if (isPremium) {
-            actionCard(container, "07", "Stock e inventário", "Controla quantidades, níveis mínimos e movimentos.", "GERIR STOCK") {
-                activePage = "Stock"; renderApp()
-            }
-            actionCard(container, "08", "Análise operacional", "Consulta os pedidos, artigos e custos registados.", "VER ANÁLISE") {
-                activePage = "Análise"; renderApp()
-            }
+            quickActions += Triple("Stock", "Stock e inventário", "Controla quantidades, alertas e movimentos.")
+            quickActions += Triple("Análise", "Análise operacional", "Consulta pedidos, artigos e indicadores.")
         }
         if ("Gestão económica" in availablePages()) {
-            actionCard(container, "€", "Gestão económica", "Simula cenários, calcula metas e analisa os custos do restaurante.", "ABRIR GESTOR") {
-                activePage = "Gestão económica"; renderApp()
-            }
+            quickActions += Triple("Gestão económica", "Gestão económica", "Simula cenários e calcula metas financeiras.")
         }
-        actionCard(container, "IA", "Assistente StudioMesa", "Sugestões de operação, engenharia da carta e ideias de conteúdo.", "ABRIR ASSISTENTE") {
-            activePage = "Assistente"; renderApp()
+        quickActions += Triple("Assistente", "Assistente StudioMesa", "Analisa a operação e sugere pontos a rever.")
+
+        for (index in quickActions.indices step 2) {
+            val first = quickActions[index]
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.TOP
+            }
+            row.addView(
+                homeActionTile(first.second, first.third, first.first),
+                LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), dp(10)) }
+            )
+            if (index + 1 < quickActions.size) {
+                val second = quickActions[index + 1]
+                row.addView(
+                    homeActionTile(second.second, second.third, second.first),
+                    LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, dp(10)) }
+                )
+            } else {
+                row.addView(View(this), LinearLayout.LayoutParams(0, dp(1), 1f))
+            }
+            container.addView(row, LinearLayout.LayoutParams(-1, -2))
         }
 
         addGap(container, 6)
@@ -858,6 +860,39 @@ class MainActivity : Activity() {
         container.addView(note, cardParams())
     }
 
+    private fun addTableFilters(container: LinearLayout) {
+        container.addView(label("FILTRAR MESAS", 9.5f, true, forestSoft))
+        addGap(container, 5)
+        val scroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        listOf("Todas", "Livres", "Ocupadas").forEach { filter ->
+            row.addView(
+                filterChip(filter, selectedTableFilter == filter) {
+                    selectedTableFilter = filter
+                    renderApp()
+                },
+                LinearLayout.LayoutParams(-2, dp(42)).apply {
+                    setMargins(0, 0, dp(6), 0)
+                }
+            )
+        }
+        scroll.addView(row)
+        container.addView(scroll, LinearLayout.LayoutParams(-1, dp(46)))
+        addGap(container, 5)
+    }
+
+    private fun tableMatchesSelectedFilter(occupied: Boolean): Boolean = when (selectedTableFilter) {
+        "Livres" -> !occupied
+        "Ocupadas" -> occupied
+        else -> true
+    }
+
     private fun renderTables(container: LinearLayout) {
         pageIntro(container, "Mesas", if (hasRemoteRestaurant())
             "Estado, zona e capacidade partilhados pela equipa."
@@ -865,37 +900,68 @@ class MainActivity : Activity() {
         addGap(container, 8)
 
         if (hasRemoteRestaurant()) {
-            container.addView(primaryButton("+  Adicionar mesa") { showAddTableDialog() },
-                LinearLayout.LayoutParams(-1, dp(48)))
-            addGap(container, 6)
-            container.addView(secondaryButton("Atualizar do servidor") { refreshRemoteOperations() },
-                LinearLayout.LayoutParams(-1, dp(48)))
+            addActionPair(
+                container,
+                "+  Adicionar mesa",
+                { showAddTableDialog() },
+                "Atualizar",
+                { refreshRemoteOperations() }
+            )
             addGap(container, 10)
 
             val tableData = remoteTables()
-            if (tableData.length() == 0) {
+            val validTableIndices = (0 until tableData.length()).filter {
+                tableData.optJSONObject(it) != null
+            }
+            if (validTableIndices.isEmpty()) {
                 container.addView(emptyCard("Ainda não existem mesas sincronizadas. Atualiza os dados ou volta a iniciar sessão."))
                 return
             }
 
-            for (index in 0 until tableData.length() step 2) {
-                val first = tableData.optJSONObject(index) ?: continue
+            val occupiedTables = validTableIndices.count {
+                tableData.optJSONObject(it)?.optBoolean("is_occupied", false) == true
+            }
+            val tableOverview = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            tableOverview.addView(statCard("MESAS LIVRES", (validTableIndices.size - occupiedTables).toString(), green),
+                LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), dp(10)) })
+            tableOverview.addView(statCard("MESAS OCUPADAS", occupiedTables.toString(), if (occupiedTables > 0) copper else forestSoft),
+                LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, dp(10)) })
+            container.addView(tableOverview)
+            addTableFilters(container)
+            val visibleTableIndices = validTableIndices.filter { index ->
+                val occupied = tableData.optJSONObject(index)?.optBoolean("is_occupied", false) == true
+                tableMatchesSelectedFilter(occupied)
+            }
+            container.addView(label("${visibleTableIndices.size} mesa(s) neste filtro", 11f, true, forestSoft))
+            addGap(container, 6)
+            if (visibleTableIndices.isEmpty()) {
+                container.addView(emptyCard("Não há mesas neste estado. Escolhe outro filtro para consultar a sala."))
+                return
+            }
+
+            for (position in visibleTableIndices.indices step 2) {
+                val firstIndex = visibleTableIndices[position]
+                val first = tableData.optJSONObject(firstIndex) ?: continue
                 val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
                 row.addView(remoteTableCard(
                     first.optString("id"),
-                    first.optInt("table_number", index + 1),
+                    first.optInt("table_number", firstIndex + 1),
                     first.optBoolean("is_occupied", false),
                     first.optString("area", "Sala principal"),
                     first.optInt("seats", 2)
                 ), LinearLayout.LayoutParams(0, -2, 1f).apply {
                     setMargins(0, 0, dp(6), dp(10))
                 })
-                if (index + 1 < tableData.length()) {
-                    val second = tableData.optJSONObject(index + 1)
+                if (position + 1 < visibleTableIndices.size) {
+                    val secondIndex = visibleTableIndices[position + 1]
+                    val second = tableData.optJSONObject(secondIndex)
                     if (second != null) {
                         row.addView(remoteTableCard(
                             second.optString("id"),
-                            second.optInt("table_number", index + 2),
+                            second.optInt("table_number", secondIndex + 1),
                             second.optBoolean("is_occupied", false),
                             second.optString("area", "Sala principal"),
                             second.optInt("seats", 2)
@@ -914,22 +980,40 @@ class MainActivity : Activity() {
             return
         }
 
-        val legend = LinearLayout(this).apply {
+        addGap(container, 8)
+        val localOccupiedTables = store.occupiedTableCount()
+        val localTableOverview = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        legend.addView(statusDot(green), LinearLayout.LayoutParams(dp(8), dp(8)))
-        legend.addView(label("  Livre", 12f, false, muted))
-        addGap(legend, 1)
-        legend.addView(statusDot(red), LinearLayout.LayoutParams(dp(8), dp(8)))
-        legend.addView(label("  Ocupada", 12f, false, muted))
-        container.addView(legend)
-        addGap(container, 14)
-
-        for (table in 1..12 step 2) {
+        localTableOverview.addView(statCard("MESAS LIVRES", (12 - localOccupiedTables).toString(), green),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), dp(10)) })
+        localTableOverview.addView(statCard("MESAS OCUPADAS", localOccupiedTables.toString(), if (localOccupiedTables > 0) copper else forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, dp(10)) })
+        container.addView(localTableOverview)
+        addTableFilters(container)
+        val visibleTables = (1..12).filter { table ->
+            tableMatchesSelectedFilter(store.isTableOccupied(table))
+        }
+        container.addView(label("${visibleTables.size} mesa(s) neste filtro", 11f, true, forestSoft))
+        addGap(container, 6)
+        if (visibleTables.isEmpty()) {
+            container.addView(emptyCard("Não há mesas neste estado. Escolhe outro filtro para consultar a sala."))
+            return
+        }
+        for (position in visibleTables.indices step 2) {
+            val table = visibleTables[position]
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            row.addView(tableCard(table), LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), dp(10)) })
-            row.addView(tableCard(table + 1), LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, dp(10)) })
+            row.addView(tableCard(table), LinearLayout.LayoutParams(0, -2, 1f).apply {
+                setMargins(0, 0, dp(6), dp(10))
+            })
+            if (position + 1 < visibleTables.size) {
+                row.addView(tableCard(visibleTables[position + 1]), LinearLayout.LayoutParams(0, -2, 1f).apply {
+                    setMargins(dp(6), 0, 0, dp(10))
+                })
+            } else {
+                row.addView(View(this), LinearLayout.LayoutParams(0, dp(1), 1f))
+            }
             container.addView(row)
         }
         addGap(container, 3)
@@ -1177,21 +1261,33 @@ class MainActivity : Activity() {
         else "Registo simples de pedidos por mesa.")
         addGap(container, 10)
         if (hasRemoteRestaurant()) {
-            container.addView(secondaryButton("Atualizar do servidor") { refreshRemoteOperations() },
-                LinearLayout.LayoutParams(-1, dp(48)))
-            addGap(container, 7)
+            addActionPair(container, "+  Novo pedido", { showCreateOrderDialog() }, "Atualizar", { refreshRemoteOperations() })
+        } else {
+            addActionPair(container, "+  Novo pedido", { showCreateOrderDialog() })
         }
-        container.addView(primaryButton("+  Novo pedido") { showCreateOrderDialog() }, LinearLayout.LayoutParams(-1, dp(50)))
         addGap(container, 15)
 
         if (hasRemoteRestaurant()) {
             val orders = remoteOrders()
+            val remoteStatuses = (0 until orders.length()).mapNotNull {
+                orders.optJSONObject(it)?.optString("status", "Aberto")
+            }
+            addOrderStatusOverview(container, remoteStatuses)
             if (orders.length() == 0) {
                 container.addView(emptyCard("Ainda não há pedidos registados no servidor. Cria o primeiro pedido para testar o fluxo."))
                 return
             }
-            for (index in 0 until orders.length()) {
-                val order = orders.optJSONObject(index) ?: continue
+            addOrderFilters(container)
+            val filteredOrders = (0 until orders.length())
+                .mapNotNull { orders.optJSONObject(it) }
+                .filter { orderMatchesSelectedFilter(it.optString("status", "Aberto")) }
+            container.addView(label("${filteredOrders.size} pedido(s) neste filtro", 11f, true, forestSoft))
+            addGap(container, 6)
+            if (filteredOrders.isEmpty()) {
+                container.addView(emptyCard("Não existem pedidos neste estado. Escolhe outro filtro para consultar os restantes."))
+                return
+            }
+            for (order in filteredOrders) {
                 val status = order.optString("status", "Aberto")
                 val closed = status == "Concluído" || status == "Cancelado"
                 val nextStatus = when (status) {
@@ -1207,10 +1303,20 @@ class MainActivity : Activity() {
                 }
                 top.addView(label("Mesa " + order.optInt("table_number", 1).toString().padStart(2, '0'), 10f, true, forestSoft),
                     LinearLayout.LayoutParams(0, -2, 1f))
-                top.addView(label(status.uppercase(Locale("pt", "PT")), 9f, true, if (closed) green else forestSoft).apply {
-                    setPadding(dp(8), dp(6), dp(8), dp(6))
-                    background = rounded(if (closed) paleGreen else copperPale, 12)
-                })
+                top.addView(statusBadge(
+                    status.uppercase(Locale("pt", "PT")),
+                    when (status) {
+                        "Concluído" -> green
+                        "Cancelado" -> muted
+                        else -> forestSoft
+                    },
+                    when (status) {
+                        "Concluído" -> paleGreen
+                        "Cancelado" -> paper
+                        else -> copperPale
+                    },
+                    9f
+                ))
                 card.addView(top)
                 addGap(card, 10)
                 val itemName = order.optString("item_name", "Artigo")
@@ -1241,32 +1347,53 @@ class MainActivity : Activity() {
                         "OK"
                     }) { renderApp() }
                 }, LinearLayout.LayoutParams(-1, dp(48)))
-                addGap(card, 5)
+                addGap(card, 6)
                 if (!closed) {
-                    card.addView(secondaryButton("Cancelar pedido") {
+                    val actions = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                    }
+                    actions.addView(secondaryButton("Cancelar") {
                         confirmCancelOrder(
                             order.optString("id"),
                             order.optInt("table_number", 1),
                             order.optString("item_name", "Artigo")
                         )
-                    }, LinearLayout.LayoutParams(-1, dp(48)))
-                    addGap(card, 5)
+                    }, LinearLayout.LayoutParams(0, dp(44), 1f).apply {
+                        setMargins(0, 0, dp(4), 0)
+                    })
+                    actions.addView(secondaryButton("Ver histórico") {
+                        showOrderHistory(order.optString("id"))
+                    }, LinearLayout.LayoutParams(0, dp(44), 1f).apply {
+                        setMargins(dp(4), 0, 0, 0)
+                    })
+                    card.addView(actions)
+                } else {
+                    card.addView(secondaryButton("Ver histórico") {
+                        showOrderHistory(order.optString("id"))
+                    }, LinearLayout.LayoutParams(-1, dp(44)))
                 }
-                card.addView(secondaryButton("Ver histórico") {
-                    showOrderHistory(order.optString("id"))
-                }, LinearLayout.LayoutParams(-1, dp(48)))
                 container.addView(card, cardParams())
             }
             return
         }
 
         val orders = store.getOrders()
+        addOrderStatusOverview(container, orders.map { it.status })
         if (orders.isEmpty()) {
             container.addView(emptyCard("Ainda não há pedidos registados. Cria um pedido de demonstração para experimentar o fluxo."))
             return
         }
+        addOrderFilters(container)
+        val filteredOrders = orders.filter { orderMatchesSelectedFilter(it.status) }
+        container.addView(label("${filteredOrders.size} pedido(s) neste filtro", 11f, true, forestSoft))
+        addGap(container, 6)
+        if (filteredOrders.isEmpty()) {
+            container.addView(emptyCard("Não existem pedidos neste estado. Escolhe outro filtro para consultar os restantes."))
+            return
+        }
 
-        orders.forEach { order ->
+        filteredOrders.forEach { order ->
             val done = order.status == "Concluído"
             val card = makeCard(16)
             val top = LinearLayout(this).apply {
@@ -1274,10 +1401,12 @@ class MainActivity : Activity() {
                 gravity = Gravity.CENTER_VERTICAL
             }
             top.addView(label("Mesa " + order.table.toString().padStart(2, '0'), 10f, true, forestSoft), LinearLayout.LayoutParams(0, -2, 1f))
-            top.addView(label(if (done) "CONCLUÍDO" else "EM ABERTO", 9f, true, if (done) green else forestSoft).apply {
-                setPadding(dp(8), dp(6), dp(8), dp(6))
-                background = rounded(if (done) paleGreen else copperPale, 12)
-            })
+            top.addView(statusBadge(
+                if (done) "CONCLUÍDO" else "EM ABERTO",
+                if (done) green else forestSoft,
+                if (done) paleGreen else copperPale,
+                9f
+            ))
             card.addView(top)
             addGap(card, 10)
             card.addView(label((if (order.quantity > 1) "${order.quantity} × " else "") + order.itemName, 17f, true, ink))
@@ -1318,6 +1447,74 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun addOrderFilters(container: LinearLayout) {
+        container.addView(label("FILTRAR PEDIDOS", 9.5f, true, forestSoft))
+        addGap(container, 5)
+        val scroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        listOf("Todos", "Ativos", "Concluídos", "Cancelados").forEach { filter ->
+            row.addView(
+                filterChip(filter, selectedOrderFilter == filter) {
+                    selectedOrderFilter = filter
+                    renderApp()
+                },
+                LinearLayout.LayoutParams(-2, dp(42)).apply {
+                    setMargins(0, 0, dp(6), 0)
+                }
+            )
+        }
+        scroll.addView(row)
+        container.addView(scroll, LinearLayout.LayoutParams(-1, dp(46)))
+        addGap(container, 5)
+    }
+
+    private fun orderMatchesSelectedFilter(status: String): Boolean = when (selectedOrderFilter) {
+        "Ativos" -> status !in setOf("Concluído", "Cancelado")
+        "Concluídos" -> status == "Concluído"
+        "Cancelados" -> status == "Cancelado"
+        else -> true
+    }
+
+    private fun addKitchenFilters(container: LinearLayout) {
+        container.addView(label("FILTRAR FILA", 9.5f, true, forestSoft))
+        addGap(container, 5)
+        val scroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        listOf("Todos", "Novos", "Em preparação", "Prontos").forEach { filter ->
+            row.addView(
+                filterChip(filter, selectedKitchenFilter == filter) {
+                    selectedKitchenFilter = filter
+                    renderApp()
+                },
+                LinearLayout.LayoutParams(-2, dp(42)).apply {
+                    setMargins(0, 0, dp(6), 0)
+                }
+            )
+        }
+        scroll.addView(row)
+        container.addView(scroll, LinearLayout.LayoutParams(-1, dp(46)))
+        addGap(container, 5)
+    }
+
+    private fun kitchenMatchesSelectedFilter(status: String): Boolean = when (selectedKitchenFilter) {
+        "Novos" -> status == "Aberto"
+        "Em preparação" -> status == "Em preparação"
+        "Prontos" -> status == "Pronto"
+        else -> true
+    }
+
     private fun renderKitchen(container: LinearLayout) {
         kitchenPageContainer = container
         pageIntro(container, "Cozinha", "Fila de preparação por estado e tempo de espera.")
@@ -1335,6 +1532,10 @@ class MainActivity : Activity() {
 
         if (hasRemoteRestaurant()) {
             val orders = kitchenOrdersCache ?: remoteOrders()
+            val allStatuses = (0 until orders.length()).mapNotNull {
+                orders.optJSONObject(it)?.optString("status", "Aberto")
+            }
+            addOrderStatusOverview(container, allStatuses)
             val active = (0 until orders.length())
                 .mapNotNull { orders.optJSONObject(it) }
                 .filter { it.optString("status", "Aberto") !in setOf("Concluído", "Cancelado") }
@@ -1352,9 +1553,15 @@ class MainActivity : Activity() {
                 container.addView(emptyCard("A fila está vazia. Os novos pedidos de dispositivos ligados aparecerão automaticamente até 15 segundos depois de serem criados."))
                 return
             }
-            container.addView(label("${active.size} pedido(s) ativo(s)", 12f, true, forestSoft))
-            addGap(container, 8)
-            for (order in active) {
+            addKitchenFilters(container)
+            val filteredActive = active.filter { kitchenMatchesSelectedFilter(it.optString("status", "Aberto")) }
+            container.addView(label("${filteredActive.size} pedido(s) nesta fila", 11f, true, forestSoft))
+            addGap(container, 6)
+            if (filteredActive.isEmpty()) {
+                container.addView(emptyCard("Não há pedidos neste estado. Escolhe outro filtro para consultar a fila."))
+                return
+            }
+            for (order in filteredActive) {
                 val status = order.optString("status", "Aberto")
                 val createdAt = parseOrderTimestamp(order.optString("created_at"))
                 val nextStatus = when (status) {
@@ -1387,16 +1594,32 @@ class MainActivity : Activity() {
                 }
             }
         } else {
-            val active = store.getOrders()
+            val allLocalOrders = store.getOrders()
+            addOrderStatusOverview(container, allLocalOrders.map { it.status })
+            val active = allLocalOrders
                 .filter { it.status !in setOf("Concluído", "Cancelado") }
-                .sortedBy { it.createdAt }
+                .sortedWith(compareBy(
+                    { order -> when (order.status) {
+                        "Aberto" -> 0
+                        "Em preparação" -> 1
+                        "Pronto" -> 2
+                        else -> 3
+                    } },
+                    { order -> order.createdAt }
+                ))
             if (active.isEmpty()) {
                 container.addView(emptyCard("A fila está vazia. Cria um pedido para testar o fluxo da cozinha."))
                 return
             }
-            container.addView(label("${active.size} pedido(s) ativo(s)", 12f, true, forestSoft))
-            addGap(container, 8)
-            active.forEach { order ->
+            addKitchenFilters(container)
+            val filteredActive = active.filter { kitchenMatchesSelectedFilter(it.status) }
+            container.addView(label("${filteredActive.size} pedido(s) nesta fila", 11f, true, forestSoft))
+            addGap(container, 6)
+            if (filteredActive.isEmpty()) {
+                container.addView(emptyCard("Não há pedidos neste estado. Escolhe outro filtro para consultar a fila."))
+                return
+            }
+            filteredActive.forEach { order ->
                 val nextStatus = when (order.status) {
                     "Aberto" -> "Em preparação"
                     "Em preparação" -> "Pronto"
@@ -1564,10 +1787,12 @@ class MainActivity : Activity() {
         }
         top.addView(label("MESA ${tableNumber.toString().padStart(2, '0')}", 12f, true, forestSoft),
             LinearLayout.LayoutParams(0, -2, 1f))
-        top.addView(label(status.uppercase(Locale("pt", "PT")), 10f, true, statusColor).apply {
-            setPadding(dp(8), dp(6), dp(8), dp(6))
-            background = rounded(statusBackground, 12)
-        })
+        top.addView(statusBadge(
+            status.uppercase(Locale("pt", "PT")),
+            statusColor,
+            statusBackground,
+            10f
+        ))
         card.addView(top)
         addGap(card, 8)
         card.addView(label((if (quantity > 1) "$quantity × " else "") + itemName, 19f, true, forestDeep))
@@ -1590,6 +1815,81 @@ class MainActivity : Activity() {
         container.addView(card, cardParams())
     }
 
+    private fun addManagementMenuFilters(container: LinearLayout, rawCategories: List<String>) {
+        val categories = listOf("Todas") + rawCategories
+            .map { it.trim().ifBlank { "Outros" } }
+            .filter { it != "Todas" }
+            .distinct()
+            .sorted()
+        if (selectedManagementMenuCategory !in categories) {
+            selectedManagementMenuCategory = "Todas"
+        }
+
+        val filterCard = makeCard(13)
+        filterCard.addView(label("PESQUISAR E FILTRAR", 9.5f, true, forestSoft))
+        addGap(filterCard, 6)
+        val searchField = inputField(
+            "Nome, categoria, descrição ou alergénios",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        ).apply {
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                    managementMenuSearch = text.toString().trim()
+                    renderApp()
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+        searchField.setText(managementMenuSearch)
+        filterCard.addView(searchField, fieldParams())
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        actions.addView(primaryButton("Pesquisar") {
+            managementMenuSearch = searchField.text.toString().trim()
+            renderApp()
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+            setMargins(0, 0, dp(5), 0)
+        })
+        actions.addView(secondaryButton("Limpar") {
+            managementMenuSearch = ""
+            selectedManagementMenuCategory = "Todas"
+            renderApp()
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+            setMargins(dp(5), 0, 0, 0)
+        })
+        filterCard.addView(actions)
+        addGap(filterCard, 7)
+
+        val scroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        categories.forEach { category ->
+            row.addView(
+                filterChip(category, selectedManagementMenuCategory == category) {
+                    selectedManagementMenuCategory = category
+                    renderApp()
+                },
+                LinearLayout.LayoutParams(-2, dp(42)).apply {
+                    setMargins(0, 0, dp(6), 0)
+                }
+            )
+        }
+        scroll.addView(row)
+        filterCard.addView(scroll, LinearLayout.LayoutParams(-1, dp(46)))
+        container.addView(filterCard, cardParams())
+        addGap(container, 5)
+    }
+
     private fun renderMenu(container: LinearLayout) {
         pageIntro(container, "Carta e custos", if (hasRemoteRestaurant())
             "Carta e custos privados, guardados no servidor."
@@ -1601,22 +1901,48 @@ class MainActivity : Activity() {
                 addGap(this, 4)
                 addView(label("A carta é partilhada pela equipa. Os custos e margens só são apresentados na aplicação de gestão, não no cartão de cliente.", 12.5f, false, ink))
             }, cardParams())
-            container.addView(secondaryButton("Atualizar do servidor") { refreshRemoteOperations() },
-                LinearLayout.LayoutParams(-1, dp(48)))
-            addGap(container, 6)
-            container.addView(primaryButton("+  Adicionar artigo") { showAddMenuItemDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
+            addActionPair(
+                container,
+                "+  Adicionar artigo",
+                { showAddMenuItemDialog() },
+                "Atualizar",
+                { refreshRemoteOperations() }
+            )
             addGap(container, 15)
             val items = remoteMenuItems()
+            val validRemoteCosts = (0 until items.length()).count { index ->
+                val item = items.optJSONObject(index) ?: return@count false
+                val price = item.optDouble("price", Double.NaN)
+                val cost = item.optDouble("cost", Double.NaN)
+                price.isFinite() && price > 0.0 && cost.isFinite() && cost >= 0.0
+            }
+            addMenuCostOverview(container, items.length(), validRemoteCosts)
             if (items.length() == 0) {
                 container.addView(emptyCard("A carta do servidor está vazia. Adiciona os primeiros artigos e preços aprovados pelo restaurante."))
                 return
             }
-            for (index in 0 until items.length()) {
-                val item = items.optJSONObject(index) ?: continue
+            val menuEntries = (0 until items.length()).mapNotNull { items.optJSONObject(it) }
+            val categories = menuEntries.map { it.optString("category", "Prato principal").trim().ifBlank { "Outros" } }
+            addManagementMenuFilters(container, categories)
+            val query = normalizeCustomerMenuSearch(managementMenuSearch)
+            val filteredItems = menuEntries.filter { item ->
+                val category = item.optString("category", "Prato principal").trim().ifBlank { "Outros" }
+                (selectedManagementMenuCategory == "Todas" || category == selectedManagementMenuCategory) &&
+                    (query.isBlank() || normalizeCustomerMenuSearch(
+                        "${category} ${item.optString("name")} ${item.optString("description")} ${item.optString("allergens")}"
+                    ).contains(query))
+            }
+            container.addView(label("${filteredItems.size} de ${menuEntries.size} artigo(s)", 11f, true, forestSoft))
+            addGap(container, 6)
+            if (filteredItems.isEmpty()) {
+                container.addView(emptyCard("Não existem artigos que correspondam à pesquisa e categoria selecionadas."))
+                return
+            }
+            for (item in filteredItems) {
                 val card = makeCard(15)
                 card.addView(label(item.optString("name"), 17f, true, forestDeep))
                 addGap(card, 3)
-                card.addView(label(item.optString("category", "Prato principal"), 10.5f, true, forestSoft))
+                card.addView(label(item.optString("category", "Prato principal").trim().ifBlank { "Outros" }, 10.5f, true, forestSoft))
                 val description = item.optString("description").trim()
                 if (description.isNotBlank()) {
                     addGap(card, 5)
@@ -1689,14 +2015,35 @@ class MainActivity : Activity() {
         addGap(container, 15)
 
         val items = store.getMenu()
+        val validLocalCosts = items.count {
+            it.price.isFinite() && it.price > 0.0 && it.cost.isFinite() && it.cost >= 0.0
+        }
+        addMenuCostOverview(container, items.size, validLocalCosts)
         if (items.isEmpty()) {
             container.addView(emptyCard("A carta está vazia. Adiciona o primeiro artigo de demonstração."))
+            return
         }
-        items.forEach { item ->
+        val categories = items.map { it.category.trim().ifBlank { "Outros" } }
+        addManagementMenuFilters(container, categories)
+        val query = normalizeCustomerMenuSearch(managementMenuSearch)
+        val filteredItems = items.filter { item ->
+            val category = item.category.trim().ifBlank { "Outros" }
+            (selectedManagementMenuCategory == "Todas" || category == selectedManagementMenuCategory) &&
+                (query.isBlank() || normalizeCustomerMenuSearch(
+                    "${category} ${item.name} ${item.description} ${item.allergens}"
+                ).contains(query))
+        }
+        container.addView(label("${filteredItems.size} de ${items.size} artigo(s)", 11f, true, forestSoft))
+        addGap(container, 6)
+        if (filteredItems.isEmpty()) {
+            container.addView(emptyCard("Não existem artigos que correspondam à pesquisa e categoria selecionadas."))
+            return
+        }
+        filteredItems.forEach { item ->
             val card = makeCard(15)
             card.addView(label(item.name, 17f, true, forestDeep))
             addGap(card, 3)
-            card.addView(label(item.category, 10.5f, true, forestSoft))
+            card.addView(label(item.category.trim().ifBlank { "Outros" }, 10.5f, true, forestSoft))
             if (item.description.isNotBlank()) {
                 addGap(card, 5)
                 card.addView(label(item.description, 12.5f, false, ink))
@@ -2659,6 +3006,30 @@ class MainActivity : Activity() {
         dialog.show()
     }
 
+    private fun clearAccountScopedUiState() {
+        clearEconomicManagerState()
+        assistantConversation.clear()
+        assistantQuestion = ""
+        assistantAnswer = null
+        assistantInsightsExpanded = false
+
+        selectedOrderFilter = "Todos"
+        selectedKitchenFilter = "Todos"
+        selectedTableFilter = "Todas"
+        selectedReservationFilter = "Todas"
+        reservationSearchQuery = ""
+        managementMenuSearch = ""
+        selectedManagementMenuCategory = "Todas"
+        inventorySearch = ""
+        selectedInventoryFilter = "Todos"
+
+        customerSearchQuery = ""
+        selectedCustomerReservationFilter = "Todas"
+        customerReservationSearchQuery = ""
+        customerMenuSearch = ""
+        selectedCustomerMenuCategory = "Todas"
+    }
+
     private fun renderBackendAccount(container: LinearLayout) {
         pageIntro(container, "Conta e sincronização", "Conta, restaurante e acesso da equipa.")
         addGap(container, 12)
@@ -2713,35 +3084,80 @@ class MainActivity : Activity() {
                 LinearLayout.LayoutParams(-1, dp(48)))
         }
         container.addView(card, cardParams())
-        addGap(container, 3)
-        if (token.isNotBlank()) {
-            container.addView(secondaryButton("Eliminar conta permanentemente") {
-                showDeleteAccountConfirmation()
-            }, LinearLayout.LayoutParams(-1, dp(48)))
-            addGap(container, 7)
-        }
-        container.addView(secondaryButton("Terminar sessão neste dispositivo") {
-            clearEconomicManagerState()
-            val tokenToRevoke = backendToken()
-            if (tokenToRevoke.isNotBlank()) {
-                Thread { runCatching { SupabaseApi.signOut(tokenToRevoke) } }.start()
+
+        if (token.isNotBlank() && backendRestaurantId().isNotBlank()) {
+            addGap(container, 3)
+            val setupCard = makeCard(14, paleGreen)
+            setupCard.addView(label("PREPARAR A OPERAÇÃO", 9.5f, true, forestSoft))
+            addGap(setupCard, 4)
+            setupCard.addView(label(
+                "Atalhos para rever a configuração essencial do restaurante.",
+                11.5f, false, ink
+            ))
+            addGap(setupCard, 8)
+            val setupScroll = HorizontalScrollView(this).apply {
+                isHorizontalScrollBarEnabled = false
+                overScrollMode = View.OVER_SCROLL_NEVER
             }
-            secureSession.clear()
-            store.clearLocalDemoData()
-            backendPrefs.edit().putBoolean("local_demo_data_isolated_v1", true)
-                .remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
-                .remove("restaurant_id").remove("restaurant_name").remove("join_code")
-                .remove("staff_join_code").remove("restaurant_role")
-                .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
-                .remove("remote_members_json").remove("remote_tables_json")
-                .remove("remote_menu_json").remove("remote_orders_json").remove("customer_menu_json")
-                .remove("remote_inventory_json").remove("inventory_loaded")
-                .remove("remote_reservations_json").remove("reservations_loaded")
-                .apply()
-            reservationCache = JSONArray()
-            reservationsLoaded = false
-            renderApp()
-        }, LinearLayout.LayoutParams(-1, dp(48)))
+            val setupRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            listOf("Mesas", "Carta", "Pedidos").forEach { page ->
+                setupRow.addView(
+                    navigationChip("Abrir $page") {
+                        activePage = page
+                        renderApp()
+                    },
+                    LinearLayout.LayoutParams(-2, dp(42)).apply {
+                        setMargins(0, 0, dp(7), 0)
+                    }
+                )
+            }
+            setupScroll.addView(setupRow)
+            setupCard.addView(setupScroll, LinearLayout.LayoutParams(-1, dp(46)))
+            container.addView(setupCard, cardParams())
+        }
+
+        if (token.isNotBlank()) {
+            addGap(container, 3)
+            val securityCard = makeCard(14)
+            securityCard.addView(label("Segurança da conta", 14f, true, forestDeep))
+            addGap(securityCard, 4)
+            securityCard.addView(label(
+                "Termina a sessão neste dispositivo ou elimina a conta permanentemente. A eliminação é irreversível.",
+                11.5f, false, muted
+            ))
+            addGap(securityCard, 8)
+            securityCard.addView(secondaryButton("Terminar sessão neste dispositivo") {
+                clearAccountScopedUiState()
+                val tokenToRevoke = backendToken()
+                if (tokenToRevoke.isNotBlank()) {
+                    Thread { runCatching { SupabaseApi.signOut(tokenToRevoke) } }.start()
+                }
+                secureSession.clear()
+                store.clearLocalDemoData()
+                backendPrefs.edit().putBoolean("local_demo_data_isolated_v1", true)
+                    .remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
+                    .remove("restaurant_id").remove("restaurant_name").remove("join_code")
+                    .remove("staff_join_code").remove("restaurant_role")
+                    .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
+                    .remove("remote_members_json").remove("remote_tables_json")
+                    .remove("remote_menu_json").remove("remote_orders_json").remove("customer_menu_json")
+                    .remove("remote_inventory_json").remove("inventory_loaded")
+                    .remove("remote_reservations_json").remove("reservations_loaded")
+                    .apply()
+                reservationCache = JSONArray()
+                reservationsLoaded = false
+                renderApp()
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+            addGap(securityCard, 6)
+            securityCard.addView(dangerButton("Eliminar conta permanentemente") {
+                showDeleteAccountConfirmation()
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+            container.addView(securityCard, cardParams())
+        }
+
         addGap(container, 10)
         container.addView(label("As funções de gestão e os dados de cada restaurante são controlados por permissões no servidor.", 12f, false, muted))
     }
@@ -2897,7 +3313,62 @@ class MainActivity : Activity() {
             return
         }
 
-        customers.forEach { customer ->
+        val searchCard = makeCard(13)
+        searchCard.addView(label("PESQUISAR CLIENTE", 9.5f, true, forestSoft))
+        addGap(searchCard, 6)
+        val customerSearchField = inputField(
+            "Nome ou código do cartão",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        ).apply {
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                    customerSearchQuery = text.toString().trim()
+                    renderApp()
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+        customerSearchField.setText(customerSearchQuery)
+        searchCard.addView(customerSearchField, fieldParams())
+        val searchActions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        searchActions.addView(primaryButton("Pesquisar") {
+            customerSearchQuery = customerSearchField.text.toString().trim()
+            renderApp()
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+            setMargins(0, 0, dp(5), 0)
+        })
+        searchActions.addView(secondaryButton("Limpar") {
+            customerSearchQuery = ""
+            renderApp()
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+            setMargins(dp(5), 0, 0, 0)
+        })
+        searchCard.addView(searchActions)
+        container.addView(searchCard, cardParams())
+
+        val query = normalizeCustomerMenuSearch(customerSearchQuery)
+        val filteredCustomers = customers.filter { customer ->
+            query.isBlank() || normalizeCustomerMenuSearch(
+                "${customer.name} ${customer.code}"
+            ).contains(query)
+        }
+        container.addView(label(
+            "${filteredCustomers.size} de ${customers.size} cliente(s)",
+            11f, true, forestSoft
+        ))
+        addGap(container, 6)
+        if (filteredCustomers.isEmpty()) {
+            container.addView(emptyCard("Não encontrámos clientes com esse nome ou código. Confirma a pesquisa ou limpa o filtro."))
+            return
+        }
+
+        filteredCustomers.forEach { customer ->
             val card = makeCard(15)
             val top = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -3200,16 +3671,67 @@ class MainActivity : Activity() {
             11f, true, forestSoft
         ))
         addGap(container, 7)
-        container.addView(secondaryButton("Mostrar: $selectedCustomerReservationFilter  ▾") {
-            AlertDialog.Builder(this)
-                .setTitle("Filtrar as minhas reservas")
-                .setItems(customerFilters.toTypedArray()) { _, selected ->
-                    selectedCustomerReservationFilter = customerFilters[selected]
+        val customerFilterScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val customerFilterRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        customerFilters.forEach { filter ->
+            customerFilterRow.addView(
+                filterChip(filter, selectedCustomerReservationFilter == filter) {
+                    selectedCustomerReservationFilter = filter
                     renderCustomerApp()
+                },
+                LinearLayout.LayoutParams(-2, dp(42)).apply {
+                    setMargins(0, 0, dp(6), 0)
                 }
-                .show()
-        }, LinearLayout.LayoutParams(-1, dp(44)))
-        addGap(container, 10)
+            )
+        }
+        customerFilterScroll.addView(customerFilterRow)
+        container.addView(customerFilterScroll, LinearLayout.LayoutParams(-1, dp(46)))
+        addGap(container, 6)
+
+        val customerReservationSearchCard = makeCard(13)
+        customerReservationSearchCard.addView(label("PESQUISAR RESERVA", 9.5f, true, forestSoft))
+        addGap(customerReservationSearchCard, 5)
+        val customerReservationSearchField = inputField(
+            "Data (dd/mm/aaaa) ou número de pessoas",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        ).apply {
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                    customerReservationSearchQuery = text.toString().trim()
+                    renderCustomerApp()
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+        customerReservationSearchField.setText(customerReservationSearchQuery)
+        customerReservationSearchCard.addView(customerReservationSearchField, fieldParams())
+        val customerReservationSearchActions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        customerReservationSearchActions.addView(primaryButton("Pesquisar") {
+            customerReservationSearchQuery = customerReservationSearchField.text.toString().trim()
+            renderCustomerApp()
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+            setMargins(0, 0, dp(5), 0)
+        })
+        customerReservationSearchActions.addView(secondaryButton("Limpar") {
+            customerReservationSearchQuery = ""
+            renderCustomerApp()
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+            setMargins(dp(5), 0, 0, 0)
+        })
+        customerReservationSearchCard.addView(customerReservationSearchActions)
+        container.addView(customerReservationSearchCard, cardParams())
 
         val filteredCustomerReservations = when (selectedCustomerReservationFilter) {
             "Ativas" -> allCustomerReservations.filter { it.optString("status") in setOf("Pendente", "Confirmada") }
@@ -3230,8 +3752,27 @@ class MainActivity : Activity() {
         }
 
         val displayFormat = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "PT"))
+        val searchDateFormat = SimpleDateFormat("dd/MM/yyyy", Locale("pt", "PT"))
         val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US)
-        filteredCustomerReservations.forEach { reservation ->
+        val customerReservationQuery = normalizeCustomerMenuSearch(customerReservationSearchQuery)
+        val visibleCustomerReservations = filteredCustomerReservations.filter { reservation ->
+            val rawDate = reservation.optString("reservation_at")
+            val timestamp = parseOrderTimestamp(rawDate)
+            val localDate = if (timestamp > 0L) searchDateFormat.format(Date(timestamp)) else ""
+            customerReservationQuery.isBlank() || normalizeCustomerMenuSearch(
+                "$rawDate $localDate ${reservation.optInt("party_size", 1)}"
+            ).contains(customerReservationQuery)
+        }
+        container.addView(label(
+            "${visibleCustomerReservations.size} de ${filteredCustomerReservations.size} reserva(s)",
+            11f, true, forestSoft
+        ))
+        addGap(container, 6)
+        if (visibleCustomerReservations.isEmpty()) {
+            container.addView(emptyCard("Não encontrámos reservas com esses dados. Altera a pesquisa ou limpa o filtro."))
+            return
+        }
+        visibleCustomerReservations.forEach { reservation ->
             val reservationId = reservation.optString("id")
             val status = reservation.optString("status", "Pendente")
             val rawDate = reservation.optString("reservation_at")
@@ -3254,10 +3795,7 @@ class MainActivity : Activity() {
                 "Cancelada", "Concluída", "Não compareceu" -> paper
                 else -> copperPale
             }
-            top.addView(label(status, 10f, true, statusColor).apply {
-                setPadding(dp(8), dp(6), dp(8), dp(6))
-                background = rounded(statusBackground, 12)
-            })
+            top.addView(statusBadge(status, statusColor, statusBackground))
             card.addView(top)
             addGap(card, 7)
             card.addView(label(
@@ -3595,33 +4133,15 @@ class MainActivity : Activity() {
         }
         val customerPages = if (hasCalculator) listOf("Cartão", "Carta", "Reservas", "Conta") else listOf("Cartão", "Carta", "Conta")
         customerPages.forEach { page ->
-            val selected = activeCustomerPage == page
-            val item = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
-                setPadding(dp(3), dp(3), dp(3), dp(3))
-                background = rippleBackground(if (selected) paleGreen else white, 12)
-                contentDescription = "Abrir secção " + page
-                isClickable = true
-                isFocusable = true
-                setOnClickListener {
+            nav.addView(
+                bottomNavigationItem(page, activeCustomerPage == page) {
                     activeCustomerPage = page
                     renderCustomerApp()
+                },
+                LinearLayout.LayoutParams(0, dp(54), 1f).apply {
+                    setMargins(dp(3), 0, dp(3), 0)
                 }
-            }
-            item.addView(TextView(this).apply {
-                text = pageGlyph(page)
-                textSize = 17f
-                gravity = Gravity.CENTER
-                setTextColor(if (selected) forestDeep else muted)
-            }, LinearLayout.LayoutParams(-2, dp(21)))
-            item.addView(label(page, 10.5f, true, if (selected) forestDeep else muted).apply {
-                gravity = Gravity.CENTER
-                maxLines = 1
-            })
-            nav.addView(item, LinearLayout.LayoutParams(0, dp(52), 1f).apply {
-                setMargins(dp(3), 0, dp(3), 0)
-            })
+            )
         }
         appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(60)))
         setContentView(appRoot)
@@ -3690,7 +4210,7 @@ class MainActivity : Activity() {
                 val item = publishedMenu.optJSONObject(index) ?: continue
                 menuItems.add(
                     CustomerMenuDisplayItem(
-                        category = item.optString("category", "Prato principal"),
+                        category = item.optString("category", "Prato principal").trim().ifBlank { "Outros" },
                         name = item.optString("name"),
                         description = item.optString("description").trim(),
                         allergens = item.optString("allergens").trim(),
@@ -3702,7 +4222,7 @@ class MainActivity : Activity() {
             store.getMenu().forEach { item ->
                 menuItems.add(
                     CustomerMenuDisplayItem(
-                        category = item.category,
+                        category = item.category.trim().ifBlank { "Outros" },
                         name = item.name,
                         description = item.description,
                         allergens = item.allergens,
@@ -3713,10 +4233,14 @@ class MainActivity : Activity() {
         }
 
         val query = normalizeCustomerMenuSearch(customerMenuSearch)
-        val filteredItems = if (query.isBlank()) menuItems else menuItems.filter { item ->
-            normalizeCustomerMenuSearch(
-                "${item.category} ${item.name} ${item.description} ${item.allergens}"
-            ).contains(query)
+        val categories = listOf("Todas") + menuItems.map { it.category }
+            .filter { it.isNotBlank() && it != "Todas" }.distinct().sorted()
+        if (selectedCustomerMenuCategory !in categories) selectedCustomerMenuCategory = "Todas"
+        val filteredItems = menuItems.filter { item ->
+            (selectedCustomerMenuCategory == "Todas" || item.category == selectedCustomerMenuCategory) &&
+                (query.isBlank() || normalizeCustomerMenuSearch(
+                    "${item.category} ${item.name} ${item.description} ${item.allergens}"
+                ).contains(query))
         }
 
         val menuCard = makeCard(16)
@@ -3737,7 +4261,18 @@ class MainActivity : Activity() {
         val searchPanel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
-        val searchField = inputField("Pesquisar nome, categoria ou alergénios", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+        val searchField = inputField("Pesquisar nome, categoria ou alergénios", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES).apply {
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                    customerMenuSearch = text.toString().trim()
+                    renderCustomerApp()
+                    true
+                } else {
+                    false
+                }
+            }
+        }
         searchField.setText(customerMenuSearch)
         searchPanel.addView(searchField, fieldParams())
         val searchActions = LinearLayout(this).apply {
@@ -3760,6 +4295,29 @@ class MainActivity : Activity() {
         )
         searchPanel.addView(searchActions)
         menuCard.addView(searchPanel, cardParams())
+
+        val categoryScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val categoryRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        categories.forEach { category ->
+            categoryRow.addView(
+                filterChip(category, selectedCustomerMenuCategory == category) {
+                    selectedCustomerMenuCategory = category
+                    renderCustomerApp()
+                },
+                LinearLayout.LayoutParams(-2, dp(42)).apply {
+                    setMargins(0, 0, dp(6), 0)
+                }
+            )
+        }
+        categoryScroll.addView(categoryRow)
+        menuCard.addView(categoryScroll, LinearLayout.LayoutParams(-1, dp(46)))
+
         menuCard.addView(label(
             if (query.isBlank()) "${menuItems.size} artigo(s) disponíveis"
             else "${filteredItems.size} resultado(s) para «${customerMenuSearch.trim()}»",
@@ -3808,16 +4366,66 @@ class MainActivity : Activity() {
             .trim()
 
     private fun renderCustomerAccountPage(container: LinearLayout) {
+        val token = backendToken()
+        val isSignedIn = token.isNotBlank()
+        val isLinked = isSignedIn && backendMemberId().isNotBlank()
+        val email = backendPrefs.getString("user_email", "").orEmpty()
+        val restaurantName = backendPrefs.getString("member_restaurant_name", "").orEmpty()
+        val savedName = store.getCustomerProfileName()
+
         container.addView(label("A tua conta", 25f, true, forestDeep))
         addGap(container, 4)
         container.addView(label("Perfil, associação ao restaurante e segurança.", 13.5f, false, muted))
         addGap(container, 13)
+
+        val accountCard = makeCard(15)
+        accountCard.addView(label(
+            when {
+                isLinked -> "CARTÃO ASSOCIADO"
+                isSignedIn -> "SESSÃO INICIADA"
+                else -> "SEM SESSÃO"
+            },
+            10f, true, if (isLinked) green else forestSoft
+        ))
+        addGap(accountCard, 7)
+        accountCard.addView(label(
+            when {
+                isLinked -> "A tua conta está ligada ao programa de fidelização."
+                isSignedIn -> "A conta está autenticada, mas ainda não está associada a um restaurante."
+                else -> "Estás a usar a área de cliente sem uma conta autenticada."
+            },
+            13f, true, forestDeep
+        ))
+        if (email.isNotBlank()) {
+            addGap(accountCard, 8)
+            accountCard.addView(label("EMAIL DA CONTA", 9.5f, true, muted))
+            addGap(accountCard, 2)
+            accountCard.addView(label(email, 12.5f, false, ink))
+        }
+        if (isLinked && restaurantName.isNotBlank()) {
+            addGap(accountCard, 8)
+            accountCard.addView(label("RESTAURANTE ASSOCIADO", 9.5f, true, muted))
+            addGap(accountCard, 2)
+            accountCard.addView(label(restaurantName, 14f, true, forest))
+        }
+        addGap(accountCard, 9)
+        accountCard.addView(label(
+            when {
+                isLinked -> "O saldo real e as reservas são consultados através do restaurante associado."
+                isSignedIn -> "Pede à equipa o código de adesão para associares o cartão."
+                else -> "Inicia sessão para associares o teu cartão e acompanhares os pontos e reservas."
+            },
+            11.5f, false, muted
+        ))
+        container.addView(accountCard, cardParams())
+
+        addGap(container, 3)
         when {
-            backendToken().isBlank() -> container.addView(
+            !isSignedIn -> container.addView(
                 primaryButton("Criar conta / iniciar sessão") { showAuthChooser { renderCustomerApp() } },
                 LinearLayout.LayoutParams(-1, dp(48))
             )
-            backendMemberId().isBlank() -> container.addView(
+            !isLinked -> container.addView(
                 primaryButton("Associar ao restaurante") { showCustomerJoinDialog() },
                 LinearLayout.LayoutParams(-1, dp(48))
             )
@@ -3826,21 +4434,37 @@ class MainActivity : Activity() {
                 LinearLayout.LayoutParams(-1, dp(48))
             )
         }
+
         addGap(container, 8)
-        container.addView(secondaryButton("Definir o meu nome") { showCustomerProfileDialog() },
-            LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(container, 12)
-        val syncNote = makeCard(13)
-        syncNote.addView(label(if (backendMemberId().isBlank()) "CARTÃO AINDA NÃO ASSOCIADO" else "CONTA LIGADA", 10f, true, if (backendMemberId().isBlank()) red else green))
-        addGap(syncNote, 5)
-        syncNote.addView(label(if (backendMemberId().isBlank()) "Para ver o saldo real, inicia sessão e associa a conta com o código fornecido pelo restaurante." else "Restaurante associado: " + (backendPrefs.getString("member_restaurant_name", "Restaurante") ?: "Restaurante") + ". Atualiza o saldo quando quiseres consultar as alterações mais recentes.", 12f, false, muted))
-        container.addView(syncNote, cardParams())
-        if (backendToken().isNotBlank()) {
-            container.addView(secondaryButton("Eliminar conta permanentemente") {
-                showDeleteAccountConfirmation()
-            }, LinearLayout.LayoutParams(-1, dp(48)))
-            addGap(container, 7)
-            container.addView(secondaryButton("Terminar sessão neste dispositivo") {
+        val profileCard = makeCard(14)
+        profileCard.addView(label("Nome de apresentação", 14f, true, forestDeep))
+        addGap(profileCard, 4)
+        profileCard.addView(label(
+            if (savedName.isBlank()) "Ainda não definiste um nome neste dispositivo."
+            else "Nome guardado neste dispositivo: $savedName",
+            11.5f, false, muted
+        ))
+        addGap(profileCard, 8)
+        profileCard.addView(secondaryButton("Definir nome neste dispositivo") { showCustomerProfileDialog() },
+            LinearLayout.LayoutParams(-1, dp(44)))
+        profileCard.addView(label(
+            "Este nome é apenas local: não altera o email da conta nem é enviado ao restaurante.",
+            10.5f, false, muted
+        ))
+        container.addView(profileCard, cardParams())
+
+        if (isSignedIn) {
+            addGap(container, 3)
+            val securityCard = makeCard(14)
+            securityCard.addView(label("Segurança da conta", 14f, true, forestDeep))
+            addGap(securityCard, 4)
+            securityCard.addView(label(
+                "Podes terminar a sessão neste dispositivo ou pedir a eliminação permanente da conta. A eliminação é irreversível.",
+                11.5f, false, muted
+            ))
+            addGap(securityCard, 8)
+            securityCard.addView(secondaryButton("Terminar sessão neste dispositivo") {
+                clearAccountScopedUiState()
                 val tokenToRevoke = backendToken()
                 if (tokenToRevoke.isNotBlank()) {
                     Thread { runCatching { SupabaseApi.signOut(tokenToRevoke) } }.start()
@@ -3859,7 +4483,12 @@ class MainActivity : Activity() {
                 customerReservationsLoadError = false
                 activeCustomerPage = "Cartão"
                 renderCustomerApp()
-            }, LinearLayout.LayoutParams(-1, dp(48)))
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+            addGap(securityCard, 6)
+            securityCard.addView(dangerButton("Eliminar conta permanentemente") {
+                showDeleteAccountConfirmation()
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+            container.addView(securityCard, cardParams())
         }
     }
 
@@ -3867,8 +4496,8 @@ class MainActivity : Activity() {
         val field = inputField("O teu nome", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
         field.setText(store.getCustomerProfileName())
         val dialog = AlertDialog.Builder(this)
-            .setTitle("Perfil de demonstração")
-            .setMessage("O nome fica guardado apenas nesta instalação.")
+            .setTitle("Nome neste dispositivo")
+            .setMessage("Este nome é guardado apenas nesta instalação. Não altera os dados da tua conta nem é partilhado com o restaurante.")
             .setView(field)
             .setNegativeButton("Cancelar", null)
             .setPositiveButton("Guardar", null)
@@ -4061,11 +4690,13 @@ class MainActivity : Activity() {
             container.addView(emptyCard("Para proteger os dados dos clientes e sincronizar as reservas, inicia sessão e configura o restaurante na secção Conta."))
             return
         }
-        container.addView(primaryButton("+  Nova reserva") { showReservationDialog() },
-            LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(container, 6)
-        container.addView(secondaryButton("Atualizar reservas") { refreshReservations() },
-            LinearLayout.LayoutParams(-1, dp(48)))
+        addActionPair(
+            container,
+            "+  Nova reserva",
+            { showReservationDialog() },
+            "Atualizar",
+            { refreshReservations() }
+        )
         addGap(container, 12)
 
         if (!reservationsLoaded) {
@@ -4115,16 +4746,67 @@ class MainActivity : Activity() {
         })
 
         val filters = listOf("Todas", "Pendentes", "Confirmadas", "Hoje")
-        container.addView(secondaryButton("Filtro: $selectedReservationFilter  ▾") {
-            AlertDialog.Builder(this)
-                .setTitle("Filtrar reservas")
-                .setItems(filters.toTypedArray()) { _, selected ->
-                    selectedReservationFilter = filters[selected]
+        val filterScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val filterRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        filters.forEach { filter ->
+            filterRow.addView(
+                filterChip(filter, selectedReservationFilter == filter) {
+                    selectedReservationFilter = filter
                     renderApp()
+                },
+                LinearLayout.LayoutParams(-2, dp(42)).apply {
+                    setMargins(0, 0, dp(6), 0)
                 }
-                .show()
-        }, LinearLayout.LayoutParams(-1, dp(44)))
-        addGap(container, 10)
+            )
+        }
+        filterScroll.addView(filterRow)
+        container.addView(filterScroll, LinearLayout.LayoutParams(-1, dp(46)))
+        addGap(container, 6)
+
+        val reservationSearchCard = makeCard(13)
+        reservationSearchCard.addView(label("PESQUISAR RESERVA", 9.5f, true, forestSoft))
+        addGap(reservationSearchCard, 5)
+        val reservationSearchField = inputField(
+            "Nome, data (dd/mm/aaaa) ou número de mesa",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        ).apply {
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                    reservationSearchQuery = text.toString().trim()
+                    renderApp()
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+        reservationSearchField.setText(reservationSearchQuery)
+        reservationSearchCard.addView(reservationSearchField, fieldParams())
+        val searchActions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        searchActions.addView(primaryButton("Pesquisar") {
+            reservationSearchQuery = reservationSearchField.text.toString().trim()
+            renderApp()
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+            setMargins(0, 0, dp(5), 0)
+        })
+        searchActions.addView(secondaryButton("Limpar") {
+            reservationSearchQuery = ""
+            renderApp()
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+            setMargins(dp(5), 0, 0, 0)
+        })
+        reservationSearchCard.addView(searchActions)
+        container.addView(reservationSearchCard, cardParams())
 
         val filteredReservations = when (selectedReservationFilter) {
             "Pendentes" -> allReservations.filter { it.optString("status") == "Pendente" }
@@ -4150,9 +4832,31 @@ class MainActivity : Activity() {
             return
         }
 
+        val reservationQuery = normalizeCustomerMenuSearch(reservationSearchQuery)
+        val reservationSearchDateFormat = SimpleDateFormat("dd/MM/yyyy", Locale("pt", "PT"))
+        val visibleReservations = filteredReservations.filter { reservation ->
+            val rawReservationDate = reservation.optString("reservation_at")
+            val reservationTimestamp = parseOrderTimestamp(rawReservationDate)
+            val displaySearchDate = if (reservationTimestamp > 0L) {
+                reservationSearchDateFormat.format(Date(reservationTimestamp))
+            } else ""
+            reservationQuery.isBlank() || normalizeCustomerMenuSearch(
+                "${reservation.optString("guest_name")} $rawReservationDate $displaySearchDate ${reservation.optInt("table_number")} ${reservation.optInt("party_size")}"
+            ).contains(reservationQuery)
+        }
+        container.addView(label(
+            "${visibleReservations.size} de ${filteredReservations.size} reserva(s)",
+            11f, true, forestSoft
+        ))
+        addGap(container, 6)
+        if (visibleReservations.isEmpty()) {
+            container.addView(emptyCard("Não encontrámos reservas com esses dados. Altera a pesquisa ou limpa o filtro."))
+            return
+        }
+
         val displayFormat = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "PT"))
         val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US)
-        filteredReservations.forEach { reservation ->
+        visibleReservations.forEach { reservation ->
             val id = reservation.optString("id")
             val guest = reservation.optString("guest_name", "Cliente")
             val status = reservation.optString("status", "Pendente")
@@ -4162,10 +4866,15 @@ class MainActivity : Activity() {
                 gravity = Gravity.CENTER_VERTICAL
             }
             top.addView(label(guest, 17f, true, forestDeep), LinearLayout.LayoutParams(0, -2, 1f))
-            top.addView(label(status, 10f, true, if (status == "Confirmada") green else if (status == "Cancelada" || status == "Concluída" || status == "Não compareceu") muted else forestSoft).apply {
-                setPadding(dp(8), dp(6), dp(8), dp(6))
-                background = rounded(if (status == "Confirmada") paleGreen else copperPale, 12)
-            })
+            top.addView(statusBadge(
+                status,
+                if (status == "Confirmada") green else if (status == "Cancelada" || status == "Concluída" || status == "Não compareceu") muted else forestSoft,
+                when (status) {
+                    "Confirmada" -> paleGreen
+                    "Cancelada", "Concluída", "Não compareceu" -> paper
+                    else -> copperPale
+                }
+            ))
             card.addView(top)
             addGap(card, 6)
             val rawDate = reservation.optString("reservation_at")
@@ -4286,18 +4995,74 @@ class MainActivity : Activity() {
         val guest = inputField("Nome do cliente", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS)
         val phone = inputField("Contacto (opcional)", InputType.TYPE_CLASS_PHONE)
         val party = inputField("Número de pessoas", InputType.TYPE_CLASS_NUMBER).apply { setText("2") }
-        val date = inputField("dd/MM/aaaa HH:mm", InputType.TYPE_CLASS_DATETIME).apply {
-            val defaultDate = Date(System.currentTimeMillis() + 24L * 60L * 60L * 1000L)
-            setText(SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "PT")).format(defaultDate))
+        val selectedReservationDate = Calendar.getInstance().apply {
+            add(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
         }
+        val dateFormat = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "PT"))
+        val dateButton = TextView(this).apply {
+            textSize = 14f
+            setTextColor(ink)
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(13), dp(11), dp(13), dp(11))
+            background = rounded(paper, 12)
+            contentDescription = "Selecionar data e hora da reserva"
+            isClickable = true
+            isFocusable = true
+        }
+        fun refreshSelectedReservationDateLabel() {
+            dateButton.text = dateFormat.format(selectedReservationDate.time) + "  ▾"
+        }
+        refreshSelectedReservationDateLabel()
+        dateButton.setOnClickListener {
+            val maximumDate = Calendar.getInstance().apply { add(Calendar.YEAR, 1) }.timeInMillis
+            val datePicker = android.app.DatePickerDialog(
+                this,
+                { _, year, month, day ->
+                    selectedReservationDate.set(Calendar.YEAR, year)
+                    selectedReservationDate.set(Calendar.MONTH, month)
+                    selectedReservationDate.set(Calendar.DAY_OF_MONTH, day)
+                    android.app.TimePickerDialog(
+                        this,
+                        { _, hour, minute ->
+                            selectedReservationDate.set(Calendar.HOUR_OF_DAY, hour)
+                            selectedReservationDate.set(Calendar.MINUTE, minute)
+                            selectedReservationDate.set(Calendar.SECOND, 0)
+                            selectedReservationDate.set(Calendar.MILLISECOND, 0)
+                            dateButton.error = null
+                            refreshSelectedReservationDateLabel()
+                        },
+                        selectedReservationDate.get(Calendar.HOUR_OF_DAY),
+                        selectedReservationDate.get(Calendar.MINUTE),
+                        true
+                    ).show()
+                },
+                selectedReservationDate.get(Calendar.YEAR),
+                selectedReservationDate.get(Calendar.MONTH),
+                selectedReservationDate.get(Calendar.DAY_OF_MONTH)
+            )
+            datePicker.datePicker.minDate = System.currentTimeMillis()
+            datePicker.datePicker.maxDate = maximumDate
+            datePicker.show()
+        }
+
         val duration = inputField("Duração em minutos", InputType.TYPE_CLASS_NUMBER).apply { setText("90") }
         val table = inputField("Número da mesa (opcional)", InputType.TYPE_CLASS_NUMBER)
         val notes = multilineInputField("Notas úteis (opcional)")
         listOf(
             "Nome do cliente" to guest,
-            "Contacto" to phone,
-            "Número de pessoas" to party,
-            "Data e hora (dd/MM/aaaa HH:mm)" to date,
+            "Contacto (opcional)" to phone,
+            "Número de pessoas" to party
+        ).forEach { (caption, field) ->
+            form.addView(label(caption, 11f, true, forestSoft))
+            form.addView(field, fieldParams())
+            addGap(form, 5)
+        }
+        form.addView(label("Data e hora", 11f, true, forestSoft))
+        form.addView(dateButton, fieldParams())
+        addGap(form, 5)
+        listOf(
             "Duração (minutos)" to duration,
             "Mesa (opcional)" to table,
             "Notas" to notes
@@ -4306,6 +5071,7 @@ class MainActivity : Activity() {
             form.addView(field, if (field === notes) multilineFieldParams() else fieldParams())
             addGap(form, 5)
         }
+
         val scroll = ScrollView(this).apply { addView(form) }
         val dialog = AlertDialog.Builder(this)
             .setTitle("Nova reserva")
@@ -4319,16 +5085,16 @@ class MainActivity : Activity() {
                 val partySize = party.text.toString().trim().toIntOrNull()
                 val durationMinutes = duration.text.toString().trim().toIntOrNull()
                 val tableNumber = table.text.toString().trim().takeIf { it.isNotBlank() }?.toIntOrNull()
-                val parsedDate = runCatching {
-                    SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "PT")).apply { isLenient = false }
-                        .parse(date.text.toString().trim())
-                }.getOrNull()
+                val parsedDate = selectedReservationDate.time
+                val maximumDate = Calendar.getInstance().apply { add(Calendar.YEAR, 1) }.timeInMillis
                 when {
                     guestName.isBlank() || guestName.length > 100 -> guest.error = "Indica um nome (máximo 100 caracteres)."
                     partySize == null || partySize !in 1..60 -> party.error = "Usa um número entre 1 e 60."
                     durationMinutes == null || durationMinutes !in 30..480 -> duration.error = "Usa 30 a 480 minutos."
-                    parsedDate == null || parsedDate.time < System.currentTimeMillis() -> date.error = "Indica uma data futura válida."
+                    parsedDate.time <= System.currentTimeMillis() -> dateButton.error = "Indica uma data e hora futuras."
+                    parsedDate.time > maximumDate -> dateButton.error = "A reserva não pode estar a mais de um ano de distância."
                     table.text.toString().isNotBlank() && (tableNumber == null || tableNumber !in 1..100) -> table.error = "Usa uma mesa entre 1 e 100."
+                    phone.text.toString().trim().length > 40 -> phone.error = "O contacto pode ter no máximo 40 caracteres."
                     notes.text.toString().length > 1000 -> notes.error = "Máximo de 1000 caracteres."
                     else -> {
                         val reservationAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).format(parsedDate)
@@ -4345,8 +5111,6 @@ class MainActivity : Activity() {
                             .put("table_number", tableNumber ?: JSONObject.NULL)
                             .put("notes", normalizedNotes)
                             .toString()
-                        // If the server committed but the reply was lost, the same payload
-                        // reuses its UUID; changed form data receives a different UUID.
                         val requestOperation = "reservation_create"
                         val requestAccountId = backendPrefs.getString("user_id", "").orEmpty()
                         val requestId = try {
@@ -4366,9 +5130,6 @@ class MainActivity : Activity() {
                             reservationsLoaded = true
                             "OK"
                         }) {
-                            // Close the form only after the server confirmed the save.
-                            // If the request fails, runBackend shows the error and the
-                            // user's entered reservation details remain available to retry.
                             dialog.dismiss()
                             renderApp()
                             pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
@@ -4381,6 +5142,73 @@ class MainActivity : Activity() {
         dialog.window?.setLayout(-1, dp(590))
     }
 
+    private fun addInventoryFilters(container: LinearLayout) {
+        val filters = listOf("Todos", "Esgotados", "Stock baixo", "Sem custo")
+        if (selectedInventoryFilter !in filters) selectedInventoryFilter = "Todos"
+        val filterCard = makeCard(13)
+        filterCard.addView(label("PESQUISAR E FILTRAR STOCK", 9.5f, true, forestSoft))
+        addGap(filterCard, 6)
+        val searchField = inputField(
+            "Nome do artigo ou unidade",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        ).apply {
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                    inventorySearch = text.toString().trim()
+                    renderApp()
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+        searchField.setText(inventorySearch)
+        filterCard.addView(searchField, fieldParams())
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        actions.addView(primaryButton("Pesquisar") {
+            inventorySearch = searchField.text.toString().trim()
+            renderApp()
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+            setMargins(0, 0, dp(5), 0)
+        })
+        actions.addView(secondaryButton("Limpar") {
+            inventorySearch = ""
+            selectedInventoryFilter = "Todos"
+            renderApp()
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+            setMargins(dp(5), 0, 0, 0)
+        })
+        filterCard.addView(actions)
+        addGap(filterCard, 7)
+        val scroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        filters.forEach { filter ->
+            row.addView(
+                filterChip(filter, selectedInventoryFilter == filter) {
+                    selectedInventoryFilter = filter
+                    renderApp()
+                },
+                LinearLayout.LayoutParams(-2, dp(42)).apply {
+                    setMargins(0, 0, dp(6), 0)
+                }
+            )
+        }
+        scroll.addView(row)
+        filterCard.addView(scroll, LinearLayout.LayoutParams(-1, dp(46)))
+        container.addView(filterCard, cardParams())
+        addGap(container, 5)
+    }
+
     private fun renderStock(container: LinearLayout) {
         inventoryPageContainer = container
         pageIntro(container, "Stock e inventário", "Quantidades, limites mínimos, movimentos e desperdício registado.")
@@ -4389,11 +5217,13 @@ class MainActivity : Activity() {
             container.addView(emptyCard("O inventário partilhado exige uma conta autenticada e um restaurante configurado na secção Conta."))
             return
         }
-        container.addView(primaryButton("+  Adicionar artigo de stock") { showInventoryItemDialog(null) },
-            LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(container, 6)
-        container.addView(secondaryButton("Atualizar stock") { refreshInventoryItems() },
-            LinearLayout.LayoutParams(-1, dp(48)))
+        addActionPair(
+            container,
+            "+  Artigo de stock",
+            { showInventoryItemDialog(null) },
+            "Atualizar",
+            { refreshInventoryItems() }
+        )
         addGap(container, 6)
         container.addView(label(
             inventoryRefreshStatusMessage(),
@@ -4421,16 +5251,14 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(-1, dp(48))
         )
         addGap(container, 8)
+        val stockItems = (0 until items.length()).mapNotNull { items.optJSONObject(it) }
         var lowCount = 0
         var stockValueWithKnownCost = BigDecimal.ZERO.setScale(2)
         var itemsWithoutUnitCost = 0
-        for (index in 0 until items.length()) {
-            val item = items.optJSONObject(index) ?: continue
-            val id = item.optString("id")
-            val name = item.optString("name", "Artigo")
-            val unit = item.optString("unit", "unidades")
+        stockItems.forEach { item ->
             val quantity = item.optDouble("quantity", 0.0)
             val threshold = item.optDouble("low_stock_threshold", 0.0)
+            if (quantity <= threshold) lowCount++
             val unitCost = if (item.isNull("unit_cost_per_unit")) null else
                 runCatching { BigDecimal(item.optString("unit_cost_per_unit")) }.getOrNull()
             if (unitCost == null) {
@@ -4440,8 +5268,79 @@ class MainActivity : Activity() {
                 val itemValue = itemQuantity?.let { InventoryWasteCostCalculator.estimate(it, unitCost) }
                 if (itemValue != null) stockValueWithKnownCost = stockValueWithKnownCost.add(itemValue)
             }
+        }
+
+        val overview = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        overview.addView(statCard("ARTIGOS", stockItems.size.toString(), forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(4), dp(8)) })
+        overview.addView(statCard("STOCK BAIXO", lowCount.toString(), if (lowCount > 0) red else green),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(2), 0, dp(2), dp(8)) })
+        overview.addView(statCard("SEM CUSTO", itemsWithoutUnitCost.toString(), if (itemsWithoutUnitCost > 0) copper else forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(4), 0, 0, dp(8)) })
+        container.addView(overview)
+
+        val summary = makeCard(13, if (lowCount > 0) paleRed else paleGreen)
+        summary.addView(label(
+            if (lowCount > 0) "$lowCount artigo(s) no limite mínimo ou abaixo dele"
+            else "Todos os artigos acima dos respetivos limites",
+            12.5f, true, if (lowCount > 0) red else forest
+        ))
+        container.addView(summary, cardParams())
+
+        val valuation = makeCard(13)
+        valuation.addView(label(
+            "Valor estimado do stock com custo registado: ${formatEuro(stockValueWithKnownCost)}",
+            13f, true, forest
+        ))
+        if (itemsWithoutUnitCost > 0) {
+            valuation.addView(label(
+                "$itemsWithoutUnitCost artigo(s) sem custo unitário; ficam fora deste total.",
+                11f, false, muted
+            ))
+        }
+        valuation.addView(label(
+            "Estimativa baseada no custo unitário atual introduzido pelo restaurante; não é valorização contabilística FIFO ou custo médio.",
+            10.5f, false, muted
+        ))
+        container.addView(valuation, cardParams())
+
+        addInventoryFilters(container)
+        val query = normalizeCustomerMenuSearch(inventorySearch)
+        val filteredStockItems = stockItems.filter { item ->
+            val quantity = item.optDouble("quantity", 0.0)
+            val threshold = item.optDouble("low_stock_threshold", 0.0)
+            val unitCost = if (item.isNull("unit_cost_per_unit")) null else
+                runCatching { BigDecimal(item.optString("unit_cost_per_unit")) }.getOrNull()
+            val matchesStatus = when (selectedInventoryFilter) {
+                "Esgotados" -> quantity <= 0.0
+                "Stock baixo" -> quantity > 0.0 && quantity <= threshold
+                "Sem custo" -> unitCost == null
+                else -> true
+            }
+            val matchesSearch = query.isBlank() || normalizeCustomerMenuSearch(
+                "${item.optString("name")} ${item.optString("unit")}"
+            ).contains(query)
+            matchesStatus && matchesSearch
+        }
+        container.addView(label("${filteredStockItems.size} de ${stockItems.size} artigo(s)", 11f, true, forestSoft))
+        addGap(container, 6)
+        if (filteredStockItems.isEmpty()) {
+            container.addView(emptyCard("Não há artigos de stock que correspondam à pesquisa e ao filtro selecionado."))
+            return
+        }
+
+        for (item in filteredStockItems) {
+            val id = item.optString("id")
+            val name = item.optString("name", "Artigo")
+            val unit = item.optString("unit", "unidades")
+            val quantity = item.optDouble("quantity", 0.0)
+            val threshold = item.optDouble("low_stock_threshold", 0.0)
+            val unitCost = if (item.isNull("unit_cost_per_unit")) null else
+                runCatching { BigDecimal(item.optString("unit_cost_per_unit")) }.getOrNull()
             val isLow = quantity <= threshold
-            if (isLow) lowCount++
             val card = makeCard(15)
             val top = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -4449,10 +5348,11 @@ class MainActivity : Activity() {
             }
             top.addView(label(name, 16f, true, forestDeep), LinearLayout.LayoutParams(0, -2, 1f))
             if (isLow) {
-                top.addView(label(if (quantity <= 0.0) "Esgotado" else "Stock baixo", 9.5f, true, red).apply {
-                    setPadding(dp(8), dp(6), dp(8), dp(6))
-                    background = rounded(paleRed, 10)
-                })
+                top.addView(statusBadge(
+                    if (quantity <= 0.0) "Esgotado" else "Stock baixo",
+                    red,
+                    paleRed
+                ))
             }
             card.addView(top)
             addGap(card, 8)
@@ -4483,26 +5383,6 @@ class MainActivity : Activity() {
                 LinearLayout.LayoutParams(-1, dp(48)))
             container.addView(card, cardParams())
         }
-        val summary = makeCard(13, if (lowCount > 0) paleRed else paleGreen)
-        summary.addView(label(if (lowCount > 0) "$lowCount artigo(s) no limite mínimo ou abaixo dele" else "Todos os artigos acima dos respetivos limites", 12.5f, true, if (lowCount > 0) red else forest))
-        container.addView(summary, cardParams())
-
-        val valuation = makeCard(13)
-        valuation.addView(label(
-            "Valor estimado do stock com custo registado: ${formatEuro(stockValueWithKnownCost)}",
-            13f, true, forest
-        ))
-        if (itemsWithoutUnitCost > 0) {
-            valuation.addView(label(
-                "$itemsWithoutUnitCost artigo(s) sem custo unitário; ficam fora deste total.",
-                11f, false, muted
-            ))
-        }
-        valuation.addView(label(
-            "Estimativa baseada no custo unitário atual introduzido pelo restaurante; não é valorização contabilística FIFO ou custo médio.",
-            10.5f, false, muted
-        ))
-        container.addView(valuation, cardParams())
     }
 
     private fun formatEuro(value: BigDecimal): String =
@@ -5486,6 +6366,7 @@ class MainActivity : Activity() {
         while (assistantConversation.size > 8) assistantConversation.removeAt(0)
         assistantQuestion = ""
         assistantAnswer = answer
+        assistantInsightsExpanded = false
         renderApp()
     }
 
@@ -5495,6 +6376,7 @@ class MainActivity : Activity() {
         while (assistantConversation.size > 8) assistantConversation.removeAt(0)
         assistantQuestion = ""
         assistantAnswer = answer
+        assistantInsightsExpanded = false
         renderApp()
     }
 
@@ -5525,29 +6407,98 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun renderAssistant(container: LinearLayout) {
-        val snapshot = assistantSnapshot()
-        pageIntro(container, "Assistente StudioMesa", "O teu apoio à gestão do restaurante, numa conversa.")
-        addGap(container, 8)
 
-        val hero = makeCard(17, forest)
-        val heroRow = LinearLayout(this).apply {
+    private fun renderAssistantComposer(): LinearLayout {
+        val composer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            setBackgroundColor(white)
+            elevation = dp(7).toFloat()
+        }
+        val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        heroRow.addView(label("✦", 28f, true, copper), LinearLayout.LayoutParams(dp(42), dp(42)))
-        val heroText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        heroText.addView(label("Gestão inteligente do restaurante", 18f, true, white))
-        heroText.addView(label("ANÁLISE LOCAL · SEM API PAGA", 10f, true, copperPale))
-        heroText.addView(label("Gestão, operação e decisões com dados.", 11.5f, false, copperPale))
-        heroRow.addView(heroText, LinearLayout.LayoutParams(0, -2, 1f))
-        hero.addView(heroRow)
-        addGap(hero, 10)
-        hero.addView(label(
-            "Pergunta em linguagem natural. O assistente analisa os dados disponíveis e indica o que deves confirmar.",
-            12.5f, false, white
+        val questionField = EditText(this).apply {
+            hint = "Escreve a tua pergunta…"
+            inputType = InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            textSize = 14f
+            setTextColor(ink)
+            setHintTextColor(muted)
+            setPadding(dp(13), dp(10), dp(13), dp(10))
+            background = rounded(paper, 15)
+            minLines = 1
+            maxLines = 3
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEND
+            setText(assistantQuestion)
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) {
+                    sendAssistantMessage(text.toString())
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+        row.addView(questionField, LinearLayout.LayoutParams(0, dp(52), 1f).apply {
+            setMargins(0, 0, dp(8), 0)
+        })
+        val sendButton = TextView(this).apply {
+            text = "↑"
+            textSize = 25f
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setTextColor(forestDeep)
+            background = rippleBackground(copper, 15)
+            contentDescription = "Enviar pergunta ao assistente"
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { sendAssistantMessage(questionField.text.toString()) }
+        }
+        row.addView(sendButton, LinearLayout.LayoutParams(dp(52), dp(52)))
+        composer.addView(row)
+        addGap(composer, 4)
+        composer.addView(label(
+            "Assistente local: usa regras e dados disponíveis; não é um modelo generativo e não altera registos.",
+            10f, false, muted
         ))
-        container.addView(hero, cardParams())
+        return composer
+    }
+
+    private fun renderAssistant(container: LinearLayout) {
+        val snapshot = assistantSnapshot()
+        pageIntro(container, "Assistente StudioMesa", "O apoio à gestão do restaurante, numa conversa.")
+        addGap(container, 4)
+
+        val assistantIdentity = makeCard(12, forest)
+        val identityRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        identityRow.addView(label("✦", 24f, true, copper), LinearLayout.LayoutParams(dp(38), dp(38)))
+        val identityText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        identityText.addView(label("Assistente StudioMesa", 15f, true, white))
+        identityText.addView(label("ANÁLISE LOCAL · SEM API PAGA", 9.5f, true, copperPale))
+        identityRow.addView(identityText, LinearLayout.LayoutParams(0, -2, 1f))
+        assistantIdentity.addView(identityRow)
+        assistantIdentity.addView(label(
+            "Respostas baseadas nos dados disponíveis. Confirma sempre os valores antes de decidir.",
+            11f, false, copperPale
+        ))
+        container.addView(assistantIdentity, cardParams())
+
+        if (assistantConversation.isNotEmpty()) {
+            container.addView(secondaryButton("Nova conversa") {
+                assistantConversation.clear()
+                assistantQuestion = ""
+                assistantAnswer = null
+                assistantInsightsExpanded = false
+                renderApp()
+            }, LinearLayout.LayoutParams(-1, dp(40)).apply {
+                setMargins(0, 0, 0, dp(8))
+            })
+        }
 
         val chatPanel = makeCard(13, Color.rgb(242, 244, 239))
         if (assistantConversation.isEmpty()) {
@@ -5600,180 +6551,155 @@ class MainActivity : Activity() {
         }
         container.addView(chatPanel, cardParams())
 
-        sectionHeading(container, "Sugestões rápidas", "Toca numa opção para iniciar a conversa.")
-        val quickRowOne = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+        if (assistantConversation.isEmpty()) {
+            sectionHeading(container, "Sugestões rápidas", "Toca numa opção para iniciar a conversa.")
+            val quickRowOne = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            quickRowOne.addView(assistantPromptButton("Gerar resumo da operação", "", true),
+                LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(0, 0, dp(5), 0) })
+            quickRowOne.addView(assistantPromptButton("Rever margens", "Quais artigos têm melhor margem e quais têm a margem mais baixa?"),
+                LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(dp(5), 0, 0, 0) })
+            container.addView(quickRowOne, LinearLayout.LayoutParams(-1, -2).apply {
+                setMargins(0, 0, 0, dp(6))
+            })
+            val quickRowTwo = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            quickRowTwo.addView(assistantPromptButton("Stock baixo", "Que artigos de stock estão baixos ou esgotados?"),
+                LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(0, 0, dp(5), 0) })
+            quickRowTwo.addView(assistantPromptButton("Reservas pendentes", "Há reservas pendentes por confirmar?"),
+                LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(dp(5), 0, 0, 0) })
+            container.addView(quickRowTwo, LinearLayout.LayoutParams(-1, -2))
         }
-        quickRowOne.addView(assistantPromptButton("Gerar resumo da operação", "", true),
-            LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(0, 0, dp(5), 0) })
-        quickRowOne.addView(assistantPromptButton("Rever margens", "Quais artigos têm melhor margem e quais têm a margem mais baixa?"),
-            LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(dp(5), 0, 0, 0) })
-        container.addView(quickRowOne, LinearLayout.LayoutParams(-1, -2).apply {
-            setMargins(0, 0, 0, dp(6))
-        })
-        val quickRowTwo = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        quickRowTwo.addView(assistantPromptButton("Stock baixo", "Que artigos de stock estão baixos ou esgotados?"),
-            LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(0, 0, dp(5), 0) })
-        quickRowTwo.addView(assistantPromptButton("Reservas pendentes", "Há reservas pendentes por confirmar?"),
-            LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(dp(5), 0, 0, 0) })
-        container.addView(quickRowTwo, LinearLayout.LayoutParams(-1, -2))
-
-        val composer = makeCard(10, white)
-        val composerRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        val questionField = EditText(this).apply {
-            hint = "Escreve a tua pergunta…"
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or InputType.TYPE_TEXT_FLAG_MULTI_LINE
-            textSize = 14f
-            setTextColor(ink)
-            setHintTextColor(muted)
-            setPadding(dp(13), dp(10), dp(13), dp(10))
-            background = rounded(paper, 15)
-            minLines = 1
-            maxLines = 3
-            setText(assistantQuestion)
-        }
-        composerRow.addView(questionField, LinearLayout.LayoutParams(0, dp(52), 1f).apply {
-            setMargins(0, 0, dp(8), 0)
-        })
-        val sendButton = TextView(this).apply {
-            text = "↑"
-            textSize = 25f
-            typeface = Typeface.create("sans-serif", Typeface.BOLD)
-            gravity = Gravity.CENTER
-            setTextColor(forestDeep)
-            background = rippleBackground(copper, 15)
-            contentDescription = "Enviar pergunta ao assistente"
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { sendAssistantMessage(questionField.text.toString()) }
-        }
-        composerRow.addView(sendButton, LinearLayout.LayoutParams(dp(52), dp(52)))
-        composer.addView(composerRow)
-        addGap(composer, 6)
-        composer.addView(label("As respostas são calculadas localmente com regras e dados disponíveis. Não é um modelo generativo e não altera registos por ti.", 10.5f, false, muted))
-        container.addView(composer, cardParams())
 
         addGap(container, 8)
-        if ("Gestão económica" in availablePages()) {
-            val economicLink = makeCard(13, copperPale)
-            economicLink.addView(label("GESTÃO ECONÓMICA", 9.5f, true, forestSoft))
-            addGap(economicLink, 4)
-            economicLink.addView(label(
-                "Abre a área do proprietário para simular cenários, calcular metas e consultar ferramentas financeiras.",
-                12f, false, ink
-            ))
-            addGap(economicLink, 8)
-            economicLink.addView(secondaryButton("Abrir gestão económica") {
-                activePage = "Gestão económica"
-                renderApp()
-            }, LinearLayout.LayoutParams(-1, dp(44)))
-            container.addView(economicLink, cardParams())
-        }
+        container.addView(secondaryButton(
+            if (assistantInsightsExpanded) "Ocultar análises complementares" else "Ver análises complementares"
+        ) {
+            assistantInsightsExpanded = !assistantInsightsExpanded
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(44)))
 
-        addGap(container, 5)
-        sectionHeading(container, "Sugestões para rever", "Prioridades estimadas. Confirma os dados e decide antes de alterar qualquer coisa.")
-        StudioMesaAdvisor.recommendations(snapshot).forEach { recommendation ->
-            val (priorityText, textColor, backColor) = when (recommendation.priority) {
-                AssistantPriority.URGENT -> Triple("PRIORIDADE ALTA", red, paleRed)
-                AssistantPriority.ATTENTION -> Triple("A REVER", forestDeep, copperPale)
-                AssistantPriority.TIP -> Triple("SUGESTÃO", forestSoft, paleGreen)
-            }
-            val card = makeCard(15)
-            card.addView(label(priorityText, 9f, true, textColor).apply {
-                setPadding(dp(8), dp(5), dp(8), dp(5))
-                background = rounded(backColor, 10)
-            }, LinearLayout.LayoutParams(-2, -2))
-            addGap(card, 8)
-            card.addView(label(recommendation.title, 16f, true, forestDeep))
-            addGap(card, 5)
-            card.addView(label(recommendation.detail, 12.5f, false, muted))
-            assistantActionTarget(recommendation.actionPage)?.let { target ->
-                addGap(card, 10)
-                card.addView(secondaryButton("Abrir " + target) {
-                    activePage = target
+        if (assistantInsightsExpanded) {
+            addGap(container, 8)
+            if ("Gestão económica" in availablePages()) {
+                val economicLink = makeCard(13, copperPale)
+                economicLink.addView(label("GESTÃO ECONÓMICA", 9.5f, true, forestSoft))
+                addGap(economicLink, 4)
+                economicLink.addView(label(
+                    "Abre a área do proprietário para simular cenários, calcular metas e consultar ferramentas financeiras.",
+                    12f, false, ink
+                ))
+                addGap(economicLink, 8)
+                economicLink.addView(secondaryButton("Abrir gestão económica") {
+                    activePage = "Gestão económica"
                     renderApp()
                 }, LinearLayout.LayoutParams(-1, dp(44)))
+                container.addView(economicLink, cardParams())
             }
-            container.addView(card, cardParams())
-        }
-        sectionHeading(container, "Engenharia da carta", "Combina unidades de pedidos concluídos com a contribuição estimada por artigo.")
-        val engineering = StudioMesaAdvisor.menuEngineering(snapshot)
-        if (!engineering.hasEnoughSales) {
-            container.addView(emptyCard(
-                "Ainda não há pelo menos ${engineering.requiredUnits} unidades concluídas que correspondam aos artigos atuais (${engineering.completedUnits} encontradas). A análise não inventa popularidade."
-            ), cardParams())
-        } else {
-            if (!engineering.hasMarginData) {
-                container.addView(emptyCard("Existem vendas, mas faltam custos válidos nos artigos vendidos para comparar a contribuição. Confirma os custos na Carta."), cardParams())
-            }
-            engineering.items.forEach { item ->
-                val title = when (item.classification) {
-                    MenuEngineeringClass.STAR -> "ESTRELA"
-                    MenuEngineeringClass.WORKHORSE -> "POPULAR · REVER MARGEM"
-                    MenuEngineeringClass.PUZZLE -> "MARGEM ALTA · REVER PROCURA"
-                    MenuEngineeringClass.DOG -> "REVER ARTIGO"
-                    MenuEngineeringClass.MISSING_COST -> "CUSTO EM FALTA"
+
+            addGap(container, 5)
+            sectionHeading(container, "Sugestões para rever", "Prioridades estimadas. Confirma os dados e decide antes de alterar qualquer coisa.")
+            StudioMesaAdvisor.recommendations(snapshot).forEach { recommendation ->
+                val (priorityText, textColor, backColor) = when (recommendation.priority) {
+                    AssistantPriority.URGENT -> Triple("PRIORIDADE ALTA", red, paleRed)
+                    AssistantPriority.ATTENTION -> Triple("A REVER", forestDeep, copperPale)
+                    AssistantPriority.TIP -> Triple("SUGESTÃO", forestSoft, paleGreen)
                 }
-                val backColor = when (item.classification) {
-                    MenuEngineeringClass.STAR -> paleGreen
-                    MenuEngineeringClass.WORKHORSE, MenuEngineeringClass.PUZZLE -> copperPale
-                    MenuEngineeringClass.DOG, MenuEngineeringClass.MISSING_COST -> paleRed
-                }
-                val card = makeCard(14)
-                card.addView(label(title, 9f, true, forestDeep).apply {
+                val card = makeCard(15)
+                card.addView(label(priorityText, 9f, true, textColor).apply {
                     setPadding(dp(8), dp(5), dp(8), dp(5))
                     background = rounded(backColor, 10)
                 }, LinearLayout.LayoutParams(-2, -2))
-                addGap(card, 7)
-                card.addView(label(item.itemName, 16f, true, forestDeep))
-                addGap(card, 4)
-                card.addView(label(
-                    "${item.unitsSold} unidade(s) concluídas · ${item.popularitySharePercent}% das unidades correspondentes · contribuição atual: ${item.contributionPerUnit?.let { money(it) } ?: "custo em falta"} por unidade.",
-                    11.5f, true, muted
-                ))
+                addGap(card, 8)
+                card.addView(label(recommendation.title, 16f, true, forestDeep))
                 addGap(card, 5)
-                card.addView(label(item.recommendation, 12.5f, false, ink))
+                card.addView(label(recommendation.detail, 12.5f, false, muted))
+                assistantActionTarget(recommendation.actionPage)?.let { target ->
+                    addGap(card, 10)
+                    card.addView(secondaryButton("Abrir " + target) {
+                        activePage = target
+                        renderApp()
+                    }, LinearLayout.LayoutParams(-1, dp(44)))
+                }
                 container.addView(card, cardParams())
             }
+            sectionHeading(container, "Engenharia da carta", "Combina unidades de pedidos concluídos com a contribuição estimada por artigo.")
+            val engineering = StudioMesaAdvisor.menuEngineering(snapshot)
+            if (!engineering.hasEnoughSales) {
+                container.addView(emptyCard(
+                    "Ainda não há pelo menos ${engineering.requiredUnits} unidades concluídas que correspondam aos artigos atuais (${engineering.completedUnits} encontradas). A análise não inventa popularidade."
+                ), cardParams())
+            } else {
+                if (!engineering.hasMarginData) {
+                    container.addView(emptyCard("Existem vendas, mas faltam custos válidos nos artigos vendidos para comparar a contribuição. Confirma os custos na Carta."), cardParams())
+                }
+                engineering.items.forEach { item ->
+                    val title = when (item.classification) {
+                        MenuEngineeringClass.STAR -> "ESTRELA"
+                        MenuEngineeringClass.WORKHORSE -> "POPULAR · REVER MARGEM"
+                        MenuEngineeringClass.PUZZLE -> "MARGEM ALTA · REVER PROCURA"
+                        MenuEngineeringClass.DOG -> "REVER ARTIGO"
+                        MenuEngineeringClass.MISSING_COST -> "CUSTO EM FALTA"
+                    }
+                    val backColor = when (item.classification) {
+                        MenuEngineeringClass.STAR -> paleGreen
+                        MenuEngineeringClass.WORKHORSE, MenuEngineeringClass.PUZZLE -> copperPale
+                        MenuEngineeringClass.DOG, MenuEngineeringClass.MISSING_COST -> paleRed
+                    }
+                    val card = makeCard(14)
+                    card.addView(label(title, 9f, true, forestDeep).apply {
+                        setPadding(dp(8), dp(5), dp(8), dp(5))
+                        background = rounded(backColor, 10)
+                    }, LinearLayout.LayoutParams(-2, -2))
+                    addGap(card, 7)
+                    card.addView(label(item.itemName, 16f, true, forestDeep))
+                    addGap(card, 4)
+                    card.addView(label(
+                        "${item.unitsSold} unidade(s) concluídas · ${item.popularitySharePercent}% das unidades correspondentes · contribuição atual: ${item.contributionPerUnit?.let { money(it) } ?: "custo em falta"} por unidade.",
+                        11.5f, true, muted
+                    ))
+                    addGap(card, 5)
+                    card.addView(label(item.recommendation, 12.5f, false, ink))
+                    container.addView(card, cardParams())
+                }
+                container.addView(label(
+                    "Triagem com pedidos concluídos e preço/custo atuais; não é lucro contabilístico nem custo histórico e não inclui IVA, mão de obra, desperdício ou encargos.",
+                    10.5f, false, muted
+                ))
+            }
+
+            sectionHeading(container, "Ideias de conteúdo", "Rascunhos para revisão; só usam nomes, descrições e preços registados na carta.")
+            val drafts = StudioMesaAdvisor.marketingDrafts(snapshot)
+            if (drafts.isEmpty()) {
+                container.addView(emptyCard("Adiciona artigos com nome e preço válidos para criar rascunhos."), cardParams())
+            } else {
+                drafts.forEach { draft ->
+                    val card = makeCard(14)
+                    card.addView(label(draft.itemName, 16f, true, forestDeep))
+                    addGap(card, 6)
+                    card.addView(label(draft.caption, 13f, false, ink))
+                    addGap(card, 5)
+                    card.addView(label(draft.basis, 10.5f, false, muted))
+                    addGap(card, 8)
+                    card.addView(secondaryButton("Copiar rascunho") {
+                        copyAssistantText(draft.caption)
+                    }, LinearLayout.LayoutParams(-1, dp(44)))
+                    container.addView(card, cardParams())
+                }
+            }
+
+            addGap(container, 4)
             container.addView(label(
-                "Triagem com pedidos concluídos e preço/custo atuais; não é lucro contabilístico nem custo histórico e não inclui IVA, mão de obra, desperdício ou encargos.",
-                10.5f, false, muted
+                if (snapshot.isDemo) "Fonte atual: dados de demonstração locais. Liga um restaurante na secção Conta para analisar dados partilhados."
+                else "Fonte atual: dados guardados em cache pela aplicação. Confirma a última atualização antes de decidir; esta análise não verifica a conectividade em tempo real.",
+                11f, false, muted
             ))
         }
 
-        sectionHeading(container, "Ideias de conteúdo", "Rascunhos para revisão; só usam nomes, descrições e preços registados na carta.")
-        val drafts = StudioMesaAdvisor.marketingDrafts(snapshot)
-        if (drafts.isEmpty()) {
-            container.addView(emptyCard("Adiciona artigos com nome e preço válidos para criar rascunhos."), cardParams())
-        } else {
-            drafts.forEach { draft ->
-                val card = makeCard(14)
-                card.addView(label(draft.itemName, 16f, true, forestDeep))
-                addGap(card, 6)
-                card.addView(label(draft.caption, 13f, false, ink))
-                addGap(card, 5)
-                card.addView(label(draft.basis, 10.5f, false, muted))
-                addGap(card, 8)
-                card.addView(secondaryButton("Copiar rascunho") {
-                    copyAssistantText(draft.caption)
-                }, LinearLayout.LayoutParams(-1, dp(44)))
-                container.addView(card, cardParams())
-            }
-        }
-
-        addGap(container, 4)
-        container.addView(label(
-            if (snapshot.isDemo) "Fonte atual: dados de demonstração locais. Liga um restaurante na secção Conta para analisar dados partilhados."
-            else "Fonte atual: dados guardados em cache pela aplicação. Confirma a última atualização antes de decidir; esta análise não verifica a conectividade em tempo real.",
-            11f, false, muted
-        ))
     }
 
 
@@ -5816,10 +6742,13 @@ class MainActivity : Activity() {
             11.5f, false, muted
         ))
         addGap(toggle, 8)
-        toggle.addView(secondaryButton(if (economicManagerEnabled) "Desativar e limpar valores da sessão" else "Ativar gestão económica") {
-            if (economicManagerEnabled) {
+        val toggleAction: Button = if (economicManagerEnabled) {
+            dangerButton("Desativar e limpar valores da sessão") {
                 clearEconomicManagerState()
-            } else {
+                renderApp()
+            }
+        } else {
+            primaryButton("Ativar gestão económica") {
                 economicManagerEnabled = true
                 economicScopeKey = scope
                 economicInputs.clear()
@@ -5828,9 +6757,10 @@ class MainActivity : Activity() {
                 breakEvenTargetReportText = ""
                 recipeReportText = ""
                 reorderReportText = ""
+                renderApp()
             }
-            renderApp()
-        }, LinearLayout.LayoutParams(-1, dp(44)))
+        }
+        toggle.addView(toggleAction, LinearLayout.LayoutParams(-1, dp(44)))
         container.addView(toggle, cardParams())
         if (!economicManagerEnabled) return
 
@@ -6306,22 +7236,34 @@ class MainActivity : Activity() {
         quickAccess.addView(label("NAVEGAÇÃO RÁPIDA", 9.5f, true, forestSoft))
         addGap(quickAccess, 4)
         quickAccess.addView(label(
-            "Escolhe uma ferramenta para ires diretamente à respetiva área.",
+            "Desliza os atalhos e abre diretamente a ferramenta pretendida.",
             11.5f, false, ink
         ))
         addGap(quickAccess, 8)
-        quickAccess.addView(secondaryButton("Ir para uma ferramenta  ↓") {
-            AlertDialog.Builder(this)
-                .setTitle("Gestor económico")
-                .setItems(toolNames.toTypedArray()) { _, selected ->
-                    val target = toolTargets[toolNames[selected]] ?: return@setItems
+        val toolChipScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val toolChipRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        toolNames.forEach { toolName ->
+            toolChipRow.addView(
+                navigationChip(toolName) {
+                    val target = toolTargets[toolName] ?: return@navigationChip
                     target.post {
                         val scroll = container.parent as? ScrollView
                         scroll?.smoothScrollTo(0, (target.top - dp(12)).coerceAtLeast(0))
                     }
+                },
+                LinearLayout.LayoutParams(-2, dp(42)).apply {
+                    setMargins(0, 0, dp(7), 0)
                 }
-                .show()
-        }, LinearLayout.LayoutParams(-1, dp(44)))
+            )
+        }
+        toolChipScroll.addView(toolChipRow)
+        quickAccess.addView(toolChipScroll, LinearLayout.LayoutParams(-1, dp(46)))
         container.addView(quickAccess, toolIndex)
 
         addGap(container, 4)
@@ -6423,19 +7365,28 @@ class MainActivity : Activity() {
             addGap(container, 6)
         }
 
-        val periods = SalesAnalysisPeriod.values()
-        container.addView(
-            secondaryButton("Período da análise: ${selectedAnalysisPeriod.label}") {
-                AlertDialog.Builder(this)
-                    .setTitle("Seleciona o período")
-                    .setItems(periods.map { it.label }.toTypedArray()) { _, selected ->
-                        selectedAnalysisPeriod = periods[selected]
-                        renderApp()
-                    }
-                    .show()
-            },
-            LinearLayout.LayoutParams(-1, dp(46))
-        )
+        val periods = SalesAnalysisPeriod.values().toList()
+        val periodScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val periodRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        periods.forEach { period ->
+            periodRow.addView(
+                filterChip(period.label, selectedAnalysisPeriod == period) {
+                    selectedAnalysisPeriod = period
+                    renderApp()
+                },
+                LinearLayout.LayoutParams(-2, dp(42)).apply {
+                    setMargins(0, 0, dp(6), 0)
+                }
+            )
+        }
+        periodScroll.addView(periodRow)
+        container.addView(periodScroll, LinearLayout.LayoutParams(-1, dp(46)))
         addGap(container, 6)
         container.addView(label(
             "O período é calculado pela data de criação do pedido e pelo fuso horário local deste dispositivo. O valor é nominal, não uma confirmação de pagamento.",
@@ -6602,6 +7553,40 @@ class MainActivity : Activity() {
         form.addView(label("Quantidade", 10f, true, forestSoft))
         val quantityField = inputField("1–99 unidades", InputType.TYPE_CLASS_NUMBER).apply { setText("1") }
         form.addView(quantityField, fieldParams())
+        val pricePreview = label("", 11.5f, true, forest)
+        fun refreshPricePreview() {
+            val selectedItem = items.getOrNull(itemSpinner.selectedItemPosition)
+            val selectedQuantity = quantityField.text.toString().trim().toIntOrNull()
+                ?.takeIf { it in 1..99 }
+            pricePreview.text = when {
+                selectedItem == null -> "Seleciona um artigo para consultar o preço."
+                selectedQuantity == null -> "Preço unitário: ${money(selectedItem.price)} · Introduz uma quantidade válida para calcular o subtotal."
+                else -> "Preço unitário: ${money(selectedItem.price)} · Subtotal: ${money(selectedItem.price * selectedQuantity)}"
+            }
+        }
+        itemSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(
+                parent: android.widget.AdapterView<*>?,
+                view: View?,
+                position: Int,
+                id: Long
+            ) {
+                refreshPricePreview()
+            }
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {
+                refreshPricePreview()
+            }
+        }
+        quantityField.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                refreshPricePreview()
+            }
+            override fun afterTextChanged(s: android.text.Editable?) = Unit
+        })
+        form.addView(pricePreview)
+        addGap(form, 5)
+        refreshPricePreview()
         addGap(form, 3)
 
         form.addView(label("Momento do serviço", 10f, true, forestSoft))
@@ -7170,19 +8155,221 @@ class MainActivity : Activity() {
         dialog.show()
     }
 
+    private fun navigationChip(title: String, action: () -> Unit): TextView =
+        label(title, 11f, true, forestDeep).apply {
+            gravity = Gravity.CENTER
+            minHeight = dp(38)
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            background = rippleBackground(white, 18)
+            contentDescription = "Ir para $title"
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { action() }
+        }
+
+    private fun addMenuCostOverview(container: LinearLayout, itemCount: Int, validCostCount: Int) {
+        val needsReview = (itemCount - validCostCount).coerceAtLeast(0)
+        val overview = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        overview.addView(statCard("ARTIGOS", itemCount.toString(), forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(4), dp(8)) })
+        overview.addView(statCard("CUSTOS VÁLIDOS", validCostCount.toString(), green),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(2), 0, dp(2), dp(8)) })
+        overview.addView(statCard("A REVER", needsReview.toString(), if (needsReview > 0) copper else forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(4), 0, 0, dp(8)) })
+        container.addView(overview)
+        container.addView(label(
+            "Custo válido = preço positivo e custo não negativo registados. Os restantes artigos precisam de revisão antes de usar análises de margem.",
+            10.5f, false, muted
+        ))
+        addGap(container, 8)
+    }
+
+    private fun addOrderStatusOverview(container: LinearLayout, statuses: List<String>) {
+        val newCount = statuses.count { it == "Aberto" }
+        val preparingCount = statuses.count { it == "Em preparação" }
+        val readyCount = statuses.count { it == "Pronto" }
+        val activeCount = statuses.count { it !in setOf("Concluído", "Cancelado") }
+        val finishedCount = statuses.count { it in setOf("Concluído", "Cancelado") }
+
+        val overview = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        overview.addView(statCard("NOVOS", newCount.toString(), if (newCount > 0) copper else forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(4), dp(8)) })
+        overview.addView(statCard("EM PREPARAÇÃO", preparingCount.toString(), if (preparingCount > 0) copper else forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(2), 0, dp(2), dp(8)) })
+        overview.addView(statCard("PRONTOS", readyCount.toString(), if (readyCount > 0) green else forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(4), 0, 0, dp(8)) })
+        container.addView(overview)
+        container.addView(label(
+            "${statuses.size} pedido(s) registado(s) · $activeCount ativo(s) · $finishedCount concluído(s) ou cancelado(s)",
+            10.5f, false, muted
+        ))
+        addGap(container, 8)
+    }
+
+    private fun filterChip(
+        title: String,
+        selected: Boolean,
+        action: () -> Unit
+    ): TextView = label(
+        title,
+        11.5f,
+        true,
+        if (selected) forestDeep else muted
+    ).apply {
+        gravity = Gravity.CENTER
+        minHeight = dp(38)
+        setPadding(dp(13), dp(8), dp(13), dp(8))
+        background = rippleBackground(if (selected) copperPale else white, 18)
+        contentDescription = if (selected) "Filtro $title selecionado" else "Aplicar filtro $title"
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { action() }
+    }
+
+    private fun statusBadge(
+        text: String,
+        foreground: Int,
+        backgroundColor: Int,
+        textSize: Float = 9.5f
+    ): TextView = label(text, textSize, true, foreground).apply {
+        gravity = Gravity.CENTER
+        maxLines = 1
+        ellipsize = android.text.TextUtils.TruncateAt.END
+        letterSpacing = 0.02f
+        setPadding(dp(8), dp(6), dp(8), dp(6))
+        background = rounded(backgroundColor, 11)
+    }
+
+    private fun bottomNavigationItem(
+        page: String,
+        selected: Boolean,
+        action: () -> Unit
+    ): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER
+        setPadding(dp(3), dp(3), dp(3), dp(3))
+        background = rippleBackground(if (selected) copperPale else white, 12)
+        contentDescription = if (selected) "$page, selecionado" else "Abrir secção $page"
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { action() }
+
+        addView(View(this@MainActivity).apply {
+            background = rounded(if (selected) copper else white, 4)
+        }, LinearLayout.LayoutParams(dp(20), dp(3)))
+
+        addView(TextView(this@MainActivity).apply {
+            text = pageGlyph(page)
+            textSize = 17f
+            gravity = Gravity.CENTER
+            setTextColor(if (selected) forestDeep else muted)
+        }, LinearLayout.LayoutParams(-2, dp(21)))
+
+        addView(label(page, 10.5f, selected, if (selected) forestDeep else muted).apply {
+            gravity = Gravity.CENTER
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        })
+    }
+
     private fun pageIntro(container: LinearLayout, title: String, subtitle: String) {
-        container.addView(label("Gestão de restaurante", 10.5f, true, forestSoft))
-        addGap(container, 5)
-        container.addView(label(title, 27f, true, forestDeep))
-        addGap(container, 5)
-        container.addView(label(subtitle, 14f, false, muted))
+        container.addView(label("STUDIOMESA  /  RESTAURANTE", 9.5f, true, forestSoft).apply {
+            letterSpacing = 0.08f
+        })
+        addGap(container, 6)
+        container.addView(label(title, 25f, true, forestDeep).apply {
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        })
+        addGap(container, 4)
+        container.addView(label(subtitle, 13f, false, muted))
     }
 
     private fun sectionHeading(container: LinearLayout, title: String, subtitle: String) {
-        container.addView(label(title, 18f, true, forestDeep))
+        container.addView(label(title, 17f, true, forestDeep))
         addGap(container, 3)
-        container.addView(label(subtitle, 12.5f, false, muted))
-        addGap(container, 10)
+        container.addView(label(subtitle, 12f, false, muted))
+        addGap(container, 9)
+    }
+
+    private fun addActionPair(
+        container: LinearLayout,
+        primaryTitle: String,
+        primaryAction: () -> Unit,
+        secondaryTitle: String? = null,
+        secondaryAction: (() -> Unit)? = null
+    ) {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        if (secondaryTitle != null && secondaryAction != null) {
+            row.addView(
+                secondaryButton(secondaryTitle, secondaryAction),
+                LinearLayout.LayoutParams(0, dp(48), 1f).apply {
+                    setMargins(0, 0, dp(5), 0)
+                }
+            )
+        }
+        val primaryWidth = if (secondaryTitle != null && secondaryAction != null) 0 else -1
+        val primaryWeight = if (primaryWidth == 0) 1f else 0f
+        row.addView(
+            primaryButton(primaryTitle, primaryAction),
+            LinearLayout.LayoutParams(primaryWidth, dp(48), primaryWeight).apply {
+                if (primaryWeight > 0f) setMargins(dp(5), 0, 0, 0)
+            }
+        )
+        container.addView(row, LinearLayout.LayoutParams(-1, -2))
+    }
+
+    private fun homeActionTile(title: String, subtitle: String, destination: String): LinearLayout {
+        val tile = makeCard(13, white).apply {
+            background = rippleBackground(white, 18)
+            elevation = dp(1).toFloat()
+            minimumHeight = dp(116)
+            isClickable = true
+            isFocusable = true
+            contentDescription = "Abrir $title"
+            setOnClickListener {
+                activePage = destination
+                renderApp()
+            }
+        }
+
+        val titleRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        titleRow.addView(TextView(this).apply {
+            text = pageGlyph(destination)
+            textSize = 18f
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setTextColor(forestDeep)
+            background = rounded(paleGreen, 12)
+        }, LinearLayout.LayoutParams(dp(38), dp(38)))
+
+        titleRow.addView(label(title, 13.5f, true, forestDeep).apply {
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(dp(9), 0, 0, 0)
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        tile.addView(titleRow)
+
+        addGap(tile, 9)
+        tile.addView(label(subtitle, 11.5f, false, muted).apply {
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        })
+        addGap(tile, 8)
+        tile.addView(label("ABRIR  ↗", 9f, true, forestSoft))
+        return tile
     }
 
     private fun actionCard(parent: LinearLayout, number: String, title: String, subtitle: String, actionText: String, action: () -> Unit) {
@@ -7205,11 +8392,17 @@ class MainActivity : Activity() {
 
     private fun statCard(title: String, value: String, accent: Int): LinearLayout {
         val card = makeCard(14)
-        card.addView(label(title, 9.5f, true, muted))
-        addGap(card, 7)
-        card.addView(label(value, 24f, true, forestDeep))
-        addGap(card, 7)
-        card.addView(View(this).apply { setBackgroundColor(accent) }, LinearLayout.LayoutParams(dp(26), dp(3)))
+        card.addView(label(title, 9f, true, muted).apply {
+            maxLines = 2
+        })
+        addGap(card, 6)
+        card.addView(label(value, 23f, true, forestDeep).apply {
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        })
+        addGap(card, 8)
+        card.addView(View(this).apply { setBackgroundColor(accent) },
+            LinearLayout.LayoutParams(dp(30), dp(3)))
         return card
     }
 
@@ -7298,6 +8491,19 @@ class MainActivity : Activity() {
             background = rippleBackground(copper, 15)
             elevation = dp(1).toFloat()
             setPadding(dp(12), dp(3), dp(12), dp(3))
+            setOnClickListener { action() }
+        }
+
+    private fun dangerButton(title: String, action: () -> Unit): Button =
+        Button(this).apply {
+            text = title
+            textSize = 11.5f
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            isAllCaps = false
+            setTextColor(red)
+            background = rippleBackground(paleRed, 14)
+            elevation = 0f
+            setPadding(dp(8), dp(2), dp(8), dp(2))
             setOnClickListener { action() }
         }
 
