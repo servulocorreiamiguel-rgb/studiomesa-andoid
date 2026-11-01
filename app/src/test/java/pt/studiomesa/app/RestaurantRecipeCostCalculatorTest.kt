@@ -81,6 +81,30 @@ class RestaurantRecipeCostCalculatorTest {
     }
 
     @Test
+    fun rejectsIngredientAndRecipeCostsAboveSupportedMoneyRange() {
+        assertThrows(IllegalArgumentException::class.java) {
+            RestaurantRecipeCostCalculator.estimate(
+                listOf(
+                    RestaurantRecipeCostInput(
+                        "expensive",
+                        BigDecimal("999999999"),
+                        BigDecimal.ZERO,
+                        BigDecimal("999999999.9999")
+                    )
+                )
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            RestaurantRecipeCostCalculator.estimate(
+                listOf(
+                    RestaurantRecipeCostInput("first", BigDecimal("1"), BigDecimal.ZERO, BigDecimal("600000000")),
+                    RestaurantRecipeCostInput("second", BigDecimal("1"), BigDecimal.ZERO, BigDecimal("600000000"))
+                )
+            )
+        }
+    }
+
+    @Test
     fun rejectsDuplicateIngredientsAndInvalidCosts() {
         assertThrows(IllegalArgumentException::class.java) {
             RestaurantRecipeCostCalculator.estimate(
