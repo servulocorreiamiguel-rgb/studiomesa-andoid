@@ -644,33 +644,15 @@ class MainActivity : Activity() {
             elevation = dp(6).toFloat()
         }
         listOf("Início", "Mesas", "Pedidos").forEach { page ->
-            val selected = activePage == page
-            val item = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
-                setPadding(dp(3), dp(3), dp(3), dp(3))
-                background = rounded(if (selected) copperPale else white, 12)
-                contentDescription = "Abrir secção " + page
-                isClickable = true
-                isFocusable = true
-                setOnClickListener {
+            nav.addView(
+                bottomNavigationItem(page, activePage == page) {
                     activePage = page
                     renderApp()
+                },
+                LinearLayout.LayoutParams(0, dp(54), 1f).apply {
+                    setMargins(dp(3), 0, dp(3), 0)
                 }
-            }
-            item.addView(TextView(this).apply {
-                text = pageGlyph(page)
-                textSize = 17f
-                gravity = Gravity.CENTER
-                setTextColor(if (selected) forestDeep else muted)
-            }, LinearLayout.LayoutParams(-2, dp(21)))
-            item.addView(label(page, 10.5f, true, if (selected) forestDeep else muted).apply {
-                gravity = Gravity.CENTER
-                maxLines = 1
-            })
-            nav.addView(item, LinearLayout.LayoutParams(0, dp(52), 1f).apply {
-                setMargins(dp(3), 0, dp(3), 0)
-            })
+            )
         }
         appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(60)))
         }
@@ -3604,33 +3586,15 @@ class MainActivity : Activity() {
         }
         val customerPages = if (hasCalculator) listOf("Cartão", "Carta", "Reservas", "Conta") else listOf("Cartão", "Carta", "Conta")
         customerPages.forEach { page ->
-            val selected = activeCustomerPage == page
-            val item = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
-                setPadding(dp(3), dp(3), dp(3), dp(3))
-                background = rippleBackground(if (selected) paleGreen else white, 12)
-                contentDescription = "Abrir secção " + page
-                isClickable = true
-                isFocusable = true
-                setOnClickListener {
+            nav.addView(
+                bottomNavigationItem(page, activeCustomerPage == page) {
                     activeCustomerPage = page
                     renderCustomerApp()
+                },
+                LinearLayout.LayoutParams(0, dp(54), 1f).apply {
+                    setMargins(dp(3), 0, dp(3), 0)
                 }
-            }
-            item.addView(TextView(this).apply {
-                text = pageGlyph(page)
-                textSize = 17f
-                gravity = Gravity.CENTER
-                setTextColor(if (selected) forestDeep else muted)
-            }, LinearLayout.LayoutParams(-2, dp(21)))
-            item.addView(label(page, 10.5f, true, if (selected) forestDeep else muted).apply {
-                gravity = Gravity.CENTER
-                maxLines = 1
-            })
-            nav.addView(item, LinearLayout.LayoutParams(0, dp(52), 1f).apply {
-                setMargins(dp(3), 0, dp(3), 0)
-            })
+            )
         }
         appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(60)))
         setContentView(appRoot)
@@ -7228,6 +7192,38 @@ class MainActivity : Activity() {
             }
         }
         dialog.show()
+    }
+
+    private fun bottomNavigationItem(
+        page: String,
+        selected: Boolean,
+        action: () -> Unit
+    ): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        gravity = Gravity.CENTER
+        setPadding(dp(3), dp(3), dp(3), dp(3))
+        background = rippleBackground(if (selected) copperPale else white, 12)
+        contentDescription = if (selected) "$page, selecionado" else "Abrir secção $page"
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { action() }
+
+        addView(View(this@MainActivity).apply {
+            background = rounded(if (selected) copper else white, 4)
+        }, LinearLayout.LayoutParams(dp(20), dp(3)))
+
+        addView(TextView(this@MainActivity).apply {
+            text = pageGlyph(page)
+            textSize = 17f
+            gravity = Gravity.CENTER
+            setTextColor(if (selected) forestDeep else muted)
+        }, LinearLayout.LayoutParams(-2, dp(21)))
+
+        addView(label(page, 10.5f, selected, if (selected) forestDeep else muted).apply {
+            gravity = Gravity.CENTER
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        })
     }
 
     private fun pageIntro(container: LinearLayout, title: String, subtitle: String) {
