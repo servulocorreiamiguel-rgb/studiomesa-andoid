@@ -5504,6 +5504,7 @@ class MainActivity : Activity() {
         while (assistantConversation.size > 8) assistantConversation.removeAt(0)
         assistantQuestion = ""
         assistantAnswer = answer
+        assistantInsightsExpanded = false
         renderApp()
     }
 
@@ -5557,7 +5558,16 @@ class MainActivity : Activity() {
             background = rounded(paper, 15)
             minLines = 1
             maxLines = 3
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEND
             setText(assistantQuestion)
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) {
+                    sendAssistantMessage(text.toString())
+                    true
+                } else {
+                    false
+                }
+            }
         }
         row.addView(questionField, LinearLayout.LayoutParams(0, dp(52), 1f).apply {
             setMargins(0, 0, dp(8), 0)
