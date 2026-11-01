@@ -29,6 +29,10 @@ SECURITY DEFINER
 SET search_path TO ''
 AS $function$
 BEGIN
+  IF (SELECT auth.uid()) IS NULL THEN
+    RAISE EXCEPTION 'É necessário iniciar sessão.';
+  END IF;
+
   IF TG_OP = 'INSERT' THEN
     IF NEW.unit_cost_per_unit IS NOT NULL
        AND NOT private.is_restaurant_owner(NEW.restaurant_id) THEN
