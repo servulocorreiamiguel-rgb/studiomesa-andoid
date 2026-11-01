@@ -4215,7 +4215,11 @@ class MainActivity : Activity() {
             top.addView(statusBadge(
                 status,
                 if (status == "Confirmada") green else if (status == "Cancelada" || status == "Concluída" || status == "Não compareceu") muted else forestSoft,
-                if (status == "Confirmada") paleGreen else copperPale
+                when (status) {
+                    "Confirmada" -> paleGreen
+                    "Cancelada", "Concluída", "Não compareceu" -> paper
+                    else -> copperPale
+                }
             ))
             card.addView(top)
             addGap(card, 6)
