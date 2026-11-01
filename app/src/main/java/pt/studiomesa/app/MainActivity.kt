@@ -6558,19 +6558,28 @@ class MainActivity : Activity() {
             addGap(container, 6)
         }
 
-        val periods = SalesAnalysisPeriod.values()
-        container.addView(
-            secondaryButton("Período da análise: ${selectedAnalysisPeriod.label}") {
-                AlertDialog.Builder(this)
-                    .setTitle("Seleciona o período")
-                    .setItems(periods.map { it.label }.toTypedArray()) { _, selected ->
-                        selectedAnalysisPeriod = periods[selected]
-                        renderApp()
-                    }
-                    .show()
-            },
-            LinearLayout.LayoutParams(-1, dp(46))
-        )
+        val periods = SalesAnalysisPeriod.values().toList()
+        val periodScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val periodRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        periods.forEach { period ->
+            periodRow.addView(
+                filterChip(period.label, selectedAnalysisPeriod == period) {
+                    selectedAnalysisPeriod = period
+                    renderApp()
+                },
+                LinearLayout.LayoutParams(-2, dp(42)).apply {
+                    setMargins(0, 0, dp(6), 0)
+                }
+            )
+        }
+        periodScroll.addView(periodRow)
+        container.addView(periodScroll, LinearLayout.LayoutParams(-1, dp(46)))
         addGap(container, 6)
         container.addView(label(
             "O período é calculado pela data de criação do pedido e pelo fuso horário local deste dispositivo. O valor é nominal, não uma confirmação de pagamento.",
