@@ -247,13 +247,19 @@ class SupabaseSecurityAuditTests(unittest.TestCase):
 
         errors, function_count, table_count = audit_migration_sql(sql)
         self.assertEqual([], errors)
-        self.assertEqual(4, function_count)
+        self.assertEqual(5, function_count)
         self.assertEqual(0, table_count)
         self.assertIn("rs.role = 'owner'", sql)
         self.assertIn(
             "REVOKE SELECT ON TABLE public.restaurant_inventory_items FROM authenticated;",
             sql,
         )
+        self.assertIn(
+            "REVOKE SELECT ON TABLE public.restaurant_inventory_movements FROM authenticated;",
+            sql,
+        )
+        self.assertIn("client_request_id", sql)
+        self.assertIn("created_by", sql)
         self.assertIn(
             "REVOKE SELECT ON TABLE public.restaurant_inventory_movements FROM authenticated;",
             sql,
