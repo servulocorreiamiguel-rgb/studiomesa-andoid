@@ -5889,8 +5889,6 @@ class MainActivity : Activity() {
         container.addView(toggle, cardParams())
         if (!economicManagerEnabled) return
 
-        renderMenuCostComparison(container)
-
         if (hasRemoteRestaurant()) {
             val encryptedStore = SecureEconomicStore(this)
             val savedCopyExists = encryptedStore.hasSaved(scope)
@@ -6051,6 +6049,10 @@ class MainActivity : Activity() {
         }
         container.addView(monthly, cardParams())
         toolTargets["Indicadores mensais"] = monthly
+
+        // Render after the monthly target field has populated the owner's chosen percentage.
+        addGap(container, 6)
+        renderMenuCostComparison(container)
 
         addGap(container, 6)
         val scenario = makeCard(15)
