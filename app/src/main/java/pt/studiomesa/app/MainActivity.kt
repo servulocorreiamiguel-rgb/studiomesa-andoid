@@ -124,6 +124,7 @@ class MainActivity : Activity() {
     private var customerReservationsLoading = false
     private var customerReservationsLoadError = false
     private var selectedCustomerReservationFilter = "Todas"
+    private var customerReservationSearchQuery = ""
 
     private val flavor = BuildConfig.FLAVOR.lowercase(Locale.ROOT)
     private val isCustomerApp = flavor.contains("cliente")
@@ -3667,7 +3668,46 @@ class MainActivity : Activity() {
         }
         customerFilterScroll.addView(customerFilterRow)
         container.addView(customerFilterScroll, LinearLayout.LayoutParams(-1, dp(46)))
-        addGap(container, 10)
+        addGap(container, 6)
+
+        val customerReservationSearchCard = makeCard(13)
+        customerReservationSearchCard.addView(label("PESQUISAR RESERVA", 9.5f, true, forestSoft))
+        addGap(customerReservationSearchCard, 5)
+        val customerReservationSearchField = inputField(
+            "Data (dd/mm/aaaa) ou número de pessoas",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        ).apply {
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                    customerReservationSearchQuery = text.toString().trim()
+                    renderCustomerApp()
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+        customerReservationSearchField.setText(customerReservationSearchQuery)
+        customerReservationSearchCard.addView(customerReservationSearchField, fieldParams())
+        val customerReservationSearchActions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        customerReservationSearchActions.addView(primaryButton("Pesquisar") {
+            customerReservationSearchQuery = customerReservationSearchField.text.toString().trim()
+            renderCustomerApp()
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+            setMargins(0, 0, dp(5), 0)
+        })
+        customerReservationSearchActions.addView(secondaryButton("Limpar") {
+            customerReservationSearchQuery = ""
+            renderCustomerApp()
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+            setMargins(dp(5), 0, 0, 0)
+        })
+        customerReservationSearchCard.addView(customerReservationSearchActions)
+        container.addView(customerReservationSearchCard, cardParams())
 
         val filteredCustomerReservations = when (selectedCustomerReservationFilter) {
             "Ativas" -> allCustomerReservations.filter { it.optString("status") in setOf("Pendente", "Confirmada") }
@@ -3688,8 +3728,27 @@ class MainActivity : Activity() {
         }
 
         val displayFormat = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "PT"))
+        val searchDateFormat = SimpleDateFormat("dd/MM/yyyy", Locale("pt", "PT"))
         val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US)
-        filteredCustomerReservations.forEach { reservation ->
+        val customerReservationQuery = normalizeCustomerMenuSearch(customerReservationSearchQuery)
+        val visibleCustomerReservations = filteredCustomerReservations.filter { reservation ->
+            val rawDate = reservation.optString("reservation_at")
+            val timestamp = parseOrderTimestamp(rawDate)
+            val localDate = if (timestamp > 0L) searchDateFormat.format(Date(timestamp)) else ""
+            customerReservationQuery.isBlank() || normalizeCustomerMenuSearch(
+                "$rawDate $localDate ${reservation.optInt("party_size", 1)}"
+            ).contains(customerReservationQuery)
+        }
+        container.addView(label(
+            "${visibleCustomerReservations.size} de ${filteredCustomerReservations.size} reserva(s)",
+            11f, true, forestSoft
+        ))
+        addGap(container, 6)
+        if (visibleCustomerReservations.isEmpty()) {
+            container.addView(emptyCard("Não encontrámos reservas com esses dados. Altera a pesquisa ou limpa o filtro."))
+            return
+        }
+        visibleCustomerReservations.forEach { reservation ->
             val reservationId = reservation.optString("id")
             val status = reservation.optString("status", "Pendente")
             val rawDate = reservation.optString("reservation_at")
