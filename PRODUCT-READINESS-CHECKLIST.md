@@ -94,6 +94,11 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [x] O proprietário pode guardar por opção os campos económicos numa cópia local cifrada com Android Keystore, isolada por conta/restaurante e excluída das cópias automáticas; o modo de demonstração não oferece persistência.
 - [ ] Testar a cópia cifrada em Android real, incluindo recuperação, isolamento entre contas/restaurantes, corrupção do ficheiro, eliminação e comportamento após reinstalação/limpeza de dados.
 - [ ] Executar os casos unitários e de interface do simulador, metas diárias, permissões de proprietário e as restantes ferramentas apenas na ronda final, conforme TEST-PLAN.md.
+- [x] A ficha técnica mostra ao proprietário o custo estimado por dose a partir do custo de compra atual por unidade nativa de cada artigo de stock e do desperdício configurado.
+- [x] Quando falta um custo de compra, mostra apenas o subtotal conhecido e identifica os ingredientes sem custo; não trata um valor em falta como zero nem sugere preço incompleto.
+- [x] A receita completa pode ser transferida para a ferramenta «Custo por receita e dose» do Gestor económico, evitando reintrodução manual; os valores permanecem na memória da sessão até o proprietário decidir guardá-los na cópia cifrada.
+- [x] Os custos detalhados da ficha técnica estão limitados à conta owner; o staff não recebe esta apresentação na interface.
+- [ ] Executar os casos RCOST-01..14 em JUnit/Android e confirmar isolamento de owner/staff com contas de teste reais, atualização do custo atual e preservação dos snapshots históricos.
 - [ ] O assistente continua determinístico/local, não é um LLM generativo nem consultor contabilístico certificado; confirmar que a apresentação comercial deixa esta limitação clara.
 
 ## Administração e equipa
