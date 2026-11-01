@@ -8083,6 +8083,10 @@ class MainActivity : Activity() {
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val selected = stockItems.getOrNull(ingredientSpinner.selectedItemPosition)
+                if (selected == null) {
+                    ingredientSpinner.requestFocus()
+                    return@setOnClickListener
+                }
                 val enteredQuantity = try {
                     RestaurantRecipeInputValidator.parseQuantityPerPortion(
                         quantity.text.toString()
@@ -8109,10 +8113,6 @@ class MainActivity : Activity() {
                     RestaurantRecipeInputValidator.parseWastePercent(waste.text.toString())
                 } catch (error: IllegalArgumentException) {
                     waste.error = error.message ?: "Percentagem inválida."
-                    return@setOnClickListener
-                }
-                if (selected == null) {
-                    ingredientSpinner.requestFocus()
                     return@setOnClickListener
                 }
                 runBackend({
