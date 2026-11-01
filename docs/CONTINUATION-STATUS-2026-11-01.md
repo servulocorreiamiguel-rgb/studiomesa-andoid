@@ -189,3 +189,7 @@ A validação de compilação e execução dos seis testes continua pendente; os
 - As falhas e respostas tardias das operações também são filtradas pelo âmbito da conta e do restaurante. Os dados da sessão atual não são substituídos por resultados de uma sessão anterior.
 
 **Validação desta continuação:** as alterações foram gravadas e relidas no GitHub. Os testes de paginação e isolamento continuam escritos, não executados. Não houve CI, Gradle, Lint, compilação APK/AAB, teste físico nem alteração ao Supabase alojado.
+
+
+- A saída de sessão e a eliminação da conta invalidam a geração de atualização de reservas em curso, limpam a hora da última consulta e repõem filtros/estados das duas variantes. Assim, voltar a iniciar sessão com a mesma conta não fica bloqueado por uma consulta antiga que ainda estivesse pendente.
+- `ReservationRefreshScope.ownsRefreshRequest` centraliza a validação da geração e tem um teste adicional para garantir que uma resposta antiga não é dona do bloqueio depois de começar outra atualização na mesma conta/restaurante.
