@@ -213,6 +213,27 @@ class RestaurantEconomicManagerTest {
         }
     }
 
+    @Test fun recipeCostAllowsAnExplicitZeroCostIngredientWhenTheRecipeTotalIsPositive() {
+        val result = RestaurantEconomicManager.costRecipe(
+            "Agua | 0,2 | 0 | 0\nCafe | 0,02 | 18,00 | 0",
+            amount("30")
+        )
+        assertEquals(amount("0.36"), result.totalCostPerPortion)
+        assertEquals(amount("1.20"), result.suggestedPriceAtTarget)
+    }
+
+    @Test fun recipeCostRejectsARecipeWhoseEveryIngredientHasZeroCost() {
+        try {
+            RestaurantEconomicManager.costRecipe(
+                "Agua | 0,2 | 0 | 0",
+                amount("30")
+            )
+            fail("A recipe with no known cost must not produce a selling price.")
+        } catch (_: IllegalArgumentException) {
+            // Expected validation failure.
+        }
+    }
+
     @Test fun reorderQuantityAccountsForLeadTimeAndSafetyStockWithoutOrdering() {
         val result = RestaurantEconomicManager.recommendReorder("5 | 3 | 4 | 2")
         assertEquals(amount("18.000"), result.targetStockForLeadAndSafetyDays)
