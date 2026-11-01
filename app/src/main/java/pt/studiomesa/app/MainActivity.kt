@@ -634,27 +634,27 @@ class MainActivity : Activity() {
                 scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
             }
         } else {
-        // Keep the three high-frequency destinations visible on phones.
-        // Secondary destinations remain available from the hamburger drawer above.
-        val nav = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(6), dp(4), dp(6), dp(4))
-            setBackgroundColor(white)
-            elevation = dp(6).toFloat()
-        }
-        listOf("Início", "Mesas", "Pedidos").forEach { page ->
-            nav.addView(
-                bottomNavigationItem(page, activePage == page) {
-                    activePage = page
-                    renderApp()
-                },
-                LinearLayout.LayoutParams(0, dp(54), 1f).apply {
-                    setMargins(dp(3), 0, dp(3), 0)
-                }
-            )
-        }
-        appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(60)))
+            // Keep the three high-frequency destinations visible on phones.
+            // Secondary destinations remain available from the hamburger drawer above.
+            val nav = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(6), dp(4), dp(6), dp(4))
+                setBackgroundColor(white)
+                elevation = dp(6).toFloat()
+            }
+            listOf("Início", "Mesas", "Pedidos").forEach { page ->
+                nav.addView(
+                    bottomNavigationItem(page, activePage == page) {
+                        activePage = page
+                        renderApp()
+                    },
+                    LinearLayout.LayoutParams(0, dp(54), 1f).apply {
+                        setMargins(dp(3), 0, dp(3), 0)
+                    }
+                )
+            }
+            appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(60)))
         }
         setContentView(appRoot)
         updateKitchenAutoRefresh()
@@ -5627,7 +5627,7 @@ class MainActivity : Activity() {
 
     private fun renderAssistant(container: LinearLayout) {
         val snapshot = assistantSnapshot()
-        pageIntro(container, "Assistente StudioMesa", "O apoio à gestão do restaurante, numa conversa.");
+        pageIntro(container, "Assistente StudioMesa", "O apoio à gestão do restaurante, numa conversa.")
         addGap(container, 4)
 
         val assistantIdentity = makeCard(12, forest)
@@ -5658,8 +5658,6 @@ class MainActivity : Activity() {
                 setMargins(0, 0, 0, dp(8))
             })
         }
-
-
 
         val chatPanel = makeCard(13, Color.rgb(242, 244, 239))
         if (assistantConversation.isEmpty()) {
@@ -5734,10 +5732,7 @@ class MainActivity : Activity() {
             quickRowTwo.addView(assistantPromptButton("Reservas pendentes", "Há reservas pendentes por confirmar?"),
                 LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(dp(5), 0, 0, 0) })
             container.addView(quickRowTwo, LinearLayout.LayoutParams(-1, -2))
-
         }
-
-
 
         addGap(container, 8)
         container.addView(secondaryButton(
