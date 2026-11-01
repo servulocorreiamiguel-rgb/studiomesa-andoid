@@ -6405,10 +6405,12 @@ class MainActivity : Activity() {
                     throw IllegalStateException("A conta ou o restaurante mudou. Atualiza novamente.")
                 }
 
+                val menu = SupabaseApi.listMenuItemsForEconomicAnalysis(token, restaurantId)
                 val recipes = SupabaseApi.listRestaurantRecipes(token, restaurantId)
                 val ingredients = SupabaseApi.listRestaurantRecipeIngredients(token, restaurantId)
                 val inventory = SupabaseApi.listInventoryItems(token, restaurantId)
-                if (recipes.length() > 500 || ingredients.length() > 3000 || inventory.length() > 2000) {
+                if (menu.length() > 500 || recipes.length() > 500 ||
+                    ingredients.length() > 3000 || inventory.length() > 2000) {
                     throw IllegalStateException(
                         "O inventário ou as fichas técnicas excedem o limite desta análise. Divide a carta ou pede uma análise paginada."
                     )
@@ -6416,6 +6418,7 @@ class MainActivity : Activity() {
                 JSONObject()
                     .put("restaurant_id", restaurantId)
                     .put("account_id", accountId)
+                    .put("menu", menu)
                     .put("recipes", recipes)
                     .put("ingredients", ingredients)
                     .put("inventory", inventory)
@@ -6447,7 +6450,7 @@ class MainActivity : Activity() {
     }
 
     private fun buildMenuCostComparisonInputs(
-        entries: List<MenuEntry>,
+        menuItems: JSONArray,
         snapshot: JSONObject?
     ): List<MenuCostComparisonInput> {
         val recipes = snapshot?.optJSONArray("recipes") ?: JSONArray()
@@ -6477,11 +6480,17 @@ class MainActivity : Activity() {
             if (id.isNotBlank()) inventoryById[id] = item
         }
 
-        return entries.map { entry ->
-            val recipe = entry.id?.let { recipesByMenuItem[it] }
+        return (0 until menuItems.length()).mapNotNull { index ->
+            val menuItem = menuItems.optJSONObject(index) ?: return@mapNotNull null
+            val menuItemId = menuItem.optString("id")
+            val itemName = menuItem.optString("name").trim()
+            if (itemName.isBlank()) return@mapNotNull null
+
+            val recipe = menuItemId.takeIf { it.isNotBlank() }?.let { recipesByMenuItem[it] }
             val recipeExists = recipe != null
-            val recipeIsActiveApproved = recipe?.optBoolean("is_active", false) == true &&
-                recipe.optBoolean("requires_review", false).not()
+            val recipeIsActiveApproved = recipe != null &&
+                recipe.optBoolean("is_active", false) &&
+                !recipe.optBoolean("requires_review", false)
             var recipeEstimate: RestaurantRecipeCostEstimate? = null
             var recipeUnitsCompatible = true
 
@@ -6531,13 +6540,18 @@ class MainActivity : Activity() {
                 }
             }
 
-            val manualCost = entry.cost.takeIf { it.isFinite() }?.let { BigDecimal.valueOf(it) }
-            val price = entry.price.takeIf { it.isFinite() }?.let { BigDecimal.valueOf(it) }
+            val manualCost = if (menuItem.has("cost") && !menuItem.isNull("cost")) {
+                runCatching { BigDecimal(menuItem.optString("cost")) }.getOrNull()
+            } else null
+            val price = if (menuItem.has("price") && !menuItem.isNull("price")) {
+                runCatching { BigDecimal(menuItem.optString("price")) }.getOrNull()
+            } else null
             val recipeIsComplete = recipeEstimate?.isComplete == true && recipeUnitsCompatible
             MenuCostComparisonInput(
-                itemName = entry.name,
+                itemName = itemName,
                 sellingPrice = price,
                 recordedUnitCost = manualCost,
+                menuItemId = menuItemId.takeIf { it.isNotBlank() },
                 recipeExists = recipeExists,
                 recipeIsActiveApproved = recipeIsActiveApproved,
                 recipeCostPerPortion = recipeEstimate?.knownCostPerPortion?.takeIf { recipeIsComplete },
@@ -6556,19 +6570,8 @@ class MainActivity : Activity() {
                 it.optString("account_id") == accountId
         }
         val entries = if (hasRemoteRestaurant()) {
-            val menu = remoteMenuItems()
-            (0 until menu.length()).mapNotNull { index ->
-                val item = menu.optJSONObject(index) ?: return@mapNotNull null
-                val name = item.optString("name").trim()
-                if (name.isBlank()) return@mapNotNull null
-                val price = if (item.has("price") && !item.isNull("price")) {
-                    runCatching { BigDecimal(item.optString("price")) }.getOrNull()
-                } else null
-                val cost = if (item.has("cost") && !item.isNull("cost")) {
-                    runCatching { BigDecimal(item.optString("cost")) }.getOrNull()
-                } else null
-                MenuCostComparisonInput(name, price, cost)
-            }
+            val currentMenu = recipeSnapshot?.optJSONArray("menu") ?: remoteMenuItems()
+            buildMenuCostComparisonInputs(currentMenu, recipeSnapshot)
         } else {
             store.getMenu().map { item ->
                 MenuCostComparisonInput(
