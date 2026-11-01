@@ -6877,10 +6877,7 @@ class MainActivity : Activity() {
                 }
                 if (menuItemPrice != null && menuItemPrice.signum() > 0 &&
                     estimate.ingredientsWithoutCost < estimate.totalIngredients) {
-                    val ratio = estimate.knownCostPerPortion
-                        .multiply(BigDecimal("100"))
-                        .divide(menuItemPrice, 4, java.math.RoundingMode.HALF_UP)
-                        .setScale(1, java.math.RoundingMode.HALF_UP)
+                    val ratio = estimate.knownIngredientCostPercent(menuItemPrice)
                     val ratioText = NumberFormat.getNumberInstance(Locale("pt", "PT")).apply {
                         minimumFractionDigits = 1
                         maximumFractionDigits = 1
@@ -6895,7 +6892,7 @@ class MainActivity : Activity() {
                         11f, true, forestDeep
                     ))
                     if (estimate.isComplete) {
-                        val afterIngredients = menuItemPrice.subtract(estimate.knownCostPerPortion)
+                        val afterIngredients = estimate.amountAfterIngredients(menuItemPrice)
                         costCard.addView(label(
                             if (afterIngredients.signum() >= 0) {
                                 "Depois dos ingredientes restam ${formatEuro(afterIngredients)} por dose para os restantes custos. Não é lucro líquido."
