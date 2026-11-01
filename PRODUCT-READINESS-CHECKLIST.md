@@ -151,3 +151,11 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 ## Comercialização e preço
 
 Os valores de referência atuais são 890 €, 1 490 € e 1 690 €. Ainda não constituem preços validados com clientes e o âmbito comercial tem de esclarecer pagamento único ou recorrente, alojamento, suporte, atualizações, configuração inicial e impostos aplicáveis. Não prometer uma funcionalidade marcada como pendente.
+
+
+## Disponibilidade do alojamento gratuito
+
+- [ ] Preparado na branch candidata um workflow GitHub Actions que executa uma consulta PostgreSQL apenas de leitura (`SELECT 1`) a cada 8 horas. Não cria pedidos, reservas, movimentos de stock ou qualquer registo comercial.
+- [ ] Antes de ativar: criar um utilizador PostgreSQL dedicado sem permissões nas tabelas/esquemas da aplicação; configurar o segredo GitHub `SUPABASE_HEALTHCHECK_DB_URL` com a ligação de sessão; rever backup/recuperação e integrar o workflow na branch principal.
+- [ ] Confirmar execuções agendadas e observar o estado do projeto durante pelo menos duas semanas. O Supabase não garante que um health check sintético, por si só, evite a pausa do plano Free; não prometer disponibilidade contínua com este mecanismo.
+- [ ] Antes de um restaurante depender comercialmente do serviço, avaliar o plano pago do Supabase, que não pausa projetos por inatividade.
