@@ -193,3 +193,13 @@ A validação de compilação e execução dos seis testes continua pendente; os
 
 - A saída de sessão e a eliminação da conta invalidam a geração de atualização de reservas em curso, limpam a hora da última consulta e repõem filtros/estados das duas variantes. Assim, voltar a iniciar sessão com a mesma conta não fica bloqueado por uma consulta antiga que ainda estivesse pendente.
 - `ReservationRefreshScope.ownsRefreshRequest` centraliza a validação da geração e tem um teste adicional para garantir que uma resposta antiga não é dona do bloqueio depois de começar outra atualização na mesma conta/restaurante.
+
+
+### Continuação — proteção da cache geral de operações
+
+- `cacheRemoteOperations` passa a guardar a conta que iniciou as consultas e só grava mesas, carta, pedidos e carimbos de sincronização se o token atual, a conta e o restaurante continuarem a corresponder à sessão inicial.
+- A sincronização manual tem uma geração própria. Só a geração que iniciou a operação pode alterar o estado de sucesso/erro ou a fila da interface; respostas antigas são ignoradas.
+- A mudança de restaurante, a saída de sessão e a eliminação da conta invalidam a geração e libertam o estado de sincronização. Uma atualização antiga não pode bloquear a atualização depois de voltar a iniciar sessão.
+- As chamadas de atualização feitas depois de criar/alterar mesas, pedidos ou artigos também beneficiam da validação final antes de substituir a cache partilhada.
+
+**Validação desta continuação:** revisão por leitura dos ficheiros e verificações de consistência no GitHub. Os testes continuam escritos e não executados; sem CI, compilação, Lint ou testes físicos. Não foi alterada a base de dados Supabase alojada.
