@@ -50,6 +50,8 @@ class MainActivity : Activity() {
     private var selectedCustomerMenuCategory = "Todas"
     private var managementMenuSearch = ""
     private var selectedManagementMenuCategory = "Todas"
+    private var inventorySearch = ""
+    private var selectedInventoryFilter = "Todos"
 
     private var activityResumed = false
     private var kitchenAutoRefreshScheduled = false
@@ -4886,6 +4888,73 @@ class MainActivity : Activity() {
         dialog.window?.setLayout(-1, dp(590))
     }
 
+    private fun addInventoryFilters(container: LinearLayout) {
+        val filters = listOf("Todos", "Esgotados", "Stock baixo", "Sem custo")
+        if (selectedInventoryFilter !in filters) selectedInventoryFilter = "Todos"
+        val filterCard = makeCard(13)
+        filterCard.addView(label("PESQUISAR E FILTRAR STOCK", 9.5f, true, forestSoft))
+        addGap(filterCard, 6)
+        val searchField = inputField(
+            "Nome do artigo ou unidade",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        ).apply {
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                    inventorySearch = text.toString().trim()
+                    renderApp()
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+        searchField.setText(inventorySearch)
+        filterCard.addView(searchField, fieldParams())
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        actions.addView(primaryButton("Pesquisar") {
+            inventorySearch = searchField.text.toString().trim()
+            renderApp()
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+            setMargins(0, 0, dp(5), 0)
+        })
+        actions.addView(secondaryButton("Limpar") {
+            inventorySearch = ""
+            selectedInventoryFilter = "Todos"
+            renderApp()
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+            setMargins(dp(5), 0, 0, 0)
+        })
+        filterCard.addView(actions)
+        addGap(filterCard, 7)
+        val scroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        filters.forEach { filter ->
+            row.addView(
+                filterChip(filter, selectedInventoryFilter == filter) {
+                    selectedInventoryFilter = filter
+                    renderApp()
+                },
+                LinearLayout.LayoutParams(-2, dp(42)).apply {
+                    setMargins(0, 0, dp(6), 0)
+                }
+            )
+        }
+        scroll.addView(row)
+        filterCard.addView(scroll, LinearLayout.LayoutParams(-1, dp(46)))
+        container.addView(filterCard, cardParams())
+        addGap(container, 5)
+    }
+
     private fun renderStock(container: LinearLayout) {
         inventoryPageContainer = container
         pageIntro(container, "Stock e inventário", "Quantidades, limites mínimos, movimentos e desperdício registado.")
@@ -4984,7 +5053,32 @@ class MainActivity : Activity() {
         ))
         container.addView(valuation, cardParams())
 
-        for (item in stockItems) {
+        addInventoryFilters(container)
+        val query = normalizeCustomerMenuSearch(inventorySearch)
+        val filteredStockItems = stockItems.filter { item ->
+            val quantity = item.optDouble("quantity", 0.0)
+            val threshold = item.optDouble("low_stock_threshold", 0.0)
+            val unitCost = if (item.isNull("unit_cost_per_unit")) null else
+                runCatching { BigDecimal(item.optString("unit_cost_per_unit")) }.getOrNull()
+            val matchesStatus = when (selectedInventoryFilter) {
+                "Esgotados" -> quantity <= 0.0
+                "Stock baixo" -> quantity > 0.0 && quantity <= threshold
+                "Sem custo" -> unitCost == null
+                else -> true
+            }
+            val matchesSearch = query.isBlank() || normalizeCustomerMenuSearch(
+                "${item.optString("name")} ${item.optString("unit")}"
+            ).contains(query)
+            matchesStatus && matchesSearch
+        }
+        container.addView(label("${filteredStockItems.size} de ${stockItems.size} artigo(s)", 11f, true, forestSoft))
+        addGap(container, 6)
+        if (filteredStockItems.isEmpty()) {
+            container.addView(emptyCard("Não há artigos de stock que correspondam à pesquisa e ao filtro selecionado."))
+            return
+        }
+
+        for (item in filteredStockItems) {
             val id = item.optString("id")
             val name = item.optString("name", "Artigo")
             val unit = item.optString("unit", "unidades")
