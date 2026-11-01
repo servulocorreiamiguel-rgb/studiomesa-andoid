@@ -6451,9 +6451,9 @@ class MainActivity : Activity() {
             },
             showProgress = false,
             onError = { error ->
-                menuRecipeCostRefreshLoading = false
                 val currentScope = "restaurant:${backendRestaurantId()}:${backendPrefs.getString("user_id", "").orEmpty()}"
                 if (requestedScope == currentScope && economicManagerEnabled) {
+                    menuRecipeCostRefreshLoading = false
                     menuRecipeCostRefreshFailed = true
                     renderApp()
                     Toast.makeText(
@@ -6464,11 +6464,11 @@ class MainActivity : Activity() {
                 }
             }
         ) { raw ->
-            menuRecipeCostRefreshLoading = false
             val currentScope = "restaurant:${backendRestaurantId()}:${backendPrefs.getString("user_id", "").orEmpty()}"
             if (requestedScope != currentScope || !economicManagerEnabled) {
                 return@runBackend
             }
+            menuRecipeCostRefreshLoading = false
             menuRecipeCostSnapshot = JSONObject(raw)
             menuRecipeCostScopeKey = requestedScope
             menuRecipeCostUpdatedAtMillis = System.currentTimeMillis()
