@@ -1874,6 +1874,9 @@ class MainActivity : Activity() {
             if (restaurant != null) {
                 val restaurantId = restaurant.optString("restaurant_id")
                 if (previousRestaurantId.isNotBlank() && previousRestaurantId != restaurantId) {
+                    remoteOperationsRefreshGeneration++
+                    remoteOperationsSyncInFlight = false
+                    remoteOperationsSyncFailed = false
                     reservationCache = JSONArray()
                     reservationsLoaded = false
                     reservationRefreshInFlightScope = null
@@ -1901,6 +1904,9 @@ class MainActivity : Activity() {
             } else {
                 // The server confirmed this account no longer belongs to a restaurant.
                 // Remove data that would otherwise remain on this device after revocation.
+                remoteOperationsRefreshGeneration++
+                remoteOperationsSyncInFlight = false
+                remoteOperationsSyncFailed = false
                 backendPrefs.edit()
                     .remove("remote_members_json")
                     .remove("remote_tables_json")
@@ -2819,6 +2825,9 @@ class MainActivity : Activity() {
                 Thread { runCatching { SupabaseApi.signOut(tokenToRevoke) } }.start()
             }
             secureSession.clear()
+            remoteOperationsRefreshGeneration++
+            remoteOperationsSyncInFlight = false
+            remoteOperationsSyncFailed = false
             store.clearLocalDemoData()
             backendPrefs.edit().putBoolean("local_demo_data_isolated_v1", true)
                 .remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
@@ -2899,6 +2908,9 @@ class MainActivity : Activity() {
             if (restaurantDeleted) "DELETED_RESTAURANT" else "DELETED_ACCOUNT"
         }) { result ->
             secureSession.clear()
+            remoteOperationsRefreshGeneration++
+            remoteOperationsSyncInFlight = false
+            remoteOperationsSyncFailed = false
             runCatching { pendingRequestIds.clearAll() }
             store.clearLocalDemoData()
             backendPrefs.edit()
@@ -3990,6 +4002,9 @@ class MainActivity : Activity() {
                     Thread { runCatching { SupabaseApi.signOut(tokenToRevoke) } }.start()
                 }
                 secureSession.clear()
+                remoteOperationsRefreshGeneration++
+                remoteOperationsSyncInFlight = false
+                remoteOperationsSyncFailed = false
                 store.clearCustomerLocalIdentity()
                 backendPrefs.edit()
                     .remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
