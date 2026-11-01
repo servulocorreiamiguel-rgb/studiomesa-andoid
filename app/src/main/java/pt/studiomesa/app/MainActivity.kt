@@ -1190,6 +1190,10 @@ class MainActivity : Activity() {
 
         if (hasRemoteRestaurant()) {
             val orders = remoteOrders()
+            val remoteStatuses = (0 until orders.length()).mapNotNull {
+                orders.optJSONObject(it)?.optString("status", "Aberto")
+            }
+            addOrderStatusOverview(container, remoteStatuses)
             if (orders.length() == 0) {
                 container.addView(emptyCard("Ainda não há pedidos registados no servidor. Cria o primeiro pedido para testar o fluxo."))
                 return
@@ -1267,6 +1271,7 @@ class MainActivity : Activity() {
         }
 
         val orders = store.getOrders()
+        addOrderStatusOverview(container, orders.map { it.status })
         if (orders.isEmpty()) {
             container.addView(emptyCard("Ainda não há pedidos registados. Cria um pedido de demonstração para experimentar o fluxo."))
             return
@@ -1343,6 +1348,10 @@ class MainActivity : Activity() {
 
         if (hasRemoteRestaurant()) {
             val orders = kitchenOrdersCache ?: remoteOrders()
+            val allStatuses = (0 until orders.length()).mapNotNull {
+                orders.optJSONObject(it)?.optString("status", "Aberto")
+            }
+            addOrderStatusOverview(container, allStatuses)
             val active = (0 until orders.length())
                 .mapNotNull { orders.optJSONObject(it) }
                 .filter { it.optString("status", "Aberto") !in setOf("Concluído", "Cancelado") }
@@ -1395,7 +1404,9 @@ class MainActivity : Activity() {
                 }
             }
         } else {
-            val active = store.getOrders()
+            val allLocalOrders = store.getOrders()
+            addOrderStatusOverview(container, allLocalOrders.map { it.status })
+            val active = allLocalOrders
                 .filter { it.status !in setOf("Concluído", "Cancelado") }
                 .sortedBy { it.createdAt }
             if (active.isEmpty()) {
@@ -7253,6 +7264,31 @@ class MainActivity : Activity() {
             }
         }
         dialog.show()
+    }
+
+    private fun addOrderStatusOverview(container: LinearLayout, statuses: List<String>) {
+        val newCount = statuses.count { it == "Aberto" }
+        val preparingCount = statuses.count { it == "Em preparação" }
+        val readyCount = statuses.count { it == "Pronto" }
+        val activeCount = statuses.count { it !in setOf("Concluído", "Cancelado") }
+        val finishedCount = statuses.count { it in setOf("Concluído", "Cancelado") }
+
+        val overview = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        overview.addView(statCard("NOVOS", newCount.toString(), if (newCount > 0) copper else forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(4), dp(8)) })
+        overview.addView(statCard("EM PREPARAÇÃO", preparingCount.toString(), if (preparingCount > 0) copper else forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(2), 0, dp(2), dp(8)) })
+        overview.addView(statCard("PRONTOS", readyCount.toString(), if (readyCount > 0) green else forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(4), 0, 0, dp(8)) })
+        container.addView(overview)
+        container.addView(label(
+            "${statuses.size} pedido(s) registado(s) · $activeCount ativo(s) · $finishedCount concluído(s) ou cancelado(s)",
+            10.5f, false, muted
+        ))
+        addGap(container, 8)
     }
 
     private fun filterChip(
