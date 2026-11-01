@@ -1937,7 +1937,7 @@ class MainActivity : Activity() {
                 val card = makeCard(15)
                 card.addView(label(item.optString("name"), 17f, true, forestDeep))
                 addGap(card, 3)
-                card.addView(label(item.optString("category", "Prato principal"), 10.5f, true, forestSoft))
+                card.addView(label(item.optString("category", "Prato principal").trim().ifBlank { "Outros" }, 10.5f, true, forestSoft))
                 val description = item.optString("description").trim()
                 if (description.isNotBlank()) {
                     addGap(card, 5)
@@ -2016,6 +2016,7 @@ class MainActivity : Activity() {
         addMenuCostOverview(container, items.size, validLocalCosts)
         if (items.isEmpty()) {
             container.addView(emptyCard("A carta está vazia. Adiciona o primeiro artigo de demonstração."))
+            return
         }
         val categories = items.map { it.category.trim().ifBlank { "Outros" } }
         addManagementMenuFilters(container, categories)
@@ -2037,7 +2038,7 @@ class MainActivity : Activity() {
             val card = makeCard(15)
             card.addView(label(item.name, 17f, true, forestDeep))
             addGap(card, 3)
-            card.addView(label(item.category, 10.5f, true, forestSoft))
+            card.addView(label(item.category.trim().ifBlank { "Outros" }, 10.5f, true, forestSoft))
             if (item.description.isNotBlank()) {
                 addGap(card, 5)
                 card.addView(label(item.description, 12.5f, false, ink))
