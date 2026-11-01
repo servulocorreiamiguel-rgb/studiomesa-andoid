@@ -89,6 +89,7 @@ class MainActivity : Activity() {
     private val assistantConversation = mutableListOf<AssistantChatTurn>()
     private var selectedAnalysisPeriod = SalesAnalysisPeriod.ALL_TIME
     private var selectedOrderFilter = "Todos"
+    private var selectedKitchenFilter = "Todos"
 
     // Owner-controlled economic tools: session-only until persistent authorization is designed.
     private var economicManagerEnabled = false
@@ -1405,6 +1406,40 @@ class MainActivity : Activity() {
         else -> true
     }
 
+    private fun addKitchenFilters(container: LinearLayout) {
+        container.addView(label("FILTRAR FILA", 9.5f, true, forestSoft))
+        addGap(container, 5)
+        val scroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        listOf("Todos", "Novos", "Em preparação", "Prontos").forEach { filter ->
+            row.addView(
+                filterChip(filter, selectedKitchenFilter == filter) {
+                    selectedKitchenFilter = filter
+                    renderApp()
+                },
+                LinearLayout.LayoutParams(-2, dp(42)).apply {
+                    setMargins(0, 0, dp(6), 0)
+                }
+            )
+        }
+        scroll.addView(row)
+        container.addView(scroll, LinearLayout.LayoutParams(-1, dp(46)))
+        addGap(container, 5)
+    }
+
+    private fun kitchenMatchesSelectedFilter(status: String): Boolean = when (selectedKitchenFilter) {
+        "Novos" -> status == "Aberto"
+        "Em preparação" -> status == "Em preparação"
+        "Prontos" -> status == "Pronto"
+        else -> true
+    }
+
     private fun renderKitchen(container: LinearLayout) {
         kitchenPageContainer = container
         pageIntro(container, "Cozinha", "Fila de preparação por estado e tempo de espera.")
@@ -1443,7 +1478,15 @@ class MainActivity : Activity() {
                 container.addView(emptyCard("A fila está vazia. Os novos pedidos de dispositivos ligados aparecerão automaticamente até 15 segundos depois de serem criados."))
                 return
             }
-            for (order in active) {
+            addKitchenFilters(container)
+            val filteredActive = active.filter { kitchenMatchesSelectedFilter(it.optString("status", "Aberto")) }
+            container.addView(label("${filteredActive.size} pedido(s) nesta fila", 11f, true, forestSoft))
+            addGap(container, 6)
+            if (filteredActive.isEmpty()) {
+                container.addView(emptyCard("Não há pedidos neste estado. Escolhe outro filtro para consultar a fila."))
+                return
+            }
+            for (order in filteredActive) {
                 val status = order.optString("status", "Aberto")
                 val createdAt = parseOrderTimestamp(order.optString("created_at"))
                 val nextStatus = when (status) {
@@ -1485,7 +1528,15 @@ class MainActivity : Activity() {
                 container.addView(emptyCard("A fila está vazia. Cria um pedido para testar o fluxo da cozinha."))
                 return
             }
-            active.forEach { order ->
+            addKitchenFilters(container)
+            val filteredActive = active.filter { kitchenMatchesSelectedFilter(it.status) }
+            container.addView(label("${filteredActive.size} pedido(s) nesta fila", 11f, true, forestSoft))
+            addGap(container, 6)
+            if (filteredActive.isEmpty()) {
+                container.addView(emptyCard("Não há pedidos neste estado. Escolhe outro filtro para consultar a fila."))
+                return
+            }
+            filteredActive.forEach { order ->
                 val nextStatus = when (order.status) {
                     "Aberto" -> "Em preparação"
                     "Em preparação" -> "Pronto"
