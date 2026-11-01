@@ -3006,6 +3006,30 @@ class MainActivity : Activity() {
         dialog.show()
     }
 
+    private fun clearAccountScopedUiState() {
+        clearEconomicManagerState()
+        assistantConversation.clear()
+        assistantQuestion = ""
+        assistantAnswer = null
+        assistantInsightsExpanded = false
+
+        selectedOrderFilter = "Todos"
+        selectedKitchenFilter = "Todos"
+        selectedTableFilter = "Todas"
+        selectedReservationFilter = "Todas"
+        reservationSearchQuery = ""
+        managementMenuSearch = ""
+        selectedManagementMenuCategory = "Todas"
+        inventorySearch = ""
+        selectedInventoryFilter = "Todos"
+
+        customerSearchQuery = ""
+        selectedCustomerReservationFilter = "Todas"
+        customerReservationSearchQuery = ""
+        customerMenuSearch = ""
+        selectedCustomerMenuCategory = "Todas"
+    }
+
     private fun renderBackendAccount(container: LinearLayout) {
         pageIntro(container, "Conta e sincronização", "Conta, restaurante e acesso da equipa.")
         addGap(container, 12)
@@ -3106,7 +3130,7 @@ class MainActivity : Activity() {
             ))
             addGap(securityCard, 8)
             securityCard.addView(secondaryButton("Terminar sessão neste dispositivo") {
-                clearEconomicManagerState()
+                clearAccountScopedUiState()
                 val tokenToRevoke = backendToken()
                 if (tokenToRevoke.isNotBlank()) {
                     Thread { runCatching { SupabaseApi.signOut(tokenToRevoke) } }.start()
@@ -4440,6 +4464,7 @@ class MainActivity : Activity() {
             ))
             addGap(securityCard, 8)
             securityCard.addView(secondaryButton("Terminar sessão neste dispositivo") {
+                clearAccountScopedUiState()
                 val tokenToRevoke = backendToken()
                 if (tokenToRevoke.isNotBlank()) {
                     Thread { runCatching { SupabaseApi.signOut(tokenToRevoke) } }.start()
