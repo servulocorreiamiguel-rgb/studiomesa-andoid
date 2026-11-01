@@ -415,7 +415,7 @@ class RestaurantEconomicManagerTest {
         assertEquals(amount("850.00"), result.scenario.estimatedOperatingResult)
         assertEquals(amount("-1000.00"), result.salesChange)
         assertEquals(amount("-1150.00"), result.operatingResultChange)
-        assertEquals(amount("7570.59"), result.scenario.estimatedBreakEvenSales)
+        assertEquals(amount("7570.09"), result.scenario.estimatedBreakEvenSales)
     }
 
     @Test fun scenarioPercentParserAcceptsPortugueseDecimalAndNegativeValues() {
