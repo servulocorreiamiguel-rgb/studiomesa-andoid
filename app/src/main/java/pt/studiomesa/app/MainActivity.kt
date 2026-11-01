@@ -6409,22 +6409,34 @@ class MainActivity : Activity() {
         quickAccess.addView(label("NAVEGAÇÃO RÁPIDA", 9.5f, true, forestSoft))
         addGap(quickAccess, 4)
         quickAccess.addView(label(
-            "Escolhe uma ferramenta para ires diretamente à respetiva área.",
+            "Desliza os atalhos e abre diretamente a ferramenta pretendida.",
             11.5f, false, ink
         ))
         addGap(quickAccess, 8)
-        quickAccess.addView(secondaryButton("Ir para uma ferramenta  ↓") {
-            AlertDialog.Builder(this)
-                .setTitle("Gestor económico")
-                .setItems(toolNames.toTypedArray()) { _, selected ->
-                    val target = toolTargets[toolNames[selected]] ?: return@setItems
+        val toolChipScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val toolChipRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        toolNames.forEach { toolName ->
+            toolChipRow.addView(
+                navigationChip(toolName) {
+                    val target = toolTargets[toolName] ?: return@navigationChip
                     target.post {
                         val scroll = container.parent as? ScrollView
                         scroll?.smoothScrollTo(0, (target.top - dp(12)).coerceAtLeast(0))
                     }
+                },
+                LinearLayout.LayoutParams(-2, dp(42)).apply {
+                    setMargins(0, 0, dp(7), 0)
                 }
-                .show()
-        }, LinearLayout.LayoutParams(-1, dp(44)))
+            )
+        }
+        toolChipScroll.addView(toolChipRow)
+        quickAccess.addView(toolChipScroll, LinearLayout.LayoutParams(-1, dp(46)))
         container.addView(quickAccess, toolIndex)
 
         addGap(container, 4)
@@ -7272,6 +7284,18 @@ class MainActivity : Activity() {
         }
         dialog.show()
     }
+
+    private fun navigationChip(title: String, action: () -> Unit): TextView =
+        label(title, 11f, true, forestDeep).apply {
+            gravity = Gravity.CENTER
+            minHeight = dp(38)
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            background = rippleBackground(white, 18)
+            contentDescription = "Ir para $title"
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { action() }
+        }
 
     private fun addMenuCostOverview(container: LinearLayout, itemCount: Int, validCostCount: Int) {
         val needsReview = (itemCount - validCostCount).coerceAtLeast(0)
