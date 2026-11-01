@@ -6398,6 +6398,7 @@ class MainActivity : Activity() {
             }
         }
 
+        val targetWasDefault = economicInputs["foodTarget"].isNullOrBlank()
         val targetText = economicInputs["foodTarget"]?.takeIf { it.isNotBlank() } ?: "30"
         val target = runCatching {
             RestaurantEconomicManager.parseNonNegative(targetText, "objetivo de custo alimentar")
@@ -6426,7 +6427,11 @@ class MainActivity : Activity() {
             }
 
             val targetDescription = target?.let {
-                "Objetivo de custo alimentar: ${economicPercent(it)}."
+                if (targetWasDefault) {
+                    "Objetivo inicial editável: ${economicPercent(it)}. Ajusta-o ao conceito e aos números do restaurante."
+                } else {
+                    "Objetivo definido: ${economicPercent(it)}."
+                }
             } ?: "O objetivo percentual não está válido; o ranking continua disponível, mas sem alerta face a um objetivo."
             card.addView(label(
                 "${analysis.rankedItems.size} artigo(s) comparáveis · ${analysis.aboveTargetCount} acima do objetivo · ${analysis.costAboveSellingPriceCount} com custo registado superior ao preço.",
