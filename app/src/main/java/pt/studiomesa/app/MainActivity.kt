@@ -3197,15 +3197,27 @@ class MainActivity : Activity() {
             11f, true, forestSoft
         ))
         addGap(container, 7)
-        container.addView(secondaryButton("Mostrar: $selectedCustomerReservationFilter  ▾") {
-            AlertDialog.Builder(this)
-                .setTitle("Filtrar as minhas reservas")
-                .setItems(customerFilters.toTypedArray()) { _, selected ->
-                    selectedCustomerReservationFilter = customerFilters[selected]
+        val customerFilterScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val customerFilterRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        customerFilters.forEach { filter ->
+            customerFilterRow.addView(
+                filterChip(filter, selectedCustomerReservationFilter == filter) {
+                    selectedCustomerReservationFilter = filter
                     renderCustomerApp()
+                },
+                LinearLayout.LayoutParams(-2, dp(42)).apply {
+                    setMargins(0, 0, dp(6), 0)
                 }
-                .show()
-        }, LinearLayout.LayoutParams(-1, dp(44)))
+            )
+        }
+        customerFilterScroll.addView(customerFilterRow)
+        container.addView(customerFilterScroll, LinearLayout.LayoutParams(-1, dp(46)))
         addGap(container, 10)
 
         val filteredCustomerReservations = when (selectedCustomerReservationFilter) {
@@ -4094,15 +4106,27 @@ class MainActivity : Activity() {
         })
 
         val filters = listOf("Todas", "Pendentes", "Confirmadas", "Hoje")
-        container.addView(secondaryButton("Filtro: $selectedReservationFilter  ▾") {
-            AlertDialog.Builder(this)
-                .setTitle("Filtrar reservas")
-                .setItems(filters.toTypedArray()) { _, selected ->
-                    selectedReservationFilter = filters[selected]
+        val filterScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val filterRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        filters.forEach { filter ->
+            filterRow.addView(
+                filterChip(filter, selectedReservationFilter == filter) {
+                    selectedReservationFilter = filter
                     renderApp()
+                },
+                LinearLayout.LayoutParams(-2, dp(42)).apply {
+                    setMargins(0, 0, dp(6), 0)
                 }
-                .show()
-        }, LinearLayout.LayoutParams(-1, dp(44)))
+            )
+        }
+        filterScroll.addView(filterRow)
+        container.addView(filterScroll, LinearLayout.LayoutParams(-1, dp(46)))
         addGap(container, 10)
 
         val filteredReservations = when (selectedReservationFilter) {
@@ -7200,6 +7224,26 @@ class MainActivity : Activity() {
             }
         }
         dialog.show()
+    }
+
+    private fun filterChip(
+        title: String,
+        selected: Boolean,
+        action: () -> Unit
+    ): TextView = label(
+        title,
+        11.5f,
+        true,
+        if (selected) forestDeep else muted
+    ).apply {
+        gravity = Gravity.CENTER
+        minHeight = dp(38)
+        setPadding(dp(13), dp(8), dp(13), dp(8))
+        background = rippleBackground(if (selected) copperPale else white, 18)
+        contentDescription = if (selected) "Filtro $title selecionado" else "Aplicar filtro $title"
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { action() }
     }
 
     private fun statusBadge(
