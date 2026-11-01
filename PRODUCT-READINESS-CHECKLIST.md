@@ -84,7 +84,7 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [ ] Testar receitas e consumo automático em dispositivos reais e com duas contas simultâneas; validar edição de receita, perda/restauro de rede e concorrência de preparação.
 - [ ] Aplicar e verificar, com plano de reversão e backup confirmado, as migrações de receitas e custos antes de instalar esta versão num restaurante real; a CI usa uma base de dados descartável e não altera o Supabase alojado.
 - [x] Custo de aquisição unitário opcional por artigo (até quatro casas decimais), fotografia do custo nos novos movimentos e valorização indicativa das existências com custo conhecido e das novas perdas; movimentos antigos sem custo continuam desconhecidos.
-- [ ] Conversões de unidades; cálculo automático do custo por receita/dose ligado à ficha técnica e integração desse custo no gestor económico.
+- [x] Conversão de unidades kg/g e L/ml na entrada das quantidades de ingredientes; valores guardados na unidade original do stock. [ ] Conversões exóticas/densidade entre massa e volume não são suportadas. [ ] Revalidar custos e consumo automático com os casos UNIT-* na ronda final.
 - [ ] Avisos automáticos, fornecedores/encomendas e inventário por local.
 
 ## Gestão económica e assistente
@@ -159,3 +159,9 @@ Os valores de referência atuais são 890 €, 1 490 € e 1 690 €. Ainda não
 - [ ] Antes de ativar: criar um utilizador PostgreSQL dedicado sem permissões nas tabelas/esquemas da aplicação; configurar o segredo GitHub `SUPABASE_HEALTHCHECK_DB_URL` com a ligação de sessão; rever backup/recuperação e integrar o workflow na branch principal.
 - [ ] Confirmar execuções agendadas e observar o estado do projeto durante pelo menos duas semanas. O Supabase não garante que um health check sintético, por si só, evite a pausa do plano Free; não prometer disponibilidade contínua com este mecanismo.
 - [ ] Antes de um restaurante depender comercialmente do serviço, avaliar o plano pago do Supabase, que não pausa projetos por inatividade.
+
+
+- [x] A branch candidata acrescenta conversão exata entre kg/g e L/ml na introdução de ingredientes das fichas técnicas; unidades personalizadas e unidades de contagem só aceitam a própria unidade.
+- [x] A conversão é feita para a unidade base do artigo de stock antes de chamar a API existente; não foi necessária alteração do esquema Supabase.
+- [x] A conversão rejeita quantidades que exigiriam arredondamento para além de três casas decimais na unidade de stock.
+- [ ] Executar os testes unitários `InventoryUnitConverterTest` e os casos ponta a ponta `UNIT-01..12`; verificar em Android real os seletores e o impacto no custo por dose/consumo automático.
