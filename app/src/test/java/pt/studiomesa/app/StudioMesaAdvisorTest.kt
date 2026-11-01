@@ -78,6 +78,18 @@ class StudioMesaAdvisorTest {
 
         val freshAnswer = StudioMesaAdvisor.answerQuestion("Que preço devo cobrar?", snapshot())
         assertFalse(freshAnswer.response.startsWith("Aviso de atualização:"))
+
+        val stockAnswer = StudioMesaAdvisor.answerQuestion(
+            "Quanto tenho de arroz em stock?",
+            snapshot(
+                stockAvailable = true,
+                stockLoaded = true,
+                stockItems = listOf(AssistantStockItem("Arroz", BigDecimal("4"), BigDecimal("2"))),
+                operationsFresh = false
+            )
+        )
+        assertEquals("Stock de Arroz", stockAnswer.title)
+        assertFalse(stockAnswer.response.startsWith("Aviso de atualização:"))
     }
 
     @Test fun dailyBriefingIdentifiesOperationalCacheThatIsNotConfirmedRecent() {
