@@ -6709,17 +6709,29 @@ class MainActivity : Activity() {
                                 quantityField.error = "Não foi possível guardar a referência segura. Tenta novamente."
                                 return@setOnClickListener
                             }
-                            runBackend({
-                                val token = backendToken()
-                                SupabaseApi.createOrder(
-                                    token, restaurantId, table, selected.name, selected.price,
-                                    quantity, serviceCourse, notes, requestId,
-                                    menuItemId = selected.id,
-                                    unitCostSnapshot = selected.cost.takeIf { it.isFinite() && it > 0.0 }?.let { BigDecimal.valueOf(it) }
-                                )
-                                cacheRemoteOperations(token, restaurantId)
-                                "OK"
-                            }) {
+                            runBackend(
+                                task = {
+                                    val token = backendToken()
+                                    SupabaseApi.createOrder(
+                                        token, restaurantId, table, selected.name, selected.price,
+                                        quantity, serviceCourse, notes, requestId,
+                                        menuItemId = selected.id,
+                                        unitCostSnapshot = selected.cost.takeIf { it.isFinite() && it > 0.0 }?.let { BigDecimal.valueOf(it) }
+                                    )
+                                    cacheRemoteOperations(token, restaurantId)
+                                    "OK"
+                                },
+                                onError = { error ->
+                                    AlertDialog.Builder(this)
+                                        .setTitle("Não foi possível confirmar o pedido")
+                                        .setMessage(
+                                            friendlyBackendError(error.message) +
+                                                "\\n\\nO servidor pode ter recebido o pedido antes de a ligação falhar. Mantém os mesmos dados e tenta novamente; a aplicação reutiliza a referência desta tentativa para evitar duplicações."
+                                        )
+                                        .setPositiveButton("OK", null)
+                                        .show()
+                                }
+                            ) {
                                 dialog.dismiss()
                                 activePage = "Pedidos"
                                 renderApp()
