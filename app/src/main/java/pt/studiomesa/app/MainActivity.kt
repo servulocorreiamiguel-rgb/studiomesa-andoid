@@ -79,6 +79,7 @@ class MainActivity : Activity() {
         }
     }
     private var assistantQuestion = ""
+    private var assistantInsightsExpanded = false
     private var assistantAnswer: StudioMesaAssistantAnswer? = null
     private data class AssistantChatTurn(
         val question: String,
@@ -627,6 +628,12 @@ class MainActivity : Activity() {
         appRoot.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         renderPage(content)
 
+        if (activePage == "Assistente") {
+            appRoot.addView(renderAssistantComposer(), LinearLayout.LayoutParams(-1, -2))
+            if (assistantConversation.isNotEmpty()) {
+                scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
+            }
+        } else {
         // Keep the three high-frequency destinations visible on phones.
         // Secondary destinations remain available from the hamburger drawer above.
         val nav = LinearLayout(this).apply {
@@ -666,6 +673,7 @@ class MainActivity : Activity() {
             })
         }
         appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(60)))
+        }
         setContentView(appRoot)
         updateKitchenAutoRefresh()
         updateInventoryAutoRefresh()
@@ -5486,6 +5494,7 @@ class MainActivity : Activity() {
         while (assistantConversation.size > 8) assistantConversation.removeAt(0)
         assistantQuestion = ""
         assistantAnswer = answer
+        assistantInsightsExpanded = false
         renderApp()
     }
 
@@ -5525,29 +5534,91 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun renderAssistant(container: LinearLayout) {
-        val snapshot = assistantSnapshot()
-        pageIntro(container, "Assistente StudioMesa", "O teu apoio à gestão do restaurante, numa conversa.")
-        addGap(container, 8)
 
-        val hero = makeCard(17, forest)
-        val heroRow = LinearLayout(this).apply {
+    private fun renderAssistantComposer(): LinearLayout {
+        val composer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            setBackgroundColor(white)
+            elevation = dp(7).toFloat()
+        }
+        val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        heroRow.addView(label("✦", 28f, true, copper), LinearLayout.LayoutParams(dp(42), dp(42)))
-        val heroText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        heroText.addView(label("Gestão inteligente do restaurante", 18f, true, white))
-        heroText.addView(label("ANÁLISE LOCAL · SEM API PAGA", 10f, true, copperPale))
-        heroText.addView(label("Gestão, operação e decisões com dados.", 11.5f, false, copperPale))
-        heroRow.addView(heroText, LinearLayout.LayoutParams(0, -2, 1f))
-        hero.addView(heroRow)
-        addGap(hero, 10)
-        hero.addView(label(
-            "Pergunta em linguagem natural. O assistente analisa os dados disponíveis e indica o que deves confirmar.",
-            12.5f, false, white
+        val questionField = EditText(this).apply {
+            hint = "Escreve a tua pergunta…"
+            inputType = InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            textSize = 14f
+            setTextColor(ink)
+            setHintTextColor(muted)
+            setPadding(dp(13), dp(10), dp(13), dp(10))
+            background = rounded(paper, 15)
+            minLines = 1
+            maxLines = 3
+            setText(assistantQuestion)
+        }
+        row.addView(questionField, LinearLayout.LayoutParams(0, dp(52), 1f).apply {
+            setMargins(0, 0, dp(8), 0)
+        })
+        val sendButton = TextView(this).apply {
+            text = "↑"
+            textSize = 25f
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setTextColor(forestDeep)
+            background = rippleBackground(copper, 15)
+            contentDescription = "Enviar pergunta ao assistente"
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { sendAssistantMessage(questionField.text.toString()) }
+        }
+        row.addView(sendButton, LinearLayout.LayoutParams(dp(52), dp(52)))
+        composer.addView(row)
+        addGap(composer, 4)
+        composer.addView(label(
+            "Assistente local: usa regras e dados disponíveis; não é um modelo generativo e não altera registos.",
+            10f, false, muted
         ))
-        container.addView(hero, cardParams())
+        return composer
+    }
+
+    private fun renderAssistant(container: LinearLayout) {
+        val snapshot = assistantSnapshot()
+        pageIntro(container, "Assistente StudioMesa", "O apoio à gestão do restaurante, numa conversa.");
+        addGap(container, 4)
+
+        val assistantIdentity = makeCard(12, forest)
+        val identityRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        identityRow.addView(label("✦", 24f, true, copper), LinearLayout.LayoutParams(dp(38), dp(38)))
+        val identityText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        identityText.addView(label("Assistente StudioMesa", 15f, true, white))
+        identityText.addView(label("ANÁLISE LOCAL · SEM API PAGA", 9.5f, true, copperPale))
+        identityRow.addView(identityText, LinearLayout.LayoutParams(0, -2, 1f))
+        assistantIdentity.addView(identityRow)
+        assistantIdentity.addView(label(
+            "Respostas baseadas nos dados disponíveis. Confirma sempre os valores antes de decidir.",
+            11f, false, copperPale
+        ))
+        container.addView(assistantIdentity, cardParams())
+
+        if (assistantConversation.isNotEmpty()) {
+            container.addView(secondaryButton("Nova conversa") {
+                assistantConversation.clear()
+                assistantQuestion = ""
+                assistantAnswer = null
+                assistantInsightsExpanded = false
+                renderApp()
+            }, LinearLayout.LayoutParams(-1, dp(40)).apply {
+                setMargins(0, 0, 0, dp(8))
+            })
+        }
+
+
 
         val chatPanel = makeCard(13, Color.rgb(242, 244, 239))
         if (assistantConversation.isEmpty()) {
@@ -5600,180 +5671,158 @@ class MainActivity : Activity() {
         }
         container.addView(chatPanel, cardParams())
 
-        sectionHeading(container, "Sugestões rápidas", "Toca numa opção para iniciar a conversa.")
-        val quickRowOne = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        quickRowOne.addView(assistantPromptButton("Gerar resumo da operação", "", true),
-            LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(0, 0, dp(5), 0) })
-        quickRowOne.addView(assistantPromptButton("Rever margens", "Quais artigos têm melhor margem e quais têm a margem mais baixa?"),
-            LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(dp(5), 0, 0, 0) })
-        container.addView(quickRowOne, LinearLayout.LayoutParams(-1, -2).apply {
-            setMargins(0, 0, 0, dp(6))
-        })
-        val quickRowTwo = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        quickRowTwo.addView(assistantPromptButton("Stock baixo", "Que artigos de stock estão baixos ou esgotados?"),
-            LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(0, 0, dp(5), 0) })
-        quickRowTwo.addView(assistantPromptButton("Reservas pendentes", "Há reservas pendentes por confirmar?"),
-            LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(dp(5), 0, 0, 0) })
-        container.addView(quickRowTwo, LinearLayout.LayoutParams(-1, -2))
+        if (assistantConversation.isEmpty()) {
+            sectionHeading(container, "Sugestões rápidas", "Toca numa opção para iniciar a conversa.")
+            val quickRowOne = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            quickRowOne.addView(assistantPromptButton("Gerar resumo da operação", "", true),
+                LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(0, 0, dp(5), 0) })
+            quickRowOne.addView(assistantPromptButton("Rever margens", "Quais artigos têm melhor margem e quais têm a margem mais baixa?"),
+                LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(dp(5), 0, 0, 0) })
+            container.addView(quickRowOne, LinearLayout.LayoutParams(-1, -2).apply {
+                setMargins(0, 0, 0, dp(6))
+            })
+            val quickRowTwo = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            quickRowTwo.addView(assistantPromptButton("Stock baixo", "Que artigos de stock estão baixos ou esgotados?"),
+                LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(0, 0, dp(5), 0) })
+            quickRowTwo.addView(assistantPromptButton("Reservas pendentes", "Há reservas pendentes por confirmar?"),
+                LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(dp(5), 0, 0, 0) })
+            container.addView(quickRowTwo, LinearLayout.LayoutParams(-1, -2))
 
-        val composer = makeCard(10, white)
-        val composerRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
         }
-        val questionField = EditText(this).apply {
-            hint = "Escreve a tua pergunta…"
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or InputType.TYPE_TEXT_FLAG_MULTI_LINE
-            textSize = 14f
-            setTextColor(ink)
-            setHintTextColor(muted)
-            setPadding(dp(13), dp(10), dp(13), dp(10))
-            background = rounded(paper, 15)
-            minLines = 1
-            maxLines = 3
-            setText(assistantQuestion)
-        }
-        composerRow.addView(questionField, LinearLayout.LayoutParams(0, dp(52), 1f).apply {
-            setMargins(0, 0, dp(8), 0)
-        })
-        val sendButton = TextView(this).apply {
-            text = "↑"
-            textSize = 25f
-            typeface = Typeface.create("sans-serif", Typeface.BOLD)
-            gravity = Gravity.CENTER
-            setTextColor(forestDeep)
-            background = rippleBackground(copper, 15)
-            contentDescription = "Enviar pergunta ao assistente"
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { sendAssistantMessage(questionField.text.toString()) }
-        }
-        composerRow.addView(sendButton, LinearLayout.LayoutParams(dp(52), dp(52)))
-        composer.addView(composerRow)
-        addGap(composer, 6)
-        composer.addView(label("As respostas são calculadas localmente com regras e dados disponíveis. Não é um modelo generativo e não altera registos por ti.", 10.5f, false, muted))
-        container.addView(composer, cardParams())
+
+
 
         addGap(container, 8)
-        if ("Gestão económica" in availablePages()) {
-            val economicLink = makeCard(13, copperPale)
-            economicLink.addView(label("GESTÃO ECONÓMICA", 9.5f, true, forestSoft))
-            addGap(economicLink, 4)
-            economicLink.addView(label(
-                "Abre a área do proprietário para simular cenários, calcular metas e consultar ferramentas financeiras.",
-                12f, false, ink
-            ))
-            addGap(economicLink, 8)
-            economicLink.addView(secondaryButton("Abrir gestão económica") {
-                activePage = "Gestão económica"
-                renderApp()
-            }, LinearLayout.LayoutParams(-1, dp(44)))
-            container.addView(economicLink, cardParams())
-        }
+        container.addView(secondaryButton(
+            if (assistantInsightsExpanded) "Ocultar análises complementares" else "Ver análises complementares"
+        ) {
+            assistantInsightsExpanded = !assistantInsightsExpanded
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(44)))
 
-        addGap(container, 5)
-        sectionHeading(container, "Sugestões para rever", "Prioridades estimadas. Confirma os dados e decide antes de alterar qualquer coisa.")
-        StudioMesaAdvisor.recommendations(snapshot).forEach { recommendation ->
-            val (priorityText, textColor, backColor) = when (recommendation.priority) {
-                AssistantPriority.URGENT -> Triple("PRIORIDADE ALTA", red, paleRed)
-                AssistantPriority.ATTENTION -> Triple("A REVER", forestDeep, copperPale)
-                AssistantPriority.TIP -> Triple("SUGESTÃO", forestSoft, paleGreen)
-            }
-            val card = makeCard(15)
-            card.addView(label(priorityText, 9f, true, textColor).apply {
-                setPadding(dp(8), dp(5), dp(8), dp(5))
-                background = rounded(backColor, 10)
-            }, LinearLayout.LayoutParams(-2, -2))
-            addGap(card, 8)
-            card.addView(label(recommendation.title, 16f, true, forestDeep))
-            addGap(card, 5)
-            card.addView(label(recommendation.detail, 12.5f, false, muted))
-            assistantActionTarget(recommendation.actionPage)?.let { target ->
-                addGap(card, 10)
-                card.addView(secondaryButton("Abrir " + target) {
-                    activePage = target
+        if (assistantInsightsExpanded) {
+            addGap(container, 8)
+            if ("Gestão económica" in availablePages()) {
+                val economicLink = makeCard(13, copperPale)
+                economicLink.addView(label("GESTÃO ECONÓMICA", 9.5f, true, forestSoft))
+                addGap(economicLink, 4)
+                economicLink.addView(label(
+                    "Abre a área do proprietário para simular cenários, calcular metas e consultar ferramentas financeiras.",
+                    12f, false, ink
+                ))
+                addGap(economicLink, 8)
+                economicLink.addView(secondaryButton("Abrir gestão económica") {
+                    activePage = "Gestão económica"
                     renderApp()
                 }, LinearLayout.LayoutParams(-1, dp(44)))
+                container.addView(economicLink, cardParams())
             }
-            container.addView(card, cardParams())
-        }
-        sectionHeading(container, "Engenharia da carta", "Combina unidades de pedidos concluídos com a contribuição estimada por artigo.")
-        val engineering = StudioMesaAdvisor.menuEngineering(snapshot)
-        if (!engineering.hasEnoughSales) {
-            container.addView(emptyCard(
-                "Ainda não há pelo menos ${engineering.requiredUnits} unidades concluídas que correspondam aos artigos atuais (${engineering.completedUnits} encontradas). A análise não inventa popularidade."
-            ), cardParams())
-        } else {
-            if (!engineering.hasMarginData) {
-                container.addView(emptyCard("Existem vendas, mas faltam custos válidos nos artigos vendidos para comparar a contribuição. Confirma os custos na Carta."), cardParams())
-            }
-            engineering.items.forEach { item ->
-                val title = when (item.classification) {
-                    MenuEngineeringClass.STAR -> "ESTRELA"
-                    MenuEngineeringClass.WORKHORSE -> "POPULAR · REVER MARGEM"
-                    MenuEngineeringClass.PUZZLE -> "MARGEM ALTA · REVER PROCURA"
-                    MenuEngineeringClass.DOG -> "REVER ARTIGO"
-                    MenuEngineeringClass.MISSING_COST -> "CUSTO EM FALTA"
+
+            addGap(container, 5)
+            sectionHeading(container, "Sugestões para rever", "Prioridades estimadas. Confirma os dados e decide antes de alterar qualquer coisa.")
+            StudioMesaAdvisor.recommendations(snapshot).forEach { recommendation ->
+                val (priorityText, textColor, backColor) = when (recommendation.priority) {
+                    AssistantPriority.URGENT -> Triple("PRIORIDADE ALTA", red, paleRed)
+                    AssistantPriority.ATTENTION -> Triple("A REVER", forestDeep, copperPale)
+                    AssistantPriority.TIP -> Triple("SUGESTÃO", forestSoft, paleGreen)
                 }
-                val backColor = when (item.classification) {
-                    MenuEngineeringClass.STAR -> paleGreen
-                    MenuEngineeringClass.WORKHORSE, MenuEngineeringClass.PUZZLE -> copperPale
-                    MenuEngineeringClass.DOG, MenuEngineeringClass.MISSING_COST -> paleRed
-                }
-                val card = makeCard(14)
-                card.addView(label(title, 9f, true, forestDeep).apply {
+                val card = makeCard(15)
+                card.addView(label(priorityText, 9f, true, textColor).apply {
                     setPadding(dp(8), dp(5), dp(8), dp(5))
                     background = rounded(backColor, 10)
                 }, LinearLayout.LayoutParams(-2, -2))
-                addGap(card, 7)
-                card.addView(label(item.itemName, 16f, true, forestDeep))
-                addGap(card, 4)
-                card.addView(label(
-                    "${item.unitsSold} unidade(s) concluídas · ${item.popularitySharePercent}% das unidades correspondentes · contribuição atual: ${item.contributionPerUnit?.let { money(it) } ?: "custo em falta"} por unidade.",
-                    11.5f, true, muted
-                ))
+                addGap(card, 8)
+                card.addView(label(recommendation.title, 16f, true, forestDeep))
                 addGap(card, 5)
-                card.addView(label(item.recommendation, 12.5f, false, ink))
+                card.addView(label(recommendation.detail, 12.5f, false, muted))
+                assistantActionTarget(recommendation.actionPage)?.let { target ->
+                    addGap(card, 10)
+                    card.addView(secondaryButton("Abrir " + target) {
+                        activePage = target
+                        renderApp()
+                    }, LinearLayout.LayoutParams(-1, dp(44)))
+                }
                 container.addView(card, cardParams())
             }
+            sectionHeading(container, "Engenharia da carta", "Combina unidades de pedidos concluídos com a contribuição estimada por artigo.")
+            val engineering = StudioMesaAdvisor.menuEngineering(snapshot)
+            if (!engineering.hasEnoughSales) {
+                container.addView(emptyCard(
+                    "Ainda não há pelo menos ${engineering.requiredUnits} unidades concluídas que correspondam aos artigos atuais (${engineering.completedUnits} encontradas). A análise não inventa popularidade."
+                ), cardParams())
+            } else {
+                if (!engineering.hasMarginData) {
+                    container.addView(emptyCard("Existem vendas, mas faltam custos válidos nos artigos vendidos para comparar a contribuição. Confirma os custos na Carta."), cardParams())
+                }
+                engineering.items.forEach { item ->
+                    val title = when (item.classification) {
+                        MenuEngineeringClass.STAR -> "ESTRELA"
+                        MenuEngineeringClass.WORKHORSE -> "POPULAR · REVER MARGEM"
+                        MenuEngineeringClass.PUZZLE -> "MARGEM ALTA · REVER PROCURA"
+                        MenuEngineeringClass.DOG -> "REVER ARTIGO"
+                        MenuEngineeringClass.MISSING_COST -> "CUSTO EM FALTA"
+                    }
+                    val backColor = when (item.classification) {
+                        MenuEngineeringClass.STAR -> paleGreen
+                        MenuEngineeringClass.WORKHORSE, MenuEngineeringClass.PUZZLE -> copperPale
+                        MenuEngineeringClass.DOG, MenuEngineeringClass.MISSING_COST -> paleRed
+                    }
+                    val card = makeCard(14)
+                    card.addView(label(title, 9f, true, forestDeep).apply {
+                        setPadding(dp(8), dp(5), dp(8), dp(5))
+                        background = rounded(backColor, 10)
+                    }, LinearLayout.LayoutParams(-2, -2))
+                    addGap(card, 7)
+                    card.addView(label(item.itemName, 16f, true, forestDeep))
+                    addGap(card, 4)
+                    card.addView(label(
+                        "${item.unitsSold} unidade(s) concluídas · ${item.popularitySharePercent}% das unidades correspondentes · contribuição atual: ${item.contributionPerUnit?.let { money(it) } ?: "custo em falta"} por unidade.",
+                        11.5f, true, muted
+                    ))
+                    addGap(card, 5)
+                    card.addView(label(item.recommendation, 12.5f, false, ink))
+                    container.addView(card, cardParams())
+                }
+                container.addView(label(
+                    "Triagem com pedidos concluídos e preço/custo atuais; não é lucro contabilístico nem custo histórico e não inclui IVA, mão de obra, desperdício ou encargos.",
+                    10.5f, false, muted
+                ))
+            }
+
+            sectionHeading(container, "Ideias de conteúdo", "Rascunhos para revisão; só usam nomes, descrições e preços registados na carta.")
+            val drafts = StudioMesaAdvisor.marketingDrafts(snapshot)
+            if (drafts.isEmpty()) {
+                container.addView(emptyCard("Adiciona artigos com nome e preço válidos para criar rascunhos."), cardParams())
+            } else {
+                drafts.forEach { draft ->
+                    val card = makeCard(14)
+                    card.addView(label(draft.itemName, 16f, true, forestDeep))
+                    addGap(card, 6)
+                    card.addView(label(draft.caption, 13f, false, ink))
+                    addGap(card, 5)
+                    card.addView(label(draft.basis, 10.5f, false, muted))
+                    addGap(card, 8)
+                    card.addView(secondaryButton("Copiar rascunho") {
+                        copyAssistantText(draft.caption)
+                    }, LinearLayout.LayoutParams(-1, dp(44)))
+                    container.addView(card, cardParams())
+                }
+            }
+
+            addGap(container, 4)
             container.addView(label(
-                "Triagem com pedidos concluídos e preço/custo atuais; não é lucro contabilístico nem custo histórico e não inclui IVA, mão de obra, desperdício ou encargos.",
-                10.5f, false, muted
+                if (snapshot.isDemo) "Fonte atual: dados de demonstração locais. Liga um restaurante na secção Conta para analisar dados partilhados."
+                else "Fonte atual: dados guardados em cache pela aplicação. Confirma a última atualização antes de decidir; esta análise não verifica a conectividade em tempo real.",
+                11f, false, muted
             ))
         }
 
-        sectionHeading(container, "Ideias de conteúdo", "Rascunhos para revisão; só usam nomes, descrições e preços registados na carta.")
-        val drafts = StudioMesaAdvisor.marketingDrafts(snapshot)
-        if (drafts.isEmpty()) {
-            container.addView(emptyCard("Adiciona artigos com nome e preço válidos para criar rascunhos."), cardParams())
-        } else {
-            drafts.forEach { draft ->
-                val card = makeCard(14)
-                card.addView(label(draft.itemName, 16f, true, forestDeep))
-                addGap(card, 6)
-                card.addView(label(draft.caption, 13f, false, ink))
-                addGap(card, 5)
-                card.addView(label(draft.basis, 10.5f, false, muted))
-                addGap(card, 8)
-                card.addView(secondaryButton("Copiar rascunho") {
-                    copyAssistantText(draft.caption)
-                }, LinearLayout.LayoutParams(-1, dp(44)))
-                container.addView(card, cardParams())
-            }
-        }
-
-        addGap(container, 4)
-        container.addView(label(
-            if (snapshot.isDemo) "Fonte atual: dados de demonstração locais. Liga um restaurante na secção Conta para analisar dados partilhados."
-            else "Fonte atual: dados guardados em cache pela aplicação. Confirma a última atualização antes de decidir; esta análise não verifica a conectividade em tempo real.",
-            11f, false, muted
-        ))
     }
 
 
