@@ -1523,7 +1523,15 @@ class MainActivity : Activity() {
             addOrderStatusOverview(container, allLocalOrders.map { it.status })
             val active = allLocalOrders
                 .filter { it.status !in setOf("Concluído", "Cancelado") }
-                .sortedBy { it.createdAt }
+                .sortedWith(compareBy(
+                    { order -> when (order.status) {
+                        "Aberto" -> 0
+                        "Em preparação" -> 1
+                        "Pronto" -> 2
+                        else -> 3
+                    } },
+                    { order -> order.createdAt }
+                ))
             if (active.isEmpty()) {
                 container.addView(emptyCard("A fila está vazia. Cria um pedido para testar o fluxo da cozinha."))
                 return
@@ -6208,10 +6216,13 @@ class MainActivity : Activity() {
             11.5f, false, muted
         ))
         addGap(toggle, 8)
-        toggle.addView(secondaryButton(if (economicManagerEnabled) "Desativar e limpar valores da sessão" else "Ativar gestão económica") {
-            if (economicManagerEnabled) {
+        val toggleAction: Button = if (economicManagerEnabled) {
+            dangerButton("Desativar e limpar valores da sessão") {
                 clearEconomicManagerState()
-            } else {
+                renderApp()
+            }
+        } else {
+            primaryButton("Ativar gestão económica") {
                 economicManagerEnabled = true
                 economicScopeKey = scope
                 economicInputs.clear()
@@ -6220,9 +6231,10 @@ class MainActivity : Activity() {
                 breakEvenTargetReportText = ""
                 recipeReportText = ""
                 reorderReportText = ""
+                renderApp()
             }
-            renderApp()
-        }, LinearLayout.LayoutParams(-1, dp(44)))
+        }
+        toggle.addView(toggleAction, LinearLayout.LayoutParams(-1, dp(44)))
         container.addView(toggle, cardParams())
         if (!economicManagerEnabled) return
 
