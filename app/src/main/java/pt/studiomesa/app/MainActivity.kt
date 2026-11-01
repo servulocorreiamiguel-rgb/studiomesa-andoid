@@ -5421,6 +5421,7 @@ class MainActivity : Activity() {
 
     private fun renderStock(container: LinearLayout) {
         inventoryPageContainer = container
+        val isOwner = isCurrentRestaurantOwner()
         pageIntro(container, "Stock e inventário", "Quantidades, limites mínimos, movimentos e desperdício registado.")
         addGap(container, 8)
         if (!hasRemoteRestaurant()) {
@@ -5451,16 +5452,30 @@ class MainActivity : Activity() {
             if (!inventoryRefreshInFlight && !inventoryRefreshFailed) refreshInventoryItems()
             return
         }
+
         val items = remoteInventoryItems()
+        if (isOwner &&
+            (!inventoryUnitCostCacheLoaded ||
+                inventoryUnitCostCacheScope != currentInventoryCostScope()) &&
+            !inventoryRefreshInFlight
+        ) {
+            // Load owner-only costs after a cold app start. Until they arrive,
+            // show operational stock but do not imply that missing data is zero.
+            refreshInventoryItems()
+        }
         if (items.length() == 0) {
             container.addView(emptyCard("Ainda não há artigos de stock. Adiciona ingredientes, bebidas ou consumíveis e define um limite mínimo."))
             return
         }
-        container.addView(
-            secondaryButton("Consultar desperdício registado") { showInventoryWasteHistory() },
-            LinearLayout.LayoutParams(-1, dp(48))
-        )
-        addGap(container, 8)
+
+        if (isOwner) {
+            container.addView(
+                secondaryButton("Consultar desperdício registado") { showInventoryWasteHistory() },
+                LinearLayout.LayoutParams(-1, dp(48))
+            )
+            addGap(container, 8)
+        }
+
         val stockItems = (0 until items.length()).mapNotNull { items.optJSONObject(it) }
         var lowCount = 0
         var stockValueWithKnownCost = BigDecimal.ZERO.setScale(2)
@@ -5469,14 +5484,20 @@ class MainActivity : Activity() {
             val quantity = item.optDouble("quantity", 0.0)
             val threshold = item.optDouble("low_stock_threshold", 0.0)
             if (quantity <= threshold) lowCount++
-            val unitCost = if (item.isNull("unit_cost_per_unit")) null else
-                runCatching { BigDecimal(item.optString("unit_cost_per_unit")) }.getOrNull()
-            if (unitCost == null) {
-                itemsWithoutUnitCost++
-            } else {
-                val itemQuantity = runCatching { BigDecimal(item.optString("quantity", "0")) }.getOrNull()
-                val itemValue = itemQuantity?.let { InventoryWasteCostCalculator.estimate(it, unitCost) }
-                if (itemValue != null) stockValueWithKnownCost = stockValueWithKnownCost.add(itemValue)
+            if (isOwner) {
+                val unitCost = if (item.isNull("unit_cost_per_unit")) null else
+                    runCatching { BigDecimal(item.optString("unit_cost_per_unit")) }.getOrNull()
+                if (unitCost == null) {
+                    itemsWithoutUnitCost++
+                } else {
+                    val itemQuantity = runCatching { BigDecimal(item.optString("quantity", "0")) }.getOrNull()
+                    val itemValue = itemQuantity?.let {
+                        InventoryWasteCostCalculator.estimate(it, unitCost)
+                    }
+                    if (itemValue != null) {
+                        stockValueWithKnownCost = stockValueWithKnownCost.add(itemValue)
+                    }
+                }
             }
         }
 
@@ -5484,12 +5505,31 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        overview.addView(statCard("ARTIGOS", stockItems.size.toString(), forestSoft),
-            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(4), dp(8)) })
-        overview.addView(statCard("STOCK BAIXO", lowCount.toString(), if (lowCount > 0) red else green),
-            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(2), 0, dp(2), dp(8)) })
-        overview.addView(statCard("SEM CUSTO", itemsWithoutUnitCost.toString(), if (itemsWithoutUnitCost > 0) copper else forestSoft),
-            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(4), 0, 0, dp(8)) })
+        val overviewCardWidth = if (isOwner) 1f else 1f
+        overview.addView(
+            statCard("ARTIGOS", stockItems.size.toString(), forestSoft),
+            LinearLayout.LayoutParams(0, -2, overviewCardWidth).apply {
+                setMargins(0, 0, dp(4), dp(8))
+            }
+        )
+        overview.addView(
+            statCard("STOCK BAIXO", lowCount.toString(), if (lowCount > 0) red else green),
+            LinearLayout.LayoutParams(0, -2, overviewCardWidth).apply {
+                setMargins(dp(2), 0, if (isOwner) dp(2) else 0, dp(8))
+            }
+        )
+        if (isOwner) {
+            overview.addView(
+                statCard(
+                    "SEM CUSTO",
+                    itemsWithoutUnitCost.toString(),
+                    if (itemsWithoutUnitCost > 0) copper else forestSoft
+                ),
+                LinearLayout.LayoutParams(0, -2, 1f).apply {
+                    setMargins(dp(4), 0, 0, dp(8))
+                }
+            )
+        }
         container.addView(overview)
 
         val summary = makeCard(13, if (lowCount > 0) paleRed else paleGreen)
@@ -5500,34 +5540,46 @@ class MainActivity : Activity() {
         ))
         container.addView(summary, cardParams())
 
-        val valuation = makeCard(13)
-        valuation.addView(label(
-            "Valor estimado do stock com custo registado: ${formatEuro(stockValueWithKnownCost)}",
-            13f, true, forest
-        ))
-        if (itemsWithoutUnitCost > 0) {
+        if (isOwner) {
+            val valuation = makeCard(13)
             valuation.addView(label(
-                "$itemsWithoutUnitCost artigo(s) sem custo unitário; ficam fora deste total.",
-                11f, false, muted
+                "Valor estimado do stock com custo registado: ${formatEuro(stockValueWithKnownCost)}",
+                13f, true, forest
             ))
+            if (itemsWithoutUnitCost > 0) {
+                valuation.addView(label(
+                    "$itemsWithoutUnitCost artigo(s) sem custo unitário; ficam fora deste total.",
+                    11f, false, muted
+                ))
+            }
+            if (!inventoryUnitCostCacheLoaded ||
+                inventoryUnitCostCacheScope != currentInventoryCostScope()
+            ) {
+                valuation.addView(label(
+                    "A atualizar os custos de compra do servidor…",
+                    10.5f, false, muted
+                ))
+            } else {
+                valuation.addView(label(
+                    "Estimativa baseada no custo unitário atual introduzido pelo restaurante; não é valorização contabilística FIFO ou custo médio.",
+                    10.5f, false, muted
+                ))
+            }
+            container.addView(valuation, cardParams())
         }
-        valuation.addView(label(
-            "Estimativa baseada no custo unitário atual introduzido pelo restaurante; não é valorização contabilística FIFO ou custo médio.",
-            10.5f, false, muted
-        ))
-        container.addView(valuation, cardParams())
 
         addInventoryFilters(container)
         val query = normalizeCustomerMenuSearch(inventorySearch)
         val filteredStockItems = stockItems.filter { item ->
             val quantity = item.optDouble("quantity", 0.0)
             val threshold = item.optDouble("low_stock_threshold", 0.0)
-            val unitCost = if (item.isNull("unit_cost_per_unit")) null else
+            val unitCost = if (isOwner && !item.isNull("unit_cost_per_unit")) {
                 runCatching { BigDecimal(item.optString("unit_cost_per_unit")) }.getOrNull()
+            } else null
             val matchesStatus = when (selectedInventoryFilter) {
                 "Esgotados" -> quantity <= 0.0
                 "Stock baixo" -> quantity > 0.0 && quantity <= threshold
-                "Sem custo" -> unitCost == null
+                "Sem custo" -> isOwner && unitCost == null
                 else -> true
             }
             val matchesSearch = query.isBlank() || normalizeCustomerMenuSearch(
@@ -5535,7 +5587,10 @@ class MainActivity : Activity() {
             ).contains(query)
             matchesStatus && matchesSearch
         }
-        container.addView(label("${filteredStockItems.size} de ${stockItems.size} artigo(s)", 11f, true, forestSoft))
+        container.addView(label(
+            "${filteredStockItems.size} de ${stockItems.size} artigo(s)",
+            11f, true, forestSoft
+        ))
         addGap(container, 6)
         if (filteredStockItems.isEmpty()) {
             container.addView(emptyCard("Não há artigos de stock que correspondam à pesquisa e ao filtro selecionado."))
@@ -5548,8 +5603,9 @@ class MainActivity : Activity() {
             val unit = item.optString("unit", "unidades")
             val quantity = item.optDouble("quantity", 0.0)
             val threshold = item.optDouble("low_stock_threshold", 0.0)
-            val unitCost = if (item.isNull("unit_cost_per_unit")) null else
+            val unitCost = if (isOwner && !item.isNull("unit_cost_per_unit")) {
                 runCatching { BigDecimal(item.optString("unit_cost_per_unit")) }.getOrNull()
+            } else null
             val isLow = quantity <= threshold
             val card = makeCard(15)
             val top = LinearLayout(this).apply {
@@ -5566,22 +5622,33 @@ class MainActivity : Activity() {
             }
             card.addView(top)
             addGap(card, 8)
-            card.addView(label("${formatQuantity(quantity)} $unit", 22f, true, if (isLow) red else forest))
-            card.addView(label("Alerta a ${formatQuantity(threshold)} $unit", 11.5f, false, muted))
             card.addView(label(
-                unitCost?.let { "Custo de compra: ${formatUnitCost(it)} / $unit" }
-                    ?: "Custo de compra por unidade não definido",
-                11.5f, false, muted
+                "${formatQuantity(quantity)} $unit",
+                22f, true, if (isLow) red else forest
             ))
+            card.addView(label("Alerta a ${formatQuantity(threshold)} $unit", 11.5f, false, muted))
+            if (isOwner) {
+                card.addView(label(
+                    unitCost?.let { "Custo de compra: ${formatUnitCost(it)} / $unit" }
+                        ?: "Custo de compra por unidade não definido",
+                    11.5f, false, muted
+                ))
+            }
             addGap(card, 10)
-            card.addView(secondaryButton("Editar artigo e limite") { showInventoryItemDialog(item) },
-                LinearLayout.LayoutParams(-1, dp(48)))
+            card.addView(
+                secondaryButton("Editar artigo e limite") { showInventoryItemDialog(item) },
+                LinearLayout.LayoutParams(-1, dp(48))
+            )
             addGap(card, 5)
             val buttons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            buttons.addView(secondaryButton("+ Entrada") { showStockAdjustmentDialog(id, name, unit, true) },
-                LinearLayout.LayoutParams(0, dp(48), 1f).apply { setMargins(0, 0, dp(4), 0) })
-            buttons.addView(secondaryButton("− Saída") { showStockAdjustmentDialog(id, name, unit, false) },
-                LinearLayout.LayoutParams(0, dp(48), 1f).apply { setMargins(dp(4), 0, 0, 0) })
+            buttons.addView(
+                secondaryButton("+ Entrada") { showStockAdjustmentDialog(id, name, unit, true) },
+                LinearLayout.LayoutParams(0, dp(48), 1f).apply { setMargins(0, 0, dp(4), 0) }
+            )
+            buttons.addView(
+                secondaryButton("− Saída") { showStockAdjustmentDialog(id, name, unit, false) },
+                LinearLayout.LayoutParams(0, dp(48), 1f).apply { setMargins(dp(4), 0, 0, 0) }
+            )
             card.addView(buttons)
             addGap(card, 5)
             card.addView(
@@ -5589,8 +5656,10 @@ class MainActivity : Activity() {
                 LinearLayout.LayoutParams(-1, dp(48))
             )
             addGap(card, 5)
-            card.addView(secondaryButton("Ver histórico de movimentos") { showInventoryMovements(id, name) },
-                LinearLayout.LayoutParams(-1, dp(48)))
+            card.addView(
+                secondaryButton("Ver histórico de movimentos") { showInventoryMovements(id, name) },
+                LinearLayout.LayoutParams(-1, dp(48))
+            )
             container.addView(card, cardParams())
         }
     }
