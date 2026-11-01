@@ -186,4 +186,66 @@ REVOKE ALL ON FUNCTION public.list_inventory_waste_movements_with_costs(uuid, in
 GRANT EXECUTE ON FUNCTION public.list_inventory_waste_movements_with_costs(uuid, integer)
   TO authenticated;
 
+
+CREATE OR REPLACE FUNCTION public.get_inventory_stock_request_result(
+  p_restaurant_id uuid,
+  p_item_id uuid,
+  p_client_request_id uuid,
+  p_delta numeric,
+  p_note text DEFAULT NULL::text
+)
+RETURNS TABLE(item_id uuid, quantity numeric)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+DECLARE
+  v_user_id uuid := (SELECT auth.uid());
+  v_note text := left(trim(coalesce(p_note, 'Ajuste de stock')), 500);
+  v_current_quantity numeric(12,3);
+BEGIN
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'É necessário iniciar sessão.';
+  END IF;
+  IF p_restaurant_id IS NULL OR NOT private.is_restaurant_staff(p_restaurant_id) THEN
+    RAISE EXCEPTION 'Sem autorização para consultar movimentos deste restaurante.';
+  END IF;
+  IF p_item_id IS NULL OR p_client_request_id IS NULL
+     OR p_delta IS NULL OR p_delta = 0 THEN
+    RAISE EXCEPTION 'A referência da operação de stock não é válida.';
+  END IF;
+
+  SELECT i.quantity
+    INTO v_current_quantity
+  FROM public.restaurant_inventory_items AS i
+  WHERE i.id = p_item_id
+    AND i.restaurant_id = p_restaurant_id;
+
+  IF NOT FOUND THEN
+    RETURN;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.restaurant_inventory_movements AS m
+    WHERE m.restaurant_id = p_restaurant_id
+      AND m.item_id = p_item_id
+      AND m.created_by = v_user_id
+      AND m.client_request_id = p_client_request_id
+      AND m.delta = p_delta
+      AND m.note = v_note
+  ) THEN
+    RETURN QUERY SELECT p_item_id, v_current_quantity::numeric;
+  END IF;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.get_inventory_stock_request_result(
+  uuid, uuid, uuid, numeric, text
+) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_inventory_stock_request_result(
+  uuid, uuid, uuid, numeric, text
+) TO authenticated;
+
 COMMIT;
