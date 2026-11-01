@@ -56,6 +56,7 @@ class MainActivity : Activity() {
     private var kitchenQueueRefreshFailed = false
     private var remoteOperationsSyncInFlight = false
     private var remoteOperationsSyncFailed = false
+    private var remoteOperationsRefreshGeneration = 0L
     private var kitchenPageContainer: LinearLayout? = null
     private var inventoryAutoRefreshScheduled = false
     private var inventoryRefreshInFlight = false
@@ -1974,11 +1975,19 @@ class MainActivity : Activity() {
         return result
     }
 
-    private fun cacheRemoteOperations(token: String, restaurantId: String) {
-        if (token.isBlank() || restaurantId.isBlank()) return
+    private fun cacheRemoteOperations(token: String, restaurantId: String): Boolean {
+        val requestedAccountId = backendPrefs.getString("user_id", "").orEmpty()
+        if (token.isBlank() || restaurantId.isBlank() || requestedAccountId.isBlank()) return false
         val tables = SupabaseApi.listTables(token, restaurantId)
         val menu = SupabaseApi.listMenuItems(token, restaurantId)
         val orders = SupabaseApi.listOrders(token, restaurantId)
+        // The user may have signed out or switched restaurant while these requests
+        // were running. Never write the previous session into the current cache.
+        if (token != backendToken() || !ReservationRefreshScope.matchesRestaurant(
+                restaurantId, backendRestaurantId(),
+                requestedAccountId, backendPrefs.getString("user_id", "").orEmpty()
+            )
+        ) return false
         val syncedAtMillis = System.currentTimeMillis()
         backendPrefs.edit()
             .putString("remote_tables_json", tables.toString())
@@ -1988,6 +1997,7 @@ class MainActivity : Activity() {
             .putLong("remote_operations_synced_at", syncedAtMillis)
             .apply()
         remoteOperationsSyncFailed = false
+        return true
     }
 
     private fun refreshRemoteOperations() {
