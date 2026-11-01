@@ -6449,13 +6449,16 @@ class MainActivity : Activity() {
             showProgress = false,
             onError = { error ->
                 menuRecipeCostRefreshLoading = false
-                menuRecipeCostRefreshFailed = true
-                renderApp()
-                Toast.makeText(
-                    this,
-                    friendlyBackendError(error.message),
-                    Toast.LENGTH_LONG
-                ).show()
+                val currentScope = "restaurant:${backendRestaurantId()}:${backendPrefs.getString("user_id", "").orEmpty()}"
+                if (requestedScope == currentScope && economicManagerEnabled) {
+                    menuRecipeCostRefreshFailed = true
+                    renderApp()
+                    Toast.makeText(
+                        this,
+                        friendlyBackendError(error.message),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             }
         ) { raw ->
             menuRecipeCostRefreshLoading = false
