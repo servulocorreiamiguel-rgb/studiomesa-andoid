@@ -2,6 +2,16 @@ package pt.studiomesa.app
 
 /** Prevents a late reservation response from overwriting a different signed-in scope. */
 internal object ReservationRefreshScope {
+    fun ownsRefreshRequest(
+        requestedScope: String,
+        currentScope: String?,
+        requestedGeneration: Long,
+        currentGeneration: Long
+    ): Boolean =
+        requestedScope.isNotBlank() &&
+            requestedScope == currentScope &&
+            requestedGeneration == currentGeneration
+
     fun matchesRestaurant(
         requestedRestaurantId: String,
         currentRestaurantId: String,
