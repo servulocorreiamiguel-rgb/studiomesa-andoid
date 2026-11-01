@@ -4422,16 +4422,14 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(-1, dp(48))
         )
         addGap(container, 8)
+        val stockItems = (0 until items.length()).mapNotNull { items.optJSONObject(it) }
         var lowCount = 0
         var stockValueWithKnownCost = BigDecimal.ZERO.setScale(2)
         var itemsWithoutUnitCost = 0
-        for (index in 0 until items.length()) {
-            val item = items.optJSONObject(index) ?: continue
-            val id = item.optString("id")
-            val name = item.optString("name", "Artigo")
-            val unit = item.optString("unit", "unidades")
+        stockItems.forEach { item ->
             val quantity = item.optDouble("quantity", 0.0)
             val threshold = item.optDouble("low_stock_threshold", 0.0)
+            if (quantity <= threshold) lowCount++
             val unitCost = if (item.isNull("unit_cost_per_unit")) null else
                 runCatching { BigDecimal(item.optString("unit_cost_per_unit")) }.getOrNull()
             if (unitCost == null) {
@@ -4441,8 +4439,54 @@ class MainActivity : Activity() {
                 val itemValue = itemQuantity?.let { InventoryWasteCostCalculator.estimate(it, unitCost) }
                 if (itemValue != null) stockValueWithKnownCost = stockValueWithKnownCost.add(itemValue)
             }
+        }
+
+        val overview = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        overview.addView(statCard("ARTIGOS", stockItems.size.toString(), forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(4), dp(8)) })
+        overview.addView(statCard("STOCK BAIXO", lowCount.toString(), if (lowCount > 0) red else green),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(2), 0, dp(2), dp(8)) })
+        overview.addView(statCard("SEM CUSTO", itemsWithoutUnitCost.toString(), if (itemsWithoutUnitCost > 0) copper else forestSoft),
+            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(4), 0, 0, dp(8)) })
+        container.addView(overview)
+
+        val summary = makeCard(13, if (lowCount > 0) paleRed else paleGreen)
+        summary.addView(label(
+            if (lowCount > 0) "$lowCount artigo(s) no limite mínimo ou abaixo dele"
+            else "Todos os artigos acima dos respetivos limites",
+            12.5f, true, if (lowCount > 0) red else forest
+        ))
+        container.addView(summary, cardParams())
+
+        val valuation = makeCard(13)
+        valuation.addView(label(
+            "Valor estimado do stock com custo registado: ${formatEuro(stockValueWithKnownCost)}",
+            13f, true, forest
+        ))
+        if (itemsWithoutUnitCost > 0) {
+            valuation.addView(label(
+                "$itemsWithoutUnitCost artigo(s) sem custo unitário; ficam fora deste total.",
+                11f, false, muted
+            ))
+        }
+        valuation.addView(label(
+            "Estimativa baseada no custo unitário atual introduzido pelo restaurante; não é valorização contabilística FIFO ou custo médio.",
+            10.5f, false, muted
+        ))
+        container.addView(valuation, cardParams())
+
+        for (item in stockItems) {
+            val id = item.optString("id")
+            val name = item.optString("name", "Artigo")
+            val unit = item.optString("unit", "unidades")
+            val quantity = item.optDouble("quantity", 0.0)
+            val threshold = item.optDouble("low_stock_threshold", 0.0)
+            val unitCost = if (item.isNull("unit_cost_per_unit")) null else
+                runCatching { BigDecimal(item.optString("unit_cost_per_unit")) }.getOrNull()
             val isLow = quantity <= threshold
-            if (isLow) lowCount++
             val card = makeCard(15)
             val top = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -4485,26 +4529,6 @@ class MainActivity : Activity() {
                 LinearLayout.LayoutParams(-1, dp(48)))
             container.addView(card, cardParams())
         }
-        val summary = makeCard(13, if (lowCount > 0) paleRed else paleGreen)
-        summary.addView(label(if (lowCount > 0) "$lowCount artigo(s) no limite mínimo ou abaixo dele" else "Todos os artigos acima dos respetivos limites", 12.5f, true, if (lowCount > 0) red else forest))
-        container.addView(summary, cardParams())
-
-        val valuation = makeCard(13)
-        valuation.addView(label(
-            "Valor estimado do stock com custo registado: ${formatEuro(stockValueWithKnownCost)}",
-            13f, true, forest
-        ))
-        if (itemsWithoutUnitCost > 0) {
-            valuation.addView(label(
-                "$itemsWithoutUnitCost artigo(s) sem custo unitário; ficam fora deste total.",
-                11f, false, muted
-            ))
-        }
-        valuation.addView(label(
-            "Estimativa baseada no custo unitário atual introduzido pelo restaurante; não é valorização contabilística FIFO ou custo médio.",
-            10.5f, false, muted
-        ))
-        container.addView(valuation, cardParams())
     }
 
     private fun formatEuro(value: BigDecimal): String =
