@@ -5874,6 +5874,8 @@ class MainActivity : Activity() {
         container.addView(toggle, cardParams())
         if (!economicManagerEnabled) return
 
+        renderMenuCostComparison(container)
+
         if (hasRemoteRestaurant()) {
             val encryptedStore = SecureEconomicStore(this)
             val savedCopyExists = encryptedStore.hasSaved(scope)
@@ -6369,6 +6371,143 @@ class MainActivity : Activity() {
             "Limites: cálculos indicativos, sem contabilidade certificada, ligação bancária, leitura automática de faturas, acesso a fornecedores ou movimentos automáticos de stock. Os registos de desperdício, propostas e comparações são manuais; por defeito ficam na sessão, mas o proprietário pode guardar uma cópia cifrada local por opção. Não são sincronizados nem alteram preços, stock, pagamentos ou encomendas.",
             10.5f, false, muted
         ))
+    }
+
+    private fun renderMenuCostComparison(container: LinearLayout) {
+        val entries = if (hasRemoteRestaurant()) {
+            val menu = remoteMenuItems()
+            (0 until menu.length()).mapNotNull { index ->
+                val item = menu.optJSONObject(index) ?: return@mapNotNull null
+                val name = item.optString("name").trim()
+                if (name.isBlank()) return@mapNotNull null
+                val price = if (item.has("price") && !item.isNull("price")) {
+                    runCatching { BigDecimal(item.optString("price")) }.getOrNull()
+                } else null
+                val cost = if (item.has("cost") && !item.isNull("cost")) {
+                    runCatching { BigDecimal(item.optString("cost")) }.getOrNull()
+                } else null
+                MenuCostComparisonInput(name, price, cost)
+            }
+        } else {
+            store.getMenu().map { item ->
+                MenuCostComparisonInput(
+                    itemName = item.name,
+                    sellingPrice = item.price.takeIf { it.isFinite() }?.let { BigDecimal.valueOf(it) },
+                    recordedUnitCost = item.cost.takeIf { it.isFinite() }?.let { BigDecimal.valueOf(it) }
+                )
+            }
+        }
+
+        val targetText = economicInputs["foodTarget"]?.takeIf { it.isNotBlank() } ?: "30"
+        val target = runCatching {
+            RestaurantEconomicManager.parseNonNegative(targetText, "objetivo de custo alimentar")
+        }.getOrNull()?.takeIf { it.signum() > 0 && it <= BigDecimal("100") }
+
+        val card = makeCard(15)
+        card.addView(label("Comparação dos artigos da carta", 17f, true, forestDeep))
+        addGap(card, 4)
+        card.addView(label(
+            "Ordena os pratos pela percentagem do preço consumida pelo custo unitário registado. Serve para escolher o que vale a pena confirmar primeiro.",
+            11.5f, false, muted
+        ))
+        addGap(card, 7)
+
+        if (entries.isEmpty()) {
+            card.addView(emptyCard("Ainda não existem artigos na carta para comparar. Adiciona os pratos e regista o respetivo preço e custo unitário."))
+        } else {
+            val analysis = runCatching {
+                MenuCostComparisonAnalyzer.analyze(entries, target)
+            }.getOrElse { error ->
+                card.addView(emptyCard(
+                    "Não foi possível comparar a carta: ${error.message ?: "confirma os preços e custos registados"}."
+                ))
+                container.addView(card, cardParams())
+                return
+            }
+
+            val targetDescription = target?.let {
+                "Objetivo de custo alimentar: ${economicPercent(it)}."
+            } ?: "O objetivo percentual não está válido; o ranking continua disponível, mas sem alerta face a um objetivo."
+            card.addView(label(
+                "${analysis.rankedItems.size} artigo(s) comparáveis · ${analysis.aboveTargetCount} acima do objetivo · ${analysis.costAboveSellingPriceCount} com custo registado superior ao preço.",
+                11.5f, true, forestSoft
+            ))
+            addGap(card, 3)
+            card.addView(label(targetDescription, 10.5f, false, muted))
+            addGap(card, 8)
+
+            analysis.rankedItems.take(8).forEachIndexed { index, item ->
+                val row = makeCard(11, if (item.amountAfterRecordedCost.signum() < 0) paleRed else white)
+                row.addView(label("${index + 1}. ${item.itemName}", 13.5f, true, forestDeep))
+                addGap(row, 3)
+                row.addView(label(
+                    "Preço: ${formatEuro(item.sellingPrice)} · Custo registado: ${formatEuro(item.recordedUnitCost)}",
+                    11f, false, muted
+                ))
+                addGap(row, 3)
+                row.addView(label(
+                    "Custo/preço: ${economicPercent(item.costToPricePercent)}",
+                    12f, true, if (item.aboveTarget || item.amountAfterRecordedCost.signum() < 0) red else forest
+                ))
+                row.addView(label(
+                    if (item.amountAfterRecordedCost.signum() >= 0) {
+                        "Diferença após este custo: ${formatEuro(item.amountAfterRecordedCost)} antes dos restantes encargos."
+                    } else {
+                        "O custo registado ultrapassa o preço em ${formatEuro(item.amountAfterRecordedCost.abs())}."
+                    },
+                    10.5f, false, ink
+                ))
+                if (item.aboveTarget) {
+                    row.addView(label(
+                        "Acima do objetivo definido. Confirma porções, custo de compra e ficha técnica antes de decidir.",
+                        10.5f, true, red
+                    ))
+                }
+                card.addView(row, cardParams())
+                addGap(card, 5)
+            }
+
+            if (analysis.rankedItems.size > 8) {
+                card.addView(label(
+                    "São apresentados os oito artigos com maior relação custo/preço, entre ${analysis.rankedItems.size} analisados.",
+                    10.5f, false, muted
+                ))
+            }
+            if (analysis.excludedMissingCost > 0 || analysis.excludedInvalidPrice > 0 || analysis.excludedInvalidCost > 0) {
+                addGap(card, 5)
+                card.addView(label(
+                    buildString {
+                        if (analysis.excludedMissingCost > 0) append("${analysis.excludedMissingCost} sem custo registado; ")
+                        if (analysis.excludedInvalidPrice > 0) append("${analysis.excludedInvalidPrice} sem preço válido; ")
+                        if (analysis.excludedInvalidCost > 0) append("${analysis.excludedInvalidCost} com custo inválido; ")
+                        append("estes artigos não entram no ranking.")
+                    },
+                    10.5f, false, muted
+                ))
+            }
+        }
+
+        addGap(card, 7)
+        card.addView(label(
+            if (hasRemoteRestaurant()) {
+                "Fonte: última carta recebida e guardada em cache. Atualiza os dados antes de decidir. O custo usado é o valor unitário registado pelo restaurante, não um custo contabilístico nem, necessariamente, o cálculo completo da ficha técnica."
+            } else {
+                "Fonte: carta local de demonstração. Os valores não pertencem a um restaurante real."
+            },
+            10.5f, false, muted
+        ))
+        if (hasRemoteRestaurant()) {
+            addGap(card, 6)
+            card.addView(secondaryButton("Atualizar dados do restaurante") {
+                refreshRemoteOperations()
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+        }
+        addGap(card, 4)
+        card.addView(label(
+            "A diferença entre preço e custo registado não é lucro: ainda pode ter de pagar pessoal, renda, energia, impostos, comissões e outros encargos. O ranking é um sinal para investigar, não uma ordem para aumentar preços.",
+            10.5f, false, muted
+        ))
+        container.addView(card, cardParams())
     }
 
     private fun economicNumberField(
