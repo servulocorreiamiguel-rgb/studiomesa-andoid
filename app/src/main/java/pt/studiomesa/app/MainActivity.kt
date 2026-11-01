@@ -6575,6 +6575,8 @@ class MainActivity : Activity() {
                 recordedUnitCost = manualCost,
                 menuItemId = menuItemId.takeIf { it.isNotBlank() },
                 recipeExists = recipeExists,
+                recipeIsActive = recipe?.optBoolean("is_active", false) == true,
+                recipeRequiresReview = recipe?.optBoolean("requires_review", false) == true,
                 recipeIsActiveApproved = recipeIsActiveApproved,
                 recipeCostPerPortion = recipeEstimate?.knownCostPerPortion?.takeIf { recipeIsComplete },
                 recipeCostComplete = recipeIsComplete
@@ -6633,8 +6635,9 @@ class MainActivity : Activity() {
                 menuRecipeCostRefreshFailed ->
                     "Não foi possível carregar as fichas técnicas. O ranking usa apenas os custos manuais da carta."
                 recipeSnapshot != null ->
-                    "Fichas técnicas e inventário recebidos às " +
-                        SimpleDateFormat("HH:mm:ss", Locale("pt", "PT")).format(Date(menuRecipeCostUpdatedAtMillis)) + "."
+                    "Fichas técnicas e inventário recebidos neste dispositivo às " +
+                        SimpleDateFormat("HH:mm:ss", Locale("pt", "PT")).format(Date(menuRecipeCostUpdatedAtMillis)) +
+                        ". Alterações feitas noutra sessão só aparecem depois de atualizares."
                 else ->
                     "Ainda não carregaste as fichas técnicas. O ranking inicial usa apenas os custos manuais registados na carta."
             }
@@ -6675,7 +6678,7 @@ class MainActivity : Activity() {
             if (isPremium && hasRemoteRestaurant() && recipeSnapshot != null) {
                 addGap(card, 3)
                 card.addView(label(
-                    "${analysis.menuItemsUsingRecipeCost} com ficha técnica aprovada · ${analysis.menuItemsUsingManualCost} com custo manual · ${analysis.recipesAwaitingApproval} por aprovar · ${analysis.approvedRecipesIncomplete} aprovadas mas incompletas.",
+                    "${analysis.menuItemsUsingRecipeCost} com ficha técnica aprovada · ${analysis.menuItemsUsingManualCost} com custo manual · ${analysis.recipesAwaitingApproval} a exigir revisão · ${analysis.recipesInactive} inativas · ${analysis.approvedRecipesIncomplete} aprovadas mas incompletas.",
                     10.5f, false, muted
                 ))
             }
@@ -6731,7 +6734,14 @@ class MainActivity : Activity() {
             if (analysis.recipesAwaitingApproval > 0) {
                 addGap(card, 4)
                 card.addView(label(
-                    "${analysis.recipesAwaitingApproval} ficha(s) ainda não aprovada(s). Nestes pratos mantém-se o custo manual da carta; a ficha não substitui esse valor antes da aprovação.",
+                    "${analysis.recipesAwaitingApproval} ficha(s) foram alteradas e exigem nova revisão do proprietário. Nestes pratos mantém-se o custo manual da carta até à aprovação.",
+                    10.5f, true, red
+                ))
+            }
+            if (analysis.recipesInactive > 0) {
+                addGap(card, 4)
+                card.addView(label(
+                    "${analysis.recipesInactive} ficha(s) estão inativas. Isto pode ser uma escolha do proprietário; o custo manual da carta continua a ser usado.",
                     10.5f, false, muted
                 ))
             }
