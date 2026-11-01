@@ -1869,6 +1869,9 @@ class MainActivity : Activity() {
             if (restaurant != null) {
                 val restaurantId = restaurant.optString("restaurant_id")
                 if (previousRestaurantId.isNotBlank() && previousRestaurantId != restaurantId) {
+                    reservationCache = JSONArray()
+                    reservationsLoaded = false
+                    selectedReservationFilter = "Todas"
                     editor.remove("remote_members_json")
                         .remove("remote_tables_json")
                         .remove("remote_menu_json")
@@ -1904,6 +1907,7 @@ class MainActivity : Activity() {
                     .apply()
                 reservationCache = JSONArray()
                 reservationsLoaded = false
+                selectedReservationFilter = "Todas"
             }
         } catch (_: Exception) {
             // Keep authentication successful if restoring cloud data temporarily fails.
@@ -4139,6 +4143,21 @@ class MainActivity : Activity() {
                     throw IllegalStateException("A conta ou o restaurante mudou. Atualiza as reservas novamente.")
                 }
                 SupabaseApi.listReservations(token, requestedRestaurantId).toString()
+            },
+            onError = { error ->
+                val currentRestaurantId = backendRestaurantId()
+                val currentAccountId = backendPrefs.getString("user_id", "").orEmpty()
+                if (ReservationRefreshScope.matchesRestaurant(
+                        requestedRestaurantId, currentRestaurantId,
+                        requestedAccountId, currentAccountId
+                    )
+                ) {
+                    AlertDialog.Builder(this)
+                        .setTitle("Não foi possível atualizar as reservas")
+                        .setMessage(friendlyBackendError(error.message))
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
             },
             onSuccess = { raw ->
                 val currentRestaurantId = backendRestaurantId()
