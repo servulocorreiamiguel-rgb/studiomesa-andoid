@@ -178,3 +178,14 @@ A validação de compilação e execução dos seis testes continua pendente; os
 - Criado `ReservationRefreshScope.kt` e `ReservationRefreshScopeTest.kt`, com dois testes que cobrem conta/restaurante diferentes, cartões diferentes e identificadores ausentes.
 
 **Validação desta continuação:** os ficheiros foram gravados e relidos no GitHub. Os dois testes de isolamento e os dois testes de paginação acrescentados nesta fase ainda não foram executados. Não houve CI, Gradle, Lint, compilação APK/AAB, teste físico ou alteração ao Supabase alojado.
+
+
+### Continuação — estado de sincronização e concorrência na agenda
+
+- A agenda da equipa mostra a hora da última lista integral confirmada. A própria interface explica que a atualização é manual e não uma subscrição em tempo real; para ver alterações de outros dispositivos é necessário atualizar.
+- Se a atualização falhar e já existir uma lista confirmada, a agenda conserva-a e identifica-a como a última lista disponível. Se nunca carregou dados, mostra um estado de erro recuperável e não repete automaticamente o pedido em ciclo.
+- Pedidos simultâneos de atualização para a mesma conta/restaurante são ignorados. Cada pedido recebe também uma geração; uma resposta atrasada de uma geração anterior não pode limpar o bloqueio nem substituir a lista de uma atualização posterior da mesma sessão.
+- Criar uma reserva, atribuir mesa e alterar o estado passam a devolver a lista atualizada à thread da interface, em vez de alterarem a cache dentro da tarefa de rede. A cache e a hora da última consulta só mudam depois de a resposta ser confirmada e de a conta/restaurante continuarem iguais.
+- As falhas e respostas tardias das operações também são filtradas pelo âmbito da conta e do restaurante. Os dados da sessão atual não são substituídos por resultados de uma sessão anterior.
+
+**Validação desta continuação:** as alterações foram gravadas e relidas no GitHub. Os testes de paginação e isolamento continuam escritos, não executados. Não houve CI, Gradle, Lint, compilação APK/AAB, teste físico nem alteração ao Supabase alojado.
