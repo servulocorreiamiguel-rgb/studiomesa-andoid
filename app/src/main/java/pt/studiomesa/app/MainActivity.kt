@@ -3263,10 +3263,7 @@ class MainActivity : Activity() {
                 "Cancelada", "Concluída", "Não compareceu" -> paper
                 else -> copperPale
             }
-            top.addView(label(status, 10f, true, statusColor).apply {
-                setPadding(dp(8), dp(6), dp(8), dp(6))
-                background = rounded(statusBackground, 12)
-            })
+            top.addView(statusBadge(status, statusColor, statusBackground))
             card.addView(top)
             addGap(card, 7)
             card.addView(label(
