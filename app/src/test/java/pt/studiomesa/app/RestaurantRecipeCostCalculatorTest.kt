@@ -57,6 +57,30 @@ class RestaurantRecipeCostCalculatorTest {
     }
 
     @Test
+    fun calculatesIngredientCostRatioAndAmountBeforeOtherCosts() {
+        val result = RestaurantRecipeCostCalculator.estimate(
+            listOf(
+                RestaurantRecipeCostInput("cheese", BigDecimal("0.100"), BigDecimal.ZERO, BigDecimal("8.0000"))
+            )
+        )
+
+        assertEquals(BigDecimal("8.0"), result.knownIngredientCostPercent(BigDecimal("10.00")))
+        assertEquals(BigDecimal("9.200"), result.amountAfterIngredients(BigDecimal("10.00")))
+    }
+
+    @Test
+    fun rejectsZeroSellingPriceForPercentage() {
+        val result = RestaurantRecipeCostCalculator.estimate(
+            listOf(
+                RestaurantRecipeCostInput("cheese", BigDecimal("0.100"), BigDecimal.ZERO, BigDecimal("8.0000"))
+            )
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            result.knownIngredientCostPercent(BigDecimal.ZERO)
+        }
+    }
+
+    @Test
     fun rejectsDuplicateIngredientsAndInvalidCosts() {
         assertThrows(IllegalArgumentException::class.java) {
             RestaurantRecipeCostCalculator.estimate(
