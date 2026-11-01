@@ -39,6 +39,17 @@ class MenuCostComparisonAnalyzerTest {
     }
 
     @Test
+    fun doesNotFlagAnItemExactlyAtTheTarget() {
+        val result = MenuCostComparisonAnalyzer.analyze(
+            listOf(MenuCostComparisonInput("No limite", BigDecimal("10.00"), BigDecimal("3.00"))),
+            targetPercent = BigDecimal("30")
+        )
+
+        assertEquals(0, result.aboveTargetCount)
+        assertFalse(result.rankedItems.single().aboveTarget)
+    }
+
+    @Test
     fun keepsCostAboveSellingPriceVisibleAsNegativeAmount() {
         val result = MenuCostComparisonAnalyzer.analyze(
             listOf(MenuCostComparisonInput("Prato", BigDecimal("5.00"), BigDecimal("6.00"))),
