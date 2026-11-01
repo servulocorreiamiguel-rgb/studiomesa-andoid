@@ -30,6 +30,9 @@ SET search_path TO ''
 AS $function$
 BEGIN
   IF (SELECT auth.uid()) IS NULL THEN
+    IF current_setting('request.jwt.claim.role', true) = 'service_role' THEN
+      RETURN NEW;
+    END IF;
     RAISE EXCEPTION 'É necessário iniciar sessão.';
   END IF;
 
