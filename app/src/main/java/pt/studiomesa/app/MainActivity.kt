@@ -88,6 +88,7 @@ class MainActivity : Activity() {
     )
     private val assistantConversation = mutableListOf<AssistantChatTurn>()
     private var selectedAnalysisPeriod = SalesAnalysisPeriod.ALL_TIME
+    private var selectedOrderFilter = "Todos"
 
     // Owner-controlled economic tools: session-only until persistent authorization is designed.
     private var economicManagerEnabled = false
@@ -1200,8 +1201,17 @@ class MainActivity : Activity() {
                 container.addView(emptyCard("Ainda não há pedidos registados no servidor. Cria o primeiro pedido para testar o fluxo."))
                 return
             }
-            for (index in 0 until orders.length()) {
-                val order = orders.optJSONObject(index) ?: continue
+            addOrderFilters(container)
+            val filteredOrders = (0 until orders.length())
+                .mapNotNull { orders.optJSONObject(it) }
+                .filter { orderMatchesSelectedFilter(it.optString("status", "Aberto")) }
+            container.addView(label("${filteredOrders.size} pedido(s) neste filtro", 11f, true, forestSoft))
+            addGap(container, 6)
+            if (filteredOrders.isEmpty()) {
+                container.addView(emptyCard("Não existem pedidos neste estado. Escolhe outro filtro para consultar os restantes."))
+                return
+            }
+            for (order in filteredOrders) {
                 val status = order.optString("status", "Aberto")
                 val closed = status == "Concluído" || status == "Cancelado"
                 val nextStatus = when (status) {
@@ -1298,8 +1308,16 @@ class MainActivity : Activity() {
             container.addView(emptyCard("Ainda não há pedidos registados. Cria um pedido de demonstração para experimentar o fluxo."))
             return
         }
+        addOrderFilters(container)
+        val filteredOrders = orders.filter { orderMatchesSelectedFilter(it.status) }
+        container.addView(label("${filteredOrders.size} pedido(s) neste filtro", 11f, true, forestSoft))
+        addGap(container, 6)
+        if (filteredOrders.isEmpty()) {
+            container.addView(emptyCard("Não existem pedidos neste estado. Escolhe outro filtro para consultar os restantes."))
+            return
+        }
 
-        orders.forEach { order ->
+        filteredOrders.forEach { order ->
             val done = order.status == "Concluído"
             val card = makeCard(16)
             val top = LinearLayout(this).apply {
@@ -1351,6 +1369,40 @@ class MainActivity : Activity() {
             minutes < 60L -> "$minutes min em espera"
             else -> "${minutes / 60L} h ${minutes % 60L} min em espera"
         }
+    }
+
+    private fun addOrderFilters(container: LinearLayout) {
+        container.addView(label("FILTRAR PEDIDOS", 9.5f, true, forestSoft))
+        addGap(container, 5)
+        val scroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        listOf("Todos", "Ativos", "Concluídos", "Cancelados").forEach { filter ->
+            row.addView(
+                filterChip(filter, selectedOrderFilter == filter) {
+                    selectedOrderFilter = filter
+                    renderApp()
+                },
+                LinearLayout.LayoutParams(-2, dp(42)).apply {
+                    setMargins(0, 0, dp(6), 0)
+                }
+            )
+        }
+        scroll.addView(row)
+        container.addView(scroll, LinearLayout.LayoutParams(-1, dp(46)))
+        addGap(container, 5)
+    }
+
+    private fun orderMatchesSelectedFilter(status: String): Boolean = when (selectedOrderFilter) {
+        "Ativos" -> status !in setOf("Concluído", "Cancelado")
+        "Concluídos" -> status == "Concluído"
+        "Cancelados" -> status == "Cancelado"
+        else -> true
     }
 
     private fun renderKitchen(container: LinearLayout) {
