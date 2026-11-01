@@ -9,6 +9,8 @@ internal data class MenuCostComparisonInput(
     val recordedUnitCost: BigDecimal?,
     val menuItemId: String? = null,
     val recipeExists: Boolean = false,
+    val recipeIsActive: Boolean = false,
+    val recipeRequiresReview: Boolean = false,
     val recipeIsActiveApproved: Boolean = false,
     val recipeCostPerPortion: BigDecimal? = null,
     val recipeCostComplete: Boolean = false
@@ -34,6 +36,7 @@ internal data class MenuCostComparisonResult(
     val menuItemsUsingRecipeCost: Int,
     val menuItemsUsingManualCost: Int,
     val recipesAwaitingApproval: Int,
+    val recipesInactive: Int,
     val approvedRecipesIncomplete: Int
 )
 
@@ -130,7 +133,8 @@ internal object MenuCostComparisonAnalyzer {
             costAboveSellingPriceCount = ranked.count { it.amountAfterRecordedCost.signum() < 0 },
             menuItemsUsingRecipeCost = ranked.count { it.costSourceLabel == "Ficha técnica aprovada" },
             menuItemsUsingManualCost = ranked.count { it.costSourceLabel != "Ficha técnica aprovada" },
-            recipesAwaitingApproval = entries.count { it.recipeExists && !it.recipeIsActiveApproved },
+            recipesAwaitingApproval = entries.count { it.recipeExists && it.recipeRequiresReview },
+            recipesInactive = entries.count { it.recipeExists && !it.recipeIsActive },
             approvedRecipesIncomplete = entries.count {
                 it.recipeExists && it.recipeIsActiveApproved && (!it.recipeCostComplete || it.recipeCostPerPortion == null)
             }
