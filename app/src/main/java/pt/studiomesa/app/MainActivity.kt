@@ -4615,7 +4615,7 @@ class MainActivity : Activity() {
                                         .setTitle("Não foi possível confirmar a reserva")
                                         .setMessage(
                                             friendlyBackendError(error.message) +
-                                                "\\n\\nOs dados continuam no formulário. Podes repetir o envio; a mesma tentativa não cria uma segunda reserva."
+                                                "\n\nOs dados continuam no formulário. Podes repetir o envio; a mesma tentativa não cria uma segunda reserva."
                                         )
                                         .setPositiveButton("OK", null)
                                         .show()
