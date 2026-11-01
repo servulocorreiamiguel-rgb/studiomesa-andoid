@@ -6430,6 +6430,8 @@ class MainActivity : Activity() {
             background = rounded(paper, 15)
             minLines = 1
             maxLines = 3
+            filters = arrayOf(InputFilter.LengthFilter(400))
+            contentDescription = "Campo de pergunta do Assistente StudioMesa, máximo 400 caracteres"
             imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEND
             setText(assistantQuestion)
             setOnEditorActionListener { _, actionId, _ ->
@@ -6460,7 +6462,7 @@ class MainActivity : Activity() {
         composer.addView(row)
         addGap(composer, 4)
         composer.addView(label(
-            "Assistente local: usa regras e dados disponíveis; não é um modelo generativo e não altera registos.",
+            "Máximo 400 caracteres. Assistente local: usa regras e dados disponíveis; não é um modelo generativo e não altera registos.",
             10f, false, muted
         ))
         return composer
