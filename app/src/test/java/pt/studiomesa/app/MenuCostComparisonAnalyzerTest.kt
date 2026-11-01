@@ -105,6 +105,78 @@ class MenuCostComparisonAnalyzerTest {
     }
 
     @Test
+    fun approvedCompleteRecipeCostOverridesManualMenuCost() {
+        val result = MenuCostComparisonAnalyzer.analyze(
+            listOf(
+                MenuCostComparisonInput(
+                    itemName = "Prato com receita",
+                    sellingPrice = BigDecimal("10.00"),
+                    recordedUnitCost = BigDecimal("2.00"),
+                    recipeExists = true,
+                    recipeIsActiveApproved = true,
+                    recipeCostPerPortion = BigDecimal("3.50"),
+                    recipeCostComplete = true
+                )
+            ),
+            targetPercent = BigDecimal("30")
+        )
+
+        val row = result.rankedItems.single()
+        assertEquals(BigDecimal("35.0"), row.costToPricePercent)
+        assertEquals("Ficha técnica aprovada", row.costSourceLabel)
+        assertEquals(1, result.menuItemsUsingRecipeCost)
+        assertEquals(0, result.menuItemsUsingManualCost)
+        assertEquals(1, result.aboveTargetCount)
+    }
+
+    @Test
+    fun unapprovedRecipeDoesNotReplaceManualMenuCost() {
+        val result = MenuCostComparisonAnalyzer.analyze(
+            listOf(
+                MenuCostComparisonInput(
+                    itemName = "Prato por rever",
+                    sellingPrice = BigDecimal("10.00"),
+                    recordedUnitCost = BigDecimal("2.00"),
+                    recipeExists = true,
+                    recipeIsActiveApproved = false,
+                    recipeCostPerPortion = BigDecimal("4.00"),
+                    recipeCostComplete = true
+                )
+            ),
+            targetPercent = BigDecimal("30")
+        )
+
+        val row = result.rankedItems.single()
+        assertEquals(BigDecimal("20.0"), row.costToPricePercent)
+        assertEquals("Custo manual · ficha técnica por aprovar", row.costSourceLabel)
+        assertEquals(1, result.recipesAwaitingApproval)
+        assertEquals(1, result.menuItemsUsingManualCost)
+    }
+
+    @Test
+    fun incompleteApprovedRecipeIsExcludedInsteadOfUnderstatingCost() {
+        val result = MenuCostComparisonAnalyzer.analyze(
+            listOf(
+                MenuCostComparisonInput(
+                    itemName = "Prato incompleto",
+                    sellingPrice = BigDecimal("10.00"),
+                    recordedUnitCost = BigDecimal("2.00"),
+                    recipeExists = true,
+                    recipeIsActiveApproved = true,
+                    recipeCostPerPortion = BigDecimal("1.00"),
+                    recipeCostComplete = false
+                )
+            ),
+            targetPercent = BigDecimal("30")
+        )
+
+        assertTrue(result.rankedItems.isEmpty())
+        assertEquals(1, result.approvedRecipesIncomplete)
+        assertEquals(0, result.menuItemsUsingManualCost)
+        assertEquals(0, result.menuItemsUsingRecipeCost)
+    }
+
+    @Test
     fun rejectsTooManyMenuItemsAndInvalidNames() {
         assertThrows(IllegalArgumentException::class.java) {
             MenuCostComparisonAnalyzer.analyze(
