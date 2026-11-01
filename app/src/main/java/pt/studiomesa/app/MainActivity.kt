@@ -5505,6 +5505,13 @@ class MainActivity : Activity() {
     private fun formatQuantity(value: Double): String =
         String.format(Locale("pt", "PT"), "%.3f", value).trimEnd('0').trimEnd(',')
 
+    private fun scrollableForm(content: View): ScrollView =
+        ScrollView(this).apply {
+            isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+            addView(content)
+        }
+
     private fun inventoryUnitSpinner(stockUnit: String): Spinner {
         val normalizedStockUnit = stockUnit.trim().ifBlank { "unidades" }
         val options = InventoryUnitConverter.compatibleUnits(normalizedStockUnit)
@@ -5676,7 +5683,7 @@ class MainActivity : Activity() {
         form.addView(note, fieldParams())
         val dialog = AlertDialog.Builder(this)
             .setTitle(if (isInbound) "Entrada de stock" else "Saída de stock")
-            .setView(form)
+            .setView(scrollableForm(form))
             .setNegativeButton("Cancelar", null)
             .setPositiveButton("Registar", null)
             .create()
@@ -5774,7 +5781,7 @@ class MainActivity : Activity() {
 
         val dialog = AlertDialog.Builder(this)
             .setTitle("Registar desperdício")
-            .setView(form)
+            .setView(scrollableForm(form))
             .setNegativeButton("Cancelar", null)
             .setPositiveButton("Registar perda", null)
             .create()
@@ -8129,7 +8136,7 @@ class MainActivity : Activity() {
 
         val dialog = AlertDialog.Builder(this)
             .setTitle("Adicionar ingrediente · $menuItemName")
-            .setView(form)
+            .setView(scrollableForm(form))
             .setNegativeButton("Cancelar", null)
             .setPositiveButton("Guardar ingrediente", null)
             .create()
