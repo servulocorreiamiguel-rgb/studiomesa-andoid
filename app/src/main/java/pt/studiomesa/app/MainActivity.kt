@@ -6792,6 +6792,28 @@ class MainActivity : Activity() {
             inventoryById[item.optString("id")] = item
         }
 
+        val recipeCostEstimate = if (ingredients.length() == 0) {
+            null
+        } else {
+            runCatching {
+                val costInputs = (0 until ingredients.length()).map { index ->
+                    val line = ingredients.getJSONObject(index)
+                    val inventoryItemId = line.optString("inventory_item_id")
+                    val stockItem = inventoryById[inventoryItemId]
+                    RestaurantRecipeCostInput(
+                        inventoryItemId = inventoryItemId,
+                        quantityPerPortion = BigDecimal(line.optString("quantity_per_portion")),
+                        wastePercent = BigDecimal(line.optString("waste_percent", "0")),
+                        unitCostPerUnit = stockItem?.let { item ->
+                            if (item.isNull("unit_cost_per_unit")) null
+                            else BigDecimal(item.optString("unit_cost_per_unit"))
+                        }
+                    )
+                }
+                RestaurantRecipeCostCalculator.estimate(costInputs)
+            }
+        }
+
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(8), dp(18), dp(10))
@@ -6814,6 +6836,46 @@ class MainActivity : Activity() {
         addGap(statusCard, 4)
         statusCard.addView(label(statusDescription, 11.5f, false, ink))
         content.addView(statusCard)
+
+        if (ingredients.length() > 0) {
+            addGap(content, 8)
+            val costCard = makeCard(12, copperPale)
+            val estimate = recipeCostEstimate?.getOrNull()
+            if (estimate == null) {
+                costCard.addView(label("Custo por dose indisponível", 13f, true, forestDeep))
+                addGap(costCard, 4)
+                costCard.addView(label(
+                    "Não foi possível calcular o custo com os dados atuais da receita e do inventário. Confirma as quantidades, o desperdício e as unidades.",
+                    11f, false, ink
+                ))
+            } else {
+                costCard.addView(label(
+                    if (estimate.isComplete) "Custo estimado por dose" else "Custo conhecido por dose",
+                    11f, true, forestSoft
+                ))
+                addGap(costCard, 3)
+                costCard.addView(label(formatEuro(estimate.knownCostPerPortion), 22f, true, forestDeep))
+                if (estimate.ingredientsWithoutCost > 0) {
+                    addGap(costCard, 4)
+                    costCard.addView(label(
+                        "\${estimate.ingredientsWithoutCost} de \${estimate.totalIngredients} ingrediente(s) sem custo de compra. O valor apresentado é parcial, não é o custo total da receita.",
+                        11f, false, ink
+                    ))
+                } else {
+                    addGap(costCard, 4)
+                    costCard.addView(label(
+                        "Inclui as quantidades de stock arredondadas como no consumo automático e o desperdício definido na ficha técnica.",
+                        10.5f, false, ink
+                    ))
+                }
+                costCard.addView(label(
+                    "Estimativa com base nos custos unitários atuais do inventário; não inclui mão de obra, energia, embalagem ou outros custos indiretos.",
+                    10f, false, muted
+                ))
+            }
+            content.addView(costCard, cardParams())
+        }
+
         addGap(content, 10)
 
         if (ingredients.length() == 0) {
@@ -6836,6 +6898,15 @@ class MainActivity : Activity() {
                     "$amount $unit por dose · desperdício de $waste%",
                     11.5f, false, muted
                 ))
+                recipeCostEstimate?.getOrNull()?.let { estimate ->
+                    val lineCost = estimate.lineCostsPerPortion[inventoryItemId]
+                    addGap(card, 3)
+                    card.addView(label(
+                        lineCost?.let { "Custo estimado desta linha: \${formatEuro(it)} por dose" }
+                            ?: "Custo desta linha por calcular: custo de compra não definido",
+                        10.5f, false, if (lineCost == null) muted else forestSoft
+                    ))
+                }
                 addGap(card, 7)
                 card.addView(secondaryButton("Remover ingrediente") {
                     AlertDialog.Builder(this)
