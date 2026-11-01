@@ -4414,17 +4414,47 @@ class MainActivity : Activity() {
                     tableField.error = "Indica uma mesa entre 1 e 100."
                     return@setOnClickListener
                 }
+                val requestedRestaurantId = backendRestaurantId()
+                val requestedAccountId = backendPrefs.getString("user_id", "").orEmpty()
+                if (requestedRestaurantId.isBlank() || requestedAccountId.isBlank()) return@setOnClickListener
                 runBackend(
                     task = {
-                        SupabaseApi.assignReservationTable(backendToken(), reservationId, tableNumber)
-                        reservationCache = SupabaseApi.listReservations(backendToken(), backendRestaurantId())
-                        reservationsLoaded = true
-                        "OK"
+                        val token = backendToken()
+                        if (token.isBlank() || !ReservationRefreshScope.matchesRestaurant(
+                                requestedRestaurantId, backendRestaurantId(),
+                                requestedAccountId, backendPrefs.getString("user_id", "").orEmpty()
+                            )
+                        ) throw IllegalStateException("A conta ou o restaurante mudou. Atualiza as reservas novamente.")
+                        SupabaseApi.assignReservationTable(token, reservationId, tableNumber)
+                        SupabaseApi.listReservations(token, requestedRestaurantId).toString()
                     },
-                    onSuccess = {
-                        dialog.dismiss()
-                        Toast.makeText(this, "Mesa atribuída à reserva.", Toast.LENGTH_SHORT).show()
-                        renderApp()
+                    onError = { error ->
+                        if (ReservationRefreshScope.matchesRestaurant(
+                                requestedRestaurantId, backendRestaurantId(),
+                                requestedAccountId, backendPrefs.getString("user_id", "").orEmpty()
+                            )
+                        ) {
+                            AlertDialog.Builder(this)
+                                .setTitle("Não foi possível atribuir a mesa")
+                                .setMessage(friendlyBackendError(error.message))
+                                .setPositiveButton("OK", null)
+                                .show()
+                        }
+                    },
+                    onSuccess = { raw ->
+                        if (ReservationRefreshScope.matchesRestaurant(
+                                requestedRestaurantId, backendRestaurantId(),
+                                requestedAccountId, backendPrefs.getString("user_id", "").orEmpty()
+                            )
+                        ) {
+                            reservationCache = JSONArray(raw)
+                            reservationsLoaded = true
+                            reservationUpdatedAtMillis = System.currentTimeMillis()
+                            reservationRefreshFailed = false
+                            dialog.dismiss()
+                            Toast.makeText(this, "Mesa atribuída à reserva.", Toast.LENGTH_SHORT).show()
+                            renderApp()
+                        }
                     }
                 )
             }
@@ -4434,13 +4464,47 @@ class MainActivity : Activity() {
     }
 
     private fun setReservationStatus(reservationId: String, status: String) {
-        runBackend({
-            SupabaseApi.updateReservationStatus(backendToken(), reservationId, status)
-            val latest = SupabaseApi.listReservations(backendToken(), backendRestaurantId())
-            reservationCache = latest
-            reservationsLoaded = true
-            "OK"
-        }) { renderApp() }
+        val requestedRestaurantId = backendRestaurantId()
+        val requestedAccountId = backendPrefs.getString("user_id", "").orEmpty()
+        if (requestedRestaurantId.isBlank() || requestedAccountId.isBlank()) return
+        runBackend(
+            task = {
+                val token = backendToken()
+                if (token.isBlank() || !ReservationRefreshScope.matchesRestaurant(
+                        requestedRestaurantId, backendRestaurantId(),
+                        requestedAccountId, backendPrefs.getString("user_id", "").orEmpty()
+                    )
+                ) throw IllegalStateException("A conta ou o restaurante mudou. Atualiza as reservas novamente.")
+                SupabaseApi.updateReservationStatus(token, reservationId, status)
+                SupabaseApi.listReservations(token, requestedRestaurantId).toString()
+            },
+            onError = { error ->
+                if (ReservationRefreshScope.matchesRestaurant(
+                        requestedRestaurantId, backendRestaurantId(),
+                        requestedAccountId, backendPrefs.getString("user_id", "").orEmpty()
+                    )
+                ) {
+                    AlertDialog.Builder(this)
+                        .setTitle("Não foi possível atualizar a reserva")
+                        .setMessage(friendlyBackendError(error.message))
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            },
+            onSuccess = { raw ->
+                if (ReservationRefreshScope.matchesRestaurant(
+                        requestedRestaurantId, backendRestaurantId(),
+                        requestedAccountId, backendPrefs.getString("user_id", "").orEmpty()
+                    )
+                ) {
+                    reservationCache = JSONArray(raw)
+                    reservationsLoaded = true
+                    reservationUpdatedAtMillis = System.currentTimeMillis()
+                    reservationRefreshFailed = false
+                    renderApp()
+                }
+            }
+        )
     }
 
     private fun showReservationDialog() {
