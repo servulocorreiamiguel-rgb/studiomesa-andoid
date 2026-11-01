@@ -2002,7 +2002,8 @@ class MainActivity : Activity() {
 
     private fun refreshRemoteOperations() {
         val restaurantId = backendRestaurantId()
-        if (!hasRemoteRestaurant() || restaurantId.isBlank()) {
+        val requestedAccountId = backendPrefs.getString("user_id", "").orEmpty()
+        if (!hasRemoteRestaurant() || restaurantId.isBlank() || requestedAccountId.isBlank()) {
             AlertDialog.Builder(this)
                 .setMessage("Inicia sessão e configura o restaurante na secção Conta para sincronizar os dados.")
                 .setPositiveButton("OK", null)
@@ -2011,30 +2012,58 @@ class MainActivity : Activity() {
         }
         if (remoteOperationsSyncInFlight) return
 
+        val requestedGeneration = ++remoteOperationsRefreshGeneration
         remoteOperationsSyncInFlight = true
         remoteOperationsSyncFailed = false
         renderApp()
 
-        runBackend({
-            cacheRemoteOperations(backendToken(), restaurantId)
-            "OK"
-        }, showProgress = false, onError = { error ->
-            remoteOperationsSyncInFlight = false
-            remoteOperationsSyncFailed = true
-            renderApp()
-            AlertDialog.Builder(this)
-                .setTitle("Não foi possível sincronizar")
-                .setMessage(friendlyBackendError(error.message))
-                .setPositiveButton("OK", null)
-                .show()
-        }) {
-            remoteOperationsSyncInFlight = false
-            remoteOperationsSyncFailed = false
-            kitchenOrdersCache = null
-            kitchenQueueUpdatedAtMillis = System.currentTimeMillis()
-            kitchenQueueRefreshFailed = false
-            renderApp()
-        }
+        runBackend(
+            task = {
+                val token = backendToken()
+                if (token.isBlank() || !ReservationRefreshScope.matchesRestaurant(
+                        restaurantId, backendRestaurantId(),
+                        requestedAccountId, backendPrefs.getString("user_id", "").orEmpty()
+                    )
+                ) throw IllegalStateException("A conta ou o restaurante mudou. Atualiza novamente.")
+                if (!cacheRemoteOperations(token, restaurantId)) {
+                    throw IllegalStateException("A sessão mudou durante a sincronização. Atualiza novamente.")
+                }
+                "OK"
+            },
+            showProgress = false,
+            onError = { error ->
+                if (requestedGeneration == remoteOperationsRefreshGeneration &&
+                    ReservationRefreshScope.matchesRestaurant(
+                        restaurantId, backendRestaurantId(),
+                        requestedAccountId, backendPrefs.getString("user_id", "").orEmpty()
+                    )
+                ) {
+                    remoteOperationsSyncInFlight = false
+                    remoteOperationsSyncFailed = true
+                    renderApp()
+                    AlertDialog.Builder(this)
+                        .setTitle("Não foi possível sincronizar")
+                        .setMessage(friendlyBackendError(error.message))
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            },
+            onSuccess = {
+                if (requestedGeneration == remoteOperationsRefreshGeneration &&
+                    ReservationRefreshScope.matchesRestaurant(
+                        restaurantId, backendRestaurantId(),
+                        requestedAccountId, backendPrefs.getString("user_id", "").orEmpty()
+                    )
+                ) {
+                    remoteOperationsSyncInFlight = false
+                    remoteOperationsSyncFailed = false
+                    kitchenOrdersCache = null
+                    kitchenQueueUpdatedAtMillis = System.currentTimeMillis()
+                    kitchenQueueRefreshFailed = false
+                    renderApp()
+                }
+            }
+        )
     }
 
     private fun restoreCustomerMembership(token: String) {
