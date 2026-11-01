@@ -3135,31 +3135,58 @@ class MainActivity : Activity() {
     }
 
     private fun refreshCustomerReservations() {
-        val memberId = backendMemberId()
-        if (backendToken().isBlank() || memberId.isBlank()) return
+        val requestedMemberId = backendMemberId()
+        val requestedAccountId = backendPrefs.getString("user_id", "").orEmpty()
+        if (backendToken().isBlank() || requestedMemberId.isBlank() || requestedAccountId.isBlank()) return
         if (customerReservationsLoading) return
         customerReservationsLoading = true
         customerReservationsLoadError = false
         runBackend(
             task = {
-                SupabaseApi.listCustomerReservations(backendToken(), memberId).toString()
+                val token = backendToken()
+                val currentMemberId = backendMemberId()
+                val currentAccountId = backendPrefs.getString("user_id", "").orEmpty()
+                if (token.isBlank() || !ReservationRefreshScope.matchesCustomer(
+                        isCustomerApp, requestedMemberId, currentMemberId,
+                        requestedAccountId, currentAccountId
+                    )
+                ) {
+                    throw IllegalStateException("A conta ou o cartão de cliente mudou. Atualiza as reservas novamente.")
+                }
+                SupabaseApi.listCustomerReservations(token, requestedMemberId).toString()
             },
             onError = { error ->
-                customerReservationsLoading = false
-                customerReservationsLoadError = true
-                if (activeCustomerPage == "Reservas") renderCustomerApp()
-                AlertDialog.Builder(this)
-                    .setTitle("Não foi possível atualizar as reservas")
-                    .setMessage(friendlyBackendError(error.message))
-                    .setPositiveButton("OK", null)
-                    .show()
+                val currentMemberId = backendMemberId()
+                val currentAccountId = backendPrefs.getString("user_id", "").orEmpty()
+                if (ReservationRefreshScope.matchesCustomer(
+                        isCustomerApp, requestedMemberId, currentMemberId,
+                        requestedAccountId, currentAccountId
+                    )
+                ) {
+                    customerReservationsLoading = false
+                    customerReservationsLoadError = true
+                    if (activeCustomerPage == "Reservas") renderCustomerApp()
+                    AlertDialog.Builder(this)
+                        .setTitle("Não foi possível atualizar as reservas")
+                        .setMessage(friendlyBackendError(error.message))
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
             },
             onSuccess = { raw ->
-                customerReservationsCache = JSONArray(raw)
-                customerReservationsLoaded = true
-                customerReservationsLoading = false
-                customerReservationsLoadError = false
-                if (activeCustomerPage == "Reservas") renderCustomerApp()
+                val currentMemberId = backendMemberId()
+                val currentAccountId = backendPrefs.getString("user_id", "").orEmpty()
+                if (ReservationRefreshScope.matchesCustomer(
+                        isCustomerApp, requestedMemberId, currentMemberId,
+                        requestedAccountId, currentAccountId
+                    )
+                ) {
+                    customerReservationsCache = JSONArray(raw)
+                    customerReservationsLoaded = true
+                    customerReservationsLoading = false
+                    customerReservationsLoadError = false
+                    if (activeCustomerPage == "Reservas") renderCustomerApp()
+                }
             }
         )
     }
@@ -4097,12 +4124,36 @@ class MainActivity : Activity() {
                 .setPositiveButton("OK", null).show()
             return
         }
-        runBackend({
-            val reservations = SupabaseApi.listReservations(backendToken(), backendRestaurantId())
-            reservationCache = reservations
-            reservationsLoaded = true
-            "OK"
-        }) { renderApp() }
+        val requestedRestaurantId = backendRestaurantId()
+        val requestedAccountId = backendPrefs.getString("user_id", "").orEmpty()
+        runBackend(
+            task = {
+                val token = backendToken()
+                val currentRestaurantId = backendRestaurantId()
+                val currentAccountId = backendPrefs.getString("user_id", "").orEmpty()
+                if (token.isBlank() || !ReservationRefreshScope.matchesRestaurant(
+                        requestedRestaurantId, currentRestaurantId,
+                        requestedAccountId, currentAccountId
+                    )
+                ) {
+                    throw IllegalStateException("A conta ou o restaurante mudou. Atualiza as reservas novamente.")
+                }
+                SupabaseApi.listReservations(token, requestedRestaurantId).toString()
+            },
+            onSuccess = { raw ->
+                val currentRestaurantId = backendRestaurantId()
+                val currentAccountId = backendPrefs.getString("user_id", "").orEmpty()
+                if (ReservationRefreshScope.matchesRestaurant(
+                        requestedRestaurantId, currentRestaurantId,
+                        requestedAccountId, currentAccountId
+                    )
+                ) {
+                    reservationCache = JSONArray(raw)
+                    reservationsLoaded = true
+                    renderApp()
+                }
+            }
+        )
     }
 
     private fun renderReservations(container: LinearLayout) {
