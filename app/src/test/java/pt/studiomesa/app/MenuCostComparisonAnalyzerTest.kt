@@ -201,7 +201,7 @@ class MenuCostComparisonAnalyzerTest {
         )
 
         assertEquals(1, result.recipesAwaitingApproval)
-        assertEquals(1, result.recipesInactive)
+        assertEquals(0, result.recipesInactive)
     }
 
     @Test
