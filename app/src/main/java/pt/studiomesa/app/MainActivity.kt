@@ -1217,8 +1217,16 @@ class MainActivity : Activity() {
                     LinearLayout.LayoutParams(0, -2, 1f))
                 top.addView(statusBadge(
                     status.uppercase(Locale("pt", "PT")),
-                    if (closed) green else forestSoft,
-                    if (closed) paleGreen else copperPale,
+                    when (status) {
+                        "Concluído" -> green
+                        "Cancelado" -> muted
+                        else -> forestSoft
+                    },
+                    when (status) {
+                        "Concluído" -> paleGreen
+                        "Cancelado" -> paper
+                        else -> copperPale
+                    },
                     9f
                 ))
                 card.addView(top)
