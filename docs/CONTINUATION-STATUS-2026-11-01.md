@@ -52,3 +52,28 @@ A execução CI #943, anterior a estas correções, confirmou:
 5. Só depois rever a PR, planear com segurança as migrações e preparar uma demonstração comercial. A PR deve continuar em rascunho até essa validação.
 
 **Objetivo comercial:** conseguir o primeiro restaurante interessado e pagante, sem prometer funcionalidades ou prontidão operacional que ainda não tenham sido demonstradas.
+
+## Continuação — revisão de 1 de novembro de 2026
+
+Depois do registo inicial deste estado, foram acrescentadas as seguintes alterações à mesma branch:
+
+- `RemoteOperationsSyncStatus.kt`: mensagens distintas para sincronização em curso, sucesso anterior, falha com cache anterior e falha antes de existir uma sincronização confirmada.
+- `RemoteOperationsSyncStatusTest.kt`: cinco testes unitários escritos para esses estados.
+- O cabeçalho da gestão usa agora esse componente e a atualização manual das mesas/carta/pedidos apresenta o estado de sincronização no próprio ecrã.
+- `CustomerReservationRefreshStatus.kt`: aviso no ecrã de reservas do cliente enquanto atualiza ou quando a última atualização falhou.
+- `CustomerReservationRefreshStatusTest.kt`: três testes unitários escritos. Quando a rede falha, a lista de reservas já recebida continua visível e a interface explica que está a usar os últimos dados disponíveis.
+- O teste do simulador económico foi corrigido para esperar **7 570,09 €** no ponto de equilíbrio do cenário documentado.
+
+**Verificação de repositório:** os dois componentes auxiliares e os respetivos ficheiros de testes foram encontrados na branch; a chamada de interface para o estado das reservas também foi confirmada. A PR #72 permanece aberta e em rascunho.
+
+**Importante:** estas verificações foram de leitura do código e dos ficheiros no GitHub. Não foi executada CI, compilação, Lint ou testes unitários depois das alterações. A bateria final continua pendente por decisão de desenvolvimento faseado.
+
+### Próximo trabalho de produto
+
+Continuar a revisão dos fluxos de pedidos e inventário, sobretudo:
+- confirmar que o pedido novo usa sempre os dados autoritativos da carta;
+- garantir que falhas de rede e repetições não criam pedidos ou movimentos de stock duplicados;
+- tornar explícito quando uma ação foi guardada no servidor;
+- manter os estados vazios, de carregamento e de erro claros sem apagar dados úteis em cache.
+
+Não aplicar as migrações pendentes ao Supabase de produção nesta fase.
