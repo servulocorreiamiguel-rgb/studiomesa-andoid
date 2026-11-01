@@ -66,7 +66,7 @@ A interface usa uma identidade discreta, inspirada em restauração contemporân
 - **Pedidos:** resumo por estado, filtros horizontais para todos/ativos/concluídos/cancelados, detalhes do artigo, ações secundárias agrupadas e etiquetas consistentes.
 - **Cozinha:** resumo da fila por estado, filtros horizontais para todos/novos/em preparação/prontos, prioridade primeiro por estado e depois por antiguidade, mesa, notas e tempo de espera.
 - **Carta:** ações de adicionar e atualizar agrupadas; indicadores de artigos/custos a rever; pesquisa por nome/categoria/descrição/alergénios e filtros horizontais por categoria na gestão e no cliente; custos organizados sem exposição na aplicação de cliente.
-- **Reservas:** ações de criar e atualizar agrupadas; indicadores, filtros horizontais e cartões com data, pessoas, mesa e estado.
+- **Reservas:** ações de criar e atualizar agrupadas; indicadores, filtros horizontais por estado e pesquisa por nome, data no formato dd/mm/aaaa, número de mesa ou dimensão da reserva; cartões com data, pessoas, mesa e estado.
 - **Stock:** ações de adicionar e atualizar agrupadas; resumo de artigos e alertas antes da lista; pesquisa por nome/unidade e filtros horizontais para todos/esgotados/stock baixo/sem custo; quantidade em destaque e ações de entrada, saída, edição e desperdício.
 - **Gestão económica e análise:** ativação destacada, desativação/limpeza com estilo de ação perigosa, atalhos horizontais para ferramentas e períodos; valores e pressupostos identificados, sem aparência de contabilidade certificada.
 - **Conta e sincronização:** dados da sessão e papel da equipa separados das ações de segurança; atalhos de configuração para Mesas, Carta e Pedidos.
