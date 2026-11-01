@@ -71,6 +71,7 @@ A interface usa uma identidade discreta, inspirada em restauração contemporân
 - **Gestão económica e análise:** ativação destacada, desativação/limpeza com estilo de ação perigosa, atalhos horizontais para ferramentas e períodos; valores e pressupostos identificados, sem aparência de contabilidade certificada.
 - **Conta e sincronização:** dados da sessão e papel da equipa separados das ações de segurança; atalhos de configuração para Mesas, Carta e Pedidos.
 - **Assistente:** conversa em primeiro plano; análises e recomendações adicionais recolhidas, mas acessíveis.
+- **Fidelização:** lista de clientes com pesquisa por nome ou código do cartão, contagem de resultados e estado vazio quando não há correspondências.
 - **Cliente:** cartão de fidelização, carta publicada com pesquisa e filtros horizontais por categoria, reservas e conta com estado de associação, email da sessão, restaurante ligado e ações de segurança separadas.
 
 ## Critérios para fechar o design
