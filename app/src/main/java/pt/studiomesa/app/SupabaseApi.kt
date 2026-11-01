@@ -844,7 +844,7 @@ object SupabaseApi {
         val encoded = URLEncoder.encode(restaurantId, "UTF-8")
         return JSONArray(call(
             "GET",
-            "/rest/v1/restaurant_inventory_items?select=id,name,unit,quantity,low_stock_threshold,unit_cost_per_unit,updated_at&restaurant_id=eq.$encoded&order=name.asc",
+            "/rest/v1/restaurant_inventory_items?select=id,name,unit,quantity,low_stock_threshold,unit_cost_per_unit,updated_at&restaurant_id=eq.$encoded&order=name.asc&limit=2001",
             null,
             token
         ))
@@ -866,11 +866,21 @@ object SupabaseApi {
         return rows.optJSONObject(0)
     }
 
-    fun listRecipeIngredients(token: String, recipeId: String): JSONArray {
-        val encoded = URLEncoder.encode(recipeId, "UTF-8")
+    fun listRestaurantRecipes(token: String, restaurantId: String): JSONArray {
+        val encoded = URLEncoder.encode(restaurantId, "UTF-8")
         return JSONArray(call(
             "GET",
-            "/rest/v1/restaurant_recipe_ingredients?select=id,inventory_item_id,quantity_per_portion,waste_percent&recipe_id=eq.$encoded&order=created_at.asc,id.asc",
+            "/rest/v1/restaurant_recipes?select=id,menu_item_id,is_active,requires_review&restaurant_id=eq.$encoded&order=menu_item_id.asc&limit=501",
+            null,
+            token
+        ))
+    }
+
+    fun listRestaurantRecipeIngredients(token: String, restaurantId: String): JSONArray {
+        val encoded = URLEncoder.encode(restaurantId, "UTF-8")
+        return JSONArray(call(
+            "GET",
+            "/rest/v1/restaurant_recipe_ingredients?select=recipe_id,inventory_item_id,quantity_per_portion,waste_percent,inventory_unit_snapshot&restaurant_id=eq.$encoded&order=recipe_id.asc,inventory_item_id.asc&limit=3001",
             null,
             token
         ))
