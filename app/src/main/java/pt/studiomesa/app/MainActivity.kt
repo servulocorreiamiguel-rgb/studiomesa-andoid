@@ -47,6 +47,7 @@ class MainActivity : Activity() {
     private var activePage = "Início"
     private var activeCustomerPage = "Cartão"
     private var customerMenuSearch = ""
+    private var selectedCustomerMenuCategory = "Todas"
 
     private var activityResumed = false
     private var kitchenAutoRefreshScheduled = false
@@ -3756,10 +3757,14 @@ class MainActivity : Activity() {
         }
 
         val query = normalizeCustomerMenuSearch(customerMenuSearch)
-        val filteredItems = if (query.isBlank()) menuItems else menuItems.filter { item ->
-            normalizeCustomerMenuSearch(
-                "${item.category} ${item.name} ${item.description} ${item.allergens}"
-            ).contains(query)
+        val categories = listOf("Todas") + menuItems.map { it.category }
+            .filter { it.isNotBlank() }.distinct().sorted()
+        if (selectedCustomerMenuCategory !in categories) selectedCustomerMenuCategory = "Todas"
+        val filteredItems = menuItems.filter { item ->
+            (selectedCustomerMenuCategory == "Todas" || item.category == selectedCustomerMenuCategory) &&
+                (query.isBlank() || normalizeCustomerMenuSearch(
+                    "${item.category} ${item.name} ${item.description} ${item.allergens}"
+                ).contains(query))
         }
 
         val menuCard = makeCard(16)
@@ -3803,6 +3808,29 @@ class MainActivity : Activity() {
         )
         searchPanel.addView(searchActions)
         menuCard.addView(searchPanel, cardParams())
+
+        val categoryScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val categoryRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        categories.forEach { category ->
+            categoryRow.addView(
+                filterChip(category, selectedCustomerMenuCategory == category) {
+                    selectedCustomerMenuCategory = category
+                    renderCustomerApp()
+                },
+                LinearLayout.LayoutParams(-2, dp(42)).apply {
+                    setMargins(0, 0, dp(6), 0)
+                }
+            )
+        }
+        categoryScroll.addView(categoryRow)
+        menuCard.addView(categoryScroll, LinearLayout.LayoutParams(-1, dp(46)))
+
         menuCard.addView(label(
             if (query.isBlank()) "${menuItems.size} artigo(s) disponíveis"
             else "${filteredItems.size} resultado(s) para «${customerMenuSearch.trim()}»",
