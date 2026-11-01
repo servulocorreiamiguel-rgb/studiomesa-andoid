@@ -426,3 +426,23 @@ Estes casos são executados na ronda final. A app do restaurante pode atribuir o
 | UNIT-14 | Desperdício | Artigo em L; registar perda de 250 ml | O movimento de desperdício retira 0,250 L e preserva o motivo e observação |
 | UNIT-15 | Idempotência | Repetir uma operação depois de perda de resposta usando a mesma quantidade introduzida noutra unidade equivalente | A assinatura usa o valor já convertido para unidade de stock; a mesma operação não duplica o movimento |
 | UNIT-16 | Interface | Abrir os formulários de receita, movimento e desperdício num ecrã pequeno | Os campos ficam acessíveis por scroll; nenhum controlo fica cortado |
+
+
+## Custo da ficha técnica a partir do inventário
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| RCOST-01 | Custo completo | Receita com todos os custos unitários preenchidos | Mostra custo estimado por dose e custo de cada ingrediente |
+| RCOST-02 | Desperdício | Receita com desperdício de preparação acima de zero | O custo usa a quantidade ajustada pelo rendimento (quantidade útil / (1 - desperdício)) |
+| RCOST-03 | Custo em falta | Um ingrediente tem `unit_cost_per_unit = null` | Mostra apenas subtotal conhecido, identifica os ingredientes sem custo e não mostra total/preço sugerido |
+| RCOST-04 | Zero explícito | Um ingrediente tem custo de compra explicitamente igual a zero e outros têm custo positivo | Zero é tratado como valor introduzido; o total considera os restantes ingredientes |
+| RCOST-05 | Separação de permissões | Abrir a ficha técnica com conta staff e depois com owner | Só o owner vê custos unitários, subtotal, total e preço indicativo |
+| RCOST-06 | Atualização de preço | Alterar o custo de compra de um artigo e voltar a abrir a ficha técnica | O cálculo reflete o custo atual obtido do servidor, sem reutilizar um valor antigo em cache |
+| RCOST-07 | Unidade | Receita em kg e €/kg; depois receita em L e €/L | Quantidade e custo usam sempre a unidade nativa do artigo; não mistura unidades |
+| RCOST-08 | Precisão | Várias linhas com custos inferiores a um cêntimo | Soma os valores com precisão antes de arredondar o total a cêntimos |
+| RCOST-09 | Preço sugerido | Usar objetivo de custo alimentar de 30% e alterar depois para outro valor válido | O preço teórico usa o total preciso e o objetivo configurado no Gestor económico |
+| RCOST-10 | Transferência | Selecionar «Usar no Gestor económico» numa receita completa | Preenche a ferramenta de custo por receita com os ingredientes/custos atuais, mantém os restantes dados da sessão e abre o Gestor |
+| RCOST-11 | Receita incompleta | Tentar transferir receita com custos em falta | A ação de transferência não aparece e não é possível sugerir um preço com dados incompletos |
+| RCOST-12 | Limites | Quantidade, custo, desperdício ou número de ingredientes fora dos limites suportados | O cálculo é recusado com mensagem compreensível; não altera receita nem stock |
+| RCOST-13 | Dados históricos | Alterar custo de compra depois de uma venda já concluída | A estimativa da ficha usa o custo atual; os snapshots históricos de pedidos/movimentos mantêm os valores guardados na altura |
+| RCOST-14 | Contabilidade | Comparar preço indicativo com preço de venda | A interface explica que não inclui IVA, mão de obra, energia, renda ou outros custos indiretos |
