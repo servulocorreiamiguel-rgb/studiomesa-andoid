@@ -157,6 +157,7 @@ class MenuCostComparisonAnalyzerTest {
         assertEquals("Custo manual · ficha técnica inativa", row.costSourceLabel)
         assertEquals(0, result.recipesAwaitingApproval)
         assertEquals(1, result.recipesInactive)
+        assertTrue(result.recipeIssues.isEmpty())
         assertEquals(1, result.menuItemsUsingManualCost)
     }
 
