@@ -18,6 +18,7 @@ internal data class MenuCostComparisonInput(
 
 internal data class MenuCostComparisonRow(
     val itemName: String,
+    val menuItemId: String?,
     val sellingPrice: BigDecimal,
     val recordedUnitCost: BigDecimal,
     val costToPricePercent: BigDecimal,
@@ -111,6 +112,7 @@ internal object MenuCostComparisonAnalyzer {
                 .setScale(1, RoundingMode.HALF_UP)
             rows += MenuCostComparisonRow(
                 itemName = entry.itemName.trim(),
+                menuItemId = entry.menuItemId,
                 sellingPrice = price.setScale(2, RoundingMode.HALF_UP),
                 recordedUnitCost = cost.setScale(2, RoundingMode.HALF_UP),
                 costToPricePercent = ratio,
