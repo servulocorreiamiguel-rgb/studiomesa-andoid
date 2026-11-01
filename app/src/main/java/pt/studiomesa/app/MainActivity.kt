@@ -2853,8 +2853,8 @@ class MainActivity : Activity() {
             container.addView(setupCard, cardParams())
         }
 
-        addGap(container, 3)
         if (token.isNotBlank()) {
+            addGap(container, 3)
             val securityCard = makeCard(14)
             securityCard.addView(label("Segurança da conta", 14f, true, forestDeep))
             addGap(securityCard, 4)
@@ -2864,31 +2864,26 @@ class MainActivity : Activity() {
             ))
             addGap(securityCard, 8)
             securityCard.addView(secondaryButton("Terminar sessão neste dispositivo") {
-                showDeleteAccountConfirmation()
-            }, LinearLayout.LayoutParams(-1, dp(48)))
-            addGap(container, 7)
-        }
-        container.addView(secondaryButton("Terminar sessão neste dispositivo") {
-            clearEconomicManagerState()
-            val tokenToRevoke = backendToken()
-            if (tokenToRevoke.isNotBlank()) {
-                Thread { runCatching { SupabaseApi.signOut(tokenToRevoke) } }.start()
-            }
-            secureSession.clear()
-            store.clearLocalDemoData()
-            backendPrefs.edit().putBoolean("local_demo_data_isolated_v1", true)
-                .remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
-                .remove("restaurant_id").remove("restaurant_name").remove("join_code")
-                .remove("staff_join_code").remove("restaurant_role")
-                .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
-                .remove("remote_members_json").remove("remote_tables_json")
-                .remove("remote_menu_json").remove("remote_orders_json").remove("customer_menu_json")
-                .remove("remote_inventory_json").remove("inventory_loaded")
-                .remove("remote_reservations_json").remove("reservations_loaded")
-                .apply()
-            reservationCache = JSONArray()
-            reservationsLoaded = false
-            renderApp()
+                clearEconomicManagerState()
+                val tokenToRevoke = backendToken()
+                if (tokenToRevoke.isNotBlank()) {
+                    Thread { runCatching { SupabaseApi.signOut(tokenToRevoke) } }.start()
+                }
+                secureSession.clear()
+                store.clearLocalDemoData()
+                backendPrefs.edit().putBoolean("local_demo_data_isolated_v1", true)
+                    .remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
+                    .remove("restaurant_id").remove("restaurant_name").remove("join_code")
+                    .remove("staff_join_code").remove("restaurant_role")
+                    .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
+                    .remove("remote_members_json").remove("remote_tables_json")
+                    .remove("remote_menu_json").remove("remote_orders_json").remove("customer_menu_json")
+                    .remove("remote_inventory_json").remove("inventory_loaded")
+                    .remove("remote_reservations_json").remove("reservations_loaded")
+                    .apply()
+                reservationCache = JSONArray()
+                reservationsLoaded = false
+                renderApp()
             }, LinearLayout.LayoutParams(-1, dp(44)))
             addGap(securityCard, 6)
             securityCard.addView(dangerButton("Eliminar conta permanentemente") {
@@ -2896,6 +2891,7 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(-1, dp(44)))
             container.addView(securityCard, cardParams())
         }
+
         addGap(container, 10)
         container.addView(label("As funções de gestão e os dados de cada restaurante são controlados por permissões no servidor.", 12f, false, muted))
     }
