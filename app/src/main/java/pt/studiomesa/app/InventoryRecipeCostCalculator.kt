@@ -25,6 +25,7 @@ internal data class InventoryRecipeCostAnalysis(
     val knownCostSubtotal: BigDecimal,
     /** Null unless every ingredient has a known purchase cost. */
     val totalCostPerPortion: BigDecimal?,
+    val preciseTotalCostPerPortion: BigDecimal?,
     val missingCostIngredientNames: List<String>
 ) {
     val isComplete: Boolean
@@ -37,11 +38,12 @@ internal data class InventoryRecipeCostAnalysis(
         require(targetFoodCostPercent.signum() > 0 && targetFoodCostPercent <= BigDecimal("100")) {
             "O objetivo de custo alimentar tem de estar entre 0 e 100%."
         }
-        val total = totalCostPerPortion ?: throw IllegalStateException("O custo total não está disponível.")
-        require(total.signum() > 0) {
+        val preciseTotal = preciseTotalCostPerPortion
+            ?: throw IllegalStateException("O custo total não está disponível.")
+        require(preciseTotal.signum() > 0) {
             "O custo da receita tem de ser superior a zero para sugerir um preço."
         }
-        return total.multiply(BigDecimal("100"))
+        return preciseTotal.multiply(BigDecimal("100"))
             .divide(targetFoodCostPercent, 2, RoundingMode.HALF_UP)
     }
 }
@@ -61,15 +63,11 @@ internal object InventoryRecipeCostCalculator {
         require(lines.isNotEmpty()) { "A receita não tem ingredientes para calcular." }
         require(lines.size <= 100) { "A receita tem demasiados ingredientes." }
 
-        val normalizedNames = mutableSetOf<String>()
         val results = lines.mapIndexed { index, line ->
             val name = line.name.trim()
             val unit = line.stockUnit.trim()
             require(name.isNotBlank() && name.length <= 100) {
                 "Ingrediente ${index + 1}: nome inválido."
-            }
-            require(normalizedNames.add(name.lowercase(java.util.Locale.ROOT))) {
-                "O ingrediente «$name» está repetido na ficha técnica."
             }
             require(unit.isNotBlank() && unit.length <= 24) {
                 "Ingrediente «$name»: unidade de stock inválida."
@@ -122,6 +120,7 @@ internal object InventoryRecipeCostCalculator {
             ingredients = results,
             knownCostSubtotal = knownSubtotal,
             totalCostPerPortion = total,
+            preciseTotalCostPerPortion = if (missing.isEmpty()) knownExact else null,
             missingCostIngredientNames = missing
         )
     }
