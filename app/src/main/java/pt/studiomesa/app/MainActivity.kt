@@ -5521,22 +5521,12 @@ class MainActivity : Activity() {
         rawValue: String,
         enteredUnit: String,
         stockUnit: String
-    ): Double {
-        val normalized = rawValue.trim().replace(',', '.')
-        require(StockDecimalValidator.hasAtMostThreeDecimalPlaces(normalized)) {
-            "Usa uma quantidade positiva com no máximo três casas decimais."
-        }
-        val amount = try {
-            BigDecimal(normalized)
-        } catch (_: NumberFormatException) {
-            throw IllegalArgumentException("Indica uma quantidade numérica válida.")
-        }
-        return InventoryUnitConverter.convertToStockUnit(
-            amount,
+    ): Double =
+        InventoryQuantityParser.parseToStockUnit(
+            rawValue,
             enteredUnit,
-            stockUnit.trim().ifBlank { "unidades" }
+            stockUnit
         ).toDouble()
-    }
 
     private fun showInventoryItemDialog(item: JSONObject?) {
         if (!hasRemoteRestaurant()) {
