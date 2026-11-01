@@ -5657,22 +5657,34 @@ class MainActivity : Activity() {
         dialog.window?.setLayout(-1, dp(580))
     }
 
-    private fun showStockAdjustmentDialog(itemId: String, itemName: String, unit: String, isInbound: Boolean) {
+    private fun showStockAdjustmentDialog(
+        itemId: String,
+        itemName: String,
+        unit: String,
+        isInbound: Boolean
+    ) {
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(8), dp(18), dp(10))
         }
         val enteredUnitSpinner = inventoryUnitSpinner(unit)
-        val amount = inputField("Quantidade", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+        val amount = inputField(
+            "Quantidade",
+            InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+        )
         val note = inputField("Nota (opcional)", InputType.TYPE_CLASS_TEXT).apply {
             setText(if (isInbound) "Entrada de stock" else "Consumo/quebra")
         }
+
         form.addView(label("Artigo: $itemName", 12f, true, forest))
         addGap(form, 8)
         form.addView(label("Unidade da quantidade introduzida", 11f, true, forestSoft))
         form.addView(enteredUnitSpinner, LinearLayout.LayoutParams(-1, dp(48)))
         addGap(form, 5)
-        form.addView(label("Quantidade a ${if (isInbound) "adicionar" else "retirar"}", 11f, true, forestSoft))
+        form.addView(label(
+            "Quantidade a ${if (isInbound) "adicionar" else "retirar"}",
+            11f, true, forestSoft
+        ))
         form.addView(amount, fieldParams())
         addGap(form, 5)
         form.addView(label(
@@ -5681,6 +5693,7 @@ class MainActivity : Activity() {
         ))
         form.addView(label("Regista a razão para manter um histórico útil.", 11f, false, muted))
         form.addView(note, fieldParams())
+
         val dialog = AlertDialog.Builder(this)
             .setTitle(if (isInbound) "Entrada de stock" else "Saída de stock")
             .setView(scrollableForm(form))
@@ -5689,10 +5702,9 @@ class MainActivity : Activity() {
             .create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val rawValue = amount.text.toString()
                 val value = try {
                     parseInventoryQuantityToStockUnit(
-                        rawValue,
+                        amount.text.toString(),
                         enteredUnitSpinner.selectedItem?.toString().orEmpty(),
                         unit
                     )
@@ -5708,37 +5720,38 @@ class MainActivity : Activity() {
                     note.error = "Máximo de 500 caracteres."
                     return@setOnClickListener
                 }
-                run {
-                    val delta = if (isInbound) value else -value
-                    val normalizedNote = note.text.toString().trim().take(500)
-                    val restaurantId = backendRestaurantId()
-                    val signature = JSONObject()
-                        .put("restaurant_id", restaurantId)
-                        .put("item_id", itemId)
-                        .put("delta", delta)
-                        .put("note", normalizedNote)
-                        .toString()
-                    val requestOperation = "stock_adjust"
-                    val requestAccountId = backendPrefs.getString("user_id", "").orEmpty()
-                    val requestId = try {
-                        pendingRequestIds.getOrCreate(requestOperation, requestAccountId, signature)
-                    } catch (_: Exception) {
-                        amount.error = "Não foi possível guardar a referência segura. Tenta novamente."
-                        return@setOnClickListener
-                    }
-                    runBackend({
-                        SupabaseApi.adjustInventoryStock(
-                            backendToken(), restaurantId, itemId, delta, normalizedNote, requestId
-                        )
-                        val latest = SupabaseApi.listInventoryItems(backendToken(), restaurantId)
-                        backendPrefs.edit().putString("remote_inventory_json", latest.toString())
-                            .putBoolean("inventory_loaded", true).apply()
-                        "OK"
-                    }) {
-                        dialog.dismiss()
-                        renderApp()
-                        pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
-                    }
+
+                val delta = if (isInbound) value else -value
+                val normalizedNote = note.text.toString().trim().take(500)
+                val restaurantId = backendRestaurantId()
+                val signature = JSONObject()
+                    .put("restaurant_id", restaurantId)
+                    .put("item_id", itemId)
+                    .put("delta", delta)
+                    .put("note", normalizedNote)
+                    .toString()
+                val requestOperation = "stock_adjust"
+                val requestAccountId = backendPrefs.getString("user_id", "").orEmpty()
+                val requestId = try {
+                    pendingRequestIds.getOrCreate(requestOperation, requestAccountId, signature)
+                } catch (_: Exception) {
+                    amount.error = "Não foi possível guardar a referência segura. Tenta novamente."
+                    return@setOnClickListener
+                }
+                runBackend({
+                    SupabaseApi.adjustInventoryStock(
+                        backendToken(), restaurantId, itemId, delta, normalizedNote, requestId
+                    )
+                    val latest = SupabaseApi.listInventoryItems(backendToken(), restaurantId)
+                    backendPrefs.edit()
+                        .putString("remote_inventory_json", latest.toString())
+                        .putBoolean("inventory_loaded", true)
+                        .apply()
+                    "OK"
+                }) {
+                    dialog.dismiss()
+                    renderApp()
+                    pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
                 }
             }
         }
