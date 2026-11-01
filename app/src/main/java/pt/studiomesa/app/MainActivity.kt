@@ -918,18 +918,7 @@ class MainActivity : Activity() {
             return
         }
 
-        val legend = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        legend.addView(statusDot(green), LinearLayout.LayoutParams(dp(8), dp(8)))
-        legend.addView(label("  Livre", 12f, false, muted))
-        addGap(legend, 1)
-        legend.addView(statusDot(red), LinearLayout.LayoutParams(dp(8), dp(8)))
-        legend.addView(label("  Ocupada", 12f, false, muted))
-        container.addView(legend)
         addGap(container, 8)
-
         val localOccupiedTables = store.occupiedTableCount()
         val localTableOverview = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
