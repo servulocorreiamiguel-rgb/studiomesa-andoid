@@ -4689,7 +4689,7 @@ class MainActivity : Activity() {
         reservationSearchCard.addView(label("PESQUISAR RESERVA", 9.5f, true, forestSoft))
         addGap(reservationSearchCard, 5)
         val reservationSearchField = inputField(
-            "Nome, data ou número de mesa",
+            "Nome, data (dd/mm/aaaa) ou número de mesa",
             InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
         ).apply {
             imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
@@ -4749,9 +4749,15 @@ class MainActivity : Activity() {
         }
 
         val reservationQuery = normalizeCustomerMenuSearch(reservationSearchQuery)
+        val reservationSearchDateFormat = SimpleDateFormat("dd/MM/yyyy", Locale("pt", "PT"))
         val visibleReservations = filteredReservations.filter { reservation ->
+            val rawReservationDate = reservation.optString("reservation_at")
+            val reservationTimestamp = parseOrderTimestamp(rawReservationDate)
+            val displaySearchDate = if (reservationTimestamp > 0L) {
+                reservationSearchDateFormat.format(Date(reservationTimestamp))
+            } else ""
             reservationQuery.isBlank() || normalizeCustomerMenuSearch(
-                "${reservation.optString("guest_name")} ${reservation.optString("reservation_at")} ${reservation.optInt("table_number")} ${reservation.optInt("party_size")}"
+                "${reservation.optString("guest_name")} $rawReservationDate $displaySearchDate ${reservation.optInt("table_number")} ${reservation.optInt("party_size")}"
             ).contains(reservationQuery)
         }
         container.addView(label(
