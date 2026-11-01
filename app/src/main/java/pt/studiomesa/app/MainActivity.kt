@@ -6502,6 +6502,13 @@ class MainActivity : Activity() {
                 refreshRemoteOperations()
             }, LinearLayout.LayoutParams(-1, dp(44)))
         }
+        if (entries.isNotEmpty()) {
+            addGap(card, 5)
+            card.addView(secondaryButton("Abrir carta para rever os artigos") {
+                activePage = "Carta"
+                renderApp()
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+        }
         addGap(card, 4)
         card.addView(label(
             "A diferença entre preço e custo registado não é lucro: ainda pode ter de pagar pessoal, renda, energia, impostos, comissões e outros encargos. O ranking é um sinal para investigar, não uma ordem para aumentar preços.",
