@@ -372,7 +372,7 @@ internal object RestaurantEconomicManager {
             val unitPrice = parseNonNegative(parts[2], "preço unitário da linha ${index + 1}")
             val wastePercent = parseNonNegative(parts[3], "desperdício da linha ${index + 1}")
             require(quantity > zero) { "Linha ${index + 1}: a quantidade por dose tem de ser superior a zero." }
-            require(unitPrice > zero) { "Linha ${index + 1}: introduz um preço unitário superior a zero." }
+            require(unitPrice >= zero) { "Linha ${index + 1}: o preço unitário não pode ser negativo." }
             require(wastePercent < hundred) { "Linha ${index + 1}: o desperdício tem de ser inferior a 100%." }
             Triple(parts[0], quantity, Pair(unitPrice, wastePercent))
         }
