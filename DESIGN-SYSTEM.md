@@ -63,7 +63,7 @@ A interface usa uma identidade discreta, inspirada em restauração contemporân
 
 - **Início:** indicadores operacionais em grelha e acesso rápido em cartões compactos de duas colunas.
 - **Mesas:** ações de adicionar e atualizar agrupadas; cartões de mesa com estado, zona e capacidade.
-- **Pedidos:** resumo por estado, detalhes do artigo, ações secundárias agrupadas e etiquetas consistentes.
+- **Pedidos:** resumo por estado, filtros horizontais para todos/ativos/concluídos/cancelados, detalhes do artigo, ações secundárias agrupadas e etiquetas consistentes.
 - **Cozinha:** resumo da fila por estado, mesa, notas e tempo de espera.
 - **Carta:** ações de adicionar e atualizar agrupadas; indicadores de artigos/custos a rever; custos organizados sem exposição na aplicação de cliente.
 - **Reservas:** ações de criar e atualizar agrupadas; indicadores, filtros horizontais e cartões com data, pessoas, mesa e estado.
