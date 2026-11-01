@@ -4608,7 +4608,13 @@ class MainActivity : Activity() {
             return SupabaseApi.listInventoryItems(token, restaurantId)
         }
 
-        val rows = SupabaseApi.listInventoryItemsWithCosts(token, restaurantId)
+        val rows = try {
+            SupabaseApi.listInventoryItemsWithCosts(token, restaurantId)
+        } catch (error: Exception) {
+            // A server-side role revocation must not leave previously loaded costs visible.
+            clearInventoryUnitCostCache()
+            throw error
+        }
         val newCosts = mutableMapOf<String, BigDecimal?>()
         for (index in 0 until rows.length()) {
             val item = rows.optJSONObject(index) ?: continue
