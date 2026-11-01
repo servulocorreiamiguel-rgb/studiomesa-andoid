@@ -6592,9 +6592,31 @@ class MainActivity : Activity() {
         card.addView(label("Comparação dos artigos da carta", 17f, true, forestDeep))
         addGap(card, 4)
         card.addView(label(
-            "Ordena os pratos pela percentagem do preço consumida pelo custo unitário registado. Serve para escolher o que vale a pena confirmar primeiro.",
+            "Ordena os pratos pela percentagem do preço consumida pelo custo de ingredientes conhecido. Quando existe uma ficha técnica aprovada e completa, essa estimativa tem prioridade sobre o custo manual da carta.",
             11.5f, false, muted
         ))
+        if (hasRemoteRestaurant() && isPremium) {
+            addGap(card, 6)
+            val snapshotStatus = when {
+                menuRecipeCostRefreshLoading -> "A carregar a carta, fichas técnicas e inventário do servidor…"
+                menuRecipeCostRefreshFailed && recipeSnapshot != null ->
+                    "A atualização falhou. Mantêm-se os últimos dados recebidos."
+                menuRecipeCostRefreshFailed ->
+                    "Não foi possível carregar as fichas técnicas. O ranking usa apenas os custos manuais da carta."
+                recipeSnapshot != null ->
+                    "Fichas técnicas e inventário recebidos às " +
+                        SimpleDateFormat("HH:mm:ss", Locale("pt", "PT")).format(Date(menuRecipeCostUpdatedAtMillis)) + "."
+                else ->
+                    "Ainda não carregaste as fichas técnicas. O ranking inicial usa apenas os custos manuais registados na carta."
+            }
+            card.addView(label(snapshotStatus, 10.5f, false, if (menuRecipeCostRefreshFailed) red else muted))
+            addGap(card, 5)
+            card.addView(secondaryButton(
+                if (menuRecipeCostRefreshLoading) "A carregar dados…" else "Atualizar carta, fichas e inventário"
+            ) {
+                refreshMenuRecipeCostSnapshot()
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+        }
         addGap(card, 7)
 
         if (entries.isEmpty()) {
@@ -6618,9 +6640,16 @@ class MainActivity : Activity() {
                 }
             } ?: "O objetivo percentual não está válido; o ranking continua disponível, mas sem alerta face a um objetivo."
             card.addView(label(
-                "${analysis.rankedItems.size} artigo(s) comparáveis · ${analysis.aboveTargetCount} acima do objetivo · ${analysis.costAboveSellingPriceCount} com custo registado superior ao preço.",
+                "${analysis.rankedItems.size} artigo(s) comparáveis · ${analysis.aboveTargetCount} acima do objetivo · ${analysis.costAboveSellingPriceCount} com custo superior ao preço.",
                 11.5f, true, forestSoft
             ))
+            if (isPremium && hasRemoteRestaurant() && recipeSnapshot != null) {
+                addGap(card, 3)
+                card.addView(label(
+                    "${analysis.menuItemsUsingRecipeCost} com ficha técnica aprovada · ${analysis.menuItemsUsingManualCost} com custo manual · ${analysis.recipesAwaitingApproval} por aprovar · ${analysis.approvedRecipesIncomplete} aprovadas mas incompletas.",
+                    10.5f, false, muted
+                ))
+            }
             addGap(card, 3)
             card.addView(label(targetDescription, 10.5f, false, muted))
             addGap(card, 8)
@@ -6630,9 +6659,10 @@ class MainActivity : Activity() {
                 row.addView(label("${index + 1}. ${item.itemName}", 13.5f, true, forestDeep))
                 addGap(row, 3)
                 row.addView(label(
-                    "Preço: ${formatEuro(item.sellingPrice)} · Custo registado: ${formatEuro(item.recordedUnitCost)}",
+                    "Preço: ${formatEuro(item.sellingPrice)} · Custo usado: ${formatEuro(item.recordedUnitCost)}",
                     11f, false, muted
                 ))
+                row.addView(label(item.costSourceLabel, 10f, true, forestSoft))
                 addGap(row, 3)
                 row.addView(label(
                     "Custo/preço: ${economicPercent(item.costToPricePercent)}",
@@ -6662,6 +6692,20 @@ class MainActivity : Activity() {
                     10.5f, false, muted
                 ))
             }
+            if (analysis.approvedRecipesIncomplete > 0) {
+                addGap(card, 5)
+                card.addView(label(
+                    "${analysis.approvedRecipesIncomplete} ficha(s) aprovada(s) não entraram no ranking porque falta algum custo de compra, ingrediente ou compatibilidade de unidades. Confirma o inventário e revê a ficha.",
+                    10.5f, true, red
+                ))
+            }
+            if (analysis.recipesAwaitingApproval > 0) {
+                addGap(card, 4)
+                card.addView(label(
+                    "${analysis.recipesAwaitingApproval} ficha(s) ainda não aprovada(s). Nestes pratos mantém-se o custo manual da carta; a ficha não substitui esse valor antes da aprovação.",
+                    10.5f, false, muted
+                ))
+            }
             if (analysis.excludedMissingCost > 0 || analysis.excludedInvalidPrice > 0 || analysis.excludedInvalidCost > 0) {
                 addGap(card, 5)
                 card.addView(label(
@@ -6678,8 +6722,10 @@ class MainActivity : Activity() {
 
         addGap(card, 7)
         card.addView(label(
-            if (hasRemoteRestaurant()) {
-                "Fonte: última carta recebida e guardada em cache. Atualiza os dados antes de decidir. O custo usado é o valor unitário registado pelo restaurante, não um custo contabilístico nem, necessariamente, o cálculo completo da ficha técnica."
+            if (hasRemoteRestaurant() && isPremium && recipeSnapshot != null) {
+                "Fonte: carta, fichas técnicas e inventário carregados do servidor no mesmo ciclo. Só fichas ativas, aprovadas, completas e com unidades iguais às do inventário fornecem o custo do ranking. Os restantes pratos usam o custo manual registado na carta."
+            } else if (hasRemoteRestaurant()) {
+                "Fonte: última carta recebida e guardada em cache. Até carregar as fichas técnicas, o ranking usa apenas o custo manual registado na carta."
             } else {
                 "Fonte: carta local de demonstração. Os valores não pertencem a um restaurante real."
             },
