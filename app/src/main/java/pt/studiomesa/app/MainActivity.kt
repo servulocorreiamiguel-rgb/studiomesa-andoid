@@ -3244,6 +3244,8 @@ class MainActivity : Activity() {
             val restaurantDeleted = SupabaseApi.deleteAccount(backendToken(), deleteRestaurantData)
             if (restaurantDeleted) "DELETED_RESTAURANT" else "DELETED_ACCOUNT"
         }) { result ->
+            clearInventoryUnitCostCache()
+            clearEconomicManagerState()
             secureSession.clear()
             runCatching { pendingRequestIds.clearAll() }
             store.clearLocalDemoData()
