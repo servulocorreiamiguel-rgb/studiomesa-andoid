@@ -48,6 +48,8 @@ class MainActivity : Activity() {
     private var activeCustomerPage = "Cartão"
     private var customerMenuSearch = ""
     private var selectedCustomerMenuCategory = "Todas"
+    private var managementMenuSearch = ""
+    private var selectedManagementMenuCategory = "Todas"
 
     private var activityResumed = false
     private var kitchenAutoRefreshScheduled = false
@@ -1808,6 +1810,81 @@ class MainActivity : Activity() {
         container.addView(card, cardParams())
     }
 
+    private fun addManagementMenuFilters(container: LinearLayout, rawCategories: List<String>) {
+        val categories = listOf("Todas") + rawCategories
+            .map { it.trim().ifBlank { "Outros" } }
+            .filter { it != "Todas" }
+            .distinct()
+            .sorted()
+        if (selectedManagementMenuCategory !in categories) {
+            selectedManagementMenuCategory = "Todas"
+        }
+
+        val filterCard = makeCard(13)
+        filterCard.addView(label("PESQUISAR E FILTRAR", 9.5f, true, forestSoft))
+        addGap(filterCard, 6)
+        val searchField = inputField(
+            "Nome, categoria, descrição ou alergénios",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        ).apply {
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                    managementMenuSearch = text.toString().trim()
+                    renderApp()
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+        searchField.setText(managementMenuSearch)
+        filterCard.addView(searchField, fieldParams())
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        actions.addView(primaryButton("Pesquisar") {
+            managementMenuSearch = searchField.text.toString().trim()
+            renderApp()
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+            setMargins(0, 0, dp(5), 0)
+        })
+        actions.addView(secondaryButton("Limpar") {
+            managementMenuSearch = ""
+            selectedManagementMenuCategory = "Todas"
+            renderApp()
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+            setMargins(dp(5), 0, 0, 0)
+        })
+        filterCard.addView(actions)
+        addGap(filterCard, 7)
+
+        val scroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        categories.forEach { category ->
+            row.addView(
+                filterChip(category, selectedManagementMenuCategory == category) {
+                    selectedManagementMenuCategory = category
+                    renderApp()
+                },
+                LinearLayout.LayoutParams(-2, dp(42)).apply {
+                    setMargins(0, 0, dp(6), 0)
+                }
+            )
+        }
+        scroll.addView(row)
+        filterCard.addView(scroll, LinearLayout.LayoutParams(-1, dp(46)))
+        container.addView(filterCard, cardParams())
+        addGap(container, 5)
+    }
+
     private fun renderMenu(container: LinearLayout) {
         pageIntro(container, "Carta e custos", if (hasRemoteRestaurant())
             "Carta e custos privados, guardados no servidor."
@@ -1839,8 +1916,24 @@ class MainActivity : Activity() {
                 container.addView(emptyCard("A carta do servidor está vazia. Adiciona os primeiros artigos e preços aprovados pelo restaurante."))
                 return
             }
-            for (index in 0 until items.length()) {
-                val item = items.optJSONObject(index) ?: continue
+            val menuEntries = (0 until items.length()).mapNotNull { items.optJSONObject(it) }
+            val categories = menuEntries.map { it.optString("category", "Prato principal").trim().ifBlank { "Outros" } }
+            addManagementMenuFilters(container, categories)
+            val query = normalizeCustomerMenuSearch(managementMenuSearch)
+            val filteredItems = menuEntries.filter { item ->
+                val category = item.optString("category", "Prato principal").trim().ifBlank { "Outros" }
+                (selectedManagementMenuCategory == "Todas" || category == selectedManagementMenuCategory) &&
+                    (query.isBlank() || normalizeCustomerMenuSearch(
+                        "${category} ${item.optString("name")} ${item.optString("description")} ${item.optString("allergens")}"
+                    ).contains(query))
+            }
+            container.addView(label("${filteredItems.size} de ${menuEntries.size} artigo(s)", 11f, true, forestSoft))
+            addGap(container, 6)
+            if (filteredItems.isEmpty()) {
+                container.addView(emptyCard("Não existem artigos que correspondam à pesquisa e categoria selecionadas."))
+                return
+            }
+            for (item in filteredItems) {
                 val card = makeCard(15)
                 card.addView(label(item.optString("name"), 17f, true, forestDeep))
                 addGap(card, 3)
@@ -1924,7 +2017,23 @@ class MainActivity : Activity() {
         if (items.isEmpty()) {
             container.addView(emptyCard("A carta está vazia. Adiciona o primeiro artigo de demonstração."))
         }
-        items.forEach { item ->
+        val categories = items.map { it.category.trim().ifBlank { "Outros" } }
+        addManagementMenuFilters(container, categories)
+        val query = normalizeCustomerMenuSearch(managementMenuSearch)
+        val filteredItems = items.filter { item ->
+            val category = item.category.trim().ifBlank { "Outros" }
+            (selectedManagementMenuCategory == "Todas" || category == selectedManagementMenuCategory) &&
+                (query.isBlank() || normalizeCustomerMenuSearch(
+                    "${category} ${item.name} ${item.description} ${item.allergens}"
+                ).contains(query))
+        }
+        container.addView(label("${filteredItems.size} de ${items.size} artigo(s)", 11f, true, forestSoft))
+        addGap(container, 6)
+        if (filteredItems.isEmpty()) {
+            container.addView(emptyCard("Não existem artigos que correspondam à pesquisa e categoria selecionadas."))
+            return
+        }
+        filteredItems.forEach { item ->
             val card = makeCard(15)
             card.addView(label(item.name, 17f, true, forestDeep))
             addGap(card, 3)
