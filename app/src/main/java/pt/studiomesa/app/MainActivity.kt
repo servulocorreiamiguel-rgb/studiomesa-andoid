@@ -54,6 +54,8 @@ class MainActivity : Activity() {
     private var kitchenOrdersCache: JSONArray? = null
     private var kitchenQueueUpdatedAtMillis = 0L
     private var kitchenQueueRefreshFailed = false
+    private var remoteOperationsSyncInFlight = false
+    private var remoteOperationsSyncFailed = false
     private var kitchenPageContainer: LinearLayout? = null
     private var inventoryAutoRefreshScheduled = false
     private var inventoryRefreshInFlight = false
@@ -606,7 +608,10 @@ class MainActivity : Activity() {
         val separator = View(this).apply { setBackgroundColor(Color.argb(65, 255, 255, 255)) }
         header.addView(separator, LinearLayout.LayoutParams(-1, dp(1)))
         addGap(header, 12)
-        header.addView(label(if (hasRemoteRestaurant()) "Restaurante configurado · dados do servidor" else "Demonstração · Dados de exemplo", 10.5f, true, copperPale))
+        header.addView(label(
+            if (hasRemoteRestaurant()) remoteOperationsSyncLabel() else "Demonstração · Dados de exemplo",
+            10.5f, true, copperPale
+        ))
         header.addView(label("Uma experiência de gestão pensada para o ritmo da sala.", 13f, false, Color.rgb(229, 235, 228)))
 
         val headerParams = LinearLayout.LayoutParams(-1, -2).apply {
@@ -704,16 +709,6 @@ class MainActivity : Activity() {
                 "Explora o painel com dados de exemplo. Liga um restaurante na secção Conta para partilhar a operação com a equipa.",
             14f, false, muted
         ))
-        if (remote) {
-            val lastSync = backendPrefs.getLong("remote_operations_updated_at", 0L)
-            val syncLabel = if (lastSync > 0L) {
-                "Última sincronização concluída às " +
-                    SimpleDateFormat("HH:mm", Locale("pt", "PT")).format(Date(lastSync))
-            } else {
-                "Ainda não existe uma sincronização concluída neste dispositivo."
-            }
-            container.addView(label(syncLabel, 10.5f, true, forestSoft))
-        }
         addGap(container, 18)
 
         val tableTotal: Int
@@ -1911,6 +1906,27 @@ class MainActivity : Activity() {
     private fun hasRemoteRestaurant(): Boolean =
         backendToken().isNotBlank() && backendRestaurantId().isNotBlank()
 
+    private fun remoteOperationsSyncLabel(): String {
+        if (remoteOperationsSyncInFlight) return "A sincronizar mesas, carta e pedidos…"
+
+        val lastSync = backendPrefs.getLong("remote_operations_updated_at", 0L)
+        val formattedLastSync = if (lastSync > 0L) {
+            SimpleDateFormat("HH:mm", Locale("pt", "PT")).format(Date(lastSync))
+        } else {
+            null
+        }
+
+        if (remoteOperationsSyncFailed) {
+            return formattedLastSync?.let {
+                "Falha ao atualizar · a usar dados recebidos às $it"
+            } ?: "Falha ao sincronizar · sem dados confirmados neste dispositivo"
+        }
+
+        return formattedLastSync?.let {
+            "Última sincronização concluída às $it"
+        } ?: "Restaurante configurado · ainda sem sincronização concluída"
+    }
+
     private fun savedRemoteArray(key: String): org.json.JSONArray {
         return try {
             org.json.JSONArray(backendPrefs.getString(key, "[]") ?: "[]")
@@ -1955,6 +1971,7 @@ class MainActivity : Activity() {
             .putString("remote_orders_json", orders.toString())
             .putLong("remote_operations_updated_at", System.currentTimeMillis())
             .apply()
+        remoteOperationsSyncFailed = false
     }
 
     private fun refreshRemoteOperations() {
@@ -1966,10 +1983,27 @@ class MainActivity : Activity() {
                 .show()
             return
         }
+        if (remoteOperationsSyncInFlight) return
+
+        remoteOperationsSyncInFlight = true
+        remoteOperationsSyncFailed = false
+        renderApp()
+
         runBackend({
             cacheRemoteOperations(backendToken(), restaurantId)
             "OK"
+        }, showProgress = false, onError = { error ->
+            remoteOperationsSyncInFlight = false
+            remoteOperationsSyncFailed = true
+            renderApp()
+            AlertDialog.Builder(this)
+                .setTitle("Não foi possível sincronizar")
+                .setMessage(friendlyBackendError(error.message))
+                .setPositiveButton("OK", null)
+                .show()
         }) {
+            remoteOperationsSyncInFlight = false
+            remoteOperationsSyncFailed = false
             kitchenOrdersCache = null
             kitchenQueueUpdatedAtMillis = System.currentTimeMillis()
             kitchenQueueRefreshFailed = false
@@ -2087,28 +2121,31 @@ class MainActivity : Activity() {
         task: () -> String,
         refreshSession: Boolean = true,
         onError: ((Exception) -> Unit)? = null,
+        showProgress: Boolean = true,
         onSuccess: (String) -> Unit
     ) {
-        val progress = AlertDialog.Builder(this)
-            .setTitle("A ligar ao StudioMesa")
-            .setMessage("A validar a conta no servidor. Aguarda, por favor…")
-            .setCancelable(false)
-            .create()
-        progress.show()
+        val progress = if (showProgress) {
+            AlertDialog.Builder(this)
+                .setTitle("A ligar ao StudioMesa")
+                .setMessage("A validar a conta no servidor. Aguarda, por favor…")
+                .setCancelable(false)
+                .create()
+        } else null
+        progress?.show()
         Thread {
             try {
                 if (refreshSession) refreshSessionIfNeeded()
                 val result = task()
                 runOnUiThread {
                     if (!isFinishing) {
-                        progress.dismiss()
+                        progress?.dismiss()
                         onSuccess(result)
                     }
                 }
             } catch (error: Exception) {
                 runOnUiThread {
                     if (!isFinishing) {
-                        progress.dismiss()
+                        progress?.dismiss()
                         if (onError != null) {
                             onError(error)
                         } else {
