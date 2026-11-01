@@ -4668,6 +4668,7 @@ class MainActivity : Activity() {
                             "OK"
                         }) {
                             dialog.dismiss()
+                            invalidateMenuRecipeCostSnapshot()
                             renderApp()
                             if (requestId != null) {
                                 pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
@@ -4741,6 +4742,7 @@ class MainActivity : Activity() {
                         "OK"
                     }) {
                         dialog.dismiss()
+                        invalidateMenuRecipeCostSnapshot()
                         renderApp()
                         pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
                     }
@@ -4836,6 +4838,7 @@ class MainActivity : Activity() {
                     "OK"
                 }) {
                     dialog.dismiss()
+                    invalidateMenuRecipeCostSnapshot()
                     renderApp()
                     pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
                 }
@@ -6383,6 +6386,15 @@ class MainActivity : Activity() {
         ))
     }
 
+    private fun invalidateMenuRecipeCostSnapshot() {
+        menuRecipeCostSnapshot = null
+        menuRecipeCostScopeKey = null
+        menuRecipeCostUpdatedAtMillis = 0L
+        backendPrefs.edit()
+            .putLong("remote_operations_updated_at", System.currentTimeMillis())
+            .apply()
+    }
+
     private fun refreshMenuRecipeCostSnapshot() {
         if (!economicManagerEnabled || !isPremium || !hasRemoteRestaurant() ||
             backendPrefs.getString("restaurant_role", "").orEmpty() != "owner" ||
@@ -7350,6 +7362,7 @@ class MainActivity : Activity() {
                                 )
                                 "OK"
                             }) {
+                                invalidateMenuRecipeCostSnapshot()
                                 showRecipeDialog(menuItemId, menuItemName, menuItemPrice)
                             }
                         }
@@ -7405,6 +7418,7 @@ class MainActivity : Activity() {
                             )
                             "OK"
                         }) {
+                            invalidateMenuRecipeCostSnapshot()
                             showRecipeDialog(menuItemId, menuItemName, menuItemPrice)
                         }
                     }
@@ -7529,6 +7543,7 @@ class MainActivity : Activity() {
                     "OK"
                 }) {
                     dialog.dismiss()
+                    invalidateMenuRecipeCostSnapshot()
                     showRecipeDialog(menuItemId, menuItemName, menuItemPrice)
                 }
             }
