@@ -113,6 +113,8 @@ class MenuCostComparisonAnalyzerTest {
                     sellingPrice = BigDecimal("10.00"),
                     recordedUnitCost = BigDecimal("2.00"),
                     recipeExists = true,
+                    recipeIsActive = true,
+                    recipeRequiresReview = false,
                     recipeIsActiveApproved = true,
                     recipeCostPerPortion = BigDecimal("3.50"),
                     recipeCostComplete = true
@@ -138,6 +140,8 @@ class MenuCostComparisonAnalyzerTest {
                     sellingPrice = BigDecimal("10.00"),
                     recordedUnitCost = BigDecimal("2.00"),
                     recipeExists = true,
+                    recipeIsActive = false,
+                    recipeRequiresReview = false,
                     recipeIsActiveApproved = false,
                     recipeCostPerPortion = BigDecimal("4.00"),
                     recipeCostComplete = true
@@ -149,7 +153,8 @@ class MenuCostComparisonAnalyzerTest {
         val row = result.rankedItems.single()
         assertEquals(BigDecimal("20.0"), row.costToPricePercent)
         assertEquals("Custo manual · ficha técnica por aprovar", row.costSourceLabel)
-        assertEquals(1, result.recipesAwaitingApproval)
+        assertEquals(0, result.recipesAwaitingApproval)
+        assertEquals(1, result.recipesInactive)
         assertEquals(1, result.menuItemsUsingManualCost)
     }
 
@@ -162,6 +167,8 @@ class MenuCostComparisonAnalyzerTest {
                     sellingPrice = BigDecimal("10.00"),
                     recordedUnitCost = BigDecimal("2.00"),
                     recipeExists = true,
+                    recipeIsActive = true,
+                    recipeRequiresReview = false,
                     recipeIsActiveApproved = true,
                     recipeCostPerPortion = BigDecimal("1.00"),
                     recipeCostComplete = false
@@ -174,6 +181,27 @@ class MenuCostComparisonAnalyzerTest {
         assertEquals(1, result.approvedRecipesIncomplete)
         assertEquals(0, result.menuItemsUsingManualCost)
         assertEquals(0, result.menuItemsUsingRecipeCost)
+    }
+
+    @Test
+    fun onlyRecipesExplicitlyMarkedForReviewCountAsAwaitingApproval() {
+        val result = MenuCostComparisonAnalyzer.analyze(
+            listOf(
+                MenuCostComparisonInput(
+                    itemName = "Receita revista",
+                    sellingPrice = BigDecimal("10.00"),
+                    recordedUnitCost = BigDecimal("2.00"),
+                    recipeExists = true,
+                    recipeIsActive = false,
+                    recipeRequiresReview = true,
+                    recipeIsActiveApproved = false
+                )
+            ),
+            targetPercent = null
+        )
+
+        assertEquals(1, result.recipesAwaitingApproval)
+        assertEquals(1, result.recipesInactive)
     }
 
     @Test
