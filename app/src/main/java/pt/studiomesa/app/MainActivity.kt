@@ -115,6 +115,8 @@ class MainActivity : Activity() {
     private var reservationCache = JSONArray()
     private var reservationsLoaded = false
     private var reservationRefreshInFlightScope: String? = null
+    private var reservationUpdatedAtMillis = 0L
+    private var reservationRefreshFailed = false
     private var selectedReservationFilter = "Todas"
     private var customerReservationsCache = JSONArray()
     private var customerReservationsLoaded = false
@@ -1873,6 +1875,8 @@ class MainActivity : Activity() {
                     reservationCache = JSONArray()
                     reservationsLoaded = false
                     reservationRefreshInFlightScope = null
+                    reservationUpdatedAtMillis = 0L
+                    reservationRefreshFailed = false
                     selectedReservationFilter = "Todas"
                     editor.remove("remote_members_json")
                         .remove("remote_tables_json")
@@ -1910,6 +1914,8 @@ class MainActivity : Activity() {
                 reservationCache = JSONArray()
                 reservationsLoaded = false
                 reservationRefreshInFlightScope = null
+                reservationUpdatedAtMillis = 0L
+                reservationRefreshFailed = false
                 selectedReservationFilter = "Todas"
             }
         } catch (_: Exception) {
@@ -4137,6 +4143,7 @@ class MainActivity : Activity() {
         val requestedScope = "$requestedRestaurantId:$requestedAccountId"
         if (reservationRefreshInFlightScope == requestedScope) return
         reservationRefreshInFlightScope = requestedScope
+        reservationRefreshFailed = false
 
         runBackend(
             task = {
@@ -4162,6 +4169,8 @@ class MainActivity : Activity() {
                         requestedAccountId, currentAccountId
                     )
                 ) {
+                    reservationRefreshFailed = true
+                    if (activePage == "Reservas") renderApp()
                     AlertDialog.Builder(this)
                         .setTitle("Não foi possível atualizar as reservas")
                         .setMessage(friendlyBackendError(error.message))
@@ -4169,7 +4178,6 @@ class MainActivity : Activity() {
                         .show()
                 }
             },
-            showProgress = false,
             onSuccess = { raw ->
                 val ownsRefreshSlot = reservationRefreshInFlightScope == requestedScope
                 if (ownsRefreshSlot) reservationRefreshInFlightScope = null
@@ -4182,10 +4190,28 @@ class MainActivity : Activity() {
                 ) {
                     reservationCache = JSONArray(raw)
                     reservationsLoaded = true
+                    reservationUpdatedAtMillis = System.currentTimeMillis()
+                    reservationRefreshFailed = false
                     renderApp()
                 }
             }
         )
+    }
+
+    private fun reservationRefreshStatusMessage(): String {
+        val lastUpdated = reservationUpdatedAtMillis.takeIf { it > 0L }?.let {
+            SimpleDateFormat("HH:mm:ss", Locale("pt", "PT")).format(Date(it))
+        }
+        return when {
+            reservationRefreshFailed && lastUpdated != null ->
+                "Não foi possível atualizar. A mostrar a última lista confirmada às $lastUpdated."
+            reservationRefreshFailed ->
+                "Ainda não foi possível carregar as reservas. Usa «Atualizar reservas» para tentar novamente."
+            lastUpdated != null ->
+                "Última atualização confirmada às $lastUpdated. A agenda não é uma subscrição em tempo real; usa «Atualizar reservas» para ver alterações de outros dispositivos."
+            else ->
+                "A agenda é atualizada por pedido. Usa «Atualizar reservas» para consultar as alterações mais recentes."
+        }
     }
 
     private fun renderReservations(container: LinearLayout) {
@@ -4200,11 +4226,21 @@ class MainActivity : Activity() {
         addGap(container, 6)
         container.addView(secondaryButton("Atualizar reservas") { refreshReservations() },
             LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(container, 12)
+        addGap(container, 5)
+        container.addView(label(
+            reservationRefreshStatusMessage(),
+            11f, false, if (reservationRefreshFailed) red else muted
+        ))
+        addGap(container, 8)
 
         if (!reservationsLoaded) {
-            container.addView(emptyCard("A carregar as reservas do servidor…"))
-            refreshReservations()
+            val loadingMessage = if (reservationRefreshFailed) {
+                "Não foi possível carregar as reservas. Verifica a ligação e tenta atualizar novamente."
+            } else {
+                "A carregar as reservas do servidor…"
+            }
+            container.addView(emptyCard(loadingMessage))
+            if (!reservationRefreshFailed) refreshReservations()
             return
         }
 
