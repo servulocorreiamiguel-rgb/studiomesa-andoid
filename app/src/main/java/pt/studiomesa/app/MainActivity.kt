@@ -2818,9 +2818,52 @@ class MainActivity : Activity() {
                 LinearLayout.LayoutParams(-1, dp(48)))
         }
         container.addView(card, cardParams())
+
+        if (token.isNotBlank() && backendRestaurantId().isNotBlank()) {
+            addGap(container, 3)
+            val setupCard = makeCard(14, paleGreen)
+            setupCard.addView(label("PREPARAR A OPERAÇÃO", 9.5f, true, forestSoft))
+            addGap(setupCard, 4)
+            setupCard.addView(label(
+                "Atalhos para rever a configuração essencial do restaurante.",
+                11.5f, false, ink
+            ))
+            addGap(setupCard, 8)
+            val setupScroll = HorizontalScrollView(this).apply {
+                isHorizontalScrollBarEnabled = false
+                overScrollMode = View.OVER_SCROLL_NEVER
+            }
+            val setupRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            listOf("Mesas", "Carta", "Pedidos").forEach { page ->
+                setupRow.addView(
+                    navigationChip("Abrir $page") {
+                        activePage = page
+                        renderApp()
+                    },
+                    LinearLayout.LayoutParams(-2, dp(42)).apply {
+                        setMargins(0, 0, dp(7), 0)
+                    }
+                )
+            }
+            setupScroll.addView(setupRow)
+            setupCard.addView(setupScroll, LinearLayout.LayoutParams(-1, dp(46)))
+            container.addView(setupCard, cardParams())
+        }
+
         addGap(container, 3)
         if (token.isNotBlank()) {
-            container.addView(secondaryButton("Eliminar conta permanentemente") {
+            val securityCard = makeCard(14)
+            securityCard.addView(label("Segurança da conta", 14f, true, forestDeep))
+            addGap(securityCard, 4)
+            securityCard.addView(label(
+                "Termina a sessão neste dispositivo ou elimina a conta permanentemente. A eliminação é irreversível.",
+                11.5f, false, muted
+            ))
+            addGap(securityCard, 8)
+            securityCard.addView(secondaryButton("Terminar sessão neste dispositivo") {
                 showDeleteAccountConfirmation()
             }, LinearLayout.LayoutParams(-1, dp(48)))
             addGap(container, 7)
@@ -2846,7 +2889,13 @@ class MainActivity : Activity() {
             reservationCache = JSONArray()
             reservationsLoaded = false
             renderApp()
-        }, LinearLayout.LayoutParams(-1, dp(48)))
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+            addGap(securityCard, 6)
+            securityCard.addView(dangerButton("Eliminar conta permanentemente") {
+                showDeleteAccountConfirmation()
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+            container.addView(securityCard, cardParams())
+        }
         addGap(container, 10)
         container.addView(label("As funções de gestão e os dados de cada restaurante são controlados por permissões no servidor.", 12f, false, muted))
     }
