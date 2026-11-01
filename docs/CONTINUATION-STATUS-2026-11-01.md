@@ -150,7 +150,7 @@ A validação de compilação e execução dos seis testes continua pendente; os
 ### Continuação — proteção contra cache operacional desatualizada
 
 - O assistente passa a verificar a idade da última sincronização real da carta, mesas e pedidos. O limite de referência é cinco minutos; uma hora ausente, futura ou demasiado antiga é considerada não recente.
-- Quando os dados operacionais não estão confirmados como recentes, o assistente mostra um alerta nas recomendações, acrescenta um aviso às respostas sobre dados do restaurante e identifica a limitação no resumo diário. O atalho encaminha para **Início**, onde existe a navegação da operação.
+- Quando os dados operacionais não estão confirmados como recentes, o assistente mostra um alerta nas recomendações, acrescenta um aviso apenas às respostas que dependem da carta e dos pedidos e identifica a limitação no resumo diário. As perguntas de stock mantêm o controlo de atualidade próprio. O atalho encaminha para **Início**, onde existe a navegação da operação.
 - Foi separado o carimbo de hora da sincronização real (\`remote_operations_synced_at\`) da versão usada para invalidar análises (\`remote_operations_updated_at\`). Esta distinção é necessária porque a invalidação de uma análise económica pode avançar a versão sem voltar a descarregar a carta e os pedidos.
 - A sincronização geral grava os dois carimbos; a mudança/perda de associação ao restaurante limpa ambos. O assistente usa exclusivamente o carimbo de sincronização real.
 - Foram acrescentados três testes unitários escritos: validade temporal do carimbo, aviso antes de responder com cache antiga e identificação da cache antiga no resumo diário.
