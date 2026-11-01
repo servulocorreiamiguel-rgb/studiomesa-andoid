@@ -71,6 +71,22 @@ class InventoryRecipeCostCalculatorTest {
     }
 
     @Test
+    fun acceptsAnExplicitZeroCostWhenAnotherIngredientHasARealCost() {
+        val result = InventoryRecipeCostCalculator.calculate(
+            listOf(
+                InventoryRecipeIngredientInput(
+                    "Água", "L", BigDecimal("0.200"), BigDecimal.ZERO.setScale(4), BigDecimal.ZERO
+                ),
+                InventoryRecipeIngredientInput(
+                    "Café", "kg", BigDecimal("0.020"), BigDecimal("18.0000"), BigDecimal.ZERO
+                )
+            )
+        )
+        assertTrue(result.isComplete)
+        assertEquals(BigDecimal("0.36"), result.totalCostPerPortion)
+    }
+
+    @Test
     fun refusesSuggestedPriceWhenAnyCostIsMissing() {
         val result = InventoryRecipeCostCalculator.calculate(
             listOf(
