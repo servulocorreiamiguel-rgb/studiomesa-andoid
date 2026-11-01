@@ -6053,6 +6053,7 @@ class MainActivity : Activity() {
         // Render after the monthly target field has populated the owner's chosen percentage.
         addGap(container, 6)
         renderMenuCostComparison(container)
+        toolTargets["Comparação da carta"] = container.getChildAt(container.childCount - 1)
 
         addGap(container, 6)
         val scenario = makeCard(15)
@@ -6617,7 +6618,8 @@ class MainActivity : Activity() {
             }
         }
 
-        val targetWasDefault = economicInputs["foodTarget"].isNullOrBlank()
+        val targetWasDefault = economicInputs["foodTarget"].isNullOrBlank() ||
+            economicInputs["foodTarget"] == "30"
         val targetText = economicInputs["foodTarget"]?.takeIf { it.isNotBlank() } ?: "30"
         val target = runCatching {
             RestaurantEconomicManager.parseNonNegative(targetText, "objetivo de custo alimentar")
