@@ -165,3 +165,14 @@ Os valores de referência atuais são 890 €, 1 490 € e 1 690 €. Ainda não
 - [ ] Antes de ativar: criar um utilizador PostgreSQL dedicado sem permissões nas tabelas/esquemas da aplicação; configurar o segredo GitHub `SUPABASE_HEALTHCHECK_DB_URL` com a ligação de sessão; rever backup/recuperação e integrar o workflow na branch principal.
 - [ ] Confirmar execuções agendadas e observar o estado do projeto durante pelo menos duas semanas. O Supabase não garante que um health check sintético, por si só, evite a pausa do plano Free; não prometer disponibilidade contínua com este mecanismo.
 - [ ] Antes de um restaurante depender comercialmente do serviço, avaliar o plano pago do Supabase, que não pausa projetos por inatividade.
+
+
+## Confidencialidade dos custos de compra
+
+- [x] Preparada migração de privilégios por coluna: contas autenticadas podem ler dados operacionais de stock, mas não `unit_cost_per_unit` nem `unit_cost_at_movement` diretamente.
+- [x] Preparadas RPCs `SECURITY DEFINER` com verificação explícita de `restaurant_staff.role = 'owner'` para custos atuais e históricos; todas as funções têm `search_path` vazio e privilégios explícitos.
+- [x] Trigger de proteção impede que staff defina custo de compra ou altere a unidade base de um artigo existente; atualizações operacionais preservam o custo antigo.
+- [x] A app usa consultas separadas: leituras operacionais para staff e leitura financeira via RPC para owner.
+- [x] Os custos são mantidos apenas em memória durante a sessão do proprietário; a cache normal `remote_inventory_json` é sanitizada e não os guarda. A cache é limpa ao mudar de conta, papel ou restaurante.
+- [ ] Reproduzir a migração em PostgreSQL descartável e provar com contas owner/staff que os privilégios, triggers, RPCs e isolamento por restaurante funcionam.
+- [ ] Testar atualização de papel, logout, mudança de restaurante, cache de processo e chamadas REST/RPC diretas em Android real.
