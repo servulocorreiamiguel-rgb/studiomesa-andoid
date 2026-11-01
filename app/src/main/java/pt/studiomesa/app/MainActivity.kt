@@ -839,13 +839,13 @@ class MainActivity : Activity() {
             }
             row.addView(
                 homeActionTile(first.second, first.third, first.first),
-                LinearLayout.LayoutParams(0, -1, 1f).apply { setMargins(0, 0, dp(6), dp(10)) }
+                LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), dp(10)) }
             )
             if (index + 1 < quickActions.size) {
                 val second = quickActions[index + 1]
                 row.addView(
                     homeActionTile(second.second, second.third, second.first),
-                    LinearLayout.LayoutParams(0, -1, 1f).apply { setMargins(dp(6), 0, 0, dp(10)) }
+                    LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, dp(10)) }
                 )
             } else {
                 row.addView(View(this), LinearLayout.LayoutParams(0, dp(1), 1f))
@@ -7231,18 +7231,23 @@ class MainActivity : Activity() {
     }
 
     private fun pageIntro(container: LinearLayout, title: String, subtitle: String) {
-        container.addView(label("Gestão de restaurante", 10.5f, true, forestSoft))
-        addGap(container, 5)
-        container.addView(label(title, 27f, true, forestDeep))
-        addGap(container, 5)
-        container.addView(label(subtitle, 14f, false, muted))
+        container.addView(label("STUDIOMESA  /  RESTAURANTE", 9.5f, true, forestSoft).apply {
+            letterSpacing = 0.08f
+        })
+        addGap(container, 6)
+        container.addView(label(title, 25f, true, forestDeep).apply {
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        })
+        addGap(container, 4)
+        container.addView(label(subtitle, 13f, false, muted))
     }
 
     private fun sectionHeading(container: LinearLayout, title: String, subtitle: String) {
-        container.addView(label(title, 18f, true, forestDeep))
+        container.addView(label(title, 17f, true, forestDeep))
         addGap(container, 3)
-        container.addView(label(subtitle, 12.5f, false, muted))
-        addGap(container, 10)
+        container.addView(label(subtitle, 12f, false, muted))
+        addGap(container, 9)
     }
 
     private fun homeActionTile(title: String, subtitle: String, destination: String): LinearLayout {
@@ -7309,11 +7314,17 @@ class MainActivity : Activity() {
 
     private fun statCard(title: String, value: String, accent: Int): LinearLayout {
         val card = makeCard(14)
-        card.addView(label(title, 9.5f, true, muted))
-        addGap(card, 7)
-        card.addView(label(value, 24f, true, forestDeep))
-        addGap(card, 7)
-        card.addView(View(this).apply { setBackgroundColor(accent) }, LinearLayout.LayoutParams(dp(26), dp(3)))
+        card.addView(label(title, 9f, true, muted).apply {
+            maxLines = 2
+        })
+        addGap(card, 6)
+        card.addView(label(value, 23f, true, forestDeep).apply {
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        })
+        addGap(card, 8)
+        card.addView(View(this).apply { setBackgroundColor(accent) },
+            LinearLayout.LayoutParams(dp(30), dp(3)))
         return card
     }
 
