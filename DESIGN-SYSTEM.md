@@ -70,7 +70,7 @@ A interface usa uma identidade discreta, inspirada em restauração contemporân
 - **Stock:** ações de adicionar e atualizar agrupadas; resumo de artigos e alertas antes da lista; quantidade em destaque e ações de entrada, saída, edição e desperdício.
 - **Gestão económica e análise:** atalhos horizontais para ferramentas e períodos; valores e pressupostos identificados, sem aparência de contabilidade certificada.
 - **Assistente:** conversa em primeiro plano; análises e recomendações adicionais recolhidas, mas acessíveis.
-- **Cliente:** cartão de fidelização, carta publicada, reservas e conta com a mesma identidade visual.
+- **Cliente:** cartão de fidelização, carta publicada com pesquisa e filtros horizontais por categoria, reservas e conta com a mesma identidade visual.
 
 ## Critérios para fechar o design
 
