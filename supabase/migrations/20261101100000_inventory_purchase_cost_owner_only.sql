@@ -75,6 +75,7 @@ GRANT SELECT (
 
 REVOKE SELECT ON TABLE public.restaurant_inventory_movements FROM authenticated;
 GRANT SELECT (
+  restaurant_id,
   item_id,
   delta,
   quantity_after,
