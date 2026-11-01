@@ -8053,8 +8053,9 @@ class MainActivity : Activity() {
                         10.5f, false, muted
                     ))
                     addGap(costCard, 7)
-                    costCard.addView(secondaryButton("Usar no Gestor económico") {
-                        val scope = if (hasRemoteRestaurant()) {
+                    if (analysis.preciseTotalCostPerPortion?.signum() ?: 0 > 0) {
+                        costCard.addView(secondaryButton("Usar no Gestor económico") {
+                            val scope = if (hasRemoteRestaurant()) {
                             "restaurant:" + backendRestaurantId() + ":" +
                                 backendPrefs.getString("user_id", "").orEmpty()
                         } else "demo"
@@ -8078,8 +8079,14 @@ class MainActivity : Activity() {
                         }
                         recipeReportText = ""
                         activePage = "Gestão económica"
-                        renderApp()
-                    }, LinearLayout.LayoutParams(-1, dp(44)))
+                            renderApp()
+                        }, LinearLayout.LayoutParams(-1, dp(44)))
+                    } else {
+                        costCard.addView(label(
+                            "O custo total registado é zero. Confirma se os custos de compra foram preenchidos antes de usar esta receita para sugerir um preço.",
+                            10.5f, false, muted
+                        ))
+                    }
                 }
                 else -> {
                     costCard.addView(label(
