@@ -258,10 +258,8 @@ class SupabaseSecurityAuditTests(unittest.TestCase):
             "REVOKE SELECT ON TABLE public.restaurant_inventory_movements FROM authenticated;",
             sql,
         )
-        self.assertIn("client_request_id", sql)
-        self.assertIn("created_by", sql)
         self.assertIn(
-            "REVOKE SELECT ON TABLE public.restaurant_inventory_movements FROM authenticated;",
+            "  created_by,\n  client_request_id,",
             sql,
         )
         self.assertNotRegex(
