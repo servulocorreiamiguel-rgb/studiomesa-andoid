@@ -6958,7 +6958,7 @@ class MainActivity : Activity() {
                                 )
                                 "OK"
                             }) {
-                                showRecipeDialog(menuItemId, menuItemName)
+                                showRecipeDialog(menuItemId, menuItemName, menuItemPrice)
                             }
                         }
                         .show()
@@ -7013,7 +7013,7 @@ class MainActivity : Activity() {
                             )
                             "OK"
                         }) {
-                            showRecipeDialog(menuItemId, menuItemName)
+                            showRecipeDialog(menuItemId, menuItemName, menuItemPrice)
                         }
                     }
                     .show()
@@ -7137,7 +7137,7 @@ class MainActivity : Activity() {
                     "OK"
                 }) {
                     dialog.dismiss()
-                    showRecipeDialog(menuItemId, menuItemName)
+                    showRecipeDialog(menuItemId, menuItemName, menuItemPrice)
                 }
             }
         }
