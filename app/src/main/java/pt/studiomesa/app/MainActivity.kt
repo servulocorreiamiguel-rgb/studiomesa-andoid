@@ -95,6 +95,7 @@ class MainActivity : Activity() {
     private var selectedOrderFilter = "Todos"
     private var selectedKitchenFilter = "Todos"
     private var selectedTableFilter = "Todas"
+    private var customerSearchQuery = ""
 
     // Owner-controlled economic tools: session-only until persistent authorization is designed.
     private var economicManagerEnabled = false
@@ -3286,7 +3287,62 @@ class MainActivity : Activity() {
             return
         }
 
-        customers.forEach { customer ->
+        val searchCard = makeCard(13)
+        searchCard.addView(label("PESQUISAR CLIENTE", 9.5f, true, forestSoft))
+        addGap(searchCard, 6)
+        val customerSearchField = inputField(
+            "Nome ou código do cartão",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        ).apply {
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            setOnEditorActionListener { _, actionId, _ ->
+                if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                    customerSearchQuery = text.toString().trim()
+                    renderApp()
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+        customerSearchField.setText(customerSearchQuery)
+        searchCard.addView(customerSearchField, fieldParams())
+        val searchActions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        searchActions.addView(primaryButton("Pesquisar") {
+            customerSearchQuery = customerSearchField.text.toString().trim()
+            renderApp()
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+            setMargins(0, 0, dp(5), 0)
+        })
+        searchActions.addView(secondaryButton("Limpar") {
+            customerSearchQuery = ""
+            renderApp()
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+            setMargins(dp(5), 0, 0, 0)
+        })
+        searchCard.addView(searchActions)
+        container.addView(searchCard, cardParams())
+
+        val query = normalizeCustomerMenuSearch(customerSearchQuery)
+        val filteredCustomers = customers.filter { customer ->
+            query.isBlank() || normalizeCustomerMenuSearch(
+                "${customer.name} ${customer.code}"
+            ).contains(query)
+        }
+        container.addView(label(
+            "${filteredCustomers.size} de ${customers.size} cliente(s)",
+            11f, true, forestSoft
+        ))
+        addGap(container, 6)
+        if (filteredCustomers.isEmpty()) {
+            container.addView(emptyCard("Não encontrámos clientes com esse nome ou código. Confirma a pesquisa ou limpa o filtro."))
+            return
+        }
+
+        filteredCustomers.forEach { customer ->
             val card = makeCard(15)
             val top = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
