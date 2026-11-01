@@ -3198,6 +3198,16 @@ class MainActivity : Activity() {
             refreshCustomerReservations()
         }, LinearLayout.LayoutParams(-1, dp(44)).apply { setMargins(0, 0, 0, dp(10)) })
 
+        if (customerReservationsLoaded) {
+            CustomerReservationRefreshStatus.message(
+                isRefreshing = customerReservationsLoading,
+                hasFailed = customerReservationsLoadError
+            )?.let { status ->
+                container.addView(emptyCard(status), cardParams())
+                addGap(container, 8)
+            }
+        }
+
         if (!customerReservationsLoaded) {
             container.addView(
                 emptyCard(
