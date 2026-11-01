@@ -404,3 +404,21 @@ Estes casos são executados na ronda final. A app do restaurante pode atribuir o
 | HCH-03 | Falha de ligação | Remover temporariamente o segredo ou usar credenciais inválidas num ensaio controlado | O workflow falha com mensagem genérica; não imprime a cadeia de ligação, palavra-passe ou chaves |
 | HCH-04 | Visibilidade | Consultar a app de restaurante e os relatórios antes/depois da execução | Não surge pedido, notificação, movimento ou alteração operacional |
 | HCH-05 | Agendamento | Confirmar execução manual e agendada depois de integrado em `main` | A execução manual funciona e o agendamento corre aproximadamente de 8 em 8 horas; a disponibilidade continuada não é garantida pelo plano Free |
+
+
+## Conversão de unidades nas fichas técnicas
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| UNIT-01 | Massa | Artigo de stock em kg; adicionar 150 g por dose | A receita guarda 0,150 kg por dose |
+| UNIT-02 | Massa | Artigo de stock em g; adicionar 1,5 kg por dose | A receita guarda 1500,000 g por dose |
+| UNIT-03 | Volume | Artigo em L; adicionar 750 ml por dose | A receita guarda 0,750 L por dose |
+| UNIT-04 | Unidade | Artigo em unidades; adicionar 2 unidades | A receita guarda 2,000 unidades |
+| UNIT-05 | Categoria incompatível | Tentar converter kg em L | A operação é recusada antes de contactar o servidor |
+| UNIT-06 | Unidade personalizada | Artigo em caixas; tentar usar unidades | Não é apresentada conversão incompatível |
+| UNIT-07 | Precisão | Converter 0,5 g para kg | A operação é recusada porque exigiria mais de três casas decimais na unidade de stock |
+| UNIT-08 | Limites | Introduzir zero, valor negativo ou quantidade acima do máximo | A validação recusa o valor |
+| UNIT-09 | Mudança de ingrediente | Escolher primeiro um artigo em kg e depois outro em L | O seletor de unidade é atualizado e reposto para a unidade nativa do novo artigo |
+| UNIT-10 | Custo por dose | Comparar a mesma receita introduzida em g e em kg para o mesmo artigo | O custo calculado é idêntico após conversão |
+| UNIT-11 | Consumo automático | Aprovar uma ficha técnica em kg com quantidades inicialmente introduzidas em g | O servidor desconta stock em kg, sem alteração do cálculo de desperdício |
+| UNIT-12 | Regressão | Editar receita existente sem converter unidade | Os valores já guardados continuam a ser interpretados na unidade do artigo de stock |
