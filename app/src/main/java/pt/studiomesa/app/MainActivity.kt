@@ -56,6 +56,18 @@ class MainActivity : Activity() {
     private var activityResumed = false
     private var kitchenAutoRefreshScheduled = false
     private var kitchenRefreshInFlight = false
+    private var reservationAutoRefreshScheduled = false
+    private var reservationRefreshInFlight = false
+    private var reservationPageContainer: LinearLayout? = null
+    private val reservationRefreshHandler = Handler(Looper.getMainLooper())
+    private val reservationRefreshRunnable = object : Runnable {
+        override fun run() {
+            reservationAutoRefreshScheduled = false
+            if (!shouldRunReservationAutoRefresh()) return
+            refreshReservationsSilently()
+            scheduleNextReservationAutoRefresh()
+        }
+    }
     private var kitchenOrdersCache: JSONArray? = null
     private var kitchenQueueUpdatedAtMillis = 0L
     private var kitchenQueueRefreshFailed = false
@@ -189,12 +201,14 @@ class MainActivity : Activity() {
         activityResumed = true
         updateKitchenAutoRefresh()
         updateInventoryAutoRefresh()
+        updateReservationAutoRefresh()
     }
 
     override fun onPause() {
         activityResumed = false
         stopKitchenAutoRefresh()
         stopInventoryAutoRefresh()
+        stopReservationAutoRefresh()
         super.onPause()
     }
 
@@ -670,10 +684,12 @@ class MainActivity : Activity() {
         setContentView(appRoot)
         updateKitchenAutoRefresh()
         updateInventoryAutoRefresh()
+        updateReservationAutoRefresh()
     }
 
     private fun renderPage(container: LinearLayout) {
         if (activePage != "Cozinha") kitchenPageContainer = null
+        if (activePage != "Reservas") reservationPageContainer = null
         when (activePage) {
             "Início" -> renderHome(container)
             "Mesas" -> renderTables(container)
@@ -4683,7 +4699,97 @@ class MainActivity : Activity() {
         }) { renderApp() }
     }
 
+    private fun shouldRunReservationAutoRefresh(): Boolean =
+        ReservationRefreshPolicy.shouldScheduleAutoRefresh(
+            activityResumed = activityResumed,
+            isCustomerApp = isCustomerApp,
+            activePage = activePage,
+            hasRemoteRestaurant = hasRemoteRestaurant()
+        )
+
+    private fun updateReservationAutoRefresh() {
+        if (!shouldRunReservationAutoRefresh()) {
+            stopReservationAutoRefresh()
+            return
+        }
+        scheduleNextReservationAutoRefresh()
+    }
+
+    private fun scheduleNextReservationAutoRefresh() {
+        if (!shouldRunReservationAutoRefresh()) {
+            stopReservationAutoRefresh()
+            return
+        }
+        if (!reservationAutoRefreshScheduled) {
+            reservationAutoRefreshScheduled = true
+            reservationRefreshHandler.postDelayed(
+                reservationRefreshRunnable,
+                ReservationRefreshPolicy.REFRESH_INTERVAL_MILLIS
+            )
+        }
+    }
+
+    private fun stopReservationAutoRefresh() {
+        reservationRefreshHandler.removeCallbacks(reservationRefreshRunnable)
+        reservationAutoRefreshScheduled = false
+    }
+
+    private fun refreshReservationsSilently() {
+        val restaurantId = backendRestaurantId()
+        if (restaurantId.isBlank() ||
+            !ReservationRefreshPolicy.mayStartRefresh(
+                activityResumed = activityResumed,
+                isCustomerApp = isCustomerApp,
+                activePage = activePage,
+                hasRemoteRestaurant = hasRemoteRestaurant(),
+                refreshInFlight = reservationRefreshInFlight
+            )
+        ) return
+
+        reservationRefreshInFlight = true
+        Thread({
+            var freshReservations: JSONArray? = null
+            try {
+                refreshSessionIfNeeded()
+                val token = backendToken()
+                if (token.isBlank() || backendRestaurantId() != restaurantId) {
+                    throw IllegalStateException("A sessão ou o restaurante já não estão disponíveis.")
+                }
+                freshReservations = SupabaseApi.listReservations(token, restaurantId)
+            } catch (_: Exception) {
+                // Keep the last verified agenda visible during temporary network failures.
+            }
+
+            runOnUiThread {
+                reservationRefreshInFlight = false
+                if (isFinishing || backendRestaurantId() != restaurantId || !hasRemoteRestaurant()) return@runOnUiThread
+                val loaded = freshReservations
+                if (loaded != null) {
+                    reservationCache = loaded
+                    reservationsLoaded = true
+                    if (activityResumed && activePage == "Reservas") {
+                        refreshReservationPageContent()
+                    }
+                }
+            }
+        }, "StudioMesa-reservations-refresh").start()
+    }
+
+    private fun refreshReservationPageContent() {
+        if (activePage != "Reservas") return
+        val container = reservationPageContainer ?: return
+        val scroll = container.parent as? ScrollView
+        val previousScrollY = scroll?.scrollY ?: 0
+        container.removeAllViews()
+        renderReservations(container)
+        scroll?.post {
+            val maxScroll = (container.height - (scroll?.height ?: 0)).coerceAtLeast(0)
+            scroll?.scrollTo(0, previousScrollY.coerceAtMost(maxScroll))
+        }
+    }
+
     private fun renderReservations(container: LinearLayout) {
+        reservationPageContainer = container
         pageIntro(container, "Reservas", "Agenda de reservas partilhada com a equipa.")
         addGap(container, 8)
         if (!hasRemoteRestaurant()) {
@@ -4698,6 +4804,11 @@ class MainActivity : Activity() {
             { refreshReservations() }
         )
         addGap(container, 12)
+        container.addView(label(
+            "Atualização automática a cada 30 segundos enquanto esta agenda está aberta.",
+            10.5f, false, muted
+        ))
+        addGap(container, 6)
 
         if (!reservationsLoaded) {
             container.addView(emptyCard("A carregar as reservas do servidor…"))
