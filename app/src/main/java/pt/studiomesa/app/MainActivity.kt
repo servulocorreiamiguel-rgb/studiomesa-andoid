@@ -811,45 +811,46 @@ class MainActivity : Activity() {
             )
         }
 
-        sectionHeading(container, "Acesso rápido", "Escolhe uma área para continuar.")
-        actionCard(container, "01", "Mesas", "Consulta as $tableTotal mesas do restaurante.", "ABRIR MESAS") {
-            activePage = "Mesas"; renderApp()
-        }
-        actionCard(container, "02", "Pedidos", "Regista pedidos e acompanha a conclusão.", "ABRIR PEDIDOS") {
-            activePage = "Pedidos"; renderApp()
-        }
-        actionCard(container, "03", "Carta e custos",
-            if (remote) "Gere os artigos, preços e custos aprovados." else "Artigos de exemplo, preços e custos.",
-            "ABRIR CARTA"
-        ) {
-            activePage = "Carta"; renderApp()
-        }
-        actionCard(container, "04", "Pontos de fidelização", "Cria cartões de cliente e ajusta saldos de pontos.", "GERIR CLIENTES") {
-            activePage = "Pontos"; renderApp()
-        }
+        sectionHeading(container, "Acesso rápido", "As principais áreas do restaurante.")
+
+        val quickActions = mutableListOf<Triple<String, String, String>>()
+        quickActions += Triple("Mesas", "Mesas do restaurante", "$tableTotal mesas disponíveis para consultar e gerir.")
+        quickActions += Triple("Pedidos", "Pedidos e serviço", "Regista pedidos e acompanha cada estado.")
+        quickActions += Triple("Carta", "Carta e custos", if (remote) "Gere artigos, preços e custos internos." else "Artigos de exemplo, preços e custos.")
+        quickActions += Triple("Pontos", "Fidelização", "Consulta clientes e gere os respetivos pontos.")
         if (hasCalculator) {
-            actionCard(container, "05", "Reservas", "Regista reservas e acompanha confirmações.", "GERIR RESERVAS") {
-                activePage = "Reservas"; renderApp()
-            }
-            actionCard(container, "06", "Preço Justo", "Calcula preços indicativos a partir dos custos.", "ABRIR CALCULADORA") {
-                activePage = "Preço Justo"; renderApp()
-            }
+            quickActions += Triple("Reservas", "Reservas", "Organiza pedidos e confirmações.")
+            quickActions += Triple("Preço Justo", "Preço Justo", "Calcula preços indicativos a partir dos custos.")
         }
         if (isPremium) {
-            actionCard(container, "07", "Stock e inventário", "Controla quantidades, níveis mínimos e movimentos.", "GERIR STOCK") {
-                activePage = "Stock"; renderApp()
-            }
-            actionCard(container, "08", "Análise operacional", "Consulta os pedidos, artigos e custos registados.", "VER ANÁLISE") {
-                activePage = "Análise"; renderApp()
-            }
+            quickActions += Triple("Stock", "Stock e inventário", "Controla quantidades, alertas e movimentos.")
+            quickActions += Triple("Análise", "Análise operacional", "Consulta pedidos, artigos e indicadores.")
         }
         if ("Gestão económica" in availablePages()) {
-            actionCard(container, "€", "Gestão económica", "Simula cenários, calcula metas e analisa os custos do restaurante.", "ABRIR GESTOR") {
-                activePage = "Gestão económica"; renderApp()
-            }
+            quickActions += Triple("Gestão económica", "Gestão económica", "Simula cenários e calcula metas financeiras.")
         }
-        actionCard(container, "IA", "Assistente StudioMesa", "Sugestões de operação, engenharia da carta e ideias de conteúdo.", "ABRIR ASSISTENTE") {
-            activePage = "Assistente"; renderApp()
+        quickActions += Triple("Assistente", "Assistente StudioMesa", "Analisa a operação e sugere pontos a rever.")
+
+        for (index in quickActions.indices step 2) {
+            val first = quickActions[index]
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.TOP
+            }
+            row.addView(
+                homeActionTile(first.second, first.third, first.first),
+                LinearLayout.LayoutParams(0, -1, 1f).apply { setMargins(0, 0, dp(6), dp(10)) }
+            )
+            if (index + 1 < quickActions.size) {
+                val second = quickActions[index + 1]
+                row.addView(
+                    homeActionTile(second.second, second.third, second.first),
+                    LinearLayout.LayoutParams(0, -1, 1f).apply { setMargins(dp(6), 0, 0, dp(10)) }
+                )
+            } else {
+                row.addView(View(this), LinearLayout.LayoutParams(0, dp(1), 1f))
+            }
+            container.addView(row, LinearLayout.LayoutParams(-1, -2))
         }
 
         addGap(container, 6)
@@ -7242,6 +7243,50 @@ class MainActivity : Activity() {
         addGap(container, 3)
         container.addView(label(subtitle, 12.5f, false, muted))
         addGap(container, 10)
+    }
+
+    private fun homeActionTile(title: String, subtitle: String, destination: String): LinearLayout {
+        val tile = makeCard(13, white).apply {
+            background = rippleBackground(white, 18)
+            elevation = dp(1).toFloat()
+            minimumHeight = dp(116)
+            isClickable = true
+            isFocusable = true
+            contentDescription = "Abrir $title"
+            setOnClickListener {
+                activePage = destination
+                renderApp()
+            }
+        }
+
+        val titleRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        titleRow.addView(TextView(this).apply {
+            text = pageGlyph(destination)
+            textSize = 18f
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setTextColor(forestDeep)
+            background = rounded(paleGreen, 12)
+        }, LinearLayout.LayoutParams(dp(38), dp(38)))
+
+        titleRow.addView(label(title, 13.5f, true, forestDeep).apply {
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(dp(9), 0, 0, 0)
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        tile.addView(titleRow)
+
+        addGap(tile, 9)
+        tile.addView(label(subtitle, 11.5f, false, muted).apply {
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        })
+        addGap(tile, 8)
+        tile.addView(label("ABRIR  ↗", 9f, true, forestSoft))
+        return tile
     }
 
     private fun actionCard(parent: LinearLayout, number: String, title: String, subtitle: String, actionText: String, action: () -> Unit) {
