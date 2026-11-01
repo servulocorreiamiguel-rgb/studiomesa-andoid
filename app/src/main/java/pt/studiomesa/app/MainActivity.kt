@@ -4589,24 +4589,54 @@ class MainActivity : Activity() {
                             notes.error = "Não foi possível guardar a referência segura. Tenta novamente."
                             return@setOnClickListener
                         }
-                        runBackend({
-                            SupabaseApi.createReservation(
-                                backendToken(), requestId, restaurantId, guestName,
-                                normalizedPhone, partySize, reservationAt, durationMinutes,
-                                tableNumber, normalizedNotes
-                            )
-                            val latest = SupabaseApi.listReservations(backendToken(), restaurantId)
-                            reservationCache = latest
-                            reservationsLoaded = true
-                            "OK"
-                        }) {
-                            // Close the form only after the server confirmed the save.
-                            // If the request fails, runBackend shows the error and the
-                            // user's entered reservation details remain available to retry.
-                            dialog.dismiss()
-                            renderApp()
-                            pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
-                        }
+                        runBackend(
+                            task = {
+                                val token = backendToken()
+                                if (token.isBlank() || !ReservationRefreshScope.matchesRestaurant(
+                                        restaurantId, backendRestaurantId(),
+                                        requestAccountId, backendPrefs.getString("user_id", "").orEmpty()
+                                    )
+                                ) throw IllegalStateException("A conta ou o restaurante mudou. O formulário continua disponível.")
+                                SupabaseApi.createReservation(
+                                    token, requestId, restaurantId, guestName,
+                                    normalizedPhone, partySize, reservationAt, durationMinutes,
+                                    tableNumber, normalizedNotes
+                                )
+                                val latest = SupabaseApi.listReservations(token, restaurantId)
+                                latest.toString()
+                            },
+                            onError = { error ->
+                                if (ReservationRefreshScope.matchesRestaurant(
+                                        restaurantId, backendRestaurantId(),
+                                        requestAccountId, backendPrefs.getString("user_id", "").orEmpty()
+                                    )
+                                ) {
+                                    AlertDialog.Builder(this)
+                                        .setTitle("Não foi possível confirmar a reserva")
+                                        .setMessage(
+                                            friendlyBackendError(error.message) +
+                                                "\\n\\nOs dados continuam no formulário. Podes repetir o envio; a mesma tentativa não cria uma segunda reserva."
+                                        )
+                                        .setPositiveButton("OK", null)
+                                        .show()
+                                }
+                            },
+                            onSuccess = { raw ->
+                                if (ReservationRefreshScope.matchesRestaurant(
+                                        restaurantId, backendRestaurantId(),
+                                        requestAccountId, backendPrefs.getString("user_id", "").orEmpty()
+                                    )
+                                ) {
+                                    reservationCache = JSONArray(raw)
+                                    reservationsLoaded = true
+                                    reservationUpdatedAtMillis = System.currentTimeMillis()
+                                    reservationRefreshFailed = false
+                                    dialog.dismiss()
+                                    renderApp()
+                                    pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
+                                }
+                            }
+                        )
                     }
                 }
             }
