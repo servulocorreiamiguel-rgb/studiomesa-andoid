@@ -3578,35 +3578,61 @@ class MainActivity : Activity() {
                         runBackend(
                             task = {
                                 val token = backendToken()
+                                if (token.isBlank() || !ReservationRefreshScope.matchesCustomer(
+                                        isCustomerApp, memberId, backendMemberId(),
+                                        requestAccountId, backendPrefs.getString("user_id", "").orEmpty()
+                                    )
+                                ) throw IllegalStateException("A conta ou o cartão de cliente mudou. O formulário já não pertence à sessão atual.")
                                 val createdId = SupabaseApi.createCustomerReservationRequest(
                                     token, requestId, memberId, partySize, reservationAt, normalizedPhone, normalizedNotes
                                 )
                                 val latest = SupabaseApi.listCustomerReservations(token, memberId)
+                                if (!ReservationRefreshScope.matchesCustomer(
+                                        isCustomerApp, memberId, backendMemberId(),
+                                        requestAccountId, backendPrefs.getString("user_id", "").orEmpty()
+                                    )
+                                ) throw IllegalStateException("A conta ou o cartão de cliente mudou durante o pedido.")
                                 JSONObject()
                                     .put("reservation_id", createdId)
                                     .put("reservations", latest)
                                     .toString()
                             },
                             onError = { error ->
-                                AlertDialog.Builder(this)
-                                    .setTitle("Pedido não confirmado")
-                                    .setMessage(
-                                        friendlyBackendError(error.message) +
-                                            "\n\nOs dados continuam no formulário. Podes repetir o envio com segurança."
+                                if (ReservationRefreshScope.matchesCustomer(
+                                        isCustomerApp, memberId, backendMemberId(),
+                                        requestAccountId, backendPrefs.getString("user_id", "").orEmpty()
                                     )
-                                    .setPositiveButton("OK", null)
-                                    .show()
+                                ) {
+                                    AlertDialog.Builder(this)
+                                        .setTitle("Pedido não confirmado")
+                                        .setMessage(
+                                            friendlyBackendError(error.message) +
+                                                "\n\nOs dados continuam no formulário. Podes repetir o envio com segurança."
+                                        )
+                                        .setPositiveButton("OK", null)
+                                        .show()
+                                } else {
+                                    dialog.dismiss()
+                                }
                             },
                             onSuccess = { raw ->
-                                val result = JSONObject(raw)
-                                customerReservationsCache = result.optJSONArray("reservations") ?: JSONArray()
-                                customerReservationsLoaded = true
-                                customerReservationsLoading = false
-                                customerReservationsLoadError = false
-                                dialog.dismiss()
-                                pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
-                                Toast.makeText(this, "Pedido enviado. Aguarda a confirmação do restaurante.", Toast.LENGTH_LONG).show()
-                                renderCustomerApp()
+                                if (ReservationRefreshScope.matchesCustomer(
+                                        isCustomerApp, memberId, backendMemberId(),
+                                        requestAccountId, backendPrefs.getString("user_id", "").orEmpty()
+                                    )
+                                ) {
+                                    val result = JSONObject(raw)
+                                    customerReservationsCache = result.optJSONArray("reservations") ?: JSONArray()
+                                    customerReservationsLoaded = true
+                                    customerReservationsLoading = false
+                                    customerReservationsLoadError = false
+                                    dialog.dismiss()
+                                    pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
+                                    Toast.makeText(this, "Pedido enviado. Aguarda a confirmação do restaurante.", Toast.LENGTH_LONG).show()
+                                    renderCustomerApp()
+                                } else {
+                                    dialog.dismiss()
+                                }
                             }
                         )
                     }
@@ -3619,6 +3645,9 @@ class MainActivity : Activity() {
 
     private fun confirmCancelCustomerReservation(reservationId: String, dateText: String) {
         if (reservationId.isBlank()) return
+        val requestedMemberId = backendMemberId()
+        val requestedAccountId = backendPrefs.getString("user_id", "").orEmpty()
+        if (requestedMemberId.isBlank() || requestedAccountId.isBlank()) return
         AlertDialog.Builder(this)
             .setTitle("Cancelar pedido de reserva?")
             .setMessage("Queres cancelar o pedido de $dateText? O restaurante deixará de o tratar como ativo.")
@@ -3626,23 +3655,47 @@ class MainActivity : Activity() {
             .setPositiveButton("Cancelar pedido") { _, _ ->
                 runBackend(
                     task = {
-                        SupabaseApi.cancelMyCustomerReservation(backendToken(), reservationId)
-                        SupabaseApi.listCustomerReservations(backendToken(), backendMemberId()).toString()
+                        val token = backendToken()
+                        if (token.isBlank() || !ReservationRefreshScope.matchesCustomer(
+                                isCustomerApp, requestedMemberId, backendMemberId(),
+                                requestedAccountId, backendPrefs.getString("user_id", "").orEmpty()
+                            )
+                        ) throw IllegalStateException("A conta ou o cartão de cliente mudou. Atualiza as reservas novamente.")
+                        SupabaseApi.cancelMyCustomerReservation(token, reservationId)
+                        val latest = SupabaseApi.listCustomerReservations(token, requestedMemberId)
+                        if (!ReservationRefreshScope.matchesCustomer(
+                                isCustomerApp, requestedMemberId, backendMemberId(),
+                                requestedAccountId, backendPrefs.getString("user_id", "").orEmpty()
+                            )
+                        ) throw IllegalStateException("A conta ou o cartão de cliente mudou durante o cancelamento.")
+                        latest.toString()
                     },
                     onError = { error ->
-                        AlertDialog.Builder(this)
-                            .setTitle("Não foi possível cancelar")
-                            .setMessage(friendlyBackendError(error.message))
-                            .setPositiveButton("OK", null)
-                            .show()
+                        if (ReservationRefreshScope.matchesCustomer(
+                                isCustomerApp, requestedMemberId, backendMemberId(),
+                                requestedAccountId, backendPrefs.getString("user_id", "").orEmpty()
+                            )
+                        ) {
+                            AlertDialog.Builder(this)
+                                .setTitle("Não foi possível cancelar")
+                                .setMessage(friendlyBackendError(error.message))
+                                .setPositiveButton("OK", null)
+                                .show()
+                        }
                     },
                     onSuccess = { raw ->
-                        customerReservationsCache = JSONArray(raw)
-                        customerReservationsLoaded = true
-                        customerReservationsLoading = false
-                        customerReservationsLoadError = false
-                        Toast.makeText(this, "Pedido de reserva cancelado.", Toast.LENGTH_SHORT).show()
-                        renderCustomerApp()
+                        if (ReservationRefreshScope.matchesCustomer(
+                                isCustomerApp, requestedMemberId, backendMemberId(),
+                                requestedAccountId, backendPrefs.getString("user_id", "").orEmpty()
+                            )
+                        ) {
+                            customerReservationsCache = JSONArray(raw)
+                            customerReservationsLoaded = true
+                            customerReservationsLoading = false
+                            customerReservationsLoadError = false
+                            Toast.makeText(this, "Pedido de reserva cancelado.", Toast.LENGTH_SHORT).show()
+                            renderCustomerApp()
+                        }
                     }
                 )
             }
