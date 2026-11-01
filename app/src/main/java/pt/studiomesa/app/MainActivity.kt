@@ -3942,16 +3942,66 @@ class MainActivity : Activity() {
             .trim()
 
     private fun renderCustomerAccountPage(container: LinearLayout) {
+        val token = backendToken()
+        val isSignedIn = token.isNotBlank()
+        val isLinked = isSignedIn && backendMemberId().isNotBlank()
+        val email = backendPrefs.getString("user_email", "").orEmpty()
+        val restaurantName = backendPrefs.getString("member_restaurant_name", "").orEmpty()
+        val savedName = store.getCustomerProfileName()
+
         container.addView(label("A tua conta", 25f, true, forestDeep))
         addGap(container, 4)
         container.addView(label("Perfil, associação ao restaurante e segurança.", 13.5f, false, muted))
         addGap(container, 13)
+
+        val accountCard = makeCard(15)
+        accountCard.addView(label(
+            when {
+                isLinked -> "CARTÃO ASSOCIADO"
+                isSignedIn -> "SESSÃO INICIADA"
+                else -> "SEM SESSÃO"
+            },
+            10f, true, if (isLinked) green else forestSoft
+        ))
+        addGap(accountCard, 7)
+        accountCard.addView(label(
+            when {
+                isLinked -> "A tua conta está ligada ao programa de fidelização."
+                isSignedIn -> "A conta está autenticada, mas ainda não está associada a um restaurante."
+                else -> "Estás a usar a área de cliente sem uma conta autenticada."
+            },
+            13f, true, forestDeep
+        ))
+        if (email.isNotBlank()) {
+            addGap(accountCard, 8)
+            accountCard.addView(label("EMAIL DA CONTA", 9.5f, true, muted))
+            addGap(accountCard, 2)
+            accountCard.addView(label(email, 12.5f, false, ink))
+        }
+        if (isLinked && restaurantName.isNotBlank()) {
+            addGap(accountCard, 8)
+            accountCard.addView(label("RESTAURANTE ASSOCIADO", 9.5f, true, muted))
+            addGap(accountCard, 2)
+            accountCard.addView(label(restaurantName, 14f, true, forest))
+        }
+        addGap(accountCard, 9)
+        accountCard.addView(label(
+            when {
+                isLinked -> "O saldo real e as reservas são consultados através do restaurante associado."
+                isSignedIn -> "Pede à equipa o código de adesão para associares o cartão."
+                else -> "Inicia sessão para associares o teu cartão e acompanhares os pontos e reservas."
+            },
+            11.5f, false, muted
+        ))
+        container.addView(accountCard, cardParams())
+
+        addGap(container, 3)
         when {
-            backendToken().isBlank() -> container.addView(
+            !isSignedIn -> container.addView(
                 primaryButton("Criar conta / iniciar sessão") { showAuthChooser { renderCustomerApp() } },
                 LinearLayout.LayoutParams(-1, dp(48))
             )
-            backendMemberId().isBlank() -> container.addView(
+            !isLinked -> container.addView(
                 primaryButton("Associar ao restaurante") { showCustomerJoinDialog() },
                 LinearLayout.LayoutParams(-1, dp(48))
             )
@@ -3960,21 +4010,36 @@ class MainActivity : Activity() {
                 LinearLayout.LayoutParams(-1, dp(48))
             )
         }
+
         addGap(container, 8)
-        container.addView(secondaryButton("Definir o meu nome") { showCustomerProfileDialog() },
-            LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(container, 12)
-        val syncNote = makeCard(13)
-        syncNote.addView(label(if (backendMemberId().isBlank()) "CARTÃO AINDA NÃO ASSOCIADO" else "CONTA LIGADA", 10f, true, if (backendMemberId().isBlank()) red else green))
-        addGap(syncNote, 5)
-        syncNote.addView(label(if (backendMemberId().isBlank()) "Para ver o saldo real, inicia sessão e associa a conta com o código fornecido pelo restaurante." else "Restaurante associado: " + (backendPrefs.getString("member_restaurant_name", "Restaurante") ?: "Restaurante") + ". Atualiza o saldo quando quiseres consultar as alterações mais recentes.", 12f, false, muted))
-        container.addView(syncNote, cardParams())
-        if (backendToken().isNotBlank()) {
-            container.addView(secondaryButton("Eliminar conta permanentemente") {
-                showDeleteAccountConfirmation()
-            }, LinearLayout.LayoutParams(-1, dp(48)))
-            addGap(container, 7)
-            container.addView(secondaryButton("Terminar sessão neste dispositivo") {
+        val profileCard = makeCard(14)
+        profileCard.addView(label("Nome de apresentação", 14f, true, forestDeep))
+        addGap(profileCard, 4)
+        profileCard.addView(label(
+            if (savedName.isBlank()) "Ainda não definiste um nome neste dispositivo."
+            else "Nome guardado neste dispositivo: $savedName",
+            11.5f, false, muted
+        ))
+        addGap(profileCard, 8)
+        profileCard.addView(secondaryButton("Definir nome neste dispositivo") { showCustomerProfileDialog() },
+            LinearLayout.LayoutParams(-1, dp(44)))
+        profileCard.addView(label(
+            "Este nome é apenas local: não altera o email da conta nem é enviado ao restaurante.",
+            10.5f, false, muted
+        ))
+        container.addView(profileCard, cardParams())
+
+        if (isSignedIn) {
+            addGap(container, 3)
+            val securityCard = makeCard(14)
+            securityCard.addView(label("Segurança da conta", 14f, true, forestDeep))
+            addGap(securityCard, 4)
+            securityCard.addView(label(
+                "Podes terminar a sessão neste dispositivo ou pedir a eliminação permanente da conta. A eliminação é irreversível.",
+                11.5f, false, muted
+            ))
+            addGap(securityCard, 8)
+            securityCard.addView(secondaryButton("Terminar sessão neste dispositivo") {
                 val tokenToRevoke = backendToken()
                 if (tokenToRevoke.isNotBlank()) {
                     Thread { runCatching { SupabaseApi.signOut(tokenToRevoke) } }.start()
@@ -3993,7 +4058,12 @@ class MainActivity : Activity() {
                 customerReservationsLoadError = false
                 activeCustomerPage = "Cartão"
                 renderCustomerApp()
-            }, LinearLayout.LayoutParams(-1, dp(48)))
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+            addGap(securityCard, 6)
+            securityCard.addView(dangerButton("Eliminar conta permanentemente") {
+                showDeleteAccountConfirmation()
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+            container.addView(securityCard, cardParams())
         }
     }
 
@@ -4001,8 +4071,8 @@ class MainActivity : Activity() {
         val field = inputField("O teu nome", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
         field.setText(store.getCustomerProfileName())
         val dialog = AlertDialog.Builder(this)
-            .setTitle("Perfil de demonstração")
-            .setMessage("O nome fica guardado apenas nesta instalação.")
+            .setTitle("Nome neste dispositivo")
+            .setMessage("Este nome é guardado apenas nesta instalação. Não altera os dados da tua conta nem é partilhado com o restaurante.")
             .setView(field)
             .setNegativeButton("Cancelar", null)
             .setPositiveButton("Guardar", null)
@@ -7753,6 +7823,19 @@ class MainActivity : Activity() {
             background = rippleBackground(copper, 15)
             elevation = dp(1).toFloat()
             setPadding(dp(12), dp(3), dp(12), dp(3))
+            setOnClickListener { action() }
+        }
+
+    private fun dangerButton(title: String, action: () -> Unit): Button =
+        Button(this).apply {
+            text = title
+            textSize = 11.5f
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            isAllCaps = false
+            setTextColor(red)
+            background = rippleBackground(paleRed, 14)
+            elevation = 0f
+            setPadding(dp(8), dp(2), dp(8), dp(2))
             setOnClickListener { action() }
         }
 
