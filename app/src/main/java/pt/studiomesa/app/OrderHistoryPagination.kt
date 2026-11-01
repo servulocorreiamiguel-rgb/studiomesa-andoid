@@ -14,10 +14,12 @@ internal object OrderHistoryPagination {
     fun <T> collect(
         pageSize: Int = DEFAULT_PAGE_SIZE,
         maxPages: Int = DEFAULT_MAX_PAGES,
+        recordLabel: String = "pedidos",
         fetchPage: (offset: Int, limit: Int) -> List<T>
     ): List<T> {
         require(pageSize in 1..1_000) { "O tamanho da página tem de estar entre 1 e 1000." }
         require(maxPages > 0) { "O número máximo de páginas tem de ser superior a zero." }
+        require(recordLabel.isNotBlank() && recordLabel.length <= 30) { "A designação do histórico não é válida." }
         require(maxPages <= Int.MAX_VALUE / pageSize) {
             "O limite de páginas excede o intervalo suportado."
         }
@@ -36,7 +38,7 @@ internal object OrderHistoryPagination {
         if (overflowProbe.isEmpty()) return collected
 
         throw IllegalStateException(
-            "O histórico tem mais de $maximumRows pedidos. " +
+            "O histórico tem mais de $maximumRows $recordLabel. " +
                 "O carregamento foi interrompido para evitar apresentar uma análise parcial; contacta o suporte."
         )
     }
