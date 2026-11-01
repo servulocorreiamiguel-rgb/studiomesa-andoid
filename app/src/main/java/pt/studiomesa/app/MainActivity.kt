@@ -7917,6 +7917,57 @@ class MainActivity : Activity() {
             inventoryById[item.optString("id")] = item
         }
 
+        // Purchase-cost data is private to the restaurant owner.
+        val ownerCanSeeRecipeCost = !hasRemoteRestaurant() ||
+            backendPrefs.getString("restaurant_role", "").orEmpty() == "owner"
+        val recipeCostInputs = if (ownerCanSeeRecipeCost) {
+            runCatching {
+                (0 until ingredients.length()).map { index ->
+                    val line = ingredients.optJSONObject(index)
+                        ?: throw IllegalArgumentException("A ficha técnica contém uma linha inválida.")
+                    val stockItemId = line.optString("inventory_item_id")
+                    val stockItem = inventoryById[stockItemId]
+                    val ingredientName = stockItem?.optString("name")
+                        ?.takeIf { it.isNotBlank() }
+                        ?: "Ingrediente sem artigo de stock"
+                    val stockUnit = stockItem?.optString("unit")
+                        ?.takeIf { it.isNotBlank() }
+                        ?: "unidades"
+                    val quantity = try {
+                        BigDecimal(line.optString("quantity_per_portion"))
+                    } catch (_: NumberFormatException) {
+                        throw IllegalArgumentException("Quantidade inválida em «$ingredientName».")
+                    }
+                    val waste = try {
+                        BigDecimal(line.optString("waste_percent", "0"))
+                    } catch (_: NumberFormatException) {
+                        throw IllegalArgumentException("Desperdício inválido em «$ingredientName».")
+                    }
+                    val unitCost = if (stockItem == null || stockItem.isNull("unit_cost_per_unit")) {
+                        null
+                    } else {
+                        try {
+                            BigDecimal(stockItem.get("unit_cost_per_unit").toString())
+                        } catch (_: NumberFormatException) {
+                            throw IllegalArgumentException("O custo de compra de «$ingredientName» não é válido.")
+                        }
+                    }
+                    InventoryRecipeIngredientInput(
+                        name = ingredientName,
+                        stockUnit = stockUnit,
+                        quantityPerPortion = quantity,
+                        unitCostPerStockUnit = unitCost,
+                        wastePercent = waste
+                    )
+                }
+            }.getOrElse { error ->
+                null
+            }
+        } else null
+        val recipeCostAnalysis = recipeCostInputs?.let { inputs ->
+            runCatching { InventoryRecipeCostCalculator.calculate(inputs) }.getOrNull()
+        }
+
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(8), dp(18), dp(10))
@@ -7940,6 +7991,115 @@ class MainActivity : Activity() {
         statusCard.addView(label(statusDescription, 11.5f, false, ink))
         content.addView(statusCard)
         addGap(content, 10)
+
+        if (ownerCanSeeRecipeCost && ingredients.length() > 0) {
+            val costCard = makeCard(
+                13,
+                if (recipeCostAnalysis?.isComplete == true) paleGreen else copperPale
+            )
+            costCard.addView(label("Custo da receita", 14f, true, forestDeep))
+            addGap(costCard, 4)
+            when {
+                recipeCostAnalysis == null -> {
+                    costCard.addView(label(
+                        "Não foi possível calcular o custo. Confirma se todos os ingredientes e quantidades da ficha técnica estão válidos.",
+                        11.5f, false, muted
+                    ))
+                }
+                recipeCostAnalysis.isComplete -> {
+                    val analysis = recipeCostAnalysis
+                    costCard.addView(label(
+                        "Custo estimado por dose: ${formatEuro(analysis.totalCostPerPortion!!)}",
+                        18f, true, forest
+                    ))
+                    addGap(costCard, 3)
+                    analysis.ingredients.forEach { ingredient ->
+                        val line = LinearLayout(this).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            gravity = Gravity.CENTER_VERTICAL
+                        }
+                        line.addView(
+                            label(
+                                "${ingredient.name} · ${formatQuantity(ingredient.quantityPerPortion.toDouble())} ${ingredient.stockUnit}",
+                                11.5f, false, ink
+                            ),
+                            LinearLayout.LayoutParams(0, -2, 1f)
+                        )
+                        line.addView(label(
+                            formatEuro(ingredient.costPerPortion!!),
+                            11.5f, true, forestDeep
+                        ))
+                        costCard.addView(line)
+                    }
+                    val target = economicInputs["foodTarget"].orEmpty().ifBlank { "30" }
+                    val targetValue = runCatching {
+                        RestaurantEconomicManager.parseNonNegative(target, "objetivo de custo alimentar")
+                    }.getOrNull()
+                    if (targetValue != null && targetValue.signum() > 0 && targetValue <= BigDecimal("100")) {
+                        val suggested = runCatching {
+                            analysis.suggestedPriceAtTarget(targetValue)
+                        }.getOrNull()
+                        if (suggested != null) {
+                            addGap(costCard, 4)
+                            costCard.addView(label(
+                                "Preço teórico à meta de ${targetValue.stripTrailingZeros().toPlainString().replace('.', ',')}%: ${formatEuro(suggested)}",
+                                12f, true, forestDeep
+                            ))
+                        }
+                    }
+                    addGap(costCard, 5)
+                    costCard.addView(label(
+                        "Estimativa com os custos de compra atuais do inventário e o desperdício definido na ficha. Não inclui IVA, mão de obra, energia, renda ou outros custos indiretos.",
+                        10.5f, false, muted
+                    ))
+                    addGap(costCard, 7)
+                    costCard.addView(secondaryButton("Usar no Gestor económico") {
+                        val scope = if (hasRemoteRestaurant()) {
+                            "restaurant:" + backendRestaurantId() + ":" +
+                                backendPrefs.getString("user_id", "").orEmpty()
+                        } else "demo"
+                        if (economicScopeKey != null && economicScopeKey != scope) {
+                            clearEconomicManagerState()
+                        }
+                        val managerLines = analysis.ingredients.joinToString("\n") { ingredient ->
+                            val safeName = ingredient.name
+                                .replace("|", "/")
+                                .replace(Regex("[\\r\\n]+"), " ")
+                                .trim()
+                            "$safeName | ${ingredient.quantityPerPortion.toPlainString()} | " +
+                                "${ingredient.unitCostPerStockUnit!!.toPlainString()} | " +
+                                ingredient.wastePercent.toPlainString()
+                        }
+                        economicManagerEnabled = true
+                        economicScopeKey = scope
+                        economicInputs["recipe"] = managerLines
+                        if (economicInputs["foodTarget"].isNullOrBlank()) {
+                            economicInputs["foodTarget"] = "30"
+                        }
+                        recipeReportText = ""
+                        activePage = "Gestão económica"
+                        renderApp()
+                    }, LinearLayout.LayoutParams(-1, dp(44)))
+                }
+                else -> {
+                    costCard.addView(label(
+                        "Custo parcial conhecido: ${formatEuro(recipeCostAnalysis.knownCostSubtotal)}",
+                        14f, true, forestDeep
+                    ))
+                    addGap(costCard, 3)
+                    costCard.addView(label(
+                        "Falta indicar o custo de compra de: ${recipeCostAnalysis.missingCostIngredientNames.joinToString(", ")}.",
+                        11.5f, false, red
+                    ))
+                    costCard.addView(label(
+                        "O custo total e o preço indicativo ficam indisponíveis até todos os ingredientes terem um custo conhecido.",
+                        10.5f, false, muted
+                    ))
+                }
+            }
+            content.addView(costCard, cardParams())
+            addGap(content, 8)
+        }
 
         if (ingredients.length() == 0) {
             content.addView(emptyCard("Ainda não há ingredientes associados. Adiciona cada ingrediente com a quantidade necessária por dose."))
@@ -8048,7 +8208,7 @@ class MainActivity : Activity() {
 
         addGap(content, 7)
         content.addView(label(
-            "Usa a mesma unidade do inventário (kg com kg, L com L ou unidades com unidades). Não há conversões automáticas. Alterar quantidades, mudar a unidade ou eliminar um ingrediente exige nova revisão e aprovação do proprietário; enquanto a revisão estiver pendente, os pedidos deste prato não avançam para preparação.",
+            "As quantidades são guardadas na unidade original do inventário. Na introdução são aceites conversões entre kg/g e L/ml, sem misturar massa com volume nem arredondar valores sem precisão suficiente. Alterar quantidades, mudar a unidade ou eliminar um ingrediente exige nova revisão e aprovação do proprietário; enquanto a revisão estiver pendente, os pedidos deste prato não avançam para preparação.",
             10.5f, false, muted
         ))
 
