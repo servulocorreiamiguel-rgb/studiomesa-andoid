@@ -1194,7 +1194,7 @@ object SupabaseApi {
                     ?: throw IllegalStateException("O servidor devolveu uma reserva com formato inválido.")
             }
         }
-        return JSONArray().also { result -> loadedRows.forEach(result::put) }
+        return JSONArray().also { result -> loadedRows.forEach { result.put(it) } }
     }
 
     fun listCustomerReservations(token: String, memberId: String): JSONArray {
@@ -1214,7 +1214,7 @@ object SupabaseApi {
                     ?: throw IllegalStateException("O servidor devolveu uma reserva com formato inválido.")
             }
         }
-        return JSONArray().also { result -> loadedRows.forEach(result::put) }
+        return JSONArray().also { result -> loadedRows.forEach { result.put(it) } }
     }
 
     fun createCustomerReservationRequest(
