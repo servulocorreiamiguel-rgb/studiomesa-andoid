@@ -7960,7 +7960,7 @@ class MainActivity : Activity() {
                         wastePercent = waste
                     )
                 }
-            }.getOrElse { error ->
+            }.getOrElse {
                 null
             }
         } else null
@@ -7995,7 +7995,7 @@ class MainActivity : Activity() {
         if (ownerCanSeeRecipeCost && ingredients.length() > 0) {
             val costCard = makeCard(
                 13,
-                if (recipeCostAnalysis?.isComplete == true) paleGreen else copperPale
+                if (recipeCostAnalysis != null && recipeCostAnalysis.isComplete) paleGreen else copperPale
             )
             costCard.addView(label("Custo da receita", 14f, true, forestDeep))
             addGap(costCard, 4)
@@ -8006,7 +8006,7 @@ class MainActivity : Activity() {
                         11.5f, false, muted
                     ))
                 }
-                recipeCostAnalysis.isComplete -> {
+                recipeCostAnalysis != null && recipeCostAnalysis.isComplete -> {
                     val analysis = recipeCostAnalysis
                     costCard.addView(label(
                         "Custo estimado por dose: ${formatEuro(analysis.totalCostPerPortion!!)}",
