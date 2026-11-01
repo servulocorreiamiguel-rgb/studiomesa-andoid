@@ -1181,11 +1181,10 @@ class MainActivity : Activity() {
         else "Registo simples de pedidos por mesa.")
         addGap(container, 10)
         if (hasRemoteRestaurant()) {
-            container.addView(secondaryButton("Atualizar do servidor") { refreshRemoteOperations() },
-                LinearLayout.LayoutParams(-1, dp(48)))
-            addGap(container, 7)
+            addActionPair(container, "+  Novo pedido", { showCreateOrderDialog() }, "Atualizar", { refreshRemoteOperations() })
+        } else {
+            addActionPair(container, "+  Novo pedido", { showCreateOrderDialog() })
         }
-        container.addView(primaryButton("+  Novo pedido") { showCreateOrderDialog() }, LinearLayout.LayoutParams(-1, dp(50)))
         addGap(container, 15)
 
         if (hasRemoteRestaurant()) {
