@@ -6726,7 +6726,7 @@ class MainActivity : Activity() {
                                         .setTitle("Não foi possível confirmar o pedido")
                                         .setMessage(
                                             friendlyBackendError(error.message) +
-                                                "\\n\\nO servidor pode ter recebido o pedido antes de a ligação falhar. Mantém os mesmos dados e tenta novamente; a aplicação reutiliza a referência desta tentativa para evitar duplicações."
+                                                "\n\nO servidor pode ter recebido o pedido antes de a ligação falhar. Mantém os mesmos dados e tenta novamente; a aplicação reutiliza a referência desta tentativa para evitar duplicações."
                                         )
                                         .setPositiveButton("OK", null)
                                         .show()
