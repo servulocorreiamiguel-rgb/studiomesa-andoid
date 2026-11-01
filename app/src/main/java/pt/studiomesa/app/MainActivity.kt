@@ -7457,6 +7457,36 @@ class MainActivity : Activity() {
         addGap(container, 9)
     }
 
+    private fun addActionPair(
+        container: LinearLayout,
+        primaryTitle: String,
+        primaryAction: () -> Unit,
+        secondaryTitle: String? = null,
+        secondaryAction: (() -> Unit)? = null
+    ) {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        if (secondaryTitle != null && secondaryAction != null) {
+            row.addView(
+                secondaryButton(secondaryTitle, secondaryAction),
+                LinearLayout.LayoutParams(0, dp(48), 1f).apply {
+                    setMargins(0, 0, dp(5), 0)
+                }
+            )
+        }
+        val primaryWidth = if (secondaryTitle != null && secondaryAction != null) 0 else -1
+        val primaryWeight = if (primaryWidth == 0) 1f else 0f
+        row.addView(
+            primaryButton(primaryTitle, primaryAction),
+            LinearLayout.LayoutParams(primaryWidth, dp(48), primaryWeight).apply {
+                if (primaryWeight > 0f) setMargins(dp(5), 0, 0, 0)
+            }
+        )
+        container.addView(row, LinearLayout.LayoutParams(-1, -2))
+    }
+
     private fun homeActionTile(title: String, subtitle: String, destination: String): LinearLayout {
         val tile = makeCard(13, white).apply {
             background = rippleBackground(white, 18)
