@@ -5927,7 +5927,7 @@ class MainActivity : Activity() {
                     SupabaseApi.adjustInventoryStock(
                         backendToken(), restaurantId, itemId, delta, normalizedNote, requestId
                     )
-                    val latest = SupabaseApi.listInventoryItems(backendToken(), restaurantId)
+                    val latest = loadInventoryItemsForCurrentRole(backendToken(), restaurantId)
                     backendPrefs.edit()
                         .putString("remote_inventory_json", latest.toString())
                         .putBoolean("inventory_loaded", true)
