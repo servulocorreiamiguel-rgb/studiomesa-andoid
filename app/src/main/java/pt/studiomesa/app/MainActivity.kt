@@ -1251,20 +1251,32 @@ class MainActivity : Activity() {
                         "OK"
                     }) { renderApp() }
                 }, LinearLayout.LayoutParams(-1, dp(48)))
-                addGap(card, 5)
+                addGap(card, 6)
                 if (!closed) {
-                    card.addView(secondaryButton("Cancelar pedido") {
+                    val actions = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                    }
+                    actions.addView(secondaryButton("Cancelar") {
                         confirmCancelOrder(
                             order.optString("id"),
                             order.optInt("table_number", 1),
                             order.optString("item_name", "Artigo")
                         )
-                    }, LinearLayout.LayoutParams(-1, dp(48)))
-                    addGap(card, 5)
+                    }, LinearLayout.LayoutParams(0, dp(44), 1f).apply {
+                        setMargins(0, 0, dp(4), 0)
+                    })
+                    actions.addView(secondaryButton("Ver histórico") {
+                        showOrderHistory(order.optString("id"))
+                    }, LinearLayout.LayoutParams(0, dp(44), 1f).apply {
+                        setMargins(dp(4), 0, 0, 0)
+                    })
+                    card.addView(actions)
+                } else {
+                    card.addView(secondaryButton("Ver histórico") {
+                        showOrderHistory(order.optString("id"))
+                    }, LinearLayout.LayoutParams(-1, dp(44)))
                 }
-                card.addView(secondaryButton("Ver histórico") {
-                    showOrderHistory(order.optString("id"))
-                }, LinearLayout.LayoutParams(-1, dp(48)))
                 container.addView(card, cardParams())
             }
             return
