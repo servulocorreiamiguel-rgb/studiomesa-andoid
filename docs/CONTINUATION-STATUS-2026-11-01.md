@@ -91,7 +91,7 @@ Não aplicar as migrações pendentes ao Supabase de produção nesta fase.
 - O cálculo usa a quantidade de stock arredondada para cima a três casas decimais, a mesma regra que a função de consumo usa por dose, incluindo a percentagem de desperdício.
 - A ficha técnica mostra agora o custo de cada ingrediente e o custo estimado da dose. Quando falta um custo de compra, mostra apenas o custo conhecido e declara que o total está incompleto; um ingrediente sem custo nunca é tratado como custo zero. Um custo explicitamente igual a zero continua a ser um custo conhecido.
 - O ecrã esclarece que a estimativa não inclui mão de obra, energia, embalagem nem outros custos indiretos e que usa os custos unitários atuais, não uma valorização contabilística.
-- Criado `RestaurantRecipeCostCalculatorTest.kt` com quatro testes escritos para desperdício/arredondamento, custos em falta, custo zero válido e entradas duplicadas ou inválidas.
+- Criado `RestaurantRecipeCostCalculatorTest.kt` com seis testes escritos para desperdício/arredondamento, custos em falta, custo zero válido, entradas duplicadas ou inválidas e métricas face ao preço de venda.
 
 **Validação pendente:** os ficheiros foram revistos no GitHub após a gravação, mas não foi possível executar Gradle/Android Lint nem GitHub Actions nesta sessão. O workflow Android está configurado para correr em pushes para `main` ou por `workflow_dispatch`; não foi disponibilizada uma ação de disparo manual nesta ligação. A tentativa de clonar o repositório para uma execução local também falhou por indisponibilidade de ligação ao GitHub. Não declarar estes testes como aprovados até à execução efetiva.
 
@@ -102,3 +102,5 @@ Não aplicar as migrações pendentes ao Supabase de produção nesta fase.
 - O conjunto `RestaurantRecipeCostCalculatorTest.kt` passou a ter seis testes escritos, incluindo a percentagem do preço de venda, valor após ingredientes e rejeição de preço zero para o cálculo percentual.
 
 A validação de compilação e execução dos seis testes continua pendente; os resultados acima descrevem o código e os testes adicionados, não testes executados.
+
+**Estado do PR após esta etapa:** PR #72 continua aberta em rascunho. A branch contém 147 commits a mais e está 1 commit atrás de `main`; não foi feito rebase nem integração nesta etapa. A consulta ao GitHub não devolveu execuções de workflow nem status checks para o último commit. O código e os testes foram confirmados nos ficheiros da branch, mas a validação executável continua pendente.
