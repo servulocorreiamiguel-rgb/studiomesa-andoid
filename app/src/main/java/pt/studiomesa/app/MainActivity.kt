@@ -5354,7 +5354,10 @@ class MainActivity : Activity() {
     }
 
     private fun addInventoryFilters(container: LinearLayout) {
-        val filters = if (isCurrentRestaurantOwner()) {
+        val ownerCostsLoaded = isCurrentRestaurantOwner() &&
+            inventoryUnitCostCacheLoaded &&
+            inventoryUnitCostCacheScope == currentInventoryCostScope()
+        val filters = if (ownerCostsLoaded) {
             listOf("Todos", "Esgotados", "Stock baixo", "Sem custo")
         } else {
             listOf("Todos", "Esgotados", "Stock baixo")
@@ -5482,6 +5485,9 @@ class MainActivity : Activity() {
         }
 
         val stockItems = (0 until items.length()).mapNotNull { items.optJSONObject(it) }
+        val ownerCostsLoaded = isOwner &&
+            inventoryUnitCostCacheLoaded &&
+            inventoryUnitCostCacheScope == currentInventoryCostScope()
         var lowCount = 0
         var stockValueWithKnownCost = BigDecimal.ZERO.setScale(2)
         var itemsWithoutUnitCost = 0
@@ -5489,7 +5495,7 @@ class MainActivity : Activity() {
             val quantity = item.optDouble("quantity", 0.0)
             val threshold = item.optDouble("low_stock_threshold", 0.0)
             if (quantity <= threshold) lowCount++
-            if (isOwner) {
+            if (ownerCostsLoaded) {
                 val unitCost = if (item.isNull("unit_cost_per_unit")) null else
                     runCatching { BigDecimal(item.optString("unit_cost_per_unit")) }.getOrNull()
                 if (unitCost == null) {
@@ -5527,8 +5533,8 @@ class MainActivity : Activity() {
             overview.addView(
                 statCard(
                     "SEM CUSTO",
-                    itemsWithoutUnitCost.toString(),
-                    if (itemsWithoutUnitCost > 0) copper else forestSoft
+                    if (ownerCostsLoaded) itemsWithoutUnitCost.toString() else "—",
+                    if (ownerCostsLoaded && itemsWithoutUnitCost > 0) copper else forestSoft
                 ),
                 LinearLayout.LayoutParams(0, -2, 1f).apply {
                     setMargins(dp(4), 0, 0, dp(8))
@@ -5547,19 +5553,19 @@ class MainActivity : Activity() {
 
         if (isOwner) {
             val valuation = makeCard(13)
-            valuation.addView(label(
-                "Valor estimado do stock com custo registado: ${formatEuro(stockValueWithKnownCost)}",
-                13f, true, forest
-            ))
-            if (itemsWithoutUnitCost > 0) {
+            if (ownerCostsLoaded) {
+                valuation.addView(label(
+                    "Valor estimado do stock com custo registado: ${formatEuro(stockValueWithKnownCost)}",
+                    13f, true, forest
+                ))
+            }
+            if (ownerCostsLoaded && itemsWithoutUnitCost > 0) {
                 valuation.addView(label(
                     "$itemsWithoutUnitCost artigo(s) sem custo unitário; ficam fora deste total.",
                     11f, false, muted
                 ))
             }
-            if (!inventoryUnitCostCacheLoaded ||
-                inventoryUnitCostCacheScope != currentInventoryCostScope()
-            ) {
+            if (!ownerCostsLoaded) {
                 valuation.addView(label(
                     "A atualizar os custos de compra do servidor…",
                     10.5f, false, muted
@@ -5578,13 +5584,13 @@ class MainActivity : Activity() {
         val filteredStockItems = stockItems.filter { item ->
             val quantity = item.optDouble("quantity", 0.0)
             val threshold = item.optDouble("low_stock_threshold", 0.0)
-            val unitCost = if (isOwner && !item.isNull("unit_cost_per_unit")) {
+            val unitCost = if (ownerCostsLoaded && !item.isNull("unit_cost_per_unit")) {
                 runCatching { BigDecimal(item.optString("unit_cost_per_unit")) }.getOrNull()
             } else null
             val matchesStatus = when (selectedInventoryFilter) {
                 "Esgotados" -> quantity <= 0.0
                 "Stock baixo" -> quantity > 0.0 && quantity <= threshold
-                "Sem custo" -> isOwner && unitCost == null
+                "Sem custo" -> ownerCostsLoaded && unitCost == null
                 else -> true
             }
             val matchesSearch = query.isBlank() || normalizeCustomerMenuSearch(
@@ -5608,7 +5614,7 @@ class MainActivity : Activity() {
             val unit = item.optString("unit", "unidades")
             val quantity = item.optDouble("quantity", 0.0)
             val threshold = item.optDouble("low_stock_threshold", 0.0)
-            val unitCost = if (isOwner && !item.isNull("unit_cost_per_unit")) {
+            val unitCost = if (ownerCostsLoaded && !item.isNull("unit_cost_per_unit")) {
                 runCatching { BigDecimal(item.optString("unit_cost_per_unit")) }.getOrNull()
             } else null
             val isLow = quantity <= threshold
@@ -5633,11 +5639,13 @@ class MainActivity : Activity() {
             ))
             card.addView(label("Alerta a ${formatQuantity(threshold)} $unit", 11.5f, false, muted))
             if (isOwner) {
-                card.addView(label(
+                val costLabel = if (!ownerCostsLoaded) {
+                    "A carregar custo de compra…"
+                } else {
                     unitCost?.let { "Custo de compra: ${formatUnitCost(it)} / $unit" }
-                        ?: "Custo de compra por unidade não definido",
-                    11.5f, false, muted
-                ))
+                        ?: "Custo de compra por unidade não definido"
+                }
+                card.addView(label(costLabel, 11.5f, false, muted))
             }
             addGap(card, 10)
             card.addView(
