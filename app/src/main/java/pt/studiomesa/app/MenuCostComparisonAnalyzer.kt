@@ -6,7 +6,11 @@ import java.math.RoundingMode
 internal data class MenuCostComparisonInput(
     val itemName: String,
     val sellingPrice: BigDecimal?,
-    val recordedUnitCost: BigDecimal?
+    val recordedUnitCost: BigDecimal?,
+    val recipeExists: Boolean = false,
+    val recipeIsActiveApproved: Boolean = false,
+    val recipeCostPerPortion: BigDecimal? = null,
+    val recipeCostComplete: Boolean = false
 )
 
 internal data class MenuCostComparisonRow(
@@ -15,7 +19,8 @@ internal data class MenuCostComparisonRow(
     val recordedUnitCost: BigDecimal,
     val costToPricePercent: BigDecimal,
     val amountAfterRecordedCost: BigDecimal,
-    val aboveTarget: Boolean
+    val aboveTarget: Boolean,
+    val costSourceLabel: String
 )
 
 internal data class MenuCostComparisonResult(
@@ -24,7 +29,11 @@ internal data class MenuCostComparisonResult(
     val excludedInvalidPrice: Int,
     val excludedInvalidCost: Int,
     val aboveTargetCount: Int,
-    val costAboveSellingPriceCount: Int
+    val costAboveSellingPriceCount: Int,
+    val menuItemsUsingRecipeCost: Int,
+    val menuItemsUsingManualCost: Int,
+    val recipesAwaitingApproval: Int,
+    val approvedRecipesIncomplete: Int
 )
 
 /**
@@ -63,10 +72,30 @@ internal object MenuCostComparisonAnalyzer {
                 return@forEach
             }
 
-            val cost = entry.recordedUnitCost
-            if (cost == null) {
-                missingCost++
-                return@forEach
+            val approvedRecipe = entry.recipeExists && entry.recipeIsActiveApproved
+            val cost: BigDecimal
+            val sourceLabel: String
+            if (approvedRecipe) {
+                val recipeCost = entry.recipeCostPerPortion
+                if (!entry.recipeCostComplete || recipeCost == null) {
+                    return@forEach
+                }
+                cost = recipeCost
+                sourceLabel = "Ficha técnica aprovada"
+            } else {
+                if (entry.recipeExists) {
+                    // An unapproved recipe must not replace the owner's recorded manual cost.
+                    // It is counted separately so the owner knows that review is still needed.
+                    sourceLabel = "Custo manual · ficha técnica por aprovar"
+                } else {
+                    sourceLabel = "Custo manual da carta"
+                }
+                val manualCost = entry.recordedUnitCost
+                if (manualCost == null) {
+                    missingCost++
+                    return@forEach
+                }
+                cost = manualCost
             }
             if (cost.signum() < 0 || cost > maxAmount) {
                 invalidCost++
@@ -82,7 +111,8 @@ internal object MenuCostComparisonAnalyzer {
                 recordedUnitCost = cost.setScale(2, RoundingMode.HALF_UP),
                 costToPricePercent = ratio,
                 amountAfterRecordedCost = price.subtract(cost).setScale(2, RoundingMode.HALF_UP),
-                aboveTarget = targetPercent != null && ratio > targetPercent
+                aboveTarget = targetPercent != null && ratio > targetPercent,
+                costSourceLabel = sourceLabel
             )
         }
 
@@ -96,7 +126,13 @@ internal object MenuCostComparisonAnalyzer {
             excludedInvalidPrice = invalidPrice,
             excludedInvalidCost = invalidCost,
             aboveTargetCount = ranked.count { it.aboveTarget },
-            costAboveSellingPriceCount = ranked.count { it.amountAfterRecordedCost.signum() < 0 }
+            costAboveSellingPriceCount = ranked.count { it.amountAfterRecordedCost.signum() < 0 },
+            menuItemsUsingRecipeCost = ranked.count { it.costSourceLabel == "Ficha técnica aprovada" },
+            menuItemsUsingManualCost = ranked.count { it.costSourceLabel != "Ficha técnica aprovada" },
+            recipesAwaitingApproval = entries.count { it.recipeExists && !it.recipeIsActiveApproved },
+            approvedRecipesIncomplete = entries.count {
+                it.recipeExists && it.recipeIsActiveApproved && (!it.recipeCostComplete || it.recipeCostPerPortion == null)
+            }
         )
     }
 }
