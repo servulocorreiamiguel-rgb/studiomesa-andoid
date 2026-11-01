@@ -4032,6 +4032,7 @@ class MainActivity : Activity() {
                         .putString("remote_inventory_json", loadedItems.toString())
                         .putBoolean("inventory_loaded", true)
                         .apply()
+                    invalidateMenuRecipeCostSnapshot()
                     inventoryUpdatedAtMillis = System.currentTimeMillis()
                     inventoryRefreshFailed = false
                 } else {
@@ -4078,6 +4079,7 @@ class MainActivity : Activity() {
             if (activePage == "Stock") renderApp()
         }) {
             inventoryRefreshInFlight = false
+            invalidateMenuRecipeCostSnapshot()
             inventoryUpdatedAtMillis = System.currentTimeMillis()
             inventoryRefreshFailed = false
             renderApp()
