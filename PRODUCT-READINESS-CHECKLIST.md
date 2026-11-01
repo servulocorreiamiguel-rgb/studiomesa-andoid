@@ -176,3 +176,7 @@ Os valores de referência atuais são 890 €, 1 490 € e 1 690 €. Ainda não
 - [x] Os custos são mantidos apenas em memória durante a sessão do proprietário; a cache normal `remote_inventory_json` é sanitizada e não os guarda. A cache é limpa ao mudar de conta, papel ou restaurante.
 - [ ] Reproduzir a migração em PostgreSQL descartável e provar com contas owner/staff que os privilégios, triggers, RPCs e isolamento por restaurante funcionam.
 - [ ] Testar atualização de papel, logout, mudança de restaurante, cache de processo e chamadas REST/RPC diretas em Android real.
+
+- [x] A falha da RPC financeira não bloqueia a leitura operacional da ficha técnica; custos deixam de ser apresentados e a interface não repete pedidos em ciclo após autorização negada.
+- [x] O logout e a eliminação de conta limpam a cache de custos em memória.
+- [ ] Testar revogação real do papel owner enquanto a app está aberta, sem rede, e após recuperar ligação; confirmar que os custos desaparecem e que a operação de receitas continua disponível.
