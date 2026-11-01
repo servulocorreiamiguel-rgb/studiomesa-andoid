@@ -6815,7 +6815,7 @@ class MainActivity : Activity() {
         addGap(card, 7)
         card.addView(label(
             if (hasRemoteRestaurant() && isPremium && recipeSnapshot != null) {
-                "Fonte: carta, fichas técnicas e inventário carregados do servidor no mesmo ciclo. Só fichas ativas, aprovadas, completas e com unidades iguais às do inventário fornecem o custo do ranking. Os restantes pratos usam o custo manual registado na carta."
+                "Fonte: carta, fichas técnicas e inventário carregados do servidor. Só fichas ativas, aprovadas, completas e com unidades iguais às do inventário fornecem o custo do ranking. Fichas inativas ou por rever usam o custo manual; fichas aprovadas mas incompletas ficam fora do ranking."
             } else if (hasRemoteRestaurant()) {
                 "Fonte: última carta recebida e guardada em cache. Até carregar as fichas técnicas, o ranking usa apenas o custo manual registado na carta."
             } else {
