@@ -70,6 +70,7 @@ A interface usa uma identidade discreta, inspirada em restauração contemporân
 - **Stock:** ações de adicionar e atualizar agrupadas; resumo de artigos e alertas antes da lista; pesquisa por nome/unidade e filtros horizontais para todos/esgotados/stock baixo/sem custo; quantidade em destaque e ações de entrada, saída, edição e desperdício.
 - **Gestão económica e análise:** ativação destacada, desativação/limpeza com estilo de ação perigosa, atalhos horizontais para ferramentas e períodos; valores e pressupostos identificados, sem aparência de contabilidade certificada.
 - **Conta e sincronização:** dados da sessão e papel da equipa separados das ações de segurança; atalhos de configuração para Mesas, Carta e Pedidos.
+- **Mudança de conta:** ao terminar sessão, limpar pesquisas e filtros temporários para não transportar o estado visual entre utilizadores.
 - **Assistente:** conversa em primeiro plano; análises e recomendações adicionais recolhidas, mas acessíveis.
 - **Fidelização:** lista de clientes com pesquisa por nome ou código do cartão, contagem de resultados e estado vazio quando não há correspondências; área de cliente com pesquisa de reservas por data ou dimensão da reserva.
 - **Cliente:** cartão de fidelização, carta publicada com pesquisa e filtros horizontais por categoria, reservas e conta com estado de associação, email da sessão, restaurante ligado e ações de segurança separadas.
