@@ -2793,6 +2793,11 @@ class MainActivity : Activity() {
                 .apply()
             reservationCache = JSONArray()
             reservationsLoaded = false
+            reservationRefreshInFlightScope = null
+            reservationRefreshGeneration++
+            reservationUpdatedAtMillis = 0L
+            reservationRefreshFailed = false
+            selectedReservationFilter = "Todas"
             renderApp()
         }, LinearLayout.LayoutParams(-1, dp(48)))
         addGap(container, 10)
@@ -2863,6 +2868,16 @@ class MainActivity : Activity() {
                 .apply()
             reservationCache = JSONArray()
             reservationsLoaded = false
+            reservationRefreshInFlightScope = null
+            reservationRefreshGeneration++
+            reservationUpdatedAtMillis = 0L
+            reservationRefreshFailed = false
+            selectedReservationFilter = "Todas"
+            customerReservationsCache = JSONArray()
+            customerReservationsLoaded = false
+            customerReservationsLoading = false
+            customerReservationsLoadError = false
+            selectedCustomerReservationFilter = "Todas"
 
             if (isCustomerApp) renderCustomerApp() else renderApp()
 
@@ -4162,9 +4177,10 @@ class MainActivity : Activity() {
                 SupabaseApi.listReservations(token, requestedRestaurantId).toString()
             },
             onError = { error ->
-                val ownsRefreshSlot =
-                    reservationRefreshInFlightScope == requestedScope &&
-                        reservationRefreshGeneration == requestedGeneration
+                val ownsRefreshSlot = ReservationRefreshScope.ownsRefreshRequest(
+                    requestedScope, reservationRefreshInFlightScope,
+                    requestedGeneration, reservationRefreshGeneration
+                )
                 if (ownsRefreshSlot) reservationRefreshInFlightScope = null
                 val currentRestaurantId = backendRestaurantId()
                 val currentAccountId = backendPrefs.getString("user_id", "").orEmpty()
@@ -4183,9 +4199,10 @@ class MainActivity : Activity() {
                 }
             },
             onSuccess = { raw ->
-                val ownsRefreshSlot =
-                    reservationRefreshInFlightScope == requestedScope &&
-                        reservationRefreshGeneration == requestedGeneration
+                val ownsRefreshSlot = ReservationRefreshScope.ownsRefreshRequest(
+                    requestedScope, reservationRefreshInFlightScope,
+                    requestedGeneration, reservationRefreshGeneration
+                )
                 if (ownsRefreshSlot) reservationRefreshInFlightScope = null
                 val currentRestaurantId = backendRestaurantId()
                 val currentAccountId = backendPrefs.getString("user_id", "").orEmpty()
