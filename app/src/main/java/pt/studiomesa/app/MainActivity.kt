@@ -90,6 +90,7 @@ class MainActivity : Activity() {
     private var selectedAnalysisPeriod = SalesAnalysisPeriod.ALL_TIME
     private var selectedOrderFilter = "Todos"
     private var selectedKitchenFilter = "Todos"
+    private var selectedTableFilter = "Todas"
 
     // Owner-controlled economic tools: session-only until persistent authorization is designed.
     private var economicManagerEnabled = false
@@ -852,6 +853,39 @@ class MainActivity : Activity() {
         container.addView(note, cardParams())
     }
 
+    private fun addTableFilters(container: LinearLayout) {
+        container.addView(label("FILTRAR MESAS", 9.5f, true, forestSoft))
+        addGap(container, 5)
+        val scroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        listOf("Todas", "Livres", "Ocupadas").forEach { filter ->
+            row.addView(
+                filterChip(filter, selectedTableFilter == filter) {
+                    selectedTableFilter = filter
+                    renderApp()
+                },
+                LinearLayout.LayoutParams(-2, dp(42)).apply {
+                    setMargins(0, 0, dp(6), 0)
+                }
+            )
+        }
+        scroll.addView(row)
+        container.addView(scroll, LinearLayout.LayoutParams(-1, dp(46)))
+        addGap(container, 5)
+    }
+
+    private fun tableMatchesSelectedFilter(occupied: Boolean): Boolean = when (selectedTableFilter) {
+        "Livres" -> !occupied
+        "Ocupadas" -> occupied
+        else -> true
+    }
+
     private fun renderTables(container: LinearLayout) {
         pageIntro(container, "Mesas", if (hasRemoteRestaurant())
             "Estado, zona e capacidade partilhados pela equipa."
@@ -886,25 +920,38 @@ class MainActivity : Activity() {
             tableOverview.addView(statCard("MESAS OCUPADAS", occupiedTables.toString(), if (occupiedTables > 0) copper else forestSoft),
                 LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, dp(10)) })
             container.addView(tableOverview)
+            addTableFilters(container)
+            val visibleTableIndices = (0 until tableData.length()).filter { index ->
+                val occupied = tableData.optJSONObject(index)?.optBoolean("is_occupied", false) == true
+                tableMatchesSelectedFilter(occupied)
+            }
+            container.addView(label("${visibleTableIndices.size} mesa(s) neste filtro", 11f, true, forestSoft))
+            addGap(container, 6)
+            if (visibleTableIndices.isEmpty()) {
+                container.addView(emptyCard("Não há mesas neste estado. Escolhe outro filtro para consultar a sala."))
+                return
+            }
 
-            for (index in 0 until tableData.length() step 2) {
-                val first = tableData.optJSONObject(index) ?: continue
+            for (position in visibleTableIndices.indices step 2) {
+                val firstIndex = visibleTableIndices[position]
+                val first = tableData.optJSONObject(firstIndex) ?: continue
                 val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
                 row.addView(remoteTableCard(
                     first.optString("id"),
-                    first.optInt("table_number", index + 1),
+                    first.optInt("table_number", firstIndex + 1),
                     first.optBoolean("is_occupied", false),
                     first.optString("area", "Sala principal"),
                     first.optInt("seats", 2)
                 ), LinearLayout.LayoutParams(0, -2, 1f).apply {
                     setMargins(0, 0, dp(6), dp(10))
                 })
-                if (index + 1 < tableData.length()) {
-                    val second = tableData.optJSONObject(index + 1)
+                if (position + 1 < visibleTableIndices.size) {
+                    val secondIndex = visibleTableIndices[position + 1]
+                    val second = tableData.optJSONObject(secondIndex)
                     if (second != null) {
                         row.addView(remoteTableCard(
                             second.optString("id"),
-                            second.optInt("table_number", index + 2),
+                            second.optInt("table_number", secondIndex + 1),
                             second.optBoolean("is_occupied", false),
                             second.optString("area", "Sala principal"),
                             second.optInt("seats", 2)
@@ -934,11 +981,29 @@ class MainActivity : Activity() {
         localTableOverview.addView(statCard("MESAS OCUPADAS", localOccupiedTables.toString(), if (localOccupiedTables > 0) copper else forestSoft),
             LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, dp(10)) })
         container.addView(localTableOverview)
-
-        for (table in 1..12 step 2) {
+        addTableFilters(container)
+        val visibleTables = (1..12).filter { table ->
+            tableMatchesSelectedFilter(store.isTableOccupied(table))
+        }
+        container.addView(label("${visibleTables.size} mesa(s) neste filtro", 11f, true, forestSoft))
+        addGap(container, 6)
+        if (visibleTables.isEmpty()) {
+            container.addView(emptyCard("Não há mesas neste estado. Escolhe outro filtro para consultar a sala."))
+            return
+        }
+        for (position in visibleTables.indices step 2) {
+            val table = visibleTables[position]
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            row.addView(tableCard(table), LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), dp(10)) })
-            row.addView(tableCard(table + 1), LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, dp(10)) })
+            row.addView(tableCard(table), LinearLayout.LayoutParams(0, -2, 1f).apply {
+                setMargins(0, 0, dp(6), dp(10))
+            })
+            if (position + 1 < visibleTables.size) {
+                row.addView(tableCard(visibleTables[position + 1]), LinearLayout.LayoutParams(0, -2, 1f).apply {
+                    setMargins(dp(6), 0, 0, dp(10))
+                })
+            } else {
+                row.addView(View(this), LinearLayout.LayoutParams(0, dp(1), 1f))
+            }
             container.addView(row)
         }
         addGap(container, 3)
