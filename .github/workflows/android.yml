@@ -314,7 +314,7 @@ jobs:
             psql --no-psqlrc --set ON_ERROR_STOP=1 --file "${migration}"
             count=$((count + 1))
           done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
-          test "${count}" -eq 44
+          test "${count}" -eq 45
           echo "Successfully replayed ${count} versioned migration files."
 
       - name: Assert core schema, RLS and RPCs exist
@@ -342,6 +342,25 @@ jobs:
               OR to_regprocedure('public.issue_loyalty_invoice_qr(uuid,numeric,text,uuid)') IS NULL
               OR to_regprocedure('public.redeem_loyalty_invoice_qr(uuid)') IS NULL THEN
               RAISE EXCEPTION 'Invoice loyalty QR table or RPCs are missing after clean migration replay.';
+            END IF;
+
+            IF EXISTS (
+              SELECT 1 FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'public'
+                AND p.proname IN ('issue_loyalty_invoice_qr', 'redeem_loyalty_invoice_qr')
+                AND p.prosecdef
+            ) OR (
+              SELECT count(*) FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'private'
+                AND p.proname IN ('issue_loyalty_invoice_qr_internal', 'redeem_loyalty_invoice_qr_internal')
+                AND p.prosecdef
+                AND p.proconfig @> ARRAY['search_path=""']
+                AND NOT has_function_privilege('anon', p.oid, 'EXECUTE')
+                AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
+            ) <> 2 THEN
+              RAISE EXCEPTION 'Invoice QR endpoints must be invoker wrappers backed by private, pinned, authenticated-only functions.';
             END IF;
 
             IF NOT EXISTS (
