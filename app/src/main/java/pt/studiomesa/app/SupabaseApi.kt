@@ -1265,6 +1265,72 @@ object SupabaseApi {
         )
     }
 
+    fun createCustomerReservationRequest(
+        token: String,
+        requestId: String,
+        guestName: String,
+        guestPhone: String,
+        partySize: Int,
+        reservationAt: String,
+        durationMinutes: Int,
+        notes: String
+    ): JSONObject {
+        require(token.isNotBlank()) { "Inicia sessão para pedir uma reserva." }
+        require(runCatching { java.util.UUID.fromString(requestId).toString() == requestId }.getOrDefault(false)) {
+            "O identificador da tentativa de reserva não é válido."
+        }
+        require(partySize in 1..60) { "O número de pessoas deve estar entre 1 e 60." }
+        require(durationMinutes in 30..480) { "A duração deve estar entre 30 e 480 minutos." }
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/create_customer_reservation_request",
+            JSONObject()
+                .put("p_client_request_id", requestId)
+                .put("p_guest_name", guestName.trim())
+                .put("p_guest_phone", guestPhone.trim())
+                .put("p_party_size", partySize)
+                .put("p_reservation_at", reservationAt)
+                .put("p_duration_minutes", durationMinutes)
+                .put("p_notes", notes.trim()),
+            token
+        )
+        val rows = try { JSONArray(response) } catch (_: Exception) {
+            throw IllegalStateException("O servidor não confirmou o pedido de reserva.")
+        }
+        if (rows.length() != 1) throw IllegalStateException("O servidor não confirmou o pedido de reserva.")
+        val row = rows.getJSONObject(0)
+        val id = row.optString("reservation_id")
+        require(runCatching { java.util.UUID.fromString(id).toString() == id }.getOrDefault(false)) {
+            "O servidor não devolveu um identificador válido para a reserva."
+        }
+        return row
+    }
+
+    fun listMyCustomerReservations(token: String): JSONArray {
+        require(token.isNotBlank()) { "Inicia sessão para consultar as tuas reservas." }
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/get_my_restaurant_reservations",
+            JSONObject(),
+            token
+        )
+        return JSONArray(response)
+    }
+
+    fun cancelMyCustomerReservation(token: String, reservationId: String) {
+        require(token.isNotBlank()) { "Inicia sessão para cancelar uma reserva." }
+        require(runCatching { java.util.UUID.fromString(reservationId).toString() == reservationId }.getOrDefault(false)) {
+            "O identificador da reserva não é válido."
+        }
+        call(
+            "POST",
+            "/rest/v1/rpc/cancel_my_restaurant_reservation",
+            JSONObject().put("p_reservation_id", reservationId),
+            token
+        )
+    }
+
+
     fun listRestaurantTeam(token: String): JSONArray {
         return JSONArray(call(
             "POST",
