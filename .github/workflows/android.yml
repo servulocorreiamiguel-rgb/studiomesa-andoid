@@ -314,7 +314,7 @@ jobs:
             psql --no-psqlrc --set ON_ERROR_STOP=1 --file "${migration}"
             count=$((count + 1))
           done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
-          test "${count}" -eq 47
+          test "${count}" -eq 48
           echo "Successfully replayed ${count} versioned migration files."
 
       - name: Assert core schema, RLS and RPCs exist
@@ -371,6 +371,42 @@ jobs:
                 AND c.relrowsecurity
             ) THEN
               RAISE EXCEPTION 'Invoice QR records are not protected by row-level security.';
+            END IF;
+
+            IF (
+              SELECT count(*)
+              FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'public'
+                AND p.proname IN (
+                  'create_loyalty_qr_token',
+                  'award_loyalty_points_from_qr',
+                  'get_member_restaurant_menu',
+                  'get_my_loyalty_membership',
+                  'get_restaurant_reward_redemptions'
+                )
+                AND NOT p.prosecdef
+                AND p.proconfig @> ARRAY['search_path=""']
+                AND NOT has_function_privilege('anon', p.oid, 'EXECUTE')
+                AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
+            ) <> 5 OR (
+              SELECT count(*)
+              FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'private'
+                AND p.proname IN (
+                  'create_loyalty_qr_token_internal',
+                  'award_loyalty_points_from_qr_internal',
+                  'get_member_restaurant_menu_internal',
+                  'get_my_loyalty_membership_internal',
+                  'get_restaurant_reward_redemptions_internal'
+                )
+                AND p.prosecdef
+                AND p.proconfig @> ARRAY['search_path=""']
+                AND NOT has_function_privilege('anon', p.oid, 'EXECUTE')
+                AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
+            ) <> 5 OR has_schema_privilege('authenticated', 'private', 'USAGE') IS NOT TRUE THEN
+              RAISE EXCEPTION 'Legacy loyalty RPCs must remain authenticated-only invoker wrappers backed by pinned private functions.';
             END IF;
 
             IF has_table_privilege('authenticated', 'private.loyalty_invoice_qr_codes', 'SELECT')
