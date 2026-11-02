@@ -7,6 +7,8 @@ import android.content.ClipboardManager
 import android.content.res.ColorStateList
 import android.app.AlertDialog
 import android.graphics.Color
+import android.graphics.Bitmap
+import android.widget.ImageView
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
@@ -31,6 +33,11 @@ import android.widget.TextView
 import android.widget.Toast
 import org.json.JSONArray
 import org.json.JSONObject
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.EncodeHintType
+import com.google.zxing.qrcode.QRCodeWriter
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
+import com.journeyapps.barcodescanner.IntentIntegrator
 import java.math.BigDecimal
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
@@ -176,6 +183,21 @@ class MainActivity : Activity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleAuthCallback(intent)
+    }
+
+    @Deprecated("The embedded QR scanner currently uses Activity result callbacks.")
+    override fun onActivityResult(
+        requestCode: Int,
+        resultCode: Int,
+        data: android.content.Intent?
+    ) {
+        val scan = IntentIntegrator.parseActivityResult(requestCode, resultCode, data)
+        if (scan != null) {
+            val contents = scan.contents
+            if (!contents.isNullOrBlank()) handleScannedInvoiceLoyaltyQr(contents)
+            return
+        }
+        super.onActivityResult(requestCode, resultCode, data)
     }
 
     private fun parseAuthParams(raw: String?): Map<String, String> =
@@ -2686,6 +2708,12 @@ class MainActivity : Activity() {
                 showCustomerPointsDialog(customer, true)
             }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { setMargins(dp(5), 0, 0, 0) })
             card.addView(actions)
+            if (remoteMode && customer.backendId != null) {
+                addGap(card, 8)
+                card.addView(secondaryButton("Emitir QR da fatura") {
+                    showIssueInvoiceLoyaltyQrDialog(customer)
+                }, LinearLayout.LayoutParams(-1, dp(44)))
+            }
             container.addView(card, cardParams())
         }
     }
@@ -2953,7 +2981,11 @@ class MainActivity : Activity() {
         when {
             backendToken().isBlank() -> container.addView(primaryButton("Criar conta / iniciar sessão") { showAuthChooser { renderCustomerApp() } }, LinearLayout.LayoutParams(-1, dp(48)))
             backendMemberId().isBlank() -> container.addView(primaryButton("Associar ao restaurante") { showCustomerJoinDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
-            else -> container.addView(primaryButton("Atualizar saldo no servidor") { refreshCustomerMembership() }, LinearLayout.LayoutParams(-1, dp(48)))
+            else -> {
+                container.addView(primaryButton("Ler QR da fatura") { startInvoiceLoyaltyQrScan() }, LinearLayout.LayoutParams(-1, dp(48)))
+                addGap(container, 6)
+                container.addView(secondaryButton("Atualizar saldo no servidor") { refreshCustomerMembership() }, LinearLayout.LayoutParams(-1, dp(46)))
+            }
         }
         addGap(container, 15)
 
@@ -2975,6 +3007,228 @@ class MainActivity : Activity() {
             activeCustomerPage = "Carta"
             renderCustomerApp()
         }, LinearLayout.LayoutParams(-1, dp(48)))
+    }
+
+    private fun startInvoiceLoyaltyQrScan() {
+        if (backendToken().isBlank()) {
+            showAuthChooser { renderCustomerApp() }
+            return
+        }
+        if (backendMemberId().isBlank()) {
+            showCustomerJoinDialog()
+            return
+        }
+        IntentIntegrator(this)
+            .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE_TYPES)
+            .setPrompt("Lê o QR de fidelização apresentado na fatura")
+            .setBeepEnabled(false)
+            .setOrientationLocked(false)
+            .initiateScan()
+    }
+
+    private fun handleScannedInvoiceLoyaltyQr(rawPayload: String) {
+        val qrToken = InvoiceLoyaltyQr.parseToken(rawPayload)
+        if (qrToken == null) {
+            AlertDialog.Builder(this)
+                .setTitle("QR não reconhecido")
+                .setMessage("Este não é um QR de fidelização StudioMesa. Os QR fiscais e outros códigos não alteram os pontos.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        if (backendToken().isBlank() || backendMemberId().isBlank()) {
+            showAuthChooser { renderCustomerApp() }
+            return
+        }
+        val expectedMemberId = backendMemberId()
+        runBackend({
+            val result = SupabaseApi.redeemLoyaltyInvoiceQr(backendToken(), qrToken)
+            if (result.optString("member_id") != expectedMemberId) {
+                throw IllegalStateException("O QR não corresponde ao cartão de cliente desta conta.")
+            }
+            backendPrefs.edit()
+                .putInt("member_points", result.optInt("points", 0))
+                .putString("member_code", result.optString("member_code"))
+                .apply()
+            result.toString()
+        }) { response ->
+            val result = JSONObject(response)
+            val awarded = result.optInt("points_awarded", 0)
+            val balance = result.optInt("points", 0)
+            val reference = result.optString("invoice_reference")
+            AlertDialog.Builder(this)
+                .setTitle("Compra validada")
+                .setMessage(
+                    "Foram reconhecidos $awarded pontos para o documento $reference.\n\n" +
+                    "Saldo atual: $balance pontos.\n\n" +
+                    "O mesmo QR não pode voltar a creditar pontos."
+                )
+                .setPositiveButton("Ver cartão") { _, _ -> renderCustomerApp() }
+                .show()
+        }
+    }
+
+    private fun showIssueInvoiceLoyaltyQrDialog(customer: LoyaltyCustomer) {
+        val memberId = customer.backendId
+        val restaurantId = backendRestaurantId()
+        if (memberId.isNullOrBlank() || backendToken().isBlank() || restaurantId.isBlank()) {
+            AlertDialog.Builder(this)
+                .setMessage("É necessária uma sessão válida e um cliente associado ao restaurante.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(4))
+        }
+        val referenceField = inputField(
+            "Referência/número do documento",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
+        )
+        val amountField = inputField(
+            "Total pago (€)",
+            InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+        )
+        form.addView(label("REFERÊNCIA DO DOCUMENTO", 10f, true, forestSoft))
+        form.addView(referenceField, fieldParams())
+        addGap(form, 4)
+        form.addView(label("TOTAL DA COMPRA", 10f, true, forestSoft))
+        form.addView(amountField, fieldParams())
+        addGap(form, 6)
+        form.addView(label(
+            "Regra inicial: 1 ponto por cada euro completo. O servidor calcula os pontos e impede a duplicação da referência. A equipa introduz os dados; este código não valida nem substitui a fatura fiscal.",
+            11.5f, false, muted
+        ))
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("QR de fidelização da fatura")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Gerar QR", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val reference = referenceField.text.toString().trim()
+                val rawAmount = amountField.text.toString().trim().replace(',', '.')
+                val amount = runCatching { BigDecimal(rawAmount) }.getOrNull()
+                when {
+                    reference.isBlank() || reference.length > 100 ->
+                        referenceField.error = "Indica uma referência entre 1 e 100 caracteres"
+                    amount == null || amount.scale() > 2 ||
+                        amount < BigDecimal("1.00") || amount > BigDecimal("100000.99") ->
+                        amountField.error = "Introduz um total entre 1 € e 100 000,99 €, com até 2 casas decimais"
+                    else -> {
+                        val normalizedAmount = amount.setScale(2, java.math.RoundingMode.UNNECESSARY)
+                        val signature = JSONObject()
+                            .put("restaurant_id", restaurantId)
+                            .put("member_id", memberId)
+                            .put("invoice_reference", reference)
+                            .put("amount", normalizedAmount.toPlainString())
+                            .toString()
+                        val operation = "loyalty_invoice_qr_issue"
+                        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+                        val requestId = try {
+                            pendingRequestIds.getOrCreate(operation, accountId, signature)
+                        } catch (_: Exception) {
+                            referenceField.error = "Não foi possível guardar a referência segura. Tenta novamente."
+                            return@setOnClickListener
+                        }
+                        runBackend({
+                            SupabaseApi.issueLoyaltyInvoiceQr(
+                                backendToken(), memberId, normalizedAmount, reference, requestId
+                            ).toString()
+                        }) { response ->
+                            pendingRequestIds.complete(operation, accountId, signature, requestId)
+                            dialog.dismiss()
+                            showIssuedInvoiceLoyaltyQr(JSONObject(response))
+                        }
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showIssuedInvoiceLoyaltyQr(result: JSONObject) {
+        val token = result.optString("qr_token")
+        val payload = try {
+            InvoiceLoyaltyQr.payloadForToken(token)
+        } catch (_: Exception) {
+            AlertDialog.Builder(this)
+                .setTitle("QR inválido")
+                .setMessage("O servidor não devolveu um código que possa ser apresentado.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        try {
+            val size = 720
+            val matrix = QRCodeWriter().encode(
+                payload,
+                BarcodeFormat.QR_CODE,
+                size,
+                size,
+                mapOf(
+                    EncodeHintType.MARGIN to 2,
+                    EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M
+                )
+            )
+            val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            for (y in 0 until size) {
+                for (x in 0 until size) {
+                    bitmap.setPixel(x, y, if (matrix.get(x, y)) Color.BLACK else Color.WHITE)
+                }
+            }
+
+            val content = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                setPadding(dp(18), dp(8), dp(18), dp(8))
+            }
+            content.addView(label("CÓDIGO DE FIDELIZAÇÃO", 10f, true, forestSoft))
+            addGap(content, 5)
+            content.addView(label(
+                "+" + result.optInt("points") + " pontos",
+                24f, true, forestDeep
+            ))
+            addGap(content, 4)
+            content.addView(label(
+                "Documento " + result.optString("invoice_reference") +
+                    " · " + String.format(Locale("pt", "PT"), "%.2f €", result.optDouble("amount")),
+                12f, false, muted
+            ))
+            addGap(content, 10)
+            content.addView(ImageView(this).apply {
+                setImageBitmap(bitmap)
+                contentDescription = "QR Code de fidelização StudioMesa"
+                adjustViewBounds = true
+                scaleType = ImageView.ScaleType.FIT_CENTER
+            }, LinearLayout.LayoutParams(dp(250), dp(250)))
+            addGap(content, 8)
+            content.addView(label(
+                "Válido até " + result.optString("expires_at").take(10) +
+                    ". O cliente deve lê-lo na aplicação StudioMesa.",
+                11f, false, muted
+            ))
+            addGap(content, 5)
+            content.addView(label(
+                "Talão de pontos — não substitui nem altera o QR fiscal da fatura.",
+                11f, true, red
+            ))
+            AlertDialog.Builder(this)
+                .setTitle("QR emitido")
+                .setView(content)
+                .setPositiveButton("Concluído", null)
+                .show()
+        } catch (_: Exception) {
+            AlertDialog.Builder(this)
+                .setTitle("Não foi possível criar a imagem")
+                .setMessage("O código ficou registado, mas a imagem QR não pôde ser apresentada neste dispositivo.")
+                .setPositiveButton("OK", null)
+                .show()
+        }
     }
 
     private fun renderCustomerMenuPage(container: LinearLayout) {
