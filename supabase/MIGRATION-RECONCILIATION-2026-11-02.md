@@ -225,3 +225,92 @@ Foi extraída a lista completa das 31 funções públicas `SECURITY DEFINER` exe
 - O aviso do Advisor é, portanto, parcialmente estrutural: as funções são realmente endpoints privilegiados para utilizadores autenticados, mas não estão abertas a `anon`/`PUBLIC`. Não revogar em bloco. A prioridade é migrar os endpoints legados para wrappers `SECURITY INVOKER`, activar a matriz granular de permissões e manter os testes de autorização correspondentes.
 
 **Estado:** revisão estática inicial concluída para os 31 nomes/assinaturas e controlos principais; revisão aprofundada de limites, condições de corrida e argumentos continua a exigir testes dedicados por função. Nenhuma alteração SQL foi aplicada ao Supabase alojado.
+
+
+## Plano candidato para corrigir o histórico Supabase
+
+A documentação actual do Supabase confirma que `migration repair` só altera `supabase_migrations.schema_migrations`: não executa nem desfaz SQL. Esta separação permite corrigir versões históricas quando o esquema já representa essas alterações. Referências: [Database Migrations](https://supabase.com/docs/guides/deployment/database-migrations) e [CLI migration repair](https://supabase.com/docs/reference/cli/supabase-migration-repair).
+
+**Este é um plano de reconciliação, não uma autorização para o executar.** Antes de o usar, é obrigatório confirmar o projecto ligado, guardar o resultado de `supabase migration list`, ter um backup/restauro adequado e repetir a sequência numa cópia isolada do estado actual.
+
+### A. Versões remotas candidatas a marcar como `reverted`
+
+Os seguintes 13 registos existem no histórico alojado, mas não têm ficheiro com a mesma versão na branch. As alterações estruturais/funcionais correspondentes estão representadas por migrações locais posteriores ou por uma migração com o mesmo conteúdo. Marcar como `reverted` remove apenas os registos históricos; não remove nenhum objecto SQL.
+
+```text
+20261102075735
+20261102080624
+20261102080905
+20261102081603
+20261102082151
+20261102090849
+20261102091511
+20261102091833
+20261102103246
+20261102103627
+20261102104650
+20261102113719
+20261102113944
+```
+
+### B. Versões locais candidatas a marcar como `applied` sem executar SQL
+
+A existência das estruturas correspondentes foi confirmada no catálogo alojado: QR de fatura, índices de QR, wrappers privados do QR de fatura, loja de recompensas, fila de resgates e wrappers privados da loja. O ficheiro de inventário abaixo tem ainda o mesmo blob SHA da versão remota `20261102082151`.
+
+```text
+20261030120000
+20261102102500
+20261102104100
+20261102104800
+20261102112000
+20261102113000
+```
+
+### C. Migrações locais que devem continuar pendentes para aplicação real
+
+Estas quatro versões correspondem a alterações que **não** existem ainda no esquema alojado:
+
+```text
+20261102135000  legacy_loyalty_rpc_private_boundary
+20261102141000  customer_reservation_flow_private_boundary
+20261102150000  add_price_adviser_actor_fk_indexes
+20261102160000  granular_restaurant_staff_permissions
+```
+
+Confirmações específicas feitas no servidor:
+
+- A migração `135000` é necessária para mover RPCs legados de fidelização para funções privadas; as implementações legadas ainda aparecem em `public`.
+- A migração `141000` cria wrappers `SECURITY INVOKER` para os fluxos de reserva; as funções públicas actuais ainda aparecem como `SECURITY DEFINER`.
+- A migração `150000` cria os dois índices de chaves estrangeiras que ainda aparecem em falta no Performance Advisor.
+- A migração `160000` cria `private.restaurant_staff_permissions` e actualiza políticas/RPCs para as seis áreas; essa tabela ainda não existe no alojamento.
+
+### D. Sequência de comandos para uma futura janela de manutenção
+
+Executar primeiro apenas no ambiente isolado e rever a saída de cada comando. A sintaxe abaixo segue a CLI documentada; os comandos de reparação não executam SQL.
+
+```bash
+supabase migration list
+
+supabase migration repair \
+  20261102075735 20261102080624 20261102080905 20261102081603 \
+  20261102082151 20261102090849 20261102091511 20261102091833 \
+  20261102103246 20261102103627 20261102104650 20261102113719 \
+  20261102113944 --status reverted
+
+supabase migration repair \
+  20261030120000 20261102102500 20261102104100 \
+  20261102104800 20261102112000 20261102113000 --status applied
+
+supabase migration list
+supabase db push --dry-run
+```
+
+A saída do último comando deve propor apenas as quatro migrações da secção C. Se aparecer outra versão, parar e reconciliar de novo; não avançar por tentativa.
+
+Apenas depois de um replay isolado do estado actual, revisão SQL, backup verificado, teste de restauração e aprovação da janela de manutenção se poderá executar `supabase db push` no projecto real. Depois, voltar a consultar migrações e Advisors e testar com contas descartáveis de proprietário, funcionário e cliente.
+
+**Não executar `db reset --linked` no projecto real.** Esse comando apaga o esquema remoto e é reservado a ambientes descartáveis.
+
+### E. CI da documentação
+
+O commit `56ececd8e0a060152fb922810eb74e2c5e677dd6` foi validado pela execução [41520562311](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/41520562311): replay de migrações, testes de autorização/idempotência, compilação, testes unitários, Android Lint e smoke tests nos emuladores Android 8 e 16 concluíram com sucesso. Esta validação não aplica migrações ao alojamento nem substitui o teste de replay contra uma cópia do seu estado actual.
