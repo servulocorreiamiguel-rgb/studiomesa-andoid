@@ -1066,6 +1066,51 @@ then
   echo "ERROR: staff confirmed a customer booking without assigning a table." >&2
   exit 1
 fi
+# Preserve the original restaurant-side reservation authorization checks.
+RESERVATION_REQUEST="99999999-9999-4999-8999-999999999999"
+RESERVATION_FOREIGN_REQUEST="abababab-abab-4bab-8bab-abababababab"
+RESERVATION_AT="$(date -u -d '+30 days' '+%Y-%m-%d %H:%M:%S+00:00')"
+RESERVATION_A="$(create_restaurant_reservation "$USER_A" "$RESTAURANT_A" "$RESERVATION_REQUEST" "CI Guest" "$RESERVATION_AT")"
+RESERVATION_RETRY="$(create_restaurant_reservation "$USER_A" "$RESTAURANT_A" "$RESERVATION_REQUEST" "CI Guest" "$RESERVATION_AT")"
+if [ -z "$RESERVATION_A" ] || [ "$RESERVATION_A" != "$RESERVATION_RETRY" ]; then
+  echo "ERROR: retrying the same reservation request did not return the original reservation." >&2
+  exit 1
+fi
+reservation_count_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*) = 1 FROM public.restaurant_reservations WHERE id = '$RESERVATION_A'::uuid AND restaurant_id = '$RESTAURANT_A'::uuid AND created_by = '$USER_A'::uuid AND client_request_id = '$RESERVATION_REQUEST'::uuid;")"
+if [ "$reservation_count_ok" != "t" ]; then
+  echo "ERROR: repeated reservation creation produced a duplicate or misplaced reservation." >&2
+  exit 1
+fi
+echo "PASS: repeated reservation creation returns the original reservation exactly once."
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.create_restaurant_reservation_idempotent(
+  '$RESERVATION_FOREIGN_REQUEST'::uuid, '$RESTAURANT_B'::uuid, 'Unauthorized Guest', '',
+  2, '$RESERVATION_AT'::timestamptz, 60, NULL::integer, 'Should be rejected'
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: user A unexpectedly created a reservation for restaurant B." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
+SET LOCAL ROLE authenticated;
+SELECT public.update_restaurant_reservation_status('$RESERVATION_A'::uuid, 'Confirmada');
+COMMIT;
+SQL
+then
+  echo "ERROR: user B unexpectedly changed a reservation belonging to restaurant A." >&2
+  exit 1
+fi
+
 # The reservation confirmation rule now requires a real table assignment.
 psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
 BEGIN;
