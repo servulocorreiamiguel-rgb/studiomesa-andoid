@@ -2856,9 +2856,12 @@ class MainActivity : Activity() {
             } else {
                 card.addView(label("Esta conta está associada à equipa deste restaurante. As alterações operacionais são guardadas no servidor.", 12f, false, ink))
             }
-            addGap(card, 12)
-            card.addView(primaryButton("Atualizar lista de clientes") { refreshRemoteCustomers() },
-                LinearLayout.LayoutParams(-1, dp(48)))
+            val canAccessLoyalty = role == "owner" || "loyalty" in currentStaffPermissions.orEmpty()
+            if (canAccessLoyalty) {
+                addGap(card, 12)
+                card.addView(primaryButton("Atualizar lista de clientes") { refreshRemoteCustomers() },
+                    LinearLayout.LayoutParams(-1, dp(48)))
+            }
         }
         container.addView(card, cardParams())
         addGap(container, 3)
