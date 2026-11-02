@@ -181,9 +181,11 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         activityResumed = true
+        // Close restricted screens and start authorization refresh before auto-refresh
+        // can query stock or kitchen data from the previous foreground session.
+        refreshStaffPermissionsSilently()
         updateKitchenAutoRefresh()
         updateInventoryAutoRefresh()
-        refreshStaffPermissionsSilently()
     }
 
     override fun onPause() {
