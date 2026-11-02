@@ -185,10 +185,11 @@ begin
     end if;
 
     -- Only the newest code remains valid for this customer.
-    delete from private.loyalty_qr_tokens
-    where member_id = v_member_id and used_at is null;
-    delete from private.loyalty_qr_tokens
-    where member_id = v_member_id and expires_at < now() - interval '1 day';
+    delete from private.loyalty_qr_tokens AS token_row
+    where token_row.member_id = v_member_id and token_row.used_at is null;
+    delete from private.loyalty_qr_tokens AS token_row
+    where token_row.member_id = v_member_id
+      and token_row.expires_at < now() - interval '1 day';
     insert into private.loyalty_qr_tokens (restaurant_id, member_id, expires_at)
     values (v_restaurant_id, v_member_id, v_expires_at)
     returning token into v_token;
