@@ -338,6 +338,30 @@ jobs:
               RAISE EXCEPTION 'A required RPC is missing after clean migration replay.';
             END IF;
 
+            IF to_regclass('private.loyalty_invoice_qr_codes') IS NULL
+              OR to_regprocedure('public.issue_loyalty_invoice_qr(uuid,numeric,text,uuid)') IS NULL
+              OR to_regprocedure('public.redeem_loyalty_invoice_qr(uuid)') IS NULL THEN
+              RAISE EXCEPTION 'Invoice loyalty QR table or RPCs are missing after clean migration replay.';
+            END IF;
+
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'private'
+                AND c.relname = 'loyalty_invoice_qr_codes'
+                AND c.relrowsecurity
+            ) THEN
+              RAISE EXCEPTION 'Invoice QR records are not protected by row-level security.';
+            END IF;
+
+            IF has_table_privilege('authenticated', 'private.loyalty_invoice_qr_codes', 'SELECT')
+              OR has_function_privilege('anon', 'public.issue_loyalty_invoice_qr(uuid,numeric,text,uuid)', 'EXECUTE')
+              OR has_function_privilege('anon', 'public.redeem_loyalty_invoice_qr(uuid)', 'EXECUTE')
+              OR NOT has_function_privilege('authenticated', 'public.issue_loyalty_invoice_qr(uuid,numeric,text,uuid)', 'EXECUTE')
+              OR NOT has_function_privilege('authenticated', 'public.redeem_loyalty_invoice_qr(uuid)', 'EXECUTE') THEN
+              RAISE EXCEPTION 'Invoice QR RPC privileges are not restricted to authenticated callers.';
+            END IF;
+
             IF to_regprocedure('public.save_inventory_item_with_cost(uuid,uuid,text,text,numeric,numeric,text,numeric)') IS NULL
               OR to_regprocedure('public.create_inventory_item_idempotent_with_cost(uuid,uuid,text,text,numeric,numeric,text,numeric)') IS NULL THEN
               RAISE EXCEPTION 'Cost-aware inventory RPCs are missing after clean migration replay.';
