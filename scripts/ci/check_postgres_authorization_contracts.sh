@@ -420,6 +420,67 @@ if [ "$table_write_rows" != "0" ] || [ "$menu_write_rows" != "0" ]; then
   echo "ERROR: a staff account wrote to an area disabled by its permission matrix." >&2
   exit 1
 fi
+
+ORDER_PERMISSION_PROBE="88888888-8888-4888-8888-888888888889"
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO public.restaurant_orders (
+  id, restaurant_id, table_number, item_name, amount, quantity, service_course, notes
+) VALUES (
+  '$ORDER_PERMISSION_PROBE'::uuid, '$RESTAURANT_A'::uuid, 1,
+  'Permission probe order', 5.00, 1, 'Principal', ''
+);
+SQL
+order_write_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+WITH changed AS (
+  UPDATE public.restaurant_orders SET status = 'Em preparação'
+  WHERE id = '$ORDER_PERMISSION_PROBE'::uuid
+  RETURNING id
+)
+SELECT count(*)::text FROM changed;
+ROLLBACK;
+SQL
+)"
+if [ "$order_write_rows" != "1" ]; then
+  echo "ERROR: the orders permission did not allow the employee to update an order." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['reservations']);
+COMMIT;
+SQL
+restricted_order_write_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+WITH changed AS (
+  UPDATE public.restaurant_orders SET status = 'Pronto'
+  WHERE id = '$ORDER_PERMISSION_PROBE'::uuid
+  RETURNING id
+)
+SELECT count(*)::text FROM changed;
+ROLLBACK;
+SQL
+)"
+if [ "$restricted_order_write_rows" != "0" ]; then
+  echo "ERROR: the orders permission did not block direct writes after being disabled." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders','reservations']);
+COMMIT;
+SQL
+
 if create_inventory_item "$USER_C" "$RESTAURANT_A" "dddddddd-dddd-4ddd-8ddd-dddddddddddd" "Blocked stock item" "1" >/dev/null 2>&1; then
   echo "ERROR: a staff account created stock while the inventory permission was disabled." >&2
   exit 1
