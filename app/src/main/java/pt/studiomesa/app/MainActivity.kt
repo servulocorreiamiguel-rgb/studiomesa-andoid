@@ -424,6 +424,20 @@ class MainActivity : Activity() {
         }
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        val scanResult = IntentIntegrator.parseActivityResult(requestCode, resultCode, data)
+        if (scanResult != null) {
+            val contents = scanResult.contents
+            if (contents.isNullOrBlank()) {
+                Toast.makeText(this, "Leitura do QR cancelada.", Toast.LENGTH_SHORT).show()
+            } else {
+                handleLoyaltyQrPayload(contents)
+            }
+            return
+        }
+        super.onActivityResult(requestCode, resultCode, data)
+    }
+
     private fun renderApp() {
         if (isCustomerApp) {
             renderCustomerApp()
@@ -2794,6 +2808,214 @@ class MainActivity : Activity() {
     }
 
     private fun showAddCustomerDialog() {
+        if (backendToken().isNotBlank() && backendRestaurantId().isNotBlank()) {
+            showRestaurantJoinCode()
+            return
+        }
+        val nameField = inputField("Nome do cliente", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(2))
+        }
+        form.addView(label("Nome para identificar o cartão", 10f, true, forestSoft))
+        form.addView(nameField, fieldParams())
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Novo cartão de fidelização")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Criar cartão", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val name = nameField.text.toString().trim()
+                if (name.isBlank()) {
+                    nameField.error = "Escreve o nome do cliente"
+                } else {
+                    val customer = store.addLoyaltyCustomer(name)
+                    dialog.dismiss()
+                    renderApp()
+                    AlertDialog.Builder(this)
+                        .setTitle("Cartão criado")
+                        .setMessage("Código do cartão: " + customer.code + "\nSaldo inicial: 0 pontos.\nGuarda o código para referência.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun startLoyaltyQrScan() {
+        if (backendToken().isBlank() || backendRestaurantId().isBlank()) {
+            Toast.makeText(this, "Inicia sessão no restaurante antes de ler QR.", Toast.LENGTH_LONG).show()
+            return
+        }
+        IntentIntegrator(this)
+            .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
+            .setPrompt("Aponta a câmara ao QR temporário do cliente")
+            .setBeepEnabled(false)
+            .setOrientationLocked(false)
+            .initiateScan()
+    }
+
+    private fun handleLoyaltyQrPayload(payload: String) {
+        val prefix = "STUDIOMESA-LOYALTY:"
+        if (!payload.startsWith(prefix, ignoreCase = true)) {
+            Toast.makeText(this, "Este QR não é um código de fidelização StudioMesa.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val qrToken = payload.substring(prefix.length).trim()
+        if (runCatching { java.util.UUID.fromString(qrToken) }.isFailure) {
+            Toast.makeText(this, "O QR não é válido.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val pointsField = inputField("Pontos a atribuir nesta compra", InputType.TYPE_CLASS_NUMBER)
+        val noteField = inputField("Referência da compra (opcional)", InputType.TYPE_CLASS_TEXT)
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(4))
+        }
+        form.addView(label("PONTOS", 10f, true, forestSoft))
+        form.addView(pointsField, fieldParams())
+        addGap(form, 5)
+        form.addView(label("REFERÊNCIA", 10f, true, forestSoft))
+        form.addView(noteField, fieldParams())
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Atribuir pontos por QR")
+            .setMessage("O QR é de utilização única e expira em dois minutos.")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Confirmar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val points = pointsField.text.toString().trim().toIntOrNull()
+                val note = noteField.text.toString().trim()
+                when {
+                    points == null || points !in 1..100000 -> pointsField.error = "Indica entre 1 e 100000 pontos."
+                    note.length > 200 -> noteField.error = "A referência não pode exceder 200 caracteres."
+                    else -> {
+                        val signature = JSONObject()
+                            .put("qr_token", qrToken)
+                            .put("points", points)
+                            .put("note", note)
+                            .toString()
+                        val operation = "loyalty_qr_award"
+                        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+                        val requestId = try {
+                            pendingRequestIds.getOrCreate(operation, accountId, signature)
+                        } catch (_: Exception) {
+                            pointsField.error = "Não foi possível guardar a referência segura. Tenta novamente."
+                            return@setOnClickListener
+                        }
+                        runBackend({
+                            val result = SupabaseApi.awardLoyaltyPointsFromQr(
+                                backendToken(), qrToken, points, note, requestId
+                            )
+                            val members = SupabaseApi.listMembers(backendToken(), backendRestaurantId())
+                            backendPrefs.edit().putString("remote_members_json", members.toString()).apply()
+                            result.optInt("points", -1).toString()
+                        }) { newBalance ->
+                            dialog.dismiss()
+                            pendingRequestIds.complete(operation, accountId, signature, requestId)
+                            renderApp()
+                            AlertDialog.Builder(this).setTitle("Pontos atribuídos")
+                                .setMessage("O novo saldo do cliente é " + newBalance + " pontos.")
+                                .setPositiveButton("OK", null).show()
+                        }
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showLoyaltyRewardEditor(existing: JSONObject?) {
+        if (backendToken().isBlank() || backendRestaurantId().isBlank() ||
+            backendPrefs.getString("restaurant_role", "") != "owner") {
+            AlertDialog.Builder(this).setMessage("Só o proprietário pode gerir a loja de pontos.")
+                .setPositiveButton("OK", null).show()
+            return
+        }
+        val name = inputField("Nome da recompensa", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+        val description = inputField("Descrição (opcional)", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+        val cost = inputField("Pontos necessários", InputType.TYPE_CLASS_NUMBER)
+        val stock = inputField("Quantidade disponível (vazio = sem limite)", InputType.TYPE_CLASS_NUMBER)
+        if (existing != null) {
+            name.setText(existing.optString("name"))
+            description.setText(existing.optString("description"))
+            cost.setText(existing.optInt("points_cost").toString())
+            if (!existing.isNull("stock_limit")) stock.setText(existing.optInt("stock_limit").toString())
+        }
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(4))
+        }
+        form.addView(label("PRÉMIO", 10f, true, forestSoft))
+        form.addView(name, fieldParams())
+        addGap(form, 5)
+        form.addView(label("DESCRIÇÃO", 10f, true, forestSoft))
+        form.addView(description, fieldParams())
+        addGap(form, 5)
+        form.addView(label("CUSTO EM PONTOS", 10f, true, forestSoft))
+        form.addView(cost, fieldParams())
+        addGap(form, 5)
+        form.addView(label("STOCK", 10f, true, forestSoft))
+        form.addView(stock, fieldParams())
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(if (existing == null) "Nova recompensa" else "Editar recompensa")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Guardar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val rewardName = name.text.toString().trim()
+                val rewardDescription = description.text.toString().trim()
+                val points = cost.text.toString().trim().toIntOrNull()
+                val limitText = stock.text.toString().trim()
+                val stockLimit = if (limitText.isBlank()) null else limitText.toIntOrNull()
+                when {
+                    rewardName.isBlank() || rewardName.length > 100 -> name.error = "Indica um nome até 100 caracteres."
+                    rewardDescription.length > 500 -> description.error = "A descrição não pode exceder 500 caracteres."
+                    points == null || points !in 1..1000000 -> cost.error = "Indica um custo entre 1 e 1000000 pontos."
+                    limitText.isNotBlank() && (stockLimit == null || stockLimit < 0) -> stock.error = "Indica uma quantidade válida ou deixa vazio."
+                    else -> {
+                        val rewardId = existing?.optString("id")?.takeIf { it.isNotBlank() }
+                            ?: java.util.UUID.randomUUID().toString()
+                        runBackend({
+                            SupabaseApi.saveLoyaltyReward(
+                                backendToken(), backendRestaurantId(), rewardId, rewardName,
+                                rewardDescription, points, stockLimit, true
+                            )
+                            val rewards = SupabaseApi.listRestaurantRewards(backendToken(), backendRestaurantId())
+                            backendPrefs.edit().putString("restaurant_rewards_json", rewards.toString()).apply()
+                            "OK"
+                        }) {
+                            dialog.dismiss()
+                            renderApp()
+                        }
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun setLoyaltyRewardActive(reward: JSONObject, active: Boolean) {
+        val rewardId = reward.optString("id")
+        val stock = if (reward.isNull("stock_limit")) null else reward.optInt("stock_limit")
+        runBackend({
+            SupabaseApi.saveLoyaltyReward(
+                backendToken(), backendRestaurantId(), rewardId,
+                reward.optString("name"), reward.optString("description"),
+                reward.optInt("points_cost"), stock, active
+            )
+            val rewards = SupabaseApi.listRestaurantRewards(backendToken(), backendRestaurantId())
+            backendPrefs.edit().putString("restaurant_rewards_json", rewards.toString()).apply()
+            "OK"
+        }) { renderApp() }
+    }
 
     private fun showCustomerPointsDialog(customer: LoyaltyCustomer, redeem: Boolean) {
         val amountField = inputField("Número inteiro de pontos", InputType.TYPE_CLASS_NUMBER)
