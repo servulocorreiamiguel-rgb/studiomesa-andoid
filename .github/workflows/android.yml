@@ -318,8 +318,8 @@ jobs:
             psql --no-psqlrc --set ON_ERROR_STOP=1 --file "${migration}"
             count=$((count + 1))
           done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
-          test "${count}" -eq 49
-          echo "Successfully replayed ${count} versioned migration files."
+          test "${count}" -eq 50
+          echo "Successfully replayed ${count} versioned migration files, including price-adviser actor indexes."
 
       - name: Assert core schema, RLS and RPCs exist
         run: |
@@ -331,7 +331,9 @@ jobs:
               OR to_regclass('public.restaurant_reservations') IS NULL
               OR to_regclass('public.restaurant_inventory_items') IS NULL
               OR to_regclass('public.loyalty_members') IS NULL
-              OR to_regclass('private.restaurant_join_codes') IS NULL THEN
+              OR to_regclass('private.restaurant_join_codes') IS NULL
+              OR to_regclass('private.restaurant_price_adviser_audit_acted_by_idx') IS NULL
+              OR to_regclass('private.restaurant_price_adviser_settings_updated_by_idx') IS NULL THEN
               RAISE EXCEPTION 'Core StudioMesa tables are missing after clean migration replay.';
             END IF;
 
