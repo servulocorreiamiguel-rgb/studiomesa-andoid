@@ -1875,6 +1875,22 @@ test "$queue_after_team_block" = "0"
 psql --no-psqlrc --set ON_ERROR_STOP=1 -c \
   "DELETE FROM public.restaurant_staff WHERE user_id = '$USER_C'::uuid;" >/dev/null
 
+removed_staff_membership="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT cardinality(public.get_my_restaurant_permissions())::text
+       || '|' || (SELECT count(*) FROM public.get_my_restaurant_details())::text
+       || '|' || private.has_restaurant_permission('$RESTAURANT_A'::uuid, 'orders')::text;
+ROLLBACK;
+SQL
+)"
+if [ "$removed_staff_membership" != "0|0|false" ]; then
+  echo "ERROR: a removed staff member retained restaurant membership or operational permissions." >&2
+  printf '%s\\n' "$removed_staff_membership" >&2
+  exit 1
+fi
+
 owner_preparation="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
