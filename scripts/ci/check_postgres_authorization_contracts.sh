@@ -235,6 +235,31 @@ test -n "$RESTAURANT_A"
 test -n "$RESTAURANT_B"
 test "$RESTAURANT_A" != "$RESTAURANT_B"
 
+# Exercise the legacy loyalty RPC wrappers created by the conditional migration.
+# The fixture implementations deliberately return no rows; this verifies the
+# public invoker wrappers resolve to the private internals and preserve grants.
+LEGACY_LOYALTY_WRAPPER_RESULT="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT
+  (SELECT count(*) FROM public.create_loyalty_qr_token())::text || '|' ||
+  (SELECT count(*) FROM public.award_loyalty_points_from_qr(
+    '11111111-aaaa-4aaa-8aaa-111111111111'::uuid,
+    1,
+    '22222222-bbbb-4bbb-8bbb-222222222222'::uuid,
+    NULL
+  ))::text || '|' ||
+  (SELECT count(*) FROM public.get_restaurant_reward_redemptions('$RESTAURANT_A'::uuid))::text;
+COMMIT;
+SQL
+)"
+if [ "$LEGACY_LOYALTY_WRAPPER_RESULT" != "0|0|0" ]; then
+  echo "ERROR: one or more legacy loyalty RPC wrappers did not preserve their callable contract: '$LEGACY_LOYALTY_WRAPPER_RESULT'." >&2
+  exit 1
+fi
+echo "PASS: legacy QR issue/award and reward-redemption RPC wrappers invoke their private implementations."
+
 # Exercise the corrected staff-join RPC in PostgreSQL, not just migration replay.
 # Repeating the same join must be safe; attempting a second restaurant must fail.
 STAFF_CODE_A="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
