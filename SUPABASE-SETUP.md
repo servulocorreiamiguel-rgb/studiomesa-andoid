@@ -55,6 +55,8 @@ A migração `20261026173330_fix_staff_join_concurrent_conflict_target` foi apli
 
 **Reconciliação de migrações verificada em 29/10/2026:** o catálogo do projeto Supabase ativo e o repositório estão alinhados em 41 migrações, incluindo `20261029133656_revoke_postgres_default_public_privileges.sql` e `20261029203424_restaurant_price_adviser_owner_approval.sql`. Ambas foram aplicadas ao projeto ativo; depois de qualquer novo deploy, confirma de novo `supabase migration list` para detetar divergências. Não usar `supabase/schema.sql` como substituto das migrações, porque é apenas um protótipo antigo.
 
+**Atualização de 02/11/2026:** a afirmação de alinhamento acima descreve o estado de 29/10 e já não corresponde ao inventário atual. A comparação read-only encontrou 54 migrações no projeto alojado e 50 ficheiros na branch de revisão, com 41 prefixos comuns, 9 versões apenas locais e 13 apenas remotas. Consulta `supabase/MIGRATION-RECONCILIATION-2026-11-02.md` antes de qualquer deploy. Não executar `supabase db push`, `supabase migration repair` nem aplicar migrações manualmente até a divergência estar reconciliada e testada numa base descartável.
+
 ## Estado verificado do backend (29/10/2026)
 
 - `private.restaurant_join_codes` tem RLS ativa, sem políticas para acesso direto; as contas `anon` e `authenticated` não têm permissões diretas de leitura/escrita. As funções proprietárias de `postgres` foram mantidas e o utilizador `postgres` tem `BYPASSRLS`, para permitir os fluxos `SECURITY DEFINER` que fazem verificações explícitas.
