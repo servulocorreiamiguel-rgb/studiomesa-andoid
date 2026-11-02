@@ -1317,6 +1317,55 @@ COMMIT;
 SQL
 echo "PASS: invoice-linked loyalty QR issuance requires the loyalty staff permission."
 
+# The manual points-adjustment RPC is SECURITY DEFINER, so it must enforce the
+# loyalty permission itself rather than relying on the menu item or table RLS.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders','reservations']);
+COMMIT;
+SQL
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.adjust_loyalty_points_idempotent(
+  '96969696-9696-4969-8969-969696969696'::uuid, '$MEMBER_A'::uuid, 1, 'No loyalty permission'
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: staff adjusted loyalty points without the loyalty permission." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['loyalty']);
+COMMIT;
+SQL
+LOYALTY_STAFF_REQUEST="97979797-9797-4979-8979-979797979797"
+LOYALTY_STAFF_BALANCE="$(adjust_loyalty_points "$USER_C" "$MEMBER_A" "$LOYALTY_STAFF_REQUEST" "1" "CI staff loyalty permission")"
+loyalty_staff_transaction_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*) = 1 FROM public.loyalty_transactions WHERE created_by = '$USER_C'::uuid AND client_request_id = '$LOYALTY_STAFF_REQUEST'::uuid;")"
+if [ "$LOYALTY_STAFF_BALANCE" != "21" ] || [ "$loyalty_staff_transaction_ok" != "t" ]; then
+  echo "ERROR: staff with the loyalty permission could not adjust points exactly once." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions(
+  '$USER_C'::uuid, ARRAY['orders','tables','reservations','menu','inventory','loyalty']
+);
+COMMIT;
+SQL
+echo "PASS: manual point adjustments are blocked without loyalty permission and permitted with it."
 
 LOYALTY_REQUEST="77777777-7777-4777-8777-777777777777"
 LOYALTY_FOREIGN_REQUEST="88888888-8888-4888-8888-888888888888"
@@ -1326,12 +1375,12 @@ if [ "$LOYALTY_FIRST" != "$LOYALTY_RETRY" ]; then
   echo "ERROR: repeating a loyalty-points request returned a different balance." >&2
   exit 1
 fi
-if [ "$LOYALTY_FIRST" != "30" ]; then
-  echo "ERROR: the loyalty adjustment returned '$LOYALTY_FIRST'; expected a total balance of 30 after the invoice QR award." >&2
+if [ "$LOYALTY_FIRST" != "31" ]; then
+  echo "ERROR: the loyalty adjustment returned '$LOYALTY_FIRST'; expected a total balance of 31 after invoice QR and staff/owner adjustments." >&2
   exit 1
 fi
 loyalty_balance_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
-  -c "SELECT points = 30 FROM public.loyalty_members WHERE id = '$MEMBER_A'::uuid;")"
+  -c "SELECT points = 31 FROM public.loyalty_members WHERE id = '$MEMBER_A'::uuid;")"
 loyalty_transaction_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
   -c "SELECT count(*) = 1 FROM public.loyalty_transactions WHERE created_by = '$USER_A'::uuid AND client_request_id = '$LOYALTY_REQUEST'::uuid;")"
 if [ "$loyalty_balance_ok" != "t" ] || [ "$loyalty_transaction_ok" != "t" ]; then
