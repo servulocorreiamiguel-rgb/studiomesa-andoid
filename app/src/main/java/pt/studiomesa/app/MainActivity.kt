@@ -116,6 +116,8 @@ class MainActivity : Activity() {
     private var customerReservationsAccountScope = ""
     private var customerReservationsMemberScope = ""
     private var customerReservationsError = ""
+    // Authoritative session snapshot used for navigation only; server RPC/RLS is the security boundary.
+    private var currentStaffPermissions: Set<String>? = null
 
     private val flavor = BuildConfig.FLAVOR.lowercase(Locale.ROOT)
     private val isCustomerApp = flavor.contains("cliente")
@@ -290,7 +292,13 @@ class MainActivity : Activity() {
             pages.add("Stock")
             pages.add("Análise")
         }
-        return pages
+        val isStaff = hasRemoteRestaurant() &&
+            backendPrefs.getString("restaurant_role", "staff") == "staff"
+        return StaffPermissionSet.filterPages(
+            pages,
+            currentStaffPermissions.orEmpty(),
+            isStaff
+        )
     }
 
     private fun showNavigationDrawer() {
@@ -1698,11 +1706,12 @@ class MainActivity : Activity() {
                 .remove("restaurant_role")
             if (restaurant != null) {
                 val restaurantId = restaurant.optString("restaurant_id")
+                val role = restaurant.optString("user_role", "staff")
                 editor.putString("restaurant_id", restaurantId)
                     .putString("restaurant_name", restaurant.optString("restaurant_name"))
                     .putString("join_code", restaurant.optString("join_code"))
                     .putString("staff_join_code", restaurant.optString("staff_code"))
-                    .putString("restaurant_role", restaurant.optString("user_role", "staff"))
+                    .putString("restaurant_role", role)
                 val cachedRestaurantId = backendPrefs.getString("restaurant_loyalty_cache_restaurant_id", null)
                 if (!LoyaltyCacheScope.belongsTo(cachedRestaurantId, restaurantId)) {
                     editor.remove("restaurant_loyalty_rewards_json")
@@ -1712,8 +1721,31 @@ class MainActivity : Activity() {
             }
             editor.apply()
             if (restaurant != null) {
+                val role = restaurant.optString("user_role", "staff")
+                currentStaffPermissions = if (role == "owner") {
+                    StaffPermissionSet.all.toSet()
+                } else {
+                    // Fail closed for navigation if the server cannot provide the effective matrix.
+                    StaffPermissionSet.fromJson(SupabaseApi.getMyRestaurantPermissions(token))
+                }
                 cacheRemoteOperations(token, restaurant.optString("restaurant_id"))
+                if ("inventory" !in currentStaffPermissions.orEmpty()) {
+                    backendPrefs.edit().remove("remote_inventory_json").remove("inventory_loaded").apply()
+                }
+                if ("reservations" !in currentStaffPermissions.orEmpty()) {
+                    backendPrefs.edit().remove("remote_reservations_json").remove("reservations_loaded").apply()
+                    reservationCache = JSONArray()
+                    reservationsLoaded = false
+                }
+                if ("loyalty" !in currentStaffPermissions.orEmpty()) {
+                    backendPrefs.edit()
+                        .remove("remote_members_json")
+                        .remove("restaurant_loyalty_rewards_json")
+                        .remove("restaurant_loyalty_redemptions_json")
+                        .apply()
+                }
             } else {
+                currentStaffPermissions = null
                 // The server confirmed this account no longer belongs to a restaurant.
                 // Remove data that would otherwise remain on this device after revocation.
                 backendPrefs.edit()
@@ -1733,7 +1765,24 @@ class MainActivity : Activity() {
                 reservationsLoaded = false
             }
         } catch (_: Exception) {
-            // Keep authentication successful if restoring cloud data temporarily fails.
+            // Authentication can remain active during a transient failure, but staff UI fails closed.
+            if (backendPrefs.getString("restaurant_role", "") == "staff") {
+                currentStaffPermissions = emptySet()
+                backendPrefs.edit()
+                    .remove("remote_members_json")
+                    .remove("remote_tables_json")
+                    .remove("remote_menu_json")
+                    .remove("remote_orders_json")
+                    .remove("remote_inventory_json")
+                    .remove("inventory_loaded")
+                    .remove("remote_reservations_json")
+                    .remove("reservations_loaded")
+                    .remove("restaurant_loyalty_rewards_json")
+                    .remove("restaurant_loyalty_redemptions_json")
+                    .apply()
+                reservationCache = JSONArray()
+                reservationsLoaded = false
+            }
         }
     }
 
@@ -1777,14 +1826,26 @@ class MainActivity : Activity() {
 
     private fun cacheRemoteOperations(token: String, restaurantId: String) {
         if (token.isBlank() || restaurantId.isBlank()) return
-        val tables = SupabaseApi.listTables(token, restaurantId)
-        val menu = SupabaseApi.listMenuItems(token, restaurantId)
-        val orders = SupabaseApi.listOrders(token, restaurantId)
-        backendPrefs.edit()
-            .putString("remote_tables_json", tables.toString())
-            .putString("remote_menu_json", menu.toString())
-            .putString("remote_orders_json", orders.toString())
-            .apply()
+        val isOwner = backendPrefs.getString("restaurant_role", "") == "owner"
+        val permissions = currentStaffPermissions.orEmpty()
+        val editor = backendPrefs.edit()
+
+        if (isOwner || "tables" in permissions) {
+            editor.putString("remote_tables_json", SupabaseApi.listTables(token, restaurantId).toString())
+        } else {
+            editor.remove("remote_tables_json")
+        }
+        if (isOwner || "menu" in permissions) {
+            editor.putString("remote_menu_json", SupabaseApi.listMenuItems(token, restaurantId).toString())
+        } else {
+            editor.remove("remote_menu_json")
+        }
+        if (isOwner || "orders" in permissions) {
+            editor.putString("remote_orders_json", SupabaseApi.listOrders(token, restaurantId).toString())
+        } else {
+            editor.remove("remote_orders_json")
+        }
+        editor.apply()
     }
 
     private fun refreshRemoteOperations() {
@@ -1883,8 +1944,13 @@ class MainActivity : Activity() {
             .remove("remote_reservations_json").remove("reservations_loaded")
             .apply()
 
+        currentStaffPermissions = null
         reservationCache = JSONArray()
         reservationsLoaded = false
+        customerReservationsCache = JSONArray()
+        customerReservationsLoaded = false
+        customerReservationsAccountScope = ""
+        customerReservationsMemberScope = ""
     }
 
     private fun backendToken(): String = secureSession.accessToken()
@@ -2335,6 +2401,10 @@ class MainActivity : Activity() {
                 ))
                 if (role == "staff") {
                     addGap(card, 8)
+                    card.addView(secondaryButton("Gerir permissões") {
+                        showStaffPermissionsDialog(userId, email)
+                    }, LinearLayout.LayoutParams(-1, dp(44)))
+                    addGap(card, 6)
                     card.addView(secondaryButton("Remover acesso") {
                         AlertDialog.Builder(this)
                             .setTitle("Remover acesso à equipa?")
@@ -2378,6 +2448,86 @@ class MainActivity : Activity() {
                 .create()
             teamDialog.show()
             teamDialog.window?.setLayout(-1, dp(560))
+        }
+    }
+
+    private fun showStaffPermissionsDialog(userId: String, email: String) {
+        if (backendToken().isBlank() ||
+            backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") {
+            Toast.makeText(this, "Só o proprietário pode gerir permissões.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        runBackend({
+            SupabaseApi.getRestaurantStaffPermissions(backendToken(), userId).toString()
+        }) { raw ->
+            val current = StaffPermissionSet.fromJson(JSONArray(raw))
+            val options = listOf(
+                "orders" to "Pedidos e cozinha",
+                "tables" to "Mesas",
+                "reservations" to "Reservas",
+                "menu" to "Carta",
+                "inventory" to "Stock e inventário",
+                "loyalty" to "Fidelização operacional"
+            )
+            val checks = linkedMapOf<String, android.widget.CheckBox>()
+            val content = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(18), dp(8), dp(18), dp(8))
+            }
+            content.addView(label(
+                "Escolhe as áreas operacionais a que $email pode aceder. O servidor confirma todas as alterações.",
+                12f, false, muted
+            ))
+            addGap(content, 8)
+            for ((key, title) in options) {
+                val check = android.widget.CheckBox(this).apply {
+                    text = title
+                    textSize = 14f
+                    setTextColor(ink)
+                    isChecked = key in current
+                    minHeight = dp(48)
+                    contentDescription = "Permissão: $title"
+                }
+                checks[key] = check
+                content.addView(check, LinearLayout.LayoutParams(-1, dp(48)))
+            }
+            val warning = makeCard(10, copperPale)
+            warning.addView(label(
+                "Gerir a equipa e códigos, alterar recompensas, consultar ferramentas económicas e eliminar o restaurante continuam a ser ações exclusivas do proprietário.",
+                11.5f, false, ink
+            ))
+            addGap(content, 8)
+            content.addView(warning, cardParams())
+
+            val scroll = ScrollView(this).apply { addView(content) }
+            val dialog = AlertDialog.Builder(this)
+                .setTitle("Permissões do funcionário")
+                .setView(scroll)
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Guardar", null)
+                .create()
+            dialog.setOnShowListener {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                    val selected = checks.filterValues { it.isChecked }.keys.toSet()
+                    runBackend({
+                        SupabaseApi.setRestaurantStaffPermissions(backendToken(), userId, selected)
+                        val confirmed = StaffPermissionSet.fromJson(
+                            SupabaseApi.getRestaurantStaffPermissions(backendToken(), userId)
+                        )
+                        if (confirmed != selected) {
+                            throw IllegalStateException("O servidor não confirmou todas as permissões selecionadas.")
+                        }
+                        "OK"
+                    }) {
+                        dialog.dismiss()
+                        Toast.makeText(this, "Permissões atualizadas no servidor.", Toast.LENGTH_LONG).show()
+                        renderApp()
+                    }
+                }
+            }
+            dialog.show()
+            dialog.window?.setLayout(-1, dp(620))
         }
     }
 
