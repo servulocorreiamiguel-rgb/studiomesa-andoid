@@ -3981,8 +3981,12 @@ class MainActivity : Activity() {
             return
         }
         runBackend({
-            val reservations = SupabaseApi.listReservations(backendToken(), backendRestaurantId())
+            val token = backendToken()
+            val restaurantId = backendRestaurantId()
+            val reservations = SupabaseApi.listReservations(token, restaurantId)
+            val tables = SupabaseApi.listTables(token, restaurantId)
             reservationCache = reservations
+            backendPrefs.edit().putString("remote_tables_json", tables.toString()).apply()
             reservationsLoaded = true
             "OK"
         }) { renderApp() }
