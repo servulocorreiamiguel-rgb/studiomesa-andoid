@@ -13,7 +13,7 @@ internal data class LoyaltyReward(
     val name: String,
     val description: String,
     val pointsCost: Int,
-    val isActive: Boolean,
+    val isActive: Boolean = true,
     val stockLimit: Int?,
     val redeemedCount: Int
 ) {
