@@ -90,3 +90,41 @@ Validação da nova cadeia de permissões:
 6. Só depois aplicar migrações aprovadas, confirmar o catálogo remoto e voltar a correr os Advisors.
 
 **Não foi executada nenhuma alteração de esquema, dados, permissões ou histórico de migrações no projeto alojado durante esta revisão.**
+
+
+## Recuperação dos originais remotos — verificação adicional
+
+Foi feita uma pesquisa nas branches GitHub, sem alterar o projeto Supabase alojado. Oito dos 13 ficheiros que faltavam no histórico local foram recuperados da branch `feature/loyalty-shop-qr-security` (PR #75), com os seguintes blobs Git:
+
+| Versão remota | Ficheiro recuperado | Blob SHA |
+|---|---|---|
+| `20261102075735` | `loyalty_shop_and_single_use_qr.sql` | `3fb81184634688f6bde3fdb9a4cb15965b44a4eb` |
+| `20261102080624` | `secure_loyalty_qr_only_awards_and_index_fks.sql` | `8f16627cb43d58b4aa3d3164d71b7b5f0bcadfe8` |
+| `20261102080905` | `consistent_loyalty_qr_lock_order.sql` | `a0db40f09655d747b924e3a1232504af768c73d2` |
+| `20261102081603` | `fix_loyalty_qr_token_cleanup_ambiguity.sql` | `7dc75abb385dcf816963fc6d45a69e5ac937fb76` |
+| `20261102082151` | `reconcile_inventory_unit_cost_and_waste_snapshots.sql` | `dd8574507d07b195384d60afca15ae535228457a` |
+| `20261102090849` | `customer_loyalty_redemption_history.sql` | `c06820b8f1099a535a79fa3b997ae837e29eb27e` |
+| `20261102091511` | `customer_reservations_and_staff_table_assignment.sql` | `f8dbc8a1700af33c0df2034e7d70a92f92da75d8` |
+| `20261102091833` | `idempotent_customer_reservation_and_table_confirmation.sql` | `f64d85d0616b070698fb3d06670c46bccb8cfdcf` |
+
+### Equivalência confirmada
+
+O ficheiro remoto `20261102082151_reconcile_inventory_unit_cost_and_waste_snapshots.sql` tem o mesmo blob SHA do ficheiro local `20261030120000_inventory_unit_cost_and_waste_snapshots.sql`. É, portanto, conteúdo byte a byte idêntico, apesar de ter uma versão diferente no histórico alojado.
+
+### Equivalências ainda não aprovadas
+
+Os ficheiros de loja/QR recuperados partilham funções, tabelas e índices com as migrações locais `20261102112000`, `20261102113000` e `20261102135000`. As migrações remotas de reservas partilham funções com `20261102141000` e `20261102160000`. Esta sobreposição de objectos não prova equivalência semântica: as versões locais incluem alterações de segurança, wrappers privados e/ou lógica posterior. Não marcar estas versões como reconciliadas apenas por coincidência de nomes.
+
+### Ficheiros ainda não recuperados
+
+Continuam sem original encontrado nas branches consultadas os cinco registos remotos:
+
+- `20261102103246_loyalty_invoice_qr`
+- `20261102103627_loyalty_invoice_qr_foreign_key_indexes`
+- `20261102104650_loyalty_invoice_qr_private_execution`
+- `20261102113719_loyalty_shop_git_reconciliation_and_redemption_queue`
+- `20261102113944_loyalty_shop_private_function_boundary`
+
+Existem candidatos locais com versões e nomes próximos (`20261102102500`, `20261102104100`, `20261102104800`, `20261102112000` e `20261102113000`), mas não são cópias históricas dos cinco ficheiros remotos. É necessário comparar cada definição com o estado actual do catálogo PostgreSQL e com as funções e tabelas do projecto antes de decidir uma baseline ou uma sequência de migrações.
+
+**Decisão mantida:** não executar `db push`, `migration repair`, `apply_migration` ou qualquer alteração ao histórico/schema de produção até a reconciliação integral estar documentada, revista e reproduzida numa base descartável.
