@@ -5,9 +5,9 @@
 Consulta de leitura ao projeto Supabase `svwvkfsyevuyabelrtjk` e comparação com a branch `feature/customer-reservations`:
 
 - Migrações registadas no projeto alojado: **54**.
-- Ficheiros SQL locais nesta branch: **50**.
+- Ficheiros SQL locais nesta branch: **51**.
 - Prefixos de versão presentes em ambos: **41**.
-- Ficheiros locais sem versão correspondente no histórico remoto: **9**.
+- Ficheiros locais sem versão correspondente no histórico remoto: **10**.
 - Registos remotos sem ficheiro local com o mesmo prefixo: **13**.
 - Não foi encontrada uma divergência de nome nos prefixos que coincidem; a divergência está nas versões que existem só de um lado.
 
@@ -26,6 +26,7 @@ A declaração de alinhamento de 29/10 em `SUPABASE-SETUP.md` é histórica e j�
 | `20261102135000` | `legacy_loyalty_rpc_private_boundary` |
 | `20261102141000` | `customer_reservation_flow_private_boundary` |
 | `20261102150000` | `add_price_adviser_actor_fk_indexes` |
+| `20261102160000` | `granular_staff_permissions` |
 
 ## Registos remotos sem ficheiro local com a mesma versão
 
@@ -51,9 +52,9 @@ Alguns nomes indicam funcionalidades semelhantes (por exemplo, QR de fidelizaç�
 
 - PR **#75** (`feature/loyalty-shop-qr-security`) é uma branch paralela baseada em `main`. Inclui QR de utilização única, reservas e permissões granulares de funcionários.
 - PR **#76** (`feature/invoice-loyalty-qr`) também parte de `main`. Inclui QR de fidelização associado à fatura e loja de recompensas. Tem migrações com versões diferentes das que aparecem no histórico remoto.
-- PR **#77** (`feature/customer-reservations`) está empilhada sobre #76. Acrescenta reservas na app Cliente e uma migração que coloca funções públicas de reserva como `SECURITY INVOKER`, deixando a lógica privilegiada em funções privadas.
+- PR **#77** (`feature/customer-reservations`) está empilhada sobre #76. Além das reservas do cliente, a branch já contém a loja/QR, permissões granulares da equipa e a actualização da matriz ao regressar à app; as novas alterações aguardam CI completa.
 - As três branches alteram ficheiros centrais como `MainActivity.kt`, `SupabaseApi.kt` e/ou o workflow Android. Não devem ser integradas em sequência sem uma revisão explícita das sobreposições.
-- A branch #77 não contém a API de permissões granulares `get_restaurant_staff_permissions` / `set_restaurant_staff_permissions` que existe na branch #75. Essa funcionalidade precisa de ser portada ou a decisão de a adiar deve ficar documentada.
+- A implementação granular da PR #75 foi portada e adaptada em #77. A migração `20261102160000_granular_staff_permissions.sql` aplica as seis áreas no servidor e conserva os wrappers privados existentes; a validação está pendente.
 
 ## Alteração de desempenho acrescentada à branch #77
 
@@ -62,14 +63,17 @@ A auditoria Performance Advisor identificou duas chaves estrangeiras sem índice
 - `private.restaurant_price_adviser_audit.acted_by`
 - `private.restaurant_price_adviser_settings.updated_by`
 
-Foi acrescentada a migração `20261102150000_add_price_adviser_actor_fk_indexes.sql`, com índices parciais para valores não nulos, e o workflow Android passou a verificar a existência dos dois índices após replay limpo.
+Foram acrescentadas as migrações `20261102150000_add_price_adviser_actor_fk_indexes.sql` (dois índices parciais) e `20261102160000_granular_staff_permissions.sql` (matriz de seis áreas e enforcement no servidor). O workflow verifica os dois índices e os objectos de permissões após replay limpo.
 
-Estado da CI para o commit `10dcaa5dbd967a81f91ba6fa88ff304a8bce0bf6`:
-- Replay de todas as migrações e testes PostgreSQL de autorização: **sucesso**.
+Validação da nova cadeia de permissões:
+- A primeira tentativa de replay falhou porque `private.loyalty_qr_tokens` era usada pelo QR legado mas não era criada na sequência limpa local.
+- A migração `20261102135000_legacy_loyalty_rpc_private_boundary.sql` foi corrigida para criar a tabela QR com `IF NOT EXISTS`, RLS, índices e privilégios directos revogados, preservando dados caso já exista.
+- A execução CI para o commit corrigido `cf89f480c9d4632580410241eb15e80a76d587ca` está pendente; só declarar a fase aprovada após o replay, testes PostgreSQL, build, Lint e emuladores Android 8/16 passarem.
 - Compilação Android e testes de interface: em execução no momento da última consulta.
-- Execução: https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/41476112833
+- Execução mais recente: https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/41479056962
 
 ## Estado de segurança observado no projeto alojado
+> A migração `20261102160000_granular_staff_permissions.sql` e a recuperação versionada da tabela QR existem apenas na branch. Não foram aplicadas ao projecto Supabase alojado.
 
 - As oito tabelas assinaladas pelo Advisor com RLS sem políticas não concedem privilégios diretos de leitura/escrita a `anon` ou `authenticated`. As duas tabelas públicas de recompensas/resgates são RPC-only; as tabelas privadas também permanecem sem acesso direto. Não criar políticas abertas para eliminar avisos informativos.
 - A consulta de funções encontrou 31 funções públicas `SECURITY DEFINER` executáveis por `authenticated`, nenhuma executável por `anon`; todas tinham referência a `auth.uid()` e `search_path` vazio. Isto não substitui a revisão do corpo e do âmbito de cada função.
