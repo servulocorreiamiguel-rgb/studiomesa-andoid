@@ -1790,6 +1790,8 @@ class MainActivity : Activity() {
                     .remove("member_points")
                     .remove("member_restaurant_name")
                     .putString("customer_menu_json", "[]")
+                    .remove("customer_loyalty_rewards_json")
+                    .remove("customer_loyalty_redemptions_json")
                     .apply()
                 return
             }
@@ -3183,6 +3185,13 @@ class MainActivity : Activity() {
             "Carta" -> renderCustomerMenuPage(content)
             "Conta" -> renderCustomerAccountPage(content)
         }
+        if (activeCustomerPage == "Prémios" &&
+            backendToken().isNotBlank() &&
+            backendMemberId().isNotBlank() &&
+            (!backendPrefs.contains("customer_loyalty_rewards_json") ||
+                !backendPrefs.contains("customer_loyalty_redemptions_json"))) {
+            refreshCustomerRewards()
+        }
         scroll.addView(content)
         appRoot.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
@@ -3292,8 +3301,9 @@ class MainActivity : Activity() {
             return
         }
         runBackend({
-            val rewards = SupabaseApi.listCustomerLoyaltyRewards(token, memberId)
-            val history = SupabaseApi.listMyLoyaltyRewardRedemptions(token)
+            val activeToken = backendToken()
+            val rewards = SupabaseApi.listCustomerLoyaltyRewards(activeToken, memberId)
+            val history = SupabaseApi.listMyLoyaltyRewardRedemptions(activeToken)
             backendPrefs.edit()
                 .putString("customer_loyalty_rewards_json", rewards.toString())
                 .putString("customer_loyalty_redemptions_json", history.toString())
