@@ -1332,4 +1332,125 @@ BEGIN
 END;
 $function$;
 
+
+-- The original idempotent points-adjustment RPC is SECURITY DEFINER and
+-- bypasses table RLS. Explicitly enforce the granular loyalty area for new
+-- requests, committed retries and the post-lock concurrency recheck.
+CREATE OR REPLACE FUNCTION public.adjust_loyalty_points_idempotent(p_client_request_id uuid, p_member_id uuid, p_delta integer, p_note text DEFAULT NULL::text)
+ RETURNS TABLE(member_id uuid, member_code text, points integer)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_restaurant_id uuid;
+  v_member_code text;
+  v_old_points integer;
+  v_new_points integer;
+  v_current_points integer;
+  v_note text := nullif(trim(coalesce(p_note, '')), '');
+  v_existing public.loyalty_transactions%rowtype;
+BEGIN
+  IF (SELECT auth.uid()) IS NULL THEN
+    RAISE EXCEPTION 'É necessário iniciar sessão.';
+  END IF;
+  IF p_client_request_id IS NULL THEN
+    RAISE EXCEPTION 'O identificador da tentativa de pontos está em falta.';
+  END IF;
+  IF p_delta IS NULL OR p_delta = 0 OR abs(p_delta::bigint) > 100000 THEN
+    RAISE EXCEPTION 'A alteração de pontos não é válida.';
+  END IF;
+
+  SELECT t.* INTO v_existing
+  FROM public.loyalty_transactions AS t
+  WHERE t.created_by = (SELECT auth.uid())
+    AND t.client_request_id = p_client_request_id
+  FOR UPDATE;
+
+  IF FOUND THEN
+    IF NOT private.has_restaurant_permission(v_existing.restaurant_id, 'loyalty') THEN
+      RAISE EXCEPTION 'Sem autorização para consultar esta transação de pontos.';
+    END IF;
+    IF v_existing.member_id = p_member_id
+       AND v_existing.points_delta = p_delta
+       AND v_existing.note IS NOT DISTINCT FROM v_note THEN
+      SELECT lm.member_code, lm.points
+        INTO v_member_code, v_current_points
+      FROM public.loyalty_members AS lm
+      WHERE lm.id = p_member_id
+        AND lm.restaurant_id = v_existing.restaurant_id;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'Cartão de cliente não encontrado.';
+      END IF;
+      RETURN QUERY SELECT p_member_id, v_member_code, v_current_points;
+      RETURN;
+    END IF;
+    RAISE EXCEPTION 'Esta tentativa já foi utilizada com dados de pontos diferentes.';
+  END IF;
+
+  SELECT lm.restaurant_id, lm.member_code, lm.points
+    INTO v_restaurant_id, v_member_code, v_old_points
+  FROM public.loyalty_members AS lm
+  WHERE lm.id = p_member_id
+  FOR UPDATE;
+
+  IF v_restaurant_id IS NULL THEN
+    RAISE EXCEPTION 'Cartão de cliente não encontrado.';
+  END IF;
+  IF NOT private.has_restaurant_permission(v_restaurant_id, 'loyalty') THEN
+    RAISE EXCEPTION 'Sem autorização para alterar pontos deste restaurante.';
+  END IF;
+
+  -- Recheck after locking the member so a concurrent identical retry cannot
+  -- apply the points adjustment twice.
+  SELECT t.* INTO v_existing
+  FROM public.loyalty_transactions AS t
+  WHERE t.created_by = (SELECT auth.uid())
+    AND t.client_request_id = p_client_request_id
+  FOR UPDATE;
+
+  IF FOUND THEN
+    IF NOT private.has_restaurant_permission(v_existing.restaurant_id, 'loyalty') THEN
+      RAISE EXCEPTION 'Sem autorização para consultar esta transação de pontos.';
+    END IF;
+    IF v_existing.member_id = p_member_id
+       AND v_existing.points_delta = p_delta
+       AND v_existing.note IS NOT DISTINCT FROM v_note THEN
+      SELECT lm.member_code, lm.points
+        INTO v_member_code, v_current_points
+      FROM public.loyalty_members AS lm
+      WHERE lm.id = p_member_id
+        AND lm.restaurant_id = v_existing.restaurant_id;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'Cartão de cliente não encontrado.';
+      END IF;
+      RETURN QUERY SELECT p_member_id, v_member_code, v_current_points;
+      RETURN;
+    END IF;
+    RAISE EXCEPTION 'Esta tentativa já foi utilizada com dados de pontos diferentes.';
+  END IF;
+
+  v_new_points := v_old_points + p_delta;
+  IF v_new_points < 0 THEN
+    RAISE EXCEPTION 'O saldo não pode ficar negativo.';
+  END IF;
+
+  UPDATE public.loyalty_members AS lm
+  SET points = v_new_points
+  WHERE lm.id = p_member_id;
+
+  INSERT INTO public.loyalty_transactions
+    (restaurant_id, member_id, created_by, points_delta, points_after, note, client_request_id)
+  VALUES
+    (v_restaurant_id, p_member_id, (SELECT auth.uid()), p_delta, v_new_points, v_note, p_client_request_id);
+
+  RETURN QUERY SELECT p_member_id, v_member_code, v_new_points;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.adjust_loyalty_points_idempotent(uuid, uuid, integer, text)
+    FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.adjust_loyalty_points_idempotent(uuid, uuid, integer, text)
+    TO authenticated;
+
 commit;
