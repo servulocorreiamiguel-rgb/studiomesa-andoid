@@ -311,6 +311,10 @@ jobs:
           count=0
           while IFS= read -r migration; do
             echo "Replaying ${migration}"
+            if [[ "${migration}" == *"20261102135000_legacy_loyalty_rpc_private_boundary.sql" ]]; then
+              echo "Creating hosted-project legacy loyalty RPC fixtures for conditional-migration coverage."
+              psql --no-psqlrc --set ON_ERROR_STOP=1 --file scripts/ci/legacy_loyalty_rpc_pre_migration_fixtures.sql
+            fi
             psql --no-psqlrc --set ON_ERROR_STOP=1 --file "${migration}"
             count=$((count + 1))
           done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
@@ -373,9 +377,7 @@ jobs:
               RAISE EXCEPTION 'Invoice QR records are not protected by row-level security.';
             END IF;
 
-            IF to_regprocedure('public.get_member_restaurant_menu(uuid)') IS NULL
-              OR to_regprocedure('public.get_my_loyalty_membership()') IS NULL
-              OR (
+            IF (
                 SELECT count(*)
                 FROM pg_proc p
                 JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -387,7 +389,7 @@ jobs:
                     'get_my_loyalty_membership',
                     'get_restaurant_reward_redemptions'
                   )
-              ) <> (
+              ) <> 5 OR (
                 SELECT count(*)
                 FROM pg_proc p
                 JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -399,7 +401,7 @@ jobs:
                     'get_my_loyalty_membership_internal',
                     'get_restaurant_reward_redemptions_internal'
                   )
-              ) OR EXISTS (
+              ) <> 5 OR EXISTS (
                 SELECT 1
                 FROM pg_proc p
                 JOIN pg_namespace n ON n.oid = p.pronamespace
