@@ -472,6 +472,18 @@ then
   exit 1
 fi
 
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders', NULL]::text[]);
+COMMIT;
+SQL
+then
+  echo "ERROR: a null staff permission entry was silently accepted." >&2
+  exit 1
+fi
+
 psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
