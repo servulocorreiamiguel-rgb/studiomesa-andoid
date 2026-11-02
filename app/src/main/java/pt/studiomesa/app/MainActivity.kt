@@ -2874,7 +2874,8 @@ class MainActivity : Activity() {
 
     private fun refreshRestaurantLoyaltyShop() {
         val restaurantId = backendRestaurantId()
-        if (backendToken().isBlank() || restaurantId.isBlank()) {
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        if (backendToken().isBlank() || restaurantId.isBlank() || accountId.isBlank()) {
             AlertDialog.Builder(this)
                 .setMessage("Inicia sessão e configura primeiro o restaurante.")
                 .setPositiveButton("OK", null)
@@ -2883,12 +2884,21 @@ class MainActivity : Activity() {
         }
         runBackend({
             val activeRestaurantId = backendRestaurantId()
-            if (activeRestaurantId != restaurantId) {
-                throw IllegalStateException("O restaurante ativo mudou. Atualiza novamente a loja.")
+            val activeAccountId = backendPrefs.getString("user_id", "").orEmpty()
+            if (!LoyaltySessionScope.matches(accountId, activeAccountId, restaurantId, activeRestaurantId)) {
+                throw IllegalStateException("A conta ou o restaurante ativo mudou. Atualiza novamente a loja.")
             }
             val token = backendToken()
             val rewards = SupabaseApi.listRestaurantLoyaltyRewards(token, activeRestaurantId)
             val redemptions = SupabaseApi.listRestaurantLoyaltyRewardRedemptions(token, activeRestaurantId)
+            if (!LoyaltySessionScope.matches(
+                accountId,
+                backendPrefs.getString("user_id", "").orEmpty(),
+                restaurantId,
+                backendRestaurantId()
+            )) {
+                throw IllegalStateException("A conta ou o restaurante mudou durante a atualização.")
+            }
             backendPrefs.edit()
                 .putString("restaurant_loyalty_rewards_json", rewards.toString())
                 .putString("restaurant_loyalty_redemptions_json", redemptions.toString())
@@ -3345,7 +3355,8 @@ class MainActivity : Activity() {
     private fun refreshCustomerRewards() {
         val token = backendToken()
         val memberId = backendMemberId()
-        if (token.isBlank()) {
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        if (token.isBlank() || accountId.isBlank()) {
             showAuthChooser { renderCustomerApp() }
             return
         }
@@ -3355,6 +3366,14 @@ class MainActivity : Activity() {
         }
         runBackend({
             val activeToken = backendToken()
+            if (!LoyaltySessionScope.matches(
+                accountId,
+                backendPrefs.getString("user_id", "").orEmpty(),
+                memberId,
+                backendMemberId()
+            )) {
+                throw IllegalStateException("A conta ou o cartão de cliente mudou. Atualiza novamente a loja.")
+            }
             val member = SupabaseApi.getMember(activeToken, memberId)
             if (member.optString("id") != memberId) {
                 throw IllegalStateException("O cartão de cliente devolvido não corresponde a esta conta.")
@@ -3365,6 +3384,14 @@ class MainActivity : Activity() {
             }
             val rewards = SupabaseApi.listCustomerLoyaltyRewards(activeToken, memberId)
             val history = SupabaseApi.listMyLoyaltyRewardRedemptions(activeToken)
+            if (!LoyaltySessionScope.matches(
+                accountId,
+                backendPrefs.getString("user_id", "").orEmpty(),
+                memberId,
+                backendMemberId()
+            )) {
+                throw IllegalStateException("A conta ou o cartão mudou durante a atualização da loja.")
+            }
             backendPrefs.edit()
                 .putInt("member_points", currentPoints)
                 .putString("member_code", member.optString("member_code"))
@@ -3486,6 +3513,14 @@ class MainActivity : Activity() {
             .setPositiveButton("Confirmar troca") { _, _ ->
                 val accountId = backendPrefs.getString("user_id", "").orEmpty()
                 val memberId = backendMemberId()
+                val requestToken = backendToken()
+                if (accountId.isBlank() || memberId.isBlank() || requestToken.isBlank()) {
+                    AlertDialog.Builder(this)
+                        .setMessage("A sessão de cliente terminou. Inicia sessão novamente.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                    return@setPositiveButton
+                }
                 val signature = JSONObject()
                     .put("member_id", memberId)
                     .put("reward_id", reward.id)
@@ -3501,11 +3536,28 @@ class MainActivity : Activity() {
                     return@setPositiveButton
                 }
                 runBackend({
-                    val result = SupabaseApi.redeemLoyaltyReward(backendToken(), reward.id, requestId)
+                    if (!LoyaltySessionScope.matches(
+                        accountId,
+                        backendPrefs.getString("user_id", "").orEmpty(),
+                        memberId,
+                        backendMemberId()
+                    )) {
+                        throw IllegalStateException("A conta ou o cartão mudou antes do resgate. Confirma novamente.")
+                    }
+                    val activeToken = backendToken()
+                    val result = SupabaseApi.redeemLoyaltyReward(activeToken, reward.id, requestId)
                     val remaining = result.optInt("points_remaining", -1)
                     if (remaining < 0) throw IllegalStateException("O novo saldo de pontos não é válido.")
-                    val rewards = SupabaseApi.listCustomerLoyaltyRewards(backendToken(), memberId)
-                    val history = SupabaseApi.listMyLoyaltyRewardRedemptions(backendToken())
+                    val rewards = SupabaseApi.listCustomerLoyaltyRewards(activeToken, memberId)
+                    val history = SupabaseApi.listMyLoyaltyRewardRedemptions(activeToken)
+                    if (!LoyaltySessionScope.matches(
+                        accountId,
+                        backendPrefs.getString("user_id", "").orEmpty(),
+                        memberId,
+                        backendMemberId()
+                    )) {
+                        throw IllegalStateException("A conta ou o cartão mudou durante o resgate. O pedido permanece guardado para confirmação segura.")
+                    }
                     backendPrefs.edit()
                         .putInt("member_points", remaining)
                         .putString("customer_loyalty_rewards_json", rewards.toString())
@@ -3519,6 +3571,14 @@ class MainActivity : Activity() {
                         .toString()
                 }) { response ->
                     pendingRequestIds.complete(operation, accountId, signature, requestId)
+                    if (!LoyaltySessionScope.matches(
+                        accountId,
+                        backendPrefs.getString("user_id", "").orEmpty(),
+                        memberId,
+                        backendMemberId()
+                    )) {
+                        return@runBackend
+                    }
                     val result = JSONObject(response)
                     renderCustomerApp()
                     AlertDialog.Builder(this)
