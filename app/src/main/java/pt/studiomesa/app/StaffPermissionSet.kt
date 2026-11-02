@@ -19,7 +19,7 @@ internal object StaffPermissionSet {
     fun toJsonArray(selected: Set<String>): JSONArray {
         require(selected.all { it in all }) { "A lista contém permissões desconhecidas." }
         return JSONArray().apply {
-            all.filter { it in selected }.forEach(::put)
+            all.filter { it in selected }.forEach { put(it) }
         }
     }
 
