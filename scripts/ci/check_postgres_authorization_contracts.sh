@@ -339,6 +339,320 @@ if [ "$STAFF_C_RESTAURANT" != "$RESTAURANT_A" ]; then
 fi
 echo "PASS: staff join RPC works, repeated joins are idempotent, and a staff account cannot join a second restaurant."
 
+# Granular staff permissions: owner-only management, per-restaurant isolation,
+# backward-compatible defaults, and no self-escalation.
+default_staff_permission="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT private.has_restaurant_permission('$RESTAURANT_A'::uuid, 'orders')::text
+       || '|' || private.has_restaurant_permission('$RESTAURANT_A'::uuid, 'inventory')::text;
+ROLLBACK;
+SQL
+)"
+if [ "$default_staff_permission" != "true|true" ]; then
+  echo "ERROR: legacy staff without a custom permission row did not retain operational access." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders']);
+COMMIT;
+SQL
+then
+  echo "ERROR: staff unexpectedly changed their own permissions." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders']);
+COMMIT;
+SQL
+then
+  echo "ERROR: owner B unexpectedly changed permissions for staff in restaurant A." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders','reservations']);
+COMMIT;
+SQL
+
+custom_staff_permission="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT private.has_restaurant_permission('$RESTAURANT_A'::uuid, 'orders')::text
+       || '|' || private.has_restaurant_permission('$RESTAURANT_A'::uuid, 'reservations')::text
+       || '|' || private.has_restaurant_permission('$RESTAURANT_A'::uuid, 'inventory')::text;
+ROLLBACK;
+SQL
+)"
+if [ "$custom_staff_permission" != "true|true|false" ]; then
+  echo "ERROR: custom staff permissions were not enforced as configured." >&2
+  exit 1
+fi
+
+owner_permission_matrix="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT array_to_string(public.get_my_restaurant_permissions(), ',');
+ROLLBACK;
+SQL
+)"
+staff_permission_matrix="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT array_to_string(public.get_my_restaurant_permissions(), ',');
+ROLLBACK;
+SQL
+)"
+if [ "$owner_permission_matrix" != "orders,tables,reservations,menu,inventory,loyalty" ] ||
+   [ "$staff_permission_matrix" != "orders,reservations" ]; then
+  echo "ERROR: current-user permission RPC returned an unexpected effective matrix." >&2
+  printf 'Owner: %s; staff: %s\\n' "$owner_permission_matrix" "$staff_permission_matrix" >&2
+  exit 1
+fi
+
+owner_readback_permissions="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT array_to_string(public.get_restaurant_staff_permissions('$USER_C'::uuid), ',');
+ROLLBACK;
+SQL
+)"
+if [ "$owner_readback_permissions" != "orders,reservations" ]; then
+  echo "ERROR: owner could not read back a staff member's effective permissions." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT public.get_restaurant_staff_permissions('$USER_D'::uuid);
+COMMIT;
+SQL
+then
+  echo "ERROR: staff unexpectedly queried another member's permissions." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['owner_access']);
+COMMIT;
+SQL
+then
+  echo "ERROR: an unknown staff permission was accepted." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY[]::text[]);
+COMMIT;
+SQL
+empty_staff_permission="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT private.has_restaurant_permission('$RESTAURANT_A'::uuid, 'orders')::text;
+ROLLBACK;
+SQL
+)"
+if [ "$empty_staff_permission" != "false" ]; then
+  echo "ERROR: an explicitly empty permission list did not deny all operational areas." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders','reservations']);
+COMMIT;
+SQL
+
+# A restricted employee cannot write to tables, menu or stock through direct
+# table access or the stock RPC, even though the Android client is bypassed.
+MENU_PERMISSION_PROBE="88888888-8888-4888-8888-888888888888"
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO public.menu_items (
+  id, restaurant_id, name, category, description, price, cost, allergens, is_active
+) VALUES (
+  '$MENU_PERMISSION_PROBE'::uuid, '$RESTAURANT_A'::uuid, 'Permission probe',
+  'Prato principal', '', 5.00, 2.00, '', true
+);
+SQL
+
+table_write_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+WITH changed AS (
+  UPDATE public.restaurant_tables
+  SET area = area
+  WHERE restaurant_id = '$RESTAURANT_A'::uuid AND table_number = 1
+  RETURNING id
+)
+SELECT count(*)::text FROM changed;
+ROLLBACK;
+SQL
+)"
+menu_write_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+WITH changed AS (
+  UPDATE public.menu_items SET price = price
+  WHERE id = '$MENU_PERMISSION_PROBE'::uuid
+  RETURNING id
+)
+SELECT count(*)::text FROM changed;
+ROLLBACK;
+SQL
+)"
+if [ "$table_write_rows" != "0" ] || [ "$menu_write_rows" != "0" ]; then
+  echo "ERROR: a staff account wrote to an area disabled by its permission matrix." >&2
+  exit 1
+fi
+
+ORDER_PERMISSION_PROBE="88888888-8888-4888-8888-888888888889"
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO public.restaurant_orders (
+  id, restaurant_id, table_number, item_name, amount, quantity, service_course, notes
+) VALUES (
+  '$ORDER_PERMISSION_PROBE'::uuid, '$RESTAURANT_A'::uuid, 1,
+  'Permission probe order', 5.00, 1, 'Principal', ''
+);
+SQL
+order_write_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+WITH changed AS (
+  UPDATE public.restaurant_orders SET status = 'Em preparação'
+  WHERE id = '$ORDER_PERMISSION_PROBE'::uuid
+  RETURNING id
+)
+SELECT count(*)::text FROM changed;
+ROLLBACK;
+SQL
+)"
+if [ "$order_write_rows" != "1" ]; then
+  echo "ERROR: the orders permission did not allow the employee to update an order." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['reservations']);
+COMMIT;
+SQL
+restricted_order_write_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+WITH changed AS (
+  UPDATE public.restaurant_orders SET status = 'Pronto'
+  WHERE id = '$ORDER_PERMISSION_PROBE'::uuid
+  RETURNING id
+)
+SELECT count(*)::text FROM changed;
+ROLLBACK;
+SQL
+)"
+if [ "$restricted_order_write_rows" != "0" ]; then
+  echo "ERROR: the orders permission did not block direct writes after being disabled." >&2
+  exit 1
+fi
+
+STAFF_RESERVATION_AT="$(date -u -d '+45 days' '+%Y-%m-%d %H:%M:%S+00:00')"
+STAFF_RESERVATION_REQUEST="d5555555-5555-4555-8555-555555555555"
+STAFF_RESERVATION_ID="$(create_restaurant_reservation "$USER_C" "$RESTAURANT_A" "$STAFF_RESERVATION_REQUEST" "Staff permission booking" "$STAFF_RESERVATION_AT")"
+if [ -z "$STAFF_RESERVATION_ID" ]; then
+  echo "ERROR: reservations permission did not allow staff to create a reservation." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders']);
+COMMIT;
+SQL
+if create_restaurant_reservation "$USER_C" "$RESTAURANT_A" "d6666666-6666-4666-8666-666666666666" "Blocked staff booking" "$STAFF_RESERVATION_AT" >/dev/null 2>&1; then
+  echo "ERROR: staff created a reservation after the reservations permission was disabled." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders','reservations']);
+COMMIT;
+SQL
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders','reservations']);
+COMMIT;
+SQL
+
+if create_inventory_item "$USER_C" "$RESTAURANT_A" "dddddddd-dddd-4ddd-8ddd-dddddddddddd" "Blocked stock item" "1" >/dev/null 2>&1; then
+  echo "ERROR: a staff account created stock while the inventory permission was disabled." >&2
+  exit 1
+fi
+
+# Restore full operational access for later legacy staff-flow tests in this script.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions(
+  '$USER_C'::uuid, ARRAY['orders','tables','reservations','menu','inventory','loyalty']
+);
+COMMIT;
+SQL
+echo "PASS: owner/staff effective matrices and direct database denial for restricted areas."
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_D'::uuid, ARRAY['orders']);
+COMMIT;
+SQL
+then
+  echo "ERROR: staff A unexpectedly changed permissions for a different restaurant member." >&2
+  exit 1
+fi
+echo "PASS: staff permissions default safely, are owner-managed, isolated and cannot be self-escalated."
+
+
 PRICE_MENU_ITEM_A="99999999-1111-4111-8111-111111111111"
 PRICE_MENU_ITEM_B="99999999-2222-4222-8222-222222222222"
 PRICE_ACTION_ID="99999999-3333-4333-8333-333333333333"
@@ -970,6 +1284,30 @@ then
 fi
 echo "PASS: invoice QR is private, bound to one customer and one restaurant, single-use, and cannot double-credit points."
 
+# A staff account without the loyalty area cannot issue an invoice-linked points QR.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders','reservations']);
+COMMIT;
+SQL
+if issue_invoice_loyalty_qr "$USER_C" "$MEMBER_A" "15.00" "FT-CI-STAFF-BLOCKED" "15151515-dddd-4ddd-8ddd-151515151515" >/dev/null 2>&1; then
+  echo "ERROR: staff issued an invoice QR after loyalty permission was disabled." >&2
+  exit 1
+fi
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions(
+  '$USER_C'::uuid, ARRAY['orders','tables','reservations','menu','inventory','loyalty']
+);
+COMMIT;
+SQL
+echo "PASS: invoice-linked loyalty QR issuance requires the loyalty staff permission."
+
+
 LOYALTY_REQUEST="77777777-7777-4777-8777-777777777777"
 LOYALTY_FOREIGN_REQUEST="88888888-8888-4888-8888-888888888888"
 LOYALTY_FIRST="$(adjust_loyalty_points "$USER_A" "$MEMBER_A" "$LOYALTY_REQUEST" "10" "CI loyalty retry")"
@@ -1160,6 +1498,47 @@ SELECT count(*) FROM public.get_restaurant_loyalty_reward_redemptions('$RESTAURA
 COMMIT;
 SQL
 )"
+
+# Reading restaurant reward catalog/fulfilment queue also requires the loyalty area.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders','reservations']);
+COMMIT;
+SQL
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.get_restaurant_loyalty_rewards('$RESTAURANT_A'::uuid);
+COMMIT;
+SQL
+then
+  echo "ERROR: staff read the reward catalog after loyalty permission was disabled." >&2
+  exit 1
+fi
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.get_restaurant_loyalty_reward_redemptions('$RESTAURANT_A'::uuid);
+COMMIT;
+SQL
+then
+  echo "ERROR: staff read the fulfilment queue after loyalty permission was disabled." >&2
+  exit 1
+fi
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions(
+  '$USER_C'::uuid, ARRAY['orders','tables','reservations','menu','inventory','loyalty']
+);
+COMMIT;
+SQL
+
 if [ "$RESTAURANT_REWARD_QUEUE_COUNT" != "1" ] || [ "$STAFF_REWARD_QUEUE_COUNT" != "1" ]; then
   echo "ERROR: the owner or staff could not view the restaurant's fulfilment queue." >&2
   exit 1
@@ -1207,6 +1586,34 @@ if [ "$CUSTOMER_REWARD_HISTORY_COUNT" != "1" ] || [ "$OTHER_CUSTOMER_HISTORY_COU
   echo "ERROR: customer redemption history was not scoped to the authenticated account." >&2
   exit 1
 fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders','reservations']);
+COMMIT;
+SQL
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT public.fulfill_loyalty_reward_redemption('$REWARD_REDEMPTION_ID'::uuid);
+COMMIT;
+SQL
+then
+  echo "ERROR: staff confirmed a reward delivery after loyalty permission was disabled." >&2
+  exit 1
+fi
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions(
+  '$USER_C'::uuid, ARRAY['orders','tables','reservations','menu','inventory','loyalty']
+);
+COMMIT;
+SQL
 
 psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL
 BEGIN;
