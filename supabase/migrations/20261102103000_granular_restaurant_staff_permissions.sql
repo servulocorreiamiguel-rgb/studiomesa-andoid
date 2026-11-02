@@ -180,6 +180,48 @@ grant execute on function public.get_restaurant_staff_permissions(uuid) to authe
 revoke all on function public.set_restaurant_staff_permissions(uuid,text[]) from public, anon, authenticated;
 grant execute on function public.set_restaurant_staff_permissions(uuid,text[]) to authenticated;
 
+create or replace function public.get_my_restaurant_permissions()
+returns text[]
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $function$
+declare
+    v_restaurant_id uuid;
+    v_role text;
+    v_permissions text[];
+begin
+    if (select auth.uid()) is null then
+        raise exception 'É necessário iniciar sessão.';
+    end if;
+
+    select rs.restaurant_id, rs.role
+      into v_restaurant_id, v_role
+    from public.restaurant_staff rs
+    where rs.user_id = (select auth.uid())
+    order by rs.created_at asc
+    limit 1;
+
+    if v_restaurant_id is null then
+        return array[]::text[];
+    end if;
+    if v_role = 'owner' then
+        return array['orders','tables','reservations','menu','inventory','loyalty']::text[];
+    end if;
+
+    select p.permissions into v_permissions
+    from private.restaurant_staff_permissions p
+    where p.restaurant_id = v_restaurant_id
+      and p.user_id = (select auth.uid());
+
+    return coalesce(v_permissions, array['orders','tables','reservations','menu','inventory','loyalty']::text[]);
+end;
+$function$;
+
+revoke all on function public.get_my_restaurant_permissions() from public, anon, authenticated;
+grant execute on function public.get_my_restaurant_permissions() to authenticated;
+
 alter policy restaurant_tables_staff_all on public.restaurant_tables
     using (private.has_restaurant_permission(restaurant_id, 'tables'))
     with check (private.has_restaurant_permission(restaurant_id, 'tables'));
