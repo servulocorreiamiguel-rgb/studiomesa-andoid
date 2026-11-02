@@ -225,6 +225,13 @@ if [ "$STAFF_C_RESTAURANT" != "$RESTAURANT_A" ]; then
   exit 1
 fi
 echo "PASS: staff join RPC works, repeated joins are idempotent, and a staff account cannot join a second restaurant."
+# A separate staff user belongs to restaurant B for cross-restaurant QR/rescue tests.
+STAFF_JOIN_D="$(join_staff_member "$USER_D" "$STAFF_CODE_B")"
+EXPECTED_STAFF_JOIN_D="$RESTAURANT_B|CI Restaurant B|staff"
+if [ "$STAFF_JOIN_D" != "$EXPECTED_STAFF_JOIN_D" ]; then
+  echo "ERROR: staff D could not join restaurant B for cross-restaurant authorization tests." >&2
+  exit 1
+fi
 
 PRICE_MENU_ITEM_A="99999999-1111-4111-8111-111111111111"
 PRICE_MENU_ITEM_B="99999999-2222-4222-8222-222222222222"
