@@ -239,3 +239,25 @@ A atualização periódica é polling, não uma subscrição Supabase Realtime, 
 A migration `20261030120000_inventory_unit_cost_and_waste_snapshots.sql` tem de estar aplicada no Supabase antes de testar a nova versão Android. Estes casos exigem CI aprovada e testes ponta a ponta com contas descartáveis; a CI, por si só, não valida a configuração do projeto Supabase de produção.\n## Assistente económico ligado ao inventário\n\n| ID | Categoria | Ação / dados | Resultado esperado / estado |\n|---|---|---|---|\n| ASI-01 | Fonte de dados | Abrir o Assistente com o inventário Premium carregado | A IA recebe unidade, quantidade, limite mínimo e custo unitário atual de cada artigo |\n| ASI-02 | Stock específico | Arroz: 2 kg disponíveis, mínimo 5 kg e custo 3,5000 €/kg | Responde 2 kg, custo unitário, valor estimado de 7,00 € e custo indicativo de 10,50 € para voltar ao mínimo |\n| ASI-03 | Valor global | Somar artigos com custo conhecido e excluir artigo sem custo | Apresenta apenas a soma conhecida e indica quantos artigos ficaram excluídos |\n| ASI-04 | Dados em falta | Todos os artigos sem custo unitário | Não inventa o valor do stock; indica que é necessário preencher custos |\n| ASI-05 | Cache não confirmada | Perguntar pelo valor do stock antes de carregar/atualizar inventário | Não mostra valores guardados numa cache não confirmada |\n| ASI-06 | Reposição | Artigo abaixo do limite mínimo, com custo unitário conhecido | Calcula apenas a quantidade e o custo para atingir o limite mínimo configurado; não cria encomenda |\n| ASI-07 | Limite de recomendação | Artigo acima do limite mínimo | Não sugere reposição nem gasto desnecessário |\n| ASI-08 | Sem custo | Artigo abaixo do limite mas sem custo de compra | Mostra o alerta de stock baixo sem inventar custo de reposição |
 | ASI-09 | Frescura | Inventário atualizado há menos de cinco minutos e leitura bem-sucedida | A IA pode utilizar quantidades e custos confirmados |
 | ASI-10 | Cache antiga/falha | Última leitura há mais de cinco minutos, sem leitura nesta sessão ou falha da atualização | A IA não apresenta valores de stock e pede atualização na secção Stock |\n\nOs valores de stock são estimativas ao custo de compra atual e não incluem portes, embalagens, descontos, IVA recuperável, perdas futuras ou condições de fornecedor. Não são uma avaliação FIFO/custo médio nem uma ordem de compra.\n
+
+
+## Permissões granulares da equipa — cenários de autorização
+
+A matriz configurável pelo proprietário contém seis áreas: pedidos/cozinha, mesas, reservas, carta, stock e fidelização. A autorização tem de ser aplicada no Supabase; esconder secções na app é apenas uma medida de interface.
+
+| ID | Cenário | Resultado esperado |
+|---|---|---|
+| PERM-01 | Funcionário antigo sem linha de configuração | Mantém temporariamente as seis áreas operacionais até o proprietário guardar uma matriz. |
+| PERM-02 | Proprietário guarda apenas Pedidos e Reservas | O funcionário só vê e usa essas áreas; as restantes operações são negadas no servidor. |
+| PERM-03 | Proprietário guarda matriz vazia | Todas as áreas operacionais ficam bloqueadas para o funcionário. |
+| PERM-04 | Funcionário tenta alterar as próprias permissões | O servidor recusa a chamada RPC. |
+| PERM-05 | Funcionário de outro restaurante tenta consultar ou alterar a matriz | O servidor recusa por falta de âmbito. |
+| PERM-06 | Funcionário sem Mesas/Carta/Pedidos tenta escrita REST directa | RLS não permite a alteração. |
+| PERM-07 | Funcionário sem Stock tenta criar/alterar inventário por RPC | A RPC recusa a operação. |
+| PERM-08 | Funcionário sem Reservas tenta criar, atribuir mesa ou alterar estado | A RPC recusa a operação. |
+| PERM-09 | Funcionário sem Fidelização tenta emitir QR de pontos, consultar catálogo/fila ou confirmar entrega | As RPCs recusam a operação. |
+| PERM-10 | Proprietário revoga acesso enquanto o funcionário tem a app aberta | A próxima operação é recusada no servidor; ao regressar à app, a matriz é actualizada e as caches revogadas são limpas. |
+| PERM-11 | Funcionário removido ou sessão expirada | Não consegue operar no restaurante nem reutilizar permissões em cache. |
+| PERM-12 | Proprietário tenta ser limitado pela matriz | Mantém acesso total; acções económicas e administrativas continuam owner-only. |
+
+Estado: os casos estão incluídos na suite PostgreSQL da branch PR #77. A execução CI exacta tem de terminar com sucesso antes de marcar a funcionalidade como validada. A migração ainda não foi aplicada à base de dados alojada.
