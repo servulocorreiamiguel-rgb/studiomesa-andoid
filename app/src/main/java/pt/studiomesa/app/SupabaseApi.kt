@@ -727,6 +727,16 @@ object SupabaseApi {
         return JSONArray(response)
     }
 
+    fun listMyLoyaltyRewardRedemptions(token: String): JSONArray {
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/get_my_loyalty_reward_redemptions",
+            JSONObject(),
+            token
+        )
+        return JSONArray(response)
+    }
+
     fun listRestaurantRewards(token: String, restaurantId: String): JSONArray {
         val response = call(
             "POST",
