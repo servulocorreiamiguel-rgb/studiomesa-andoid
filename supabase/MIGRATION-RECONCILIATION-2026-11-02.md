@@ -314,3 +314,47 @@ Apenas depois de um replay isolado do estado actual, revisão SQL, backup verifi
 ### E. CI da documentação
 
 O commit `56ececd8e0a060152fb922810eb74e2c5e677dd6` foi validado pela execução [41520562311](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/41520562311): replay de migrações, testes de autorização/idempotência, compilação, testes unitários, Android Lint e smoke tests nos emuladores Android 8 e 16 concluíram com sucesso. Esta validação não aplica migrações ao alojamento nem substitui o teste de replay contra uma cópia do seu estado actual.
+
+
+---
+
+## Verificação adicional do estado alojado — 02/11/2026, 21:22 UTC
+
+Esta passagem foi feita com consultas SQL apenas de leitura e com os Advisors. Não foi executado DDL, reparação do histórico, alteração de privilégios ou deploy no projecto alojado.
+
+### Estado real das permissões por funcionário
+
+- `private.restaurant_staff_permissions` continua inexistente no alojamento.
+- As nove políticas relevantes verificadas em `restaurant_tables`, `menu_items`, `restaurant_orders`, `restaurant_order_events`, `restaurant_inventory_items`, `restaurant_inventory_movements`, `restaurant_reservations`, `loyalty_members` e `loyalty_transactions` ainda usam `private.is_restaurant_staff` para o acesso operacional da equipa. A matriz de seis áreas da migração `20261102160000` ainda não está activa.
+- A tabela privada futura deve continuar sem privilégios directos para `anon` ou `authenticated`; o acesso deve ser feito apenas através das RPCs de proprietário e da função de verificação.
+- A tabela de reservas já contém `created_by` e `client_request_id`, e já existe o índice único parcial `(restaurant_id, created_by, client_request_id)`. Os índices de reserva por restaurante/mesa/horário também existem. Isto confirma os pré-requisitos estruturais observados para a migração `141000`.
+- O código Android da branch consulta novamente a matriz quando o funcionário regressa à app, fecha as áreas enquanto valida a sessão e remove caches das áreas revogadas. A autorização efectiva continua dependente das verificações de servidor/RLS; a interface não é tratada como fronteira de segurança.
+
+### Advisors na mesma verificação
+
+| Aviso | Quantidade | Leitura |
+|---|---:|---|
+| RLS activo sem políticas | 8 INFO | Não adicionar políticas permissivas só para eliminar o aviso: as tabelas verificadas não dão acesso directo às roles de API e são acedidas por funções controladas |
+| SECURITY DEFINER executável por authenticated | 31 WARN | Rever por função e manter testes de autorização; a execução por `anon` não foi observada nas funções da aplicação examinadas |
+| Protecção de palavras-passe comprometidas desactivada | 1 WARN | Bloqueio para a preparação de produção até ser possível activar e verificar esta protecção |
+| Chaves estrangeiras sem índice | 2 INFO | Corrigidas pelo candidato `20261102150000`, ainda pendente |
+| Índices sem utilização observada | 28 INFO | Não remover sem tráfego real e análise de planos; falta de utilização no ambiente actual não prova redundância |
+
+### Contrato RPC a confirmar antes da aplicação
+
+Na consulta ao catálogo, `public.adjust_loyalty_points_idempotent(uuid,uuid,integer,text)` estava com execução de `authenticated` revogada no alojamento. O método correspondente existe em `SupabaseApi.kt`; nesta revisão não foi encontrada uma chamada a esse método na `MainActivity.kt`. A migração `160000` volta a conceder execução autenticada depois de reforçar a verificação da permissão `loyalty`. Antes do deploy, confirmar se o método está legado ou se existe outro consumidor e manter o teste de autorização correspondente.
+
+### CI da branch de reservas — execução 41526996865
+
+Link: https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/41526996865
+
+No momento desta verificação:
+- Replay das 51 migrações e testes PostgreSQL de autorização/idempotência: concluídos com sucesso.
+- Compilação Android, testes unitários de todas as variantes e Android Lint: concluídos com sucesso.
+- Validação da configuração de release: concluída com sucesso.
+- Smoke tests de interface nos emuladores Android 8 e Android 16: ainda em execução.
+- A execução global ainda não tinha conclusão final.
+
+O pipeline de CI usa uma base PostgreSQL descartável; não testa nem altera a base de dados alojada. O replay limpo prova a sequência local de migrações, mas não substitui a reprodução isolada do estado actual do projecto alojado.
+
+**Conclusão desta passagem:** o código e os testes da matriz granular estão preparados na branch, mas o projecto alojado ainda não tem permissões granulares. Continuam bloqueados a reparação do histórico e o deploy até existir uma cópia isolada do estado real, backup com restauro comprovado e revisão final das quatro migrações pendentes.
