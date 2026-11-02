@@ -2,6 +2,8 @@ package pt.studiomesa.app
 
 import android.app.Activity
 import android.app.Dialog
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.res.ColorStateList
@@ -106,6 +108,11 @@ class MainActivity : Activity() {
     // Reservation contacts are kept in memory only, not persisted to SharedPreferences.
     private var reservationCache = JSONArray()
     private var reservationsLoaded = false
+    // Customer reservation details contain names, telephone numbers and notes.
+    // Keep this snapshot in memory only and scope every refresh to the active account/card.
+    private var customerReservationsCache = JSONArray()
+    private var customerReservationsLoaded = false
+    private var customerReservationsRefreshInFlight = false
 
     private val flavor = BuildConfig.FLAVOR.lowercase(Locale.ROOT)
     private val isCustomerApp = flavor.contains("cliente")
@@ -3186,7 +3193,7 @@ class MainActivity : Activity() {
     }
 
     private fun renderCustomerApp() {
-        if (activeCustomerPage !in setOf("Cartão", "Prémios", "Carta", "Conta")) activeCustomerPage = "Cartão"
+        if (activeCustomerPage !in setOf("Cartão", "Prémios", "Reservas", "Carta", "Conta")) activeCustomerPage = "Cartão"
         appRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(paper)
@@ -3230,6 +3237,7 @@ class MainActivity : Activity() {
         when (activeCustomerPage) {
             "Cartão" -> renderCustomerLoyaltyPage(content)
             "Prémios" -> renderCustomerRewardsPage(content)
+            "Reservas" -> renderCustomerReservationsPage(content)
             "Carta" -> renderCustomerMenuPage(content)
             "Conta" -> renderCustomerAccountPage(content)
         }
@@ -3243,7 +3251,7 @@ class MainActivity : Activity() {
             setBackgroundColor(white)
             elevation = dp(6).toFloat()
         }
-        listOf("Cartão", "Prémios", "Carta", "Conta").forEach { page ->
+        listOf("Cartão", "Prémios", "Reservas", "Carta", "Conta").forEach { page ->
             val selected = activeCustomerPage == page
             val item = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
@@ -3265,6 +3273,9 @@ class MainActivity : Activity() {
                         backendPrefs.contains("customer_loyalty_redemptions_json")) {
                         refreshCustomerRewards()
                     }
+                    if (page == "Reservas" && backendToken().isNotBlank() && backendMemberId().isNotBlank()) {
+                        refreshCustomerReservations()
+                    }
                 }
             }
             item.addView(TextView(this).apply {
@@ -3283,6 +3294,12 @@ class MainActivity : Activity() {
         }
         appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(60)))
         setContentView(appRoot)
+        if (activeCustomerPage == "Reservas" &&
+            backendToken().isNotBlank() &&
+            backendMemberId().isNotBlank() &&
+            !customerReservationsLoaded) {
+            refreshCustomerReservations()
+        }
         if (activeCustomerPage == "Prémios" &&
             backendToken().isNotBlank() &&
             backendMemberId().isNotBlank() &&
