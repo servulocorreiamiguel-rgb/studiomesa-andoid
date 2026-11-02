@@ -269,25 +269,13 @@ class MainActivity : Activity() {
             pages.add("Análise")
         }
 
-        if (hasRemoteRestaurant() && backendPrefs.getString("restaurant_role", "staff") == "staff") {
-            val permissions = currentStaffPermissions.orEmpty()
-            if ("tables" !in permissions) pages.remove("Mesas")
-            if ("orders" !in permissions) {
-                pages.remove("Pedidos")
-                pages.remove("Cozinha")
-            }
-            if ("menu" !in permissions) pages.remove("Carta")
-            if ("loyalty" !in permissions) pages.remove("Pontos")
-            if ("reservations" !in permissions) pages.remove("Reservas")
-            if ("inventory" !in permissions) pages.remove("Stock")
-
-            // The assistant and economic reports can expose internal costs and
-            // business indicators, so they remain owner-only.
-            pages.remove("Assistente")
-            pages.remove("Preço Justo")
-            pages.remove("Análise")
-        }
-        return pages
+        val isStaff = hasRemoteRestaurant() &&
+            backendPrefs.getString("restaurant_role", "staff") == "staff"
+        return StaffPermissionSet.filterPages(
+            pages,
+            currentStaffPermissions.orEmpty(),
+            isStaff
+        )
     }
 
     private fun showNavigationDrawer() {
