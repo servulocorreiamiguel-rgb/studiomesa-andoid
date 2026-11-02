@@ -347,7 +347,33 @@ if [ "$STAFF_C_RESTAURANT" != "$RESTAURANT_A" ]; then
   echo "ERROR: rejected cross-restaurant join changed the existing staff membership." >&2
   exit 1
 fi
-echo "PASS: staff join RPC works, repeated joins are idempotent, and a staff account cannot join a second restaurant."
+
+STAFF_JOIN_CODES="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT coalesce(join_code, '<hidden>') || '|' || coalesce(staff_code, '<hidden>') || '|' || user_role
+FROM public.get_my_restaurant_details();
+COMMIT;
+SQL
+)"
+OWNER_JOIN_CODES="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT coalesce(join_code, '<missing>') || '|' || coalesce(staff_code, '<missing>') || '|' || user_role
+FROM public.get_my_restaurant_details();
+COMMIT;
+SQL
+)"
+if [ "$STAFF_JOIN_CODES" != "<hidden>|<hidden>|staff" ] ||
+   [ "$OWNER_JOIN_CODES" != "SMOKEAA001|$STAFF_CODE_A|owner" ]; then
+  echo "ERROR: customer/staff join codes were not restricted to the restaurant owner." >&2
+  printf 'Staff result: %s\\nOwner result: %s\\n' "$STAFF_JOIN_CODES" "$OWNER_JOIN_CODES" >&2
+  exit 1
+fi
+
+echo "PASS: staff join RPC works, repeated joins are idempotent, a staff account cannot join a second restaurant, and join codes remain owner-only."
 
 # Granular staff permissions: owner-only management, per-restaurant isolation,
 # backward-compatible defaults, and no self-escalation.
