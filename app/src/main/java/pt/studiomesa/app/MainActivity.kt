@@ -3019,7 +3019,7 @@ class MainActivity : Activity() {
             return
         }
         IntentIntegrator(this)
-            .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE_TYPES)
+            .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
             .setPrompt("Lê o QR de fidelização apresentado na fatura")
             .setBeepEnabled(false)
             .setOrientationLocked(false)
