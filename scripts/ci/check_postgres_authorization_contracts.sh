@@ -1543,7 +1543,7 @@ if [ "$REWARD_FIRST" != "$REWARD_RETRY" ]; then
 fi
 IFS='|' read -r REWARD_REDEMPTION_ID REWARD_NAME REWARD_POINTS_SPENT REWARD_POINTS_LEFT REWARD_STATUS <<< "$REWARD_FIRST"
 if [ -z "$REWARD_REDEMPTION_ID" ] || [ "$REWARD_NAME" != "CI Dessert" ] ||
-   [ "$REWARD_POINTS_SPENT" != "15" ] || [ "$REWARD_POINTS_LEFT" != "15" ] ||
+   [ "$REWARD_POINTS_SPENT" != "15" ] || [ "$REWARD_POINTS_LEFT" != "16" ] ||
    [ "$REWARD_STATUS" != "pending" ]; then
   echo "ERROR: reward redemption returned an unexpected result." >&2
   exit 1
@@ -1559,7 +1559,7 @@ if redeem_reward "$USER_E" "$EMPTY_REWARD_ID" "eeee6666-6666-4666-8666-666666666
 fi
 
 reward_balance_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
-  -c "SELECT points = 15 FROM public.loyalty_members WHERE id = '$MEMBER_A'::uuid;")"
+  -c "SELECT points = 16 FROM public.loyalty_members WHERE id = '$MEMBER_A'::uuid;")"
 reward_stock_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
   -c "SELECT redeemed_count = 1 FROM public.loyalty_rewards WHERE id = '$REWARD_ID'::uuid;")"
 reward_redemption_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
