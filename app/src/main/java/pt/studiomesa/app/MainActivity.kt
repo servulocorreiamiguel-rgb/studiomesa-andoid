@@ -3300,7 +3300,8 @@ class MainActivity : Activity() {
         if (activeCustomerPage == "Reservas" &&
             backendToken().isNotBlank() &&
             backendMemberId().isNotBlank() &&
-            !customerReservationsLoaded) {
+            !customerReservationsLoaded &&
+            customerReservationsError.isBlank()) {
             refreshCustomerReservations()
         }
         if (activeCustomerPage == "Prémios" &&
@@ -3393,6 +3394,7 @@ class MainActivity : Activity() {
         }
         if (customerReservationsRefreshInFlight) return
         customerReservationsRefreshInFlight = true
+        customerReservationsError = ""
 
         runBackend({
             if (!LoyaltySessionScope.matches(
@@ -3419,6 +3421,7 @@ class MainActivity : Activity() {
             customerReservationsError = ""
             "OK"
         }, onError = { error ->
+            customerReservationsRefreshInFlight = false
             customerReservationsError = friendlyBackendError(error.message)
             if (activeCustomerPage == "Reservas") renderCustomerApp()
             AlertDialog.Builder(this)
@@ -3578,7 +3581,8 @@ class MainActivity : Activity() {
             .format(calendar.time)
         fun formatTime(): String = SimpleDateFormat("HH:mm", Locale.ROOT).format(calendar.time)
 
-        val dateButton = secondaryButton(formatDate().replaceFirstChar { it.uppercase(Locale("pt", "PT")) }) {
+        lateinit var dateButton: Button
+        dateButton = secondaryButton(formatDate().replaceFirstChar { it.uppercase(Locale("pt", "PT")) }) {
             DatePickerDialog(
                 this,
                 { _, year, month, day ->
@@ -3595,7 +3599,8 @@ class MainActivity : Activity() {
         form.addView(label("Data", 10f, true, forestSoft))
         form.addView(dateButton, LinearLayout.LayoutParams(-1, dp(44)))
         addGap(form, 6)
-        val timeButton = secondaryButton("Hora: " + formatTime()) {
+        lateinit var timeButton: Button
+        timeButton = secondaryButton("Hora: " + formatTime()) {
             TimePickerDialog(
                 this,
                 { _, hour, minute ->
