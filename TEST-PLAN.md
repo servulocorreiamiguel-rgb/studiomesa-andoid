@@ -258,7 +258,7 @@ A matriz configurável pelo proprietário contém seis áreas: pedidos/cozinha, 
 | PERM-08 | Funcionário sem Reservas tenta criar, atribuir mesa ou alterar estado | A RPC recusa a operação. |
 | PERM-09 | Funcionário sem Fidelização tenta emitir QR de pontos, consultar catálogo/fila ou confirmar entrega | As RPCs recusam a operação. |
 | PERM-10 | Proprietário revoga acesso enquanto o funcionário tem a app aberta | A próxima operação é recusada no servidor; ao regressar à app, a matriz é actualizada e as caches revogadas são limpas. |
-| PERM-11 | Funcionário removido ou sessão expirada | Não consegue operar no restaurante nem reutilizar permissões em cache. |
+| PERM-11 | Funcionário removido ou sessão expirada | A app confirma a associação no servidor, limpa o restaurante/caches quando já não pertence e não reutiliza permissões em cache. |
 | PERM-12 | Proprietário tenta ser limitado pela matriz | Mantém acesso total; acções económicas e administrativas continuam owner-only. |
 | PERM-13 | Proprietário volta a conceder uma área antes revogada | Ao regressar à app, o funcionário volta a carregar os dados autorizados do servidor; não depende de uma cache que foi apagada. |
 | PERM-14 | Funcionário regressa sem ligação após uma alteração de permissões | A app fecha o acesso local por defeito até conseguir confirmar novamente a matriz e os dados no servidor. |
