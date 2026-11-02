@@ -22,4 +22,24 @@ internal object StaffPermissionSet {
             all.filter { it in selected }.forEach(::put)
         }
     }
+
+    fun filterPages(pages: List<String>, permissions: Set<String>, isStaff: Boolean): List<String> {
+        if (!isStaff) return pages
+        val visible = pages.toMutableList()
+        if ("tables" !in permissions) visible.remove("Mesas")
+        if ("orders" !in permissions) {
+            visible.remove("Pedidos")
+            visible.remove("Cozinha")
+        }
+        if ("menu" !in permissions) visible.remove("Carta")
+        if ("loyalty" !in permissions) visible.remove("Pontos")
+        if ("reservations" !in permissions) visible.remove("Reservas")
+        if ("inventory" !in permissions) visible.remove("Stock")
+
+        // These screens can expose internal costs or business indicators.
+        visible.remove("Assistente")
+        visible.remove("Preço Justo")
+        visible.remove("Análise")
+        return visible
+    }
 }
