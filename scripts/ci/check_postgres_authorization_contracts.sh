@@ -176,6 +176,32 @@ COMMIT;
 SQL
 }
 
+issue_invoice_loyalty_qr() {
+  local user_id="$1" member_id="$2" amount="$3" invoice_reference="$4" request_id="$5"
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT qr_token::text || '|' || points::text || '|' || invoice_reference
+FROM public.issue_loyalty_invoice_qr(
+  '$member_id'::uuid, '$amount'::numeric, '$invoice_reference', '$request_id'::uuid
+);
+COMMIT;
+SQL
+}
+
+redeem_invoice_loyalty_qr() {
+  local user_id="$1" qr_token="$2"
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT points::text || '|' || points_awarded::text || '|' || invoice_reference
+FROM public.redeem_loyalty_invoice_qr('$qr_token'::uuid);
+COMMIT;
+SQL
+}
+
 adjust_loyalty_points() {
   local user_id="$1" member_id="$2" request_id="$3" delta="$4" note="$5"
   psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
@@ -717,6 +743,80 @@ then
   exit 1
 fi
 echo "PASS: a customer can query only the menu associated with their own loyalty card."
+
+# Invoice-linked loyalty QR: issuance, server-side points calculation, customer binding,
+# idempotent retries, single redemption, cross-restaurant isolation and private table access.
+INVOICE_QR_REQUEST="12121212-aaaa-4aaa-8aaa-121212121212"
+INVOICE_QR_FOREIGN_REQUEST="13131313-bbbb-4bbb-8bbb-131313131313"
+INVOICE_QR_TOKEN_REQUEST="14141414-cccc-4ccc-8ccc-141414141414"
+INVOICE_QR_REFERENCE="FT-CI-QR-1001"
+
+INVOICE_QR_FIRST="$(issue_invoice_loyalty_qr "$USER_A" "$MEMBER_A" "20.75" "$INVOICE_QR_REFERENCE" "$INVOICE_QR_REQUEST")"
+INVOICE_QR_RETRY="$(issue_invoice_loyalty_qr "$USER_A" "$MEMBER_A" "20.75" "$INVOICE_QR_REFERENCE" "$INVOICE_QR_REQUEST")"
+if [ "$INVOICE_QR_FIRST" != "$INVOICE_QR_RETRY" ]; then
+  echo "ERROR: retrying invoice QR issuance returned a different token or points value." >&2
+  exit 1
+fi
+IFS='|' read -r INVOICE_QR_TOKEN INVOICE_QR_POINTS INVOICE_QR_REF <<< "$INVOICE_QR_FIRST"
+if [ -z "$INVOICE_QR_TOKEN" ] || [ "$INVOICE_QR_POINTS" != "20" ] || [ "$INVOICE_QR_REF" != "$INVOICE_QR_REFERENCE" ]; then
+  echo "ERROR: invoice QR issuance did not calculate one point per complete euro." >&2
+  exit 1
+fi
+echo "PASS: invoice QR issuance is idempotent and the server calculates points from the paid total."
+
+# A different request cannot create another points QR for the same invoice reference.
+if issue_invoice_loyalty_qr "$USER_A" "$MEMBER_A" "20.75" "$INVOICE_QR_REFERENCE" "$INVOICE_QR_TOKEN_REQUEST" >/dev/null 2>&1; then
+  echo "ERROR: a duplicate invoice reference was accepted." >&2
+  exit 1
+fi
+
+# An owner from another restaurant cannot issue points against MEMBER_A.
+if issue_invoice_loyalty_qr "$USER_B" "$MEMBER_A" "20.75" "FT-CI-FOREIGN-1002" "$INVOICE_QR_FOREIGN_REQUEST" >/dev/null 2>&1; then
+  echo "ERROR: restaurant B unexpectedly issued a loyalty QR for restaurant A's customer." >&2
+  exit 1
+fi
+
+# Only the account that owns MEMBER_A may redeem the token.
+INVOICE_QR_REDEEM_FIRST="$(redeem_invoice_loyalty_qr "$USER_E" "$INVOICE_QR_TOKEN")"
+INVOICE_QR_REDEEM_RETRY="$(redeem_invoice_loyalty_qr "$USER_E" "$INVOICE_QR_TOKEN")"
+if [ "$INVOICE_QR_REDEEM_FIRST" != "$INVOICE_QR_REDEEM_RETRY" ]; then
+  echo "ERROR: repeating the same invoice QR scan changed the redemption result." >&2
+  exit 1
+fi
+IFS='|' read -r INVOICE_QR_BALANCE INVOICE_QR_AWARDED INVOICE_QR_REDEEMED_REF <<< "$INVOICE_QR_REDEEM_FIRST"
+if [ "$INVOICE_QR_BALANCE" != "20" ] || [ "$INVOICE_QR_AWARDED" != "20" ] || [ "$INVOICE_QR_REDEEMED_REF" != "$INVOICE_QR_REFERENCE" ]; then
+  echo "ERROR: invoice QR redemption returned an unexpected balance or points award." >&2
+  exit 1
+fi
+
+if redeem_invoice_loyalty_qr "$USER_F" "$INVOICE_QR_TOKEN" >/dev/null 2>&1; then
+  echo "ERROR: a different customer account unexpectedly redeemed MEMBER_A's invoice QR." >&2
+  exit 1
+fi
+
+invoice_qr_transaction_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*) FROM public.loyalty_transactions WHERE client_request_id = '$INVOICE_QR_TOKEN'::uuid AND member_id = '$MEMBER_A'::uuid AND points_delta = 20;")"
+invoice_qr_balance_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT points = 20 FROM public.loyalty_members WHERE id = '$MEMBER_A'::uuid;")"
+invoice_qr_redeemed_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT redeemed_at IS NOT NULL AND redeemed_by = '$USER_E'::uuid FROM private.loyalty_invoice_qr_codes WHERE token = '$INVOICE_QR_TOKEN'::uuid;")"
+if [ "$invoice_qr_transaction_count" != "1" ] || [ "$invoice_qr_balance_ok" != "t" ] || [ "$invoice_qr_redeemed_ok" != "t" ]; then
+  echo "ERROR: invoice QR did not produce exactly one transaction and one balance increase." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM private.loyalty_invoice_qr_codes;
+COMMIT;
+SQL
+then
+  echo "ERROR: an authenticated customer unexpectedly read the private invoice QR table directly." >&2
+  exit 1
+fi
+echo "PASS: invoice QR is private, bound to one customer and one restaurant, single-use, and cannot double-credit points."
 
 LOYALTY_REQUEST="77777777-7777-4777-8777-777777777777"
 LOYALTY_FOREIGN_REQUEST="88888888-8888-4888-8888-888888888888"
