@@ -314,7 +314,7 @@ jobs:
             psql --no-psqlrc --set ON_ERROR_STOP=1 --file "${migration}"
             count=$((count + 1))
           done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
-          test "${count}" -eq 46
+          test "${count}" -eq 47
           echo "Successfully replayed ${count} versioned migration files."
 
       - name: Assert core schema, RLS and RPCs exist
@@ -348,7 +348,8 @@ jobs:
               OR to_regprocedure('public.award_loyalty_points_from_qr(uuid,integer,uuid,text)') IS NULL
               OR to_regprocedure('public.redeem_loyalty_reward(uuid,uuid)') IS NULL
               OR to_regprocedure('public.get_restaurant_reward_redemptions(uuid)') IS NULL
-              OR to_regprocedure('public.fulfill_loyalty_reward_redemption(uuid)') IS NULL THEN
+              OR to_regprocedure('public.fulfill_loyalty_reward_redemption(uuid)') IS NULL
+              OR to_regprocedure('public.get_my_loyalty_reward_redemptions()') IS NULL THEN
               RAISE EXCEPTION 'A loyalty shop or QR RPC is missing after clean migration replay.';
             END IF;
 
@@ -380,6 +381,8 @@ jobs:
               OR NOT has_function_privilege('authenticated','public.save_loyalty_reward(uuid,uuid,text,text,integer,integer,boolean)','EXECUTE')
               OR NOT has_function_privilege('authenticated','public.create_loyalty_qr_token()','EXECUTE')
               OR NOT has_function_privilege('authenticated','public.award_loyalty_points_from_qr(uuid,integer,uuid,text)','EXECUTE')
+              OR has_function_privilege('anon','public.get_my_loyalty_reward_redemptions()','EXECUTE')
+              OR NOT has_function_privilege('authenticated','public.get_my_loyalty_reward_redemptions()','EXECUTE')
               OR has_function_privilege('authenticated','public.adjust_loyalty_points_idempotent(uuid,uuid,integer,text)','EXECUTE') THEN
               RAISE EXCEPTION 'Loyalty QR permissions are not restricted to authenticated RPCs.';
             END IF;
