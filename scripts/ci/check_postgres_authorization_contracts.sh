@@ -553,6 +553,25 @@ INSERT INTO public.restaurant_orders (
   'Permission probe order', 5.00, 1, 'Principal', ''
 );
 SQL
+order_event_probe_exists="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*) = 1 FROM public.restaurant_order_events WHERE order_id = '$ORDER_PERMISSION_PROBE'::uuid;")"
+if [ "$order_event_probe_exists" != "t" ]; then
+  echo "ERROR: order audit event test fixture was not created." >&2
+  exit 1
+fi
+order_event_visible_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text FROM public.restaurant_order_events WHERE order_id = '$ORDER_PERMISSION_PROBE'::uuid;
+ROLLBACK;
+SQL
+)"
+if [ "$order_event_visible_rows" != "1" ]; then
+  echo "ERROR: staff with the orders permission could not read its audit event." >&2
+  exit 1
+fi
+
 order_write_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
@@ -578,6 +597,19 @@ SET LOCAL ROLE authenticated;
 SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['reservations']);
 COMMIT;
 SQL
+restricted_order_event_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text FROM public.restaurant_order_events WHERE order_id = '$ORDER_PERMISSION_PROBE'::uuid;
+ROLLBACK;
+SQL
+)"
+if [ "$restricted_order_event_rows" != "0" ]; then
+  echo "ERROR: staff read order audit history after the orders permission was disabled." >&2
+  exit 1
+fi
+
 restricted_order_write_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
