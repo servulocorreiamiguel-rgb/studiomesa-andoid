@@ -418,13 +418,17 @@ class MainActivitySmokeTest {
     }
 
     @Test
-    fun customerNavigationSeparatesCardMenuAndAccount() {
+    fun customerNavigationSeparatesCardRewardsReservationsMenuAndAccount() {
         assumeTrue("Restaurant variant has no customer navigation.", isCustomerVariant())
 
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir secção Cartão")).check(matches(isDisplayed()))
             onView(withContentDescription("Abrir secção Prémios")).perform(click())
             onView(withText("Prémios e recompensas")).check(matches(isDisplayed()))
+            onView(withText("Criar conta / iniciar sessão")).check(matches(isDisplayed()))
+
+            onView(withContentDescription("Abrir secção Reservas")).perform(click())
+            onView(withText("As minhas reservas")).check(matches(isDisplayed()))
             onView(withText("Criar conta / iniciar sessão")).check(matches(isDisplayed()))
 
             onView(withContentDescription("Abrir secção Carta")).perform(click())
