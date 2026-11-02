@@ -132,6 +132,7 @@ Estes casos estão cobertos pela limpeza local no código, mas continuam pendent
 |---|---|---|---|
 | CACHE-01 | Privacidade / sessão | Encerrar sessão, mudar a adesão/permissões da mesma conta no servidor e iniciar sessão novamente | Os dados de restaurante guardados no dispositivo são removidos antes do carregamento; só os dados atuais devolvidos pelo servidor voltam a aparecer |
 | CACHE-02 | Privacidade / troca de conta | Iniciar sessão com outra conta no mesmo dispositivo | Não são apresentados cartões de cliente, reservas, stock, mesas, carta ou pedidos da conta anterior |
+| CACHE-03 | Privacidade / troca de restaurante | A mesma conta perde a associação a um restaurante e passa a pertencer a outro | São eliminadas todas as caches do restaurante anterior, incluindo equipa, mesas, carta, pedidos, stock, reservas e fidelização; só são carregados dados do novo restaurante |
 
 Estes casos estão protegidos no código por limpeza da cache ao estabelecer uma nova sessão, mas continuam pendentes de execução manual num Android real.
 
