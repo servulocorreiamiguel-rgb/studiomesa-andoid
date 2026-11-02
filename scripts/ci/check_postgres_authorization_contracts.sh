@@ -970,6 +970,146 @@ if [ "$loyalty_redemption_state" != "fulfilled|$USER_C" ] ||
 fi
 echo "PASS: reward redemption is one-time, stock-limited, customer-scoped and staff-fulfilled."
 
+# Customer booking requests are account-scoped and idempotent; the restaurant assigns
+# a suitable table and must do so before confirming the request.
+CUSTOMER_BOOKING_AT="$(date -u -d '+40 days' '+%Y-%m-%d %H:%M:%S+00:00')"
+CUSTOMER_BOOKING_LATER="$(date -u -d '+40 days 3 hours' '+%Y-%m-%d %H:%M:%S+00:00')"
+CUSTOMER_BOOKING_REQUEST_A="a1111111-1111-4111-8111-111111111111"
+CUSTOMER_BOOKING_REQUEST_B="b2222222-2222-4222-8222-222222222222"
+CUSTOMER_BOOKING_REQUEST_C="c3333333-3333-4333-8333-333333333333"
+CUSTOMER_BOOKING_REQUEST_D="d4444444-4444-4444-8444-444444444444"
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO public.restaurant_tables (restaurant_id, table_number, is_occupied, area, seats)
+VALUES ('$RESTAURANT_A'::uuid, 99, false, 'CI Booking', 2);
+SQL
+
+create_customer_booking() {
+  local user_id="$1" request_id="$2" guest_name="$3" booking_at="$4"
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT reservation_id::text || '|' || status
+FROM public.create_customer_reservation_request(
+  '$request_id'::uuid, '$guest_name', '', 2, '$booking_at'::timestamptz, 90, 'CI customer booking'
+);
+COMMIT;
+SQL
+}
+
+my_customer_booking_count() {
+  local user_id="$1"
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text FROM public.get_my_restaurant_reservations();
+ROLLBACK;
+SQL
+}
+
+CUSTOMER_BOOKING_FIRST="$(create_customer_booking "$USER_E" "$CUSTOMER_BOOKING_REQUEST_A" "CI Customer A" "$CUSTOMER_BOOKING_AT")"
+CUSTOMER_BOOKING_RETRY="$(create_customer_booking "$USER_E" "$CUSTOMER_BOOKING_REQUEST_A" "CI Customer A" "$CUSTOMER_BOOKING_AT")"
+if [ "$CUSTOMER_BOOKING_FIRST" != "$CUSTOMER_BOOKING_RETRY" ] ||
+   [[ "$CUSTOMER_BOOKING_FIRST" != *"|Pendente" ]]; then
+  echo "ERROR: customer booking retry did not return the original pending request." >&2
+  exit 1
+fi
+CUSTOMER_BOOKING_ID="$(cut -d '|' -f 1 <<<"$CUSTOMER_BOOKING_FIRST")"
+booking_request_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1   -c "SELECT count(*)::text FROM public.restaurant_reservations WHERE restaurant_id='$RESTAURANT_A'::uuid AND created_by='$USER_E'::uuid AND client_request_id='$CUSTOMER_BOOKING_REQUEST_A'::uuid;")"
+if [ "$booking_request_count" != "1" ] ||
+   [ "$(my_customer_booking_count "$USER_E")" != "1" ] ||
+   [ "$(my_customer_booking_count "$USER_F")" != "0" ]; then
+  echo "ERROR: customer booking was duplicated or visible to another customer's account." >&2
+  exit 1
+fi
+
+CUSTOMER_BOOKING_B="$(create_customer_booking "$USER_F" "$CUSTOMER_BOOKING_REQUEST_B" "CI Customer B" "$CUSTOMER_BOOKING_AT")"
+CUSTOMER_BOOKING_B_ID="$(cut -d '|' -f 1 <<<"$CUSTOMER_BOOKING_B")"
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT public.cancel_my_restaurant_reservation('$CUSTOMER_BOOKING_B_ID'::uuid);
+COMMIT;
+SQL
+then
+  echo "ERROR: customer A unexpectedly cancelled customer B's reservation." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT public.cancel_my_restaurant_reservation('$CUSTOMER_BOOKING_ID'::uuid);
+SELECT public.cancel_my_restaurant_reservation('$CUSTOMER_BOOKING_ID'::uuid);
+COMMIT;
+SQL
+customer_cancel_status="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1   -c "SELECT status FROM public.restaurant_reservations WHERE id='$CUSTOMER_BOOKING_ID'::uuid;")"
+if [ "$customer_cancel_status" != "Cancelada" ]; then
+  echo "ERROR: customer's own cancellation did not persist or was not idempotent." >&2
+  exit 1
+fi
+
+CUSTOMER_BOOKING_C="$(create_customer_booking "$USER_E" "$CUSTOMER_BOOKING_REQUEST_C" "CI Customer A" "$CUSTOMER_BOOKING_LATER")"
+CUSTOMER_BOOKING_C_ID="$(cut -d '|' -f 1 <<<"$CUSTOMER_BOOKING_C")"
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT public.update_restaurant_reservation_status('$CUSTOMER_BOOKING_C_ID'::uuid, 'Confirmada');
+COMMIT;
+SQL
+then
+  echo "ERROR: staff confirmed a customer booking without assigning a table." >&2
+  exit 1
+fi
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT public.assign_restaurant_reservation_table('$CUSTOMER_BOOKING_C_ID'::uuid, 99);
+SELECT public.update_restaurant_reservation_status('$CUSTOMER_BOOKING_C_ID'::uuid, 'Confirmada');
+COMMIT;
+SQL
+
+# Retrying the original customer request after staff assigned/confirmed it must
+# still return the same reservation rather than report a payload conflict.
+CUSTOMER_BOOKING_ASSIGNED_RETRY="$(create_customer_booking "$USER_E" "$CUSTOMER_BOOKING_REQUEST_C" "CI Customer A" "$CUSTOMER_BOOKING_LATER")"
+if [ "$CUSTOMER_BOOKING_ASSIGNED_RETRY" != "$CUSTOMER_BOOKING_C_ID|Confirmada" ]; then
+  echo "ERROR: customer booking retry failed after staff assignment/confirmation." >&2
+  exit 1
+fi
+
+CUSTOMER_BOOKING_D="$(create_customer_booking "$USER_E" "$CUSTOMER_BOOKING_REQUEST_D" "CI Customer A" "$CUSTOMER_BOOKING_LATER")"
+CUSTOMER_BOOKING_D_ID="$(cut -d '|' -f 1 <<<"$CUSTOMER_BOOKING_D")"
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT public.assign_restaurant_reservation_table('$CUSTOMER_BOOKING_D_ID'::uuid, 99);
+COMMIT;
+SQL
+then
+  echo "ERROR: overlapping customer reservation was assigned to an already reserved table." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_D', true);
+SET LOCAL ROLE authenticated;
+SELECT public.assign_restaurant_reservation_table('$CUSTOMER_BOOKING_D_ID'::uuid, 99);
+COMMIT;
+SQL
+then
+  echo "ERROR: staff from restaurant B unexpectedly assigned a table in restaurant A." >&2
+  exit 1
+fi
+echo "PASS: customer reservation creation/retry, private listing, own cancellation, foreign cancellation rejection, table assignment and confirmation guard."
+
 # Customer reward history is resolved from auth.uid(), not a client-supplied member ID.
 CUSTOMER_HISTORY_COUNT="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
 BEGIN;
