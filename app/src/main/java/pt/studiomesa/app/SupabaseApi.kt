@@ -1293,6 +1293,40 @@ object SupabaseApi {
         )
     }
 
+    fun getMyRestaurantPermissions(token: String): JSONArray {
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/get_my_restaurant_permissions",
+            JSONObject(),
+            token
+        ))
+    }
+
+    fun getRestaurantStaffPermissions(token: String, userId: String): JSONArray {
+        require(userId.isNotBlank()) { "Seleciona um funcionário válido." }
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/get_restaurant_staff_permissions",
+            JSONObject().put("p_user_id", userId),
+            token
+        ))
+    }
+
+    fun setRestaurantStaffPermissions(
+        token: String,
+        userId: String,
+        permissions: Set<String>
+    ): JSONArray {
+        require(userId.isNotBlank()) { "Seleciona um funcionário válido." }
+        val payload = StaffPermissionSet.toJsonArray(permissions)
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/set_restaurant_staff_permissions",
+            JSONObject().put("p_user_id", userId).put("p_permissions", payload),
+            token
+        ))
+    }
+
     fun listRestaurantTeam(token: String): JSONArray {
         return JSONArray(call(
             "POST",
