@@ -118,6 +118,7 @@ class MainActivity : Activity() {
     private var customerReservationsError = ""
     // Authoritative session snapshot used for navigation only; server RPC/RLS is the security boundary.
     private var currentStaffPermissions: Set<String>? = null
+    private var staffPermissionRefreshInFlight = false
 
     private val flavor = BuildConfig.FLAVOR.lowercase(Locale.ROOT)
     private val isCustomerApp = flavor.contains("cliente")
@@ -182,6 +183,7 @@ class MainActivity : Activity() {
         activityResumed = true
         updateKitchenAutoRefresh()
         updateInventoryAutoRefresh()
+        refreshStaffPermissionsSilently()
     }
 
     override fun onPause() {
@@ -1729,21 +1731,7 @@ class MainActivity : Activity() {
                     StaffPermissionSet.fromJson(SupabaseApi.getMyRestaurantPermissions(token))
                 }
                 cacheRemoteOperations(token, restaurant.optString("restaurant_id"))
-                if ("inventory" !in currentStaffPermissions.orEmpty()) {
-                    backendPrefs.edit().remove("remote_inventory_json").remove("inventory_loaded").apply()
-                }
-                if ("reservations" !in currentStaffPermissions.orEmpty()) {
-                    backendPrefs.edit().remove("remote_reservations_json").remove("reservations_loaded").apply()
-                    reservationCache = JSONArray()
-                    reservationsLoaded = false
-                }
-                if ("loyalty" !in currentStaffPermissions.orEmpty()) {
-                    backendPrefs.edit()
-                        .remove("remote_members_json")
-                        .remove("restaurant_loyalty_rewards_json")
-                        .remove("restaurant_loyalty_redemptions_json")
-                        .apply()
-                }
+                clearUnavailableStaffCaches()
             } else {
                 currentStaffPermissions = null
                 // The server confirmed this account no longer belongs to a restaurant.
@@ -1846,6 +1834,77 @@ class MainActivity : Activity() {
             editor.remove("remote_orders_json")
         }
         editor.apply()
+    }
+
+    private fun clearUnavailableStaffCaches() {
+        if (backendPrefs.getString("restaurant_role", "") != "staff") return
+        val permissions = currentStaffPermissions.orEmpty()
+        val editor = backendPrefs.edit()
+        if ("tables" !in permissions) editor.remove("remote_tables_json")
+        if ("menu" !in permissions) editor.remove("remote_menu_json")
+        if ("orders" !in permissions) editor.remove("remote_orders_json")
+        if ("inventory" !in permissions) {
+            editor.remove("remote_inventory_json").remove("inventory_loaded")
+        }
+        if ("reservations" !in permissions) {
+            editor.remove("remote_reservations_json").remove("reservations_loaded")
+            reservationCache = JSONArray()
+            reservationsLoaded = false
+        }
+        if ("loyalty" !in permissions) {
+            editor.remove("remote_members_json")
+                .remove("restaurant_loyalty_rewards_json")
+                .remove("restaurant_loyalty_redemptions_json")
+        }
+        editor.apply()
+    }
+
+    /**
+     * Re-fetch the authoritative matrix when a staff member returns to the app.
+     * Revoked areas are removed from navigation and local caches; server-side
+     * RPC/RLS checks still reject direct requests immediately.
+     */
+    private fun refreshStaffPermissionsSilently() {
+        if (isCustomerApp || staffPermissionRefreshInFlight ||
+            backendPrefs.getString("restaurant_role", "") != "staff") return
+
+        val startingUserId = backendPrefs.getString("user_id", "").orEmpty()
+        val startingRestaurantId = backendRestaurantId()
+        if (startingUserId.isBlank() || startingRestaurantId.isBlank() || backendToken().isBlank()) return
+
+        staffPermissionRefreshInFlight = true
+        Thread {
+            val permissions = try {
+                refreshSessionIfNeeded()
+                val token = backendToken()
+                val currentUserId = backendPrefs.getString("user_id", "").orEmpty()
+                val currentRestaurantId = backendRestaurantId()
+                if (token.isBlank() || currentUserId != startingUserId ||
+                    currentRestaurantId != startingRestaurantId ||
+                    backendPrefs.getString("restaurant_role", "") != "staff") {
+                    runOnUiThread { staffPermissionRefreshInFlight = false }
+                    return@Thread
+                }
+                StaffPermissionSet.fromJson(SupabaseApi.getMyRestaurantPermissions(token))
+            } catch (_: Exception) {
+                // A failed authorization refresh must not leave a revoked area exposed.
+                emptySet()
+            }
+
+            runOnUiThread {
+                staffPermissionRefreshInFlight = false
+                if (isFinishing) return@runOnUiThread
+                if (backendPrefs.getString("user_id", "").orEmpty() != startingUserId ||
+                    backendRestaurantId() != startingRestaurantId ||
+                    backendPrefs.getString("restaurant_role", "") != "staff") return@runOnUiThread
+
+                val changed = currentStaffPermissions != permissions
+                currentStaffPermissions = permissions
+                clearUnavailableStaffCaches()
+                if (activePage !in availablePages()) activePage = "Início"
+                if (changed) renderApp()
+            }
+        }.start()
     }
 
     private fun refreshRemoteOperations() {
