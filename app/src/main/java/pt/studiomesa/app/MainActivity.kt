@@ -2524,6 +2524,7 @@ class MainActivity : Activity() {
                 .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
                 .remove("remote_members_json").remove("remote_tables_json")
                 .remove("remote_menu_json").remove("remote_orders_json").remove("customer_menu_json")
+                .remove("customer_rewards_json")
                 .remove("remote_inventory_json").remove("inventory_loaded")
                 .remove("remote_reservations_json").remove("reservations_loaded")
                 .apply()
@@ -3018,6 +3019,10 @@ class MainActivity : Activity() {
     }
 
     private fun showCustomerPointsDialog(customer: LoyaltyCustomer, redeem: Boolean) {
+        if (backendToken().isNotBlank() && customer.backendId != null) {
+            Toast.makeText(this, "Na conta online, os pontos só podem ser atribuídos através do QR temporário.", Toast.LENGTH_LONG).show()
+            return
+        }
         val amountField = inputField("Número inteiro de pontos", InputType.TYPE_CLASS_NUMBER)
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -3528,6 +3533,7 @@ class MainActivity : Activity() {
                     .remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
                     .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
                     .remove("customer_menu_json")
+                    .remove("customer_rewards_json")
                     .apply()
                 activeCustomerPage = "Cartão"
                 renderCustomerApp()
