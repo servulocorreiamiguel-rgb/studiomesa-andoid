@@ -1951,6 +1951,27 @@ class MainActivity : Activity() {
                     return@Thread
                 }
 
+                val confirmedMembership = SupabaseApi.getMyRestaurant(token)
+                val confirmedMembershipId = confirmedMembership?.optString("restaurant_id").orEmpty()
+                val confirmedRole = confirmedMembership?.optString("user_role").orEmpty()
+                if (confirmedMembership == null || confirmedMembershipId != startingRestaurantId ||
+                    confirmedRole != "staff") {
+                    // A removed member receives an empty permission list, which alone
+                    // cannot distinguish removal from a deliberately empty matrix.
+                    // Reconcile the actual membership first so Account cannot keep
+                    // showing a restaurant that no longer recognizes this session.
+                    restoreOwnedRestaurant(token)
+                    runOnUiThread {
+                        staffPermissionRefreshInFlight = false
+                        if (!isFinishing &&
+                            backendPrefs.getString("user_id", "").orEmpty() == startingUserId) {
+                            activePage = "Início"
+                            renderApp()
+                        }
+                    }
+                    return@Thread
+                }
+
                 val confirmed = StaffPermissionSet.fromJson(
                     SupabaseApi.getMyRestaurantPermissions(token)
                 )
