@@ -970,6 +970,30 @@ if [ "$loyalty_redemption_state" != "fulfilled|$USER_C" ] ||
 fi
 echo "PASS: reward redemption is one-time, stock-limited, customer-scoped and staff-fulfilled."
 
+# Customer reward history is resolved from auth.uid(), not a client-supplied member ID.
+CUSTOMER_HISTORY_COUNT="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text FROM public.get_my_loyalty_reward_redemptions();
+ROLLBACK;
+SQL
+)"
+FOREIGN_CUSTOMER_HISTORY_COUNT="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_F', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text FROM public.get_my_loyalty_reward_redemptions();
+ROLLBACK;
+SQL
+)"
+if [ "$CUSTOMER_HISTORY_COUNT" != "1" ] || [ "$FOREIGN_CUSTOMER_HISTORY_COUNT" != "0" ]; then
+  echo "ERROR: customer reward history exposed another account's redemptions or omitted its own." >&2
+  printf 'Customer A history: %s; customer B history: %s\n' "$CUSTOMER_HISTORY_COUNT" "$FOREIGN_CUSTOMER_HISTORY_COUNT" >&2
+  exit 1
+fi
+echo "PASS: customers can see their own reward redemption history only."
+
 RESERVATION_REQUEST="99999999-9999-4999-8999-999999999999"
 RESERVATION_FOREIGN_REQUEST="abababab-abab-4bab-8bab-abababababab"
 RESERVATION_AT="$(date -u -d '+30 days' '+%Y-%m-%d %H:%M:%S+00:00')"
