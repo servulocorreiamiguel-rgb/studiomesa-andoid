@@ -473,6 +473,34 @@ if [ "$restricted_order_write_rows" != "0" ]; then
   exit 1
 fi
 
+STAFF_RESERVATION_AT="$(date -u -d '+45 days' '+%Y-%m-%d %H:%M:%S+00:00')"
+STAFF_RESERVATION_REQUEST="d5555555-5555-4555-8555-555555555555"
+STAFF_RESERVATION_ID="$(create_restaurant_reservation "$USER_C" "$RESTAURANT_A" "$STAFF_RESERVATION_REQUEST" "Staff permission booking" "$STAFF_RESERVATION_AT")"
+if [ -z "$STAFF_RESERVATION_ID" ]; then
+  echo "ERROR: reservations permission did not allow staff to create a reservation." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders']);
+COMMIT;
+SQL
+if create_restaurant_reservation "$USER_C" "$RESTAURANT_A" "d6666666-6666-4666-8666-666666666666" "Blocked staff booking" "$STAFF_RESERVATION_AT" >/dev/null 2>&1; then
+  echo "ERROR: staff created a reservation after the reservations permission was disabled." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders','reservations']);
+COMMIT;
+SQL
+
 psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
