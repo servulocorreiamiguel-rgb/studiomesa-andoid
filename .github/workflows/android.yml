@@ -314,7 +314,7 @@ jobs:
             psql --no-psqlrc --set ON_ERROR_STOP=1 --file "${migration}"
             count=$((count + 1))
           done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
-          test "${count}" -eq 46
+          test "${count}" -eq 47
           echo "Successfully replayed ${count} versioned migration files."
 
       - name: Assert core schema, RLS and RPCs exist
@@ -407,12 +407,30 @@ jobs:
                   'get_my_loyalty_reward_redemptions',
                   'get_restaurant_loyalty_reward_redemptions'
                 )
+                AND NOT p.prosecdef
+                AND p.proconfig @> ARRAY['search_path=""']
+                AND NOT has_function_privilege('anon', p.oid, 'EXECUTE')
+                AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
+            ) <> 7 OR (
+              SELECT count(*)
+              FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'private'
+                AND p.proname IN (
+                  'save_loyalty_reward_internal',
+                  'get_restaurant_loyalty_rewards_internal',
+                  'get_customer_loyalty_rewards_internal',
+                  'redeem_loyalty_reward_internal',
+                  'fulfill_loyalty_reward_redemption_internal',
+                  'get_my_loyalty_reward_redemptions_internal',
+                  'get_restaurant_loyalty_reward_redemptions_internal'
+                )
                 AND p.prosecdef
                 AND p.proconfig @> ARRAY['search_path=""']
                 AND NOT has_function_privilege('anon', p.oid, 'EXECUTE')
                 AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
-            ) <> 7 THEN
-              RAISE EXCEPTION 'Loyalty shop RPCs must be pinned SECURITY DEFINER functions executable only by authenticated callers.';
+            ) <> 7 OR has_schema_privilege('authenticated', 'private', 'USAGE') IS NOT TRUE THEN
+              RAISE EXCEPTION 'Loyalty shop RPCs must be invoker wrappers backed by private, pinned, authenticated-only functions.';
             END IF;
 
             IF EXISTS (
