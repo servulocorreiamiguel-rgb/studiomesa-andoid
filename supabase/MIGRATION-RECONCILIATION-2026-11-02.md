@@ -200,3 +200,28 @@ Na leitura efectuada, estes endpoints não podem ser executados por `anon` ou `P
 A migração local `20261102135000_legacy_loyalty_rpc_private_boundary.sql` prepara a passagem dos três RPCs legados de QR/resgates para implementações privadas com wrappers públicos `SECURITY INVOKER`. A migração `20261102141000_customer_reservation_flow_private_boundary.sql` prepara a mesma separação para o fluxo de reservas. A migração `20261102160000_granular_restaurant_staff_permissions.sql` introduz a matriz de seis áreas e substitui as políticas antigas por verificações de permissão. Nenhuma destas três migrações está aplicada ao projecto alojado.
 
 **Classificação actual:** o QR de fatura e a loja de recompensas apresentam correspondência forte no estado final com os candidatos locais; QR legado, reservas e permissões granulares continuam a precisar da sequência local posterior. Não executar reparação do histórico nem deploy até a sequência completa ser reproduzida e revista numa base descartável.
+
+
+## Revisão por grupos das 31 RPCs SECURITY DEFINER — 02/11/2026
+
+Foi extraída a lista completa das 31 funções públicas `SECURITY DEFINER` executáveis por `authenticated` e verificada a presença dos controlos no corpo das funções. Resultado da revisão estática:
+
+| Grupo de operações | Controlos observados no código alojado | Limite actual |
+|---|---|---|
+| Preços e consultor económico | As três operações de consulta/activação e aplicação verificam o papel `owner` do utilizador na associação ao restaurante | O consultor continua reservado ao proprietário; manter assim |
+| Equipa e códigos | Lista de equipa, remoção de funcionário e rotação de códigos verificam o proprietário; detalhes devolvem os códigos apenas ao proprietário | Não permitir que funcionários vejam ou rodem códigos |
+| Stock | As RPCs de criação, edição e ajuste verificam sessão e pertença ao restaurante indicado | Ainda não distinguem a permissão `inventory` da matriz por funcionário |
+| Pedidos e reservas da equipa | Atribuição de mesa, criação idempotente de reserva e alteração de estado verificam sessão e pertença ao restaurante | Ainda não distinguem `orders`, `tables` e `reservations` |
+| Fidelização da equipa | Atribuição por QR e consulta da fila de resgates verificam pertença ao restaurante; o registo de QR do cliente está ligado ao cartão da própria conta | Ainda não distinguem a permissão `loyalty`; os RPCs legados continuam em `public` |
+| Reservas do cliente | Criação, consulta e cancelamento estão limitados ao restaurante associado ao cartão e/ou a reservas com `created_by = auth.uid()` | A implementação alojada continua em funções públicas `SECURITY DEFINER`; a migração local 141000 prepara wrappers `SECURITY INVOKER` |
+| Conta e adesão | Cancelamento da eliminação apaga apenas a fila da própria conta; criar restaurante bloqueia segunda associação; adesão de cliente/equipa usa códigos e associa a conta autenticada | Continuar a testar concorrência e abuso de códigos |
+
+### Resultado e limites
+
+- Nas 31 funções: execução por `anon` = **0**; execução por `PUBLIC` = **0**; todas usam `search_path` vazio e referenciam `auth.uid()`.
+- A amostra de corpos consultada confirma controlos de proprietário, pertença ao restaurante ou titularidade do cartão/reserva, consoante a operação.
+- Não foi identificado, nesta passagem estática, um caminho óbvio em que um utilizador anónimo consiga invocar estas RPCs ou escolher livremente os dados de outra conta.
+- Isto não é um teste de penetração nem substitui testes adversariais de cada função/argumento. Os testes PostgreSQL em CI cobrem cenários importantes de isolamento, idempotência e revogação; a matriz granular ainda não está activa no projecto alojado.
+- O aviso do Advisor é, portanto, parcialmente estrutural: as funções são realmente endpoints privilegiados para utilizadores autenticados, mas não estão abertas a `anon`/`PUBLIC`. Não revogar em bloco. A prioridade é migrar os endpoints legados para wrappers `SECURITY INVOKER`, activar a matriz granular de permissões e manter os testes de autorização correspondentes.
+
+**Estado:** revisão estática inicial concluída para os 31 nomes/assinaturas e controlos principais; revisão aprofundada de limites, condições de corrida e argumentos continua a exigir testes dedicados por função. Nenhuma alteração SQL foi aplicada ao Supabase alojado.
