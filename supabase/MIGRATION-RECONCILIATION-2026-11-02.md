@@ -52,9 +52,9 @@ Alguns nomes indicam funcionalidades semelhantes (por exemplo, QR de fidelizaç�
 
 - PR **#75** (`feature/loyalty-shop-qr-security`) é uma branch paralela baseada em `main`. Inclui QR de utilização única, reservas e permissões granulares de funcionários.
 - PR **#76** (`feature/invoice-loyalty-qr`) também parte de `main`. Inclui QR de fidelização associado à fatura e loja de recompensas. Tem migrações com versões diferentes das que aparecem no histórico remoto.
-- PR **#77** (`feature/customer-reservations`) está empilhada sobre #76. Além das reservas do cliente, a branch contém a loja/QR, permissões granulares da equipa e a actualização da matriz ao regressar à app.
+- PR **#77** (`feature/customer-reservations`) está empilhada sobre #76. Além das reservas do cliente, a branch contém a loja/QR, permissões granulares da equipa, filtragem da navegação e revalidação da associação/matriz ao regressar à app.
 - As três branches alteram ficheiros centrais como `MainActivity.kt`, `SupabaseApi.kt` e/ou o workflow Android. Não devem ser integradas em sequência sem uma revisão explícita das sobreposições.
-- A implementação granular da PR #75 foi portada e adaptada em #77. A migração `20261102160000_granular_staff_permissions.sql` aplica as seis áreas no servidor e conserva os wrappers privados existentes.
+- A implementação granular da PR #75 foi portada e adaptada em #77. A migração `20261102160000_granular_staff_permissions.sql` aplica as seis áreas no servidor, rejeita identificadores desconhecidos, repetidos e elementos NULL, e conserva os wrappers privados existentes. A UI só mostra os códigos de adesão e as ações de rotação ao proprietário.
 
 ## Alteração de desempenho acrescentada à branch #77
 
@@ -69,7 +69,7 @@ Validação da nova cadeia de permissões:
 - A primeira tentativa de replay falhou porque `private.loyalty_qr_tokens` era usada pelo QR legado mas não era criada na sequência limpa local.
 - A migração `20261102135000_legacy_loyalty_rpc_private_boundary.sql` foi corrigida para criar a tabela QR com `IF NOT EXISTS`, RLS, índices e privilégios directos revogados, preservando dados caso já exista.
 - O workflow completo passou na execução [41481734799](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/41481734799), no commit `247ed883b514e514826e2ca56be4b7156d126a9b`: replay das 51 migrações locais desde base vazia, testes de autorização/idempotência PostgreSQL, compilação, unit tests de todas as variantes, Android Lint e smoke tests em Android 8 e Android 16.
-- Depois dessa execução foram acrescentados ajustes de fail-closed/recarga da cache e mais testes unitários (`d113f3d` e `58bf586`). A CI tem de voltar a passar no commit mais recente antes de considerar a revisão atual aprovada.
+- A execução seguinte [41495700617](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/41495700617) está em curso no commit `6c14e6d`. Inclui o teste de rejeição de elementos NULL na matriz e as verificações owner-only dos códigos. A verificação live da associação ao restaurante foi acrescentada depois desse commit (`3bb5d53)) e requer uma execução CI no head atual.
 - O sucesso da CI de desenvolvimento não corrige a divergência de migrações do projeto alojado e não autoriza deploy.
 
 ## Estado de segurança observado no projeto alojado
