@@ -176,6 +176,55 @@ COMMIT;
 SQL
 }
 
+create_customer_reservation() {
+  local user_id="$1" request_id="$2" guest_name="$3" guest_phone="$4"
+  local party_size="$5" reservation_at="$6" duration="$7" notes="$8"
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT reservation_id::text || '|' || status
+FROM public.create_customer_reservation_request(
+  '$request_id'::uuid, '$guest_name', '$guest_phone', '$party_size'::integer,
+  '$reservation_at'::timestamptz, '$duration'::integer, '$notes'
+);
+COMMIT;
+SQL
+}
+
+get_customer_reservation_count() {
+  local user_id="$1"
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text FROM public.get_my_restaurant_reservations();
+COMMIT;
+SQL
+}
+
+cancel_customer_reservation() {
+  local user_id="$1" reservation_id="$2"
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT public.cancel_my_restaurant_reservation('$reservation_id'::uuid);
+COMMIT;
+SQL
+}
+
+assign_reservation_table() {
+  local user_id="$1" reservation_id="$2" table_number="$3"
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT public.assign_restaurant_reservation_table('$reservation_id'::uuid, '$table_number'::integer);
+COMMIT;
+SQL
+}
+
 issue_invoice_loyalty_qr() {
   local user_id="$1" member_id="$2" amount="$3" invoice_reference="$4" request_id="$5"
   psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
@@ -745,6 +794,84 @@ MEMBER_B="$(join_customer "$USER_F" "SMOKEBB001" "CI Customer B")"
 test -n "$MEMBER_A"
 test -n "$MEMBER_B"
 test "$MEMBER_A" != "$MEMBER_B"
+
+# Customer reservation flow: server derives the restaurant from the customer's
+# own loyalty membership; retries are idempotent and all reads/cancellations
+# remain scoped to the authenticated owner.
+RESERVATION_AT="$(date -u -d '+2 days' '+%Y-%m-%dT%H:%M:%SZ')"
+RESERVATION_REQUEST_A="aaaaaaaa-1212-4121-8121-121212121212"
+RESERVATION_REQUEST_B="bbbbbbbb-2323-4232-8232-232323232323"
+RESERVATION_REQUEST_C="cccccccc-3434-4343-8343-343434343434"
+RESERVATION_FIRST="$(create_customer_reservation "$USER_E" "$RESERVATION_REQUEST_A" "CI Booking A" "+351900000001" 2 "$RESERVATION_AT" 90 "Allergy note test")"
+RESERVATION_RETRY="$(create_customer_reservation "$USER_E" "$RESERVATION_REQUEST_A" "CI Booking A" "+351900000001" 2 "$RESERVATION_AT" 90 "Allergy note test")"
+if [ "$RESERVATION_FIRST" != "$RESERVATION_RETRY" ]; then
+  echo "ERROR: retrying a customer reservation did not return the original reservation." >&2
+  exit 1
+fi
+RESERVATION_ID="${RESERVATION_FIRST%%|*}"
+RESERVATION_STATUS="${RESERVATION_FIRST##*|}"
+if [ -z "$RESERVATION_ID" ] || [ "$RESERVATION_STATUS" != "Pendente" ]; then
+  echo "ERROR: customer reservation was not created as pending." >&2
+  exit 1
+fi
+
+if create_customer_reservation "$USER_E" "$RESERVATION_REQUEST_A" "Different booking" "+351900000001" 2 "$RESERVATION_AT" 90 "Allergy note test" >/dev/null 2>&1; then
+  echo "ERROR: reservation request ID was reused with a different payload." >&2
+  exit 1
+fi
+
+CUSTOMER_A_RESERVATION_COUNT="$(get_customer_reservation_count "$USER_E")"
+CUSTOMER_B_RESERVATION_COUNT="$(get_customer_reservation_count "$USER_F")"
+if [ "$CUSTOMER_A_RESERVATION_COUNT" != "1" ] || [ "$CUSTOMER_B_RESERVATION_COUNT" != "0" ]; then
+  echo "ERROR: customer reservation history is not isolated by authenticated membership." >&2
+  exit 1
+fi
+
+# Restaurant A staff can assign a suitable table, but staff from B cannot touch A.
+assign_reservation_table "$USER_C" "$RESERVATION_ID" 1 >/dev/null
+ASSIGNED_TABLE="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT table_number::text FROM public.restaurant_reservations WHERE id = '$RESERVATION_ID'::uuid;")"
+if [ "$ASSIGNED_TABLE" != "1" ]; then
+  echo "ERROR: authorized restaurant staff did not assign the requested table." >&2
+  exit 1
+fi
+if assign_reservation_table "$USER_D" "$RESERVATION_ID" 2 >/dev/null 2>&1; then
+  echo "ERROR: staff from another restaurant assigned a table to this reservation." >&2
+  exit 1
+fi
+
+# The same table cannot be assigned to overlapping requests, and a table with
+# insufficient seats is rejected by the server.
+OVERLAP_RESULT="$(create_customer_reservation "$USER_E" "$RESERVATION_REQUEST_B" "CI Booking B" "" 2 "$RESERVATION_AT" 90 "")"
+OVERLAP_ID="${OVERLAP_RESULT%%|*}"
+if assign_reservation_table "$USER_C" "$OVERLAP_ID" 1 >/dev/null 2>&1; then
+  echo "ERROR: overlapping reservation was assigned to an occupied table/time window." >&2
+  exit 1
+fi
+LARGE_PARTY_AT="$(date -u -d '+3 days' '+%Y-%m-%dT%H:%M:%SZ')"
+LARGE_PARTY_RESULT="$(create_customer_reservation "$USER_E" "$RESERVATION_REQUEST_C" "CI Booking C" "" 5 "$LARGE_PARTY_AT" 90 "")"
+LARGE_PARTY_ID="${LARGE_PARTY_RESULT%%|*}"
+if assign_reservation_table "$USER_C" "$LARGE_PARTY_ID" 2 >/dev/null 2>&1; then
+  echo "ERROR: server accepted a table with insufficient seating capacity." >&2
+  exit 1
+fi
+
+# A different customer's session cannot cancel this request; the owner can,
+# and repeated cancellation is safe.
+if cancel_customer_reservation "$USER_F" "$RESERVATION_ID" >/dev/null 2>&1; then
+  echo "ERROR: a different customer cancelled another customer's reservation." >&2
+  exit 1
+fi
+cancel_customer_reservation "$USER_E" "$RESERVATION_ID" >/dev/null
+cancel_customer_reservation "$USER_E" "$RESERVATION_ID" >/dev/null
+CANCELLED_STATUS="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT status FROM public.restaurant_reservations WHERE id = '$RESERVATION_ID'::uuid;")"
+if [ "$CANCELLED_STATUS" != "Cancelada" ]; then
+  echo "ERROR: customer's own reservation was not cancelled." >&2
+  exit 1
+fi
+
+echo "PASS: customer reservation creation is idempotent, history and cancellation are private, table assignment is restaurant-scoped, and capacity/time conflicts are rejected."
 
 own_menu_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
 BEGIN;
