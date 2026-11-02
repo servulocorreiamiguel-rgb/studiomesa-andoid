@@ -314,7 +314,7 @@ jobs:
             psql --no-psqlrc --set ON_ERROR_STOP=1 --file "${migration}"
             count=$((count + 1))
           done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
-          test "${count}" -eq 45
+          test "${count}" -eq 46
           echo "Successfully replayed ${count} versioned migration files."
 
       - name: Assert core schema, RLS and RPCs exist
@@ -379,6 +379,52 @@ jobs:
               OR NOT has_function_privilege('authenticated', 'public.issue_loyalty_invoice_qr(uuid,numeric,text,uuid)', 'EXECUTE')
               OR NOT has_function_privilege('authenticated', 'public.redeem_loyalty_invoice_qr(uuid)', 'EXECUTE') THEN
               RAISE EXCEPTION 'Invoice QR RPC privileges are not restricted to authenticated callers.';
+            END IF;
+
+            IF to_regclass('public.loyalty_rewards') IS NULL
+              OR to_regclass('public.loyalty_reward_redemptions') IS NULL
+              OR to_regprocedure('public.save_loyalty_reward(uuid,uuid,text,text,integer,integer,boolean)') IS NULL
+              OR to_regprocedure('public.get_restaurant_loyalty_rewards(uuid)') IS NULL
+              OR to_regprocedure('public.get_customer_loyalty_rewards(uuid)') IS NULL
+              OR to_regprocedure('public.redeem_loyalty_reward(uuid,uuid)') IS NULL
+              OR to_regprocedure('public.fulfill_loyalty_reward_redemption(uuid)') IS NULL
+              OR to_regprocedure('public.get_my_loyalty_reward_redemptions()') IS NULL
+              OR to_regprocedure('public.get_restaurant_loyalty_reward_redemptions(uuid)') IS NULL THEN
+              RAISE EXCEPTION 'The loyalty shop schema or one of its RPCs is missing after clean migration replay.';
+            END IF;
+
+            IF (
+              SELECT count(*)
+              FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'public'
+                AND p.proname IN (
+                  'save_loyalty_reward',
+                  'get_restaurant_loyalty_rewards',
+                  'get_customer_loyalty_rewards',
+                  'redeem_loyalty_reward',
+                  'fulfill_loyalty_reward_redemption',
+                  'get_my_loyalty_reward_redemptions',
+                  'get_restaurant_loyalty_reward_redemptions'
+                )
+                AND p.prosecdef
+                AND p.proconfig @> ARRAY['search_path=""']
+                AND NOT has_function_privilege('anon', p.oid, 'EXECUTE')
+                AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
+            ) <> 7 THEN
+              RAISE EXCEPTION 'Loyalty shop RPCs must be pinned SECURITY DEFINER functions executable only by authenticated callers.';
+            END IF;
+
+            IF EXISTS (
+              SELECT 1
+              FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public'
+                AND c.relname IN ('loyalty_rewards', 'loyalty_reward_redemptions')
+                AND NOT c.relrowsecurity
+            ) OR has_table_privilege('authenticated', 'public.loyalty_rewards', 'SELECT')
+              OR has_table_privilege('authenticated', 'public.loyalty_reward_redemptions', 'SELECT') THEN
+              RAISE EXCEPTION 'Loyalty reward tables must have RLS enabled and remain inaccessible for direct authenticated reads.';
             END IF;
 
             IF to_regprocedure('public.save_inventory_item_with_cost(uuid,uuid,text,text,numeric,numeric,text,numeric)') IS NULL
