@@ -1910,10 +1910,23 @@ class MainActivity : Activity() {
                 val token = backendToken()
                 val currentUserId = backendPrefs.getString("user_id", "").orEmpty()
                 val currentRestaurantId = backendRestaurantId()
-                if (token.isBlank() || currentUserId != startingUserId ||
-                    currentRestaurantId != startingRestaurantId ||
-                    backendPrefs.getString("restaurant_role", "") != "staff") {
+                if (token.isBlank() || currentUserId != startingUserId) {
                     runOnUiThread { staffPermissionRefreshInFlight = false }
+                    return@Thread
+                }
+                if (currentRestaurantId != startingRestaurantId ||
+                    backendPrefs.getString("restaurant_role", "") != "staff") {
+                    // Session refresh may have confirmed that the account was removed
+                    // from this restaurant or promoted to owner. Restore the whole view
+                    // from the new server-confirmed membership instead of leaving an old page on screen.
+                    runOnUiThread {
+                        staffPermissionRefreshInFlight = false
+                        if (!isFinishing &&
+                            backendPrefs.getString("user_id", "").orEmpty() == startingUserId) {
+                            activePage = "Início"
+                            renderApp()
+                        }
+                    }
                     return@Thread
                 }
 
