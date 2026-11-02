@@ -3305,16 +3305,26 @@ class MainActivity : Activity() {
         }
         runBackend({
             val activeToken = backendToken()
+            val member = SupabaseApi.getMember(activeToken, memberId)
+            if (member.optString("id") != memberId) {
+                throw IllegalStateException("O cartão de cliente devolvido não corresponde a esta conta.")
+            }
+            val currentPoints = member.optInt("points", -1)
+            if (currentPoints < 0) {
+                throw IllegalStateException("O servidor devolveu um saldo de pontos inválido.")
+            }
             val rewards = SupabaseApi.listCustomerLoyaltyRewards(activeToken, memberId)
             val history = SupabaseApi.listMyLoyaltyRewardRedemptions(activeToken)
             backendPrefs.edit()
+                .putInt("member_points", currentPoints)
+                .putString("member_code", member.optString("member_code"))
                 .putString("customer_loyalty_rewards_json", rewards.toString())
                 .putString("customer_loyalty_redemptions_json", history.toString())
                 .apply()
             rewards.length().toString()
         }) { count ->
             if (activeCustomerPage == "Prémios") renderCustomerApp()
-            Toast.makeText(this, "Loja atualizada.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Loja e saldo atualizados.", Toast.LENGTH_SHORT).show()
         }
     }
 
