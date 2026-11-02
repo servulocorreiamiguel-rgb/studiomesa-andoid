@@ -312,6 +312,71 @@ if [ "$owner_permission_matrix" != "orders,tables,reservations,menu,inventory,lo
   exit 1
 fi
 
+owner_readback_permissions="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT array_to_string(public.get_restaurant_staff_permissions('$USER_C'::uuid), ',');
+ROLLBACK;
+SQL
+)"
+if [ "$owner_readback_permissions" != "orders,reservations" ]; then
+  echo "ERROR: owner could not read back a staff member's effective permissions." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT public.get_restaurant_staff_permissions('$USER_D'::uuid);
+COMMIT;
+SQL
+then
+  echo "ERROR: staff unexpectedly queried another member's permissions." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['owner_access']);
+COMMIT;
+SQL
+then
+  echo "ERROR: an unknown staff permission was accepted." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY[]::text[]);
+COMMIT;
+SQL
+empty_staff_permission="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT private.has_restaurant_permission('$RESTAURANT_A'::uuid, 'orders')::text;
+ROLLBACK;
+SQL
+)"
+if [ "$empty_staff_permission" != "false" ]; then
+  echo "ERROR: an explicitly empty permission list did not deny all operational areas." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders','reservations']);
+COMMIT;
+SQL
+
 # A restricted employee cannot write to tables, menu or stock through direct
 # table access or the stock RPC, even though the Android client is bypassed.
 MENU_PERMISSION_PROBE="88888888-8888-4888-8888-888888888888"
