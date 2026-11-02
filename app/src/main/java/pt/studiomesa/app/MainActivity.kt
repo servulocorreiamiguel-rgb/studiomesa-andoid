@@ -1927,7 +1927,9 @@ class MainActivity : Activity() {
         // restricted page or its cached data visible while a revocation is checked.
         val hadPermissions = currentStaffPermissions?.isNotEmpty() == true
         currentStaffPermissions = emptySet()
-        clearUnavailableStaffCaches()
+        // Keep the old cache stored but unreachable while the screen is closed behind
+        // the home fallback. After the server answers, purge only revoked areas; on
+        // network/auth failure the final empty matrix purges every operational cache.
         if (activePage !in availablePages()) activePage = "Início"
         if (hadPermissions) renderApp()
 
