@@ -79,9 +79,10 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [x] Separação de contas, papéis owner/staff e código de adesão de equipa.
 - [x] Proprietário pode consultar membros, remover o acesso de um funcionário e renovar automaticamente o código de adesão após a remoção.
 - [x] Verificado em teste transacional que operações administrativas de proprietário (consultar equipa, renovar códigos e remover membros) são recusadas a uma conta `staff`.
-- [ ] Validar na CI e rever a implementação portada de permissões granulares: seis áreas, imposição no Supabase, gestão pelo proprietário, actualização ao regressar à app e limpeza de cache após revogação. A migração ainda não foi aplicada ao Supabase alojado.
-- [ ] Suspensão temporária, horários/turnos e trilho de auditoria administrativo completo.
-- [ ] Verificar em testes que a revogação é refletida em todos os dispositivos; ecrãs ativos podem continuar a mostrar dados já carregados até atualizar/reabrir.
+- [x] Permissões granulares implementadas na branch: seis áreas, matriz por funcionário, gestão exclusiva do proprietário e autorização em RLS/RPC. A suite PostgreSQL, o replay de migrações e o build Android passaram na execução [41481734799](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/41481734799).
+- [ ] Revalidar na CI os ajustes posteriores ao comportamento de cache: fail-closed enquanto a matriz é atualizada ao regressar à app e recarga dos dados quando uma área volta a ser concedida.
+- [ ] Aplicar a migração `20261102160000_granular_restaurant_staff_permissions.sql` ao Supabase alojado apenas depois de reconciliar as 10 migrações locais-only e as 13 remotas-only e aprovar um plano de deploy. Não foi aplicada nesta revisão.
+- [ ] Testar em dois dispositivos reais revogação, retorno à app, reposição de permissões, acesso com sessão aberta e perda de rede. A revogação no servidor é imediata; a interface de outro dispositivo atualiza quando volta a validar a matriz.
 - [x] Ensaios transacionais live: duas contas só viram os próprios dados em `restaurants`, `restaurant_staff`, `menu_items`, `restaurant_tables` e `restaurant_orders`; RPCs de criação de stock/reserva para o restaurante alheio foram recusadas. Uma conta `staff` não conseguiu listar a equipa, renovar códigos de equipa/clientes ou remover outro membro. Os testes foram revertidos e verificou-se que não ficaram registos temporários.
 - [ ] Alargar os testes de isolamento a fidelização, restantes RPCs, cliente Android com sessões reais e pedidos concorrentes.
 
