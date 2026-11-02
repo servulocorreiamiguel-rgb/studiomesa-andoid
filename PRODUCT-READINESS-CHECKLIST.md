@@ -17,6 +17,24 @@
 
 Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige desenvolvimento/testes. Um botão presente na interface não prova que uma funcionalidade esteja completa.
 
+## Requisitos adicionais de segurança obrigatórios antes da primeira venda
+
+Estes cenários são critérios de aceitação, não apenas recomendações. Cada item só pode passar a concluído depois de testes no servidor e na aplicação Android:
+
+- [ ] **Pontos sem duplicação:** duas tentativas concorrentes com o mesmo pedido não podem creditar pontos duas vezes; o mesmo QR não pode ser usado com um segundo identificador de operação.
+- [ ] **QR de cliente:** o cliente autenticado gera um QR temporário de utilização única; expira ao fim de dois minutos, um novo QR invalida os anteriores ainda não utilizados e só um funcionário autenticado do restaurante associado pode atribuir pontos. O servidor valida e consome o QR na mesma transação que credita os pontos.
+- [ ] **Loja de pontos:** só o proprietário pode criar, editar, ativar ou desativar recompensas e definir custo em pontos e limite de stock. O cliente só consulta recompensas do seu próprio restaurante.
+- [ ] **Resgate único:** o servidor confirma saldo e stock, desconta pontos e regista o resgate atomicamente. Repetições do mesmo pedido não descontam novamente; duas pessoas não conseguem ultrapassar o stock disponível por concorrência.
+- [ ] **Entrega de recompensas:** os funcionários só podem confirmar resgates do próprio restaurante; a confirmação repetida é inofensiva e fica registada.
+- [ ] **Isolamento entre restaurantes:** testar leitura e escrita cruzada em cartas, preços, clientes, pontos, QR, recompensas, resgates, reservas, pedidos e stock.
+- [ ] **Separação de funções:** um funcionário não pode executar ações exclusivas do proprietário, incluindo gerir equipa, códigos de acesso, configuração da loja de pontos ou definições económicas; a autorização é imposta no servidor.
+- [ ] **Alterações de preços:** validar quem pode alterar preços e confirmar que o cliente recebe o valor publicado, sem acesso ao custo interno.
+- [ ] **Falhas de rede:** interromper a ligação antes, durante e depois de cada escrita crítica; confirmar que reservas, pontos e resgates não ficam duplicados nem em estado parcial.
+- [ ] **Mudança de telemóvel:** entrar na mesma conta num segundo dispositivo e confirmar cartão, saldo, movimentos e resgates a partir do servidor.
+- [ ] **Cópias de segurança:** confirmar política e retenção efetivas no plano contratado e executar um restauro de teste num ambiente separado; não basta existir uma opção de backup no painel.
+
+Nenhum destes pontos deve ser anunciado como testado por existir apenas código, tabela ou botão. A validação de concorrência, autorização, falhas de rede e restauro tem de ficar documentada com o resultado do ensaio.
+
 ## Carta e menu
 
 - [x] Criar/editar artigos, categorias, descrição, preço e alergénios declarados.
