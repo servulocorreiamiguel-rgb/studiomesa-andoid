@@ -567,7 +567,7 @@ class MainActivity : Activity() {
             setBackgroundColor(white)
             elevation = dp(6).toFloat()
         }
-        listOf("Início", "Mesas", "Pedidos").forEach { page ->
+        StaffPermissionSet.bottomNavigationPages(availablePages()).forEach { page ->
             val selected = activePage == page
             val item = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
