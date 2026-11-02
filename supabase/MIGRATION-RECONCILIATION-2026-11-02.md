@@ -128,3 +128,33 @@ Continuam sem original encontrado nas branches consultadas os cinco registos rem
 Existem candidatos locais com versões e nomes próximos (`20261102102500`, `20261102104100`, `20261102104800`, `20261102112000` e `20261102113000`), mas não são cópias históricas dos cinco ficheiros remotos. É necessário comparar cada definição com o estado actual do catálogo PostgreSQL e com as funções e tabelas do projecto antes de decidir uma baseline ou uma sequência de migrações.
 
 **Decisão mantida:** não executar `db push`, `migration repair`, `apply_migration` ou qualquer alteração ao histórico/schema de produção até a reconciliação integral estar documentada, revista e reproduzida numa base descartável.
+
+
+## Fotografia do projecto alojado — 02/11/2026, 20:25 UTC
+
+Leitura feita directamente ao projecto Supabase `svwvkfsyevuyabelrtjk`. Foram executadas apenas consultas de leitura.
+
+### Diferenças relevantes face à branch `feature/customer-reservations`
+
+- O histórico alojado tem **54 versões**, terminando em `20261102113944`.
+- A tabela `private.restaurant_staff_permissions` **não existe** no projecto alojado. As políticas activas para Mesas, Carta, Pedidos, Reservas, Membros e Transacções de Fidelização continuam a usar `private.is_restaurant_staff`, sem a matriz granular por área.
+- A migração local `20261102150000_add_price_adviser_actor_fk_indexes.sql` ainda não está aplicada: o Performance Advisor continua a assinalar as FKs `restaurant_price_adviser_audit.acted_by` e `restaurant_price_adviser_settings.updated_by` sem índices.
+- As tabelas `private.loyalty_invoice_qr_codes`, `private.loyalty_qr_tokens`, `public.loyalty_rewards`, `public.loyalty_reward_redemptions` e `public.restaurant_reservations` existem no projecto. Foram encontrados os índices de QR, idempotência e reservas esperados.
+- `public.loyalty_rewards` e `public.loyalty_reward_redemptions` não têm políticas RLS, mas também não concedem SELECT/INSERT directos a `anon` ou `authenticated`. Este desenho RPC-only é intencional; não adicionar políticas abertas só para remover o aviso informativo do Advisor.
+
+### Security Advisor — leitura do catálogo
+
+Foram encontradas **36** funções `SECURITY DEFINER` no schema `public`; **31** podem ser executadas por `authenticated`, correspondendo ao aviso do Advisor. Nas 36 funções verificadas:
+
+- nenhuma permite EXECUTE a `anon`;
+- nenhuma permite EXECUTE a `PUBLIC`;
+- todas referenciam `auth.uid()`;
+- todas fixam `search_path` vazio.
+
+Isto reduz a superfície anónima, mas não prova por si só que cada RPC esteja correctamente limitada ao restaurante, titular, papel e operação. Os 31 avisos têm de ser revistos função a função; não revogar em bloco nem converter indiscriminadamente para `SECURITY INVOKER`, porque algumas operações precisam de atravessar tabelas privadas/RLS e já têm validação própria.
+
+O Security Advisor mantém também o aviso de **Leaked Password Protection Disabled**. Esta opção requer alteração nas definições de Auth do projecto e continua por tratar.
+
+### Consequência para a preparação comercial
+
+A aplicação Android e a branch de desenvolvimento têm uma implementação de permissões mais recente do que a base alojada. Até reconciliar e aplicar a migração aprovada, não anunciar permissões individuais de funcionários como já activas em produção. A integração da PR #77 e o plano de migração continuam bloqueados pela reconciliação do histórico, não pela compilação Android.
