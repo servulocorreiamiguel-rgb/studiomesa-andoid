@@ -263,5 +263,6 @@ A matriz configurável pelo proprietário contém seis áreas: pedidos/cozinha, 
 | PERM-13 | Proprietário volta a conceder uma área antes revogada | Ao regressar à app, o funcionário volta a carregar os dados autorizados do servidor; não depende de uma cache que foi apagada. |
 | PERM-14 | Funcionário regressa sem ligação após uma alteração de permissões | A app fecha o acesso local por defeito até conseguir confirmar novamente a matriz e os dados no servidor. |
 | PERM-15 | Funcionário não tem acesso a Mesas ou Pedidos | Os atalhos correspondentes também desaparecem da barra inferior; não ficam controlos sem ação.
+| PERM-16 | Funcionário abre a fidelização e tenta consultar os códigos de adesão de clientes/equipa | Os códigos não são apresentados nem podem ser abertos pelo método direto; apenas o proprietário tem acesso. |
 
 Estado: os testes PostgreSQL de permissões, isolamento e chamadas diretas passaram na execução CI [41481734799](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/41481734799). Os ajustes posteriores para fail-closed ao regressar à app e recarregar dados das áreas recém-concedidas ainda exigem uma nova execução CI. STAFF/PERM-10 e PERM-11 continuam a exigir validação manual em dois dispositivos reais. A migração ainda não foi aplicada à base de dados alojada.
