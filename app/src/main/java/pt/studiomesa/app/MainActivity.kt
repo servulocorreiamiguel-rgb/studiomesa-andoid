@@ -3628,10 +3628,27 @@ class MainActivity : Activity() {
             return
         }
         val expectedMemberId = backendMemberId()
+        val expectedAccountId = backendPrefs.getString("user_id", "").orEmpty()
         runBackend({
+            if (!LoyaltySessionScope.matches(
+                expectedAccountId,
+                backendPrefs.getString("user_id", "").orEmpty(),
+                expectedMemberId,
+                backendMemberId()
+            )) {
+                throw IllegalStateException("A conta ou o cartão mudou antes da leitura. Lê novamente o código.")
+            }
             val result = SupabaseApi.redeemLoyaltyInvoiceQr(backendToken(), qrToken)
             if (result.optString("member_id") != expectedMemberId) {
                 throw IllegalStateException("O QR não corresponde ao cartão de cliente desta conta.")
+            }
+            if (!LoyaltySessionScope.matches(
+                expectedAccountId,
+                backendPrefs.getString("user_id", "").orEmpty(),
+                expectedMemberId,
+                backendMemberId()
+            )) {
+                throw IllegalStateException("A conta ou o cartão mudou durante a validação do QR.")
             }
             backendPrefs.edit()
                 .putInt("member_points", result.optInt("points", 0))
@@ -3639,6 +3656,14 @@ class MainActivity : Activity() {
                 .apply()
             result.toString()
         }) { response ->
+            if (!LoyaltySessionScope.matches(
+                expectedAccountId,
+                backendPrefs.getString("user_id", "").orEmpty(),
+                expectedMemberId,
+                backendMemberId()
+            )) {
+                return@runBackend
+            }
             val result = JSONObject(response)
             val awarded = result.optInt("points_awarded", 0)
             val balance = result.optInt("points", 0)
@@ -3716,6 +3741,15 @@ class MainActivity : Activity() {
                             .toString()
                         val operation = "loyalty_invoice_qr_issue"
                         val accountId = backendPrefs.getString("user_id", "").orEmpty()
+                        if (!LoyaltySessionScope.matches(
+                            accountId,
+                            backendPrefs.getString("user_id", "").orEmpty(),
+                            restaurantId,
+                            backendRestaurantId()
+                        )) {
+                            referenceField.error = "A conta ou o restaurante mudou. Fecha e abre novamente."
+                            return@setOnClickListener
+                        }
                         val requestId = try {
                             pendingRequestIds.getOrCreate(operation, accountId, signature)
                         } catch (_: Exception) {
@@ -3723,11 +3757,27 @@ class MainActivity : Activity() {
                             return@setOnClickListener
                         }
                         runBackend({
+                            if (!LoyaltySessionScope.matches(
+                                accountId,
+                                backendPrefs.getString("user_id", "").orEmpty(),
+                                restaurantId,
+                                backendRestaurantId()
+                            )) {
+                                throw IllegalStateException("A conta ou o restaurante mudou antes da emissão do QR.")
+                            }
                             SupabaseApi.issueLoyaltyInvoiceQr(
                                 backendToken(), memberId, normalizedAmount, reference, requestId
                             ).toString()
                         }) { response ->
                             pendingRequestIds.complete(operation, accountId, signature, requestId)
+                            if (!LoyaltySessionScope.matches(
+                                accountId,
+                                backendPrefs.getString("user_id", "").orEmpty(),
+                                restaurantId,
+                                backendRestaurantId()
+                            )) {
+                                return@runBackend
+                            }
                             dialog.dismiss()
                             showIssuedInvoiceLoyaltyQr(JSONObject(response))
                         }
