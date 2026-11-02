@@ -178,13 +178,17 @@ begin
     select lm.id, lm.restaurant_id into v_member_id, v_restaurant_id
     from public.loyalty_members lm
     where lm.auth_user_id = (select auth.uid())
-    order by lm.created_at asc limit 1;
+    order by lm.created_at asc limit 1
+    for update;
     if v_member_id is null then
         raise exception 'Associa primeiro a tua conta ao restaurante.';
     end if;
 
     -- Only the newest code remains valid for this customer.
-    delete from private.loyalty_qr_tokens where member_id = v_member_id;
+    delete from private.loyalty_qr_tokens
+    where member_id = v_member_id and used_at is null;
+    delete from private.loyalty_qr_tokens
+    where member_id = v_member_id and expires_at < now() - interval '1 day';
     insert into private.loyalty_qr_tokens (restaurant_id, member_id, expires_at)
     values (v_restaurant_id, v_member_id, v_expires_at)
     returning token into v_token;
@@ -216,6 +220,24 @@ begin
         raise exception 'A descrição excede o limite permitido.';
     end if;
 
+    -- Check a committed request before looking up the QR: the customer may have
+    -- generated a new token, or the original may have expired, after the award committed.
+    select t.* into v_existing
+    from public.loyalty_transactions t
+    where t.created_by = (select auth.uid())
+      and t.client_request_id = p_client_request_id
+    for update;
+    if found then
+        if v_existing.points_delta <> p_delta
+           or v_existing.note is distinct from coalesce(v_note, 'Pontos atribuídos através de QR')
+           or not private.is_restaurant_staff(v_existing.restaurant_id) then
+            raise exception 'Este identificador já foi utilizado noutra atribuição de pontos.';
+        end if;
+        select lm.* into v_member from public.loyalty_members lm where lm.id = v_existing.member_id;
+        return query select v_member.id, v_member.member_code, v_member.points;
+        return;
+    end if;
+
     select t.* into v_token
     from private.loyalty_qr_tokens t where t.token = p_qr_token for update;
     if not found then raise exception 'QR inválido. Pede ao cliente que apresente um código novo.'; end if;
@@ -223,7 +245,7 @@ begin
         raise exception 'Sem autorização para atribuir pontos neste restaurante.';
     end if;
 
-    -- Same request ID safely returns the original transaction after a lost response.
+    -- Recheck after taking the QR lock to serialize concurrent duplicate requests.
     select t.* into v_existing
     from public.loyalty_transactions t
     where t.restaurant_id = v_token.restaurant_id
