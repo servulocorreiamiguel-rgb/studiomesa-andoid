@@ -2605,6 +2605,7 @@ class MainActivity : Activity() {
                 .putBoolean("local_demo_data_isolated_v1", true)
                 .apply()
             reservationCache = JSONArray()
+            customerRedemptionHistory = JSONArray()
             reservationsLoaded = false
 
             if (isCustomerApp) renderCustomerApp() else renderApp()
