@@ -1697,6 +1697,9 @@ then
   echo "ERROR: user B unexpectedly changed a reservation belonging to restaurant A." >&2
   exit 1
 fi
+
+# Confirming a reservation requires a real table assignment first.
+assign_reservation_table "$USER_A" "$RESERVATION_A" 1 >/dev/null
 psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
