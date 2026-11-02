@@ -1901,7 +1901,7 @@ test "$queue_after_team_block" = "0"
 psql --no-psqlrc --set ON_ERROR_STOP=1 -c \
   "DELETE FROM public.restaurant_staff WHERE user_id = '$USER_C'::uuid;" >/dev/null
 
-removed_staff_membership="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL
+removed_staff_membership="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
 SET LOCAL ROLE authenticated;
@@ -1913,7 +1913,7 @@ SQL
 )"
 if [ "$removed_staff_membership" != "0|0|false" ]; then
   echo "ERROR: a removed staff member retained restaurant membership or operational permissions." >&2
-  printf '%s\\n' "$removed_staff_membership" >&2
+  printf 'Observed removed-staff state: <%s> (expected <0|0|false>)\\n' "$removed_staff_membership" >&2
   exit 1
 fi
 
