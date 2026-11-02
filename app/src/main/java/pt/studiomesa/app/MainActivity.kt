@@ -103,7 +103,8 @@ class MainActivity : Activity() {
     private val backendPrefs by lazy { getSharedPreferences("studiomesa_backend", MODE_PRIVATE) }
     private val secureSession by lazy { SecureSessionStore(this) }
     private val pendingRequestIds by lazy { PendingRequestIds(this) }
-    // Reservation contacts and customer reward history are memory-only.
+    // Reservation contacts, reward history and staff permissions are memory-only.
+    private var currentStaffPermissions: Set<String>? = null
     private var reservationCache = JSONArray()
     private var customerReservationsCache = JSONArray()
     private var customerRedemptionHistory = JSONArray()
@@ -266,6 +267,25 @@ class MainActivity : Activity() {
         if (isPremium) {
             pages.add("Stock")
             pages.add("Análise")
+        }
+
+        if (hasRemoteRestaurant() && backendPrefs.getString("restaurant_role", "staff") == "staff") {
+            val permissions = currentStaffPermissions.orEmpty()
+            if ("tables" !in permissions) pages.remove("Mesas")
+            if ("orders" !in permissions) {
+                pages.remove("Pedidos")
+                pages.remove("Cozinha")
+            }
+            if ("menu" !in permissions) pages.remove("Carta")
+            if ("loyalty" !in permissions) pages.remove("Pontos")
+            if ("reservations" !in permissions) pages.remove("Reservas")
+            if ("inventory" !in permissions) pages.remove("Stock")
+
+            // The assistant and economic reports can expose internal costs and
+            // business indicators, so they remain owner-only.
+            pages.remove("Assistente")
+            pages.remove("Preço Justo")
+            pages.remove("Análise")
         }
         return pages
     }
@@ -1687,8 +1707,26 @@ class MainActivity : Activity() {
             }
             editor.apply()
             if (restaurant != null) {
+                val role = restaurant.optString("user_role", "staff")
+                currentStaffPermissions = if (role == "owner") {
+                    StaffPermissionSet.all.toSet()
+                } else {
+                    StaffPermissionSet.fromJson(SupabaseApi.getMyRestaurantPermissions(token))
+                }
                 cacheRemoteOperations(token, restaurant.optString("restaurant_id"))
+                if ("inventory" !in currentStaffPermissions.orEmpty()) {
+                    backendPrefs.edit().remove("remote_inventory_json").remove("inventory_loaded").apply()
+                }
+                if ("reservations" !in currentStaffPermissions.orEmpty()) {
+                    backendPrefs.edit().remove("remote_reservations_json").remove("reservations_loaded").apply()
+                    reservationCache = JSONArray()
+                    reservationsLoaded = false
+                }
+                if ("loyalty" !in currentStaffPermissions.orEmpty()) {
+                    backendPrefs.edit().remove("remote_members_json").remove("restaurant_rewards_json").apply()
+                }
             } else {
+                currentStaffPermissions = null
                 // The server confirmed this account no longer belongs to a restaurant.
                 // Remove data that would otherwise remain on this device after revocation.
                 backendPrefs.edit()
@@ -1705,7 +1743,11 @@ class MainActivity : Activity() {
                 reservationsLoaded = false
             }
         } catch (_: Exception) {
-            // Keep authentication successful if restoring cloud data temporarily fails.
+            // Keep authentication successful if restoring cloud data temporarily fails,
+            // but fail closed for staff navigation until permissions can be reloaded.
+            if (backendPrefs.getString("restaurant_role", "") == "staff") {
+                currentStaffPermissions = emptySet()
+            }
         }
     }
 
@@ -1851,6 +1893,7 @@ class MainActivity : Activity() {
             .remove("remote_reservations_json").remove("reservations_loaded")
             .apply()
 
+        currentStaffPermissions = null
         reservationCache = JSONArray()
         customerReservationsCache = JSONArray()
         customerRedemptionHistory = JSONArray()
