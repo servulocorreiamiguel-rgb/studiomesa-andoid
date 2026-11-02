@@ -4654,6 +4654,12 @@ class MainActivity : Activity() {
             val notes = reservation.optString("notes").trim()
             if (notes.isNotBlank()) card.addView(label("Notas: $notes", 11.5f, false, muted))
             addGap(card, 10)
+            if (status == "Pendente" && tableNo <= 0) {
+                card.addView(secondaryButton("Atribuir mesa") {
+                    showAssignReservationTableDialog(id, reservation.optInt("party_size", 1))
+                }, LinearLayout.LayoutParams(-1, dp(44)))
+                addGap(card, 5)
+            }
             when (status) {
                 "Pendente" -> card.addView(primaryButton("Confirmar reserva") {
                     setReservationStatus(id, "Confirmada")
@@ -4680,6 +4686,62 @@ class MainActivity : Activity() {
                 }, LinearLayout.LayoutParams(-1, dp(48)))
             }
             container.addView(card, cardParams())
+        }
+    }
+
+    private fun showAssignReservationTableDialog(reservationId: String, partySize: Int) {
+        if (!hasRemoteRestaurant()) return
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        val restaurantId = backendRestaurantId()
+        var eligibleTables = emptyList<JSONObject>()
+
+        runBackend({
+            if (accountId.isBlank() || restaurantId.isBlank() ||
+                backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                backendRestaurantId() != restaurantId) {
+                throw IllegalStateException("A conta ou o restaurante mudou. Atualiza as reservas.")
+            }
+            val rows = SupabaseApi.listTables(backendToken(), restaurantId)
+            eligibleTables = (0 until rows.length())
+                .mapNotNull { rows.optJSONObject(it) }
+                .filter { it.optInt("seats", 0) >= partySize }
+                .sortedBy { it.optInt("table_number", 0) }
+            if (eligibleTables.isEmpty()) {
+                throw IllegalStateException("Não existem mesas com capacidade para $partySize pessoa(s). Adiciona ou configura uma mesa.")
+            }
+            "OK"
+        }) {
+            val labels = eligibleTables.map { table ->
+                val number = table.optInt("table_number")
+                val area = table.optString("area").ifBlank { "Sala principal" }
+                val seats = table.optInt("seats", 0)
+                "Mesa $number · $area · $seats lugares"
+            }.toTypedArray()
+
+            AlertDialog.Builder(this)
+                .setTitle("Atribuir mesa")
+                .setItems(labels) { _, which ->
+                    val tableNumber = eligibleTables.getOrNull(which)?.optInt("table_number", 0) ?: 0
+                    if (tableNumber !in 1..100) return@setItems
+                    runBackend({
+                        if (backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                            backendRestaurantId() != restaurantId) {
+                            throw IllegalStateException("A conta ou o restaurante mudou. Atualiza as reservas.")
+                        }
+                        SupabaseApi.assignReservationTable(
+                            backendToken(), reservationId, tableNumber
+                        )
+                        val latest = SupabaseApi.listReservations(backendToken(), restaurantId)
+                        reservationCache = latest
+                        reservationsLoaded = true
+                        "OK"
+                    }) {
+                        renderApp()
+                        Toast.makeText(this, "Mesa $tableNumber atribuída.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .setNegativeButton("Cancelar", null)
+                .show()
         }
     }
 
