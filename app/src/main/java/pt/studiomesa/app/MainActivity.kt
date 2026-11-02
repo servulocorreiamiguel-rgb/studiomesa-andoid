@@ -1811,7 +1811,23 @@ class MainActivity : Activity() {
             return
         }
         runBackend({
+            if (backendPrefs.getString("restaurant_role", "").orEmpty() == "staff") {
+                currentStaffPermissions = StaffPermissionSet.fromJson(
+                    SupabaseApi.getMyRestaurantPermissions(backendToken())
+                )
+            }
             cacheRemoteOperations(backendToken(), restaurantId)
+            if ("inventory" !in currentStaffPermissions.orEmpty()) {
+                backendPrefs.edit().remove("remote_inventory_json").remove("inventory_loaded").apply()
+            }
+            if ("reservations" !in currentStaffPermissions.orEmpty()) {
+                backendPrefs.edit().remove("remote_reservations_json").remove("reservations_loaded").apply()
+                reservationCache = JSONArray()
+                reservationsLoaded = false
+            }
+            if ("loyalty" !in currentStaffPermissions.orEmpty()) {
+                backendPrefs.edit().remove("remote_members_json").remove("restaurant_rewards_json").apply()
+            }
             "OK"
         }) {
             kitchenOrdersCache = null
