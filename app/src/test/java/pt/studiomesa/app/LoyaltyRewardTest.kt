@@ -52,7 +52,7 @@ class LoyaltyRewardTest {
     }
 
     @Test
-    fun customerRpcPayloadDefaultsMissingActiveFieldToTrue() {
+    fun rewardDefaultsToActiveUnlessMarkedInactive() {
         val item = LoyaltyReward(
             id = "c9c0a19a-7da8-4c94-a12f-04a7c75c138d",
             name = "Sobremesa",
