@@ -1831,10 +1831,14 @@ class MainActivity : Activity() {
         return result
     }
 
-    private fun cacheRemoteOperations(token: String, restaurantId: String) {
+    private fun cacheRemoteOperations(
+        token: String,
+        restaurantId: String,
+        permissionsOverride: Set<String>? = null
+    ) {
         if (token.isBlank() || restaurantId.isBlank()) return
         val isOwner = backendPrefs.getString("restaurant_role", "") == "owner"
-        val permissions = currentStaffPermissions.orEmpty()
+        val permissions = permissionsOverride ?: currentStaffPermissions.orEmpty()
         val editor = backendPrefs.edit()
 
         if (isOwner || "tables" in permissions) {
@@ -1891,6 +1895,14 @@ class MainActivity : Activity() {
         val startingRestaurantId = backendRestaurantId()
         if (startingUserId.isBlank() || startingRestaurantId.isBlank() || backendToken().isBlank()) return
 
+        // Fail closed before the network round-trip: do not leave a previously open
+        // restricted page or its cached data visible while a revocation is checked.
+        val hadPermissions = currentStaffPermissions?.isNotEmpty() == true
+        currentStaffPermissions = emptySet()
+        clearUnavailableStaffCaches()
+        if (activePage !in availablePages()) activePage = "Início"
+        if (hadPermissions) renderApp()
+
         staffPermissionRefreshInFlight = true
         Thread {
             val permissions = try {
@@ -1904,9 +1916,17 @@ class MainActivity : Activity() {
                     runOnUiThread { staffPermissionRefreshInFlight = false }
                     return@Thread
                 }
-                StaffPermissionSet.fromJson(SupabaseApi.getMyRestaurantPermissions(token))
+
+                val confirmed = StaffPermissionSet.fromJson(
+                    SupabaseApi.getMyRestaurantPermissions(token)
+                )
+                // Refresh newly granted areas as well as the permission matrix. If
+                // the data fetch fails, the whole refresh fails closed rather than
+                // exposing an empty or stale page as if it were current.
+                cacheRemoteOperations(token, currentRestaurantId, confirmed)
+                confirmed
             } catch (_: Exception) {
-                // A failed authorization refresh must not leave a revoked area exposed.
+                // A failed authorization or data refresh must not leave an old area exposed.
                 emptySet()
             }
 
@@ -1917,11 +1937,10 @@ class MainActivity : Activity() {
                     backendRestaurantId() != startingRestaurantId ||
                     backendPrefs.getString("restaurant_role", "") != "staff") return@runOnUiThread
 
-                val changed = currentStaffPermissions != permissions
                 currentStaffPermissions = permissions
                 clearUnavailableStaffCaches()
                 if (activePage !in availablePages()) activePage = "Início"
-                if (changed) renderApp()
+                renderApp()
             }
         }.start()
     }
