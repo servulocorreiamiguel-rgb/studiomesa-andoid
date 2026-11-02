@@ -393,6 +393,7 @@ class MainActivity : Activity() {
 
     private fun pageGlyph(page: String): String = when (page) {
         "Cartão" -> "▣"
+        "Prémios" -> "✦"
         "Início" -> "⌂"
         "Mesas" -> "▦"
         "Pedidos" -> "≡"
@@ -1836,6 +1837,7 @@ class MainActivity : Activity() {
             .remove("remote_members_json").remove("remote_tables_json")
             .remove("remote_menu_json").remove("remote_orders_json")
             .remove("customer_menu_json")
+                    .remove("customer_loyalty_rewards_json").remove("customer_loyalty_redemptions_json")
             .remove("remote_inventory_json").remove("inventory_loaded")
             .remove("remote_reservations_json").remove("reservations_loaded")
             .apply()
@@ -2666,7 +2668,7 @@ class MainActivity : Activity() {
         val notice = makeCard(14, copperPale)
         notice.addView(label(if (remoteMode) "FIDELIZAÇÃO PARTILHADA" else "REGRAS A DEFINIR COM O RESTAURANTE", 10f, true, forest))
         addGap(notice, 5)
-        notice.addView(label(if (remoteMode) "Os pontos são guardados no servidor e as alterações ficam registadas. A acumulação automática por compra e os prémios ainda precisam de regras comerciais." else "No modo local, os dados ficam apenas neste telemóvel. Liga uma conta e configura o restaurante na secção Conta para ativar a fidelização partilhada.", 12.5f, false, ink))
+        notice.addView(label(if (remoteMode) "Os pontos e as recompensas são partilhados com os clientes através do servidor. O proprietário gere o catálogo e a equipa confirma as entregas." else "No modo local, os dados ficam apenas neste telemóvel. Liga uma conta e configura o restaurante na secção Conta para ativar a fidelização partilhada.", 12.5f, false, ink))
         container.addView(notice, cardParams())
         if (remoteMode) {
             container.addView(primaryButton("Atualizar clientes do servidor") { refreshRemoteCustomers() }, LinearLayout.LayoutParams(-1, dp(48)))
@@ -2674,6 +2676,10 @@ class MainActivity : Activity() {
             container.addView(secondaryButton("Ver código de adesão") { showRestaurantJoinCode() }, LinearLayout.LayoutParams(-1, dp(48)))
         } else {
             container.addView(primaryButton("+  Adicionar cliente (local)") { showAddCustomerDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
+        }
+        if (remoteMode) {
+            addGap(container, 13)
+            renderRestaurantLoyaltyShop(container)
         }
         addGap(container, 13)
 
@@ -2716,6 +2722,247 @@ class MainActivity : Activity() {
             }
             container.addView(card, cardParams())
         }
+    }
+
+
+    private fun cachedRestaurantRewards(): List<LoyaltyReward> {
+        val raw = backendPrefs.getString("restaurant_loyalty_rewards_json", "[]") ?: "[]"
+        return runCatching {
+            val rows = JSONArray(raw)
+            (0 until rows.length()).map { LoyaltyReward.fromJson(rows.getJSONObject(it)) }
+        }.getOrElse { emptyList() }
+    }
+
+    private fun cachedRestaurantRewardRedemptions(): JSONArray =
+        runCatching {
+            JSONArray(backendPrefs.getString("restaurant_loyalty_redemptions_json", "[]") ?: "[]")
+        }.getOrElse { JSONArray() }
+
+    private fun renderRestaurantLoyaltyShop(container: LinearLayout) {
+        val isOwner = backendPrefs.getString("restaurant_role", "").orEmpty() == "owner"
+        val heading = makeCard(15, paleGreen)
+        heading.addView(label("LOJA DE RECOMPENSAS", 10f, true, forest))
+        addGap(heading, 4)
+        heading.addView(label(
+            if (isOwner) "Cria prémios próprios, define quantos pontos custam e controla a disponibilidade."
+            else "Consulta as recompensas do restaurante e acompanha os pedidos de entrega.",
+            12f, false, ink
+        ))
+        container.addView(heading, cardParams())
+
+        if (isOwner) {
+            container.addView(primaryButton("+ Adicionar recompensa") {
+                showLoyaltyRewardEditor(null)
+            }, LinearLayout.LayoutParams(-1, dp(46)))
+        }
+        addGap(container, 5)
+        container.addView(secondaryButton("Atualizar loja e pedidos") {
+            refreshRestaurantLoyaltyShop()
+        }, LinearLayout.LayoutParams(-1, dp(44)))
+
+        val rewards = cachedRestaurantRewards()
+        if (rewards.isEmpty()) {
+            container.addView(emptyCard(
+                if (isOwner) "Ainda não existem recompensas. Cria o primeiro prémio para os teus clientes."
+                else "Ainda não há recompensas registadas neste restaurante."
+            ))
+        } else {
+            rewards.forEach { reward ->
+                val card = makeCard(13)
+                card.addView(label(reward.name, 15f, true, forestDeep))
+                if (reward.description.isNotBlank()) {
+                    addGap(card, 4)
+                    card.addView(label(reward.description, 12f, false, ink))
+                }
+                addGap(card, 7)
+                val statusRow = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                statusRow.addView(
+                    label(reward.pointsCost.toString() + " pontos", 13f, true, forest),
+                    LinearLayout.LayoutParams(0, -2, 1f)
+                )
+                val remaining = reward.availableStock()
+                val stockText = when {
+                    !reward.isActive -> "Pausada"
+                    remaining == null -> "Stock ilimitado"
+                    remaining == 0 -> "Esgotada"
+                    else -> remaining.toString() + " disponíveis"
+                }
+                statusRow.addView(label(stockText, 10.5f, true, if (reward.isActive) forestSoft else muted))
+                card.addView(statusRow)
+                if (isOwner) {
+                    addGap(card, 8)
+                    card.addView(secondaryButton("Editar recompensa") {
+                        showLoyaltyRewardEditor(reward)
+                    }, LinearLayout.LayoutParams(-1, dp(42)))
+                }
+                container.addView(card, cardParams())
+            }
+        }
+
+        addGap(container, 10)
+        container.addView(label("PEDIDOS DE RECOMPENSAS", 10f, true, forestSoft))
+        addGap(container, 5)
+        val redemptions = cachedRestaurantRewardRedemptions()
+        if (redemptions.length() == 0) {
+            container.addView(emptyCard("Ainda não existem pedidos de recompensa."))
+        } else {
+            for (index in 0 until redemptions.length()) {
+                val row = redemptions.optJSONObject(index) ?: continue
+                val card = makeCard(12)
+                card.addView(label(row.optString("reward_name", "Recompensa"), 14f, true, forestDeep))
+                addGap(card, 3)
+                card.addView(label("Cliente: " + row.optString("customer_name", "Cliente"), 11.5f, false, muted))
+                val fulfilled = row.optString("status") == "fulfilled"
+                card.addView(label(
+                    row.optInt("points_spent", 0).toString() + " pontos · " +
+                        if (fulfilled) "Entregue" else "Pendente",
+                    11.5f, true, if (fulfilled) green else forest
+                ))
+                if (!fulfilled && row.optString("redemption_id").isNotBlank()) {
+                    addGap(card, 7)
+                    card.addView(secondaryButton("Confirmar entrega") {
+                        confirmLoyaltyRewardDelivery(row.optString("redemption_id"))
+                    }, LinearLayout.LayoutParams(-1, dp(42)))
+                }
+                container.addView(card, cardParams())
+            }
+        }
+    }
+
+    private fun refreshRestaurantLoyaltyShop() {
+        val restaurantId = backendRestaurantId()
+        if (backendToken().isBlank() || restaurantId.isBlank()) {
+            AlertDialog.Builder(this)
+                .setMessage("Inicia sessão e configura primeiro o restaurante.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        runBackend({
+            val token = backendToken()
+            val rewards = SupabaseApi.listRestaurantLoyaltyRewards(token, restaurantId)
+            val redemptions = SupabaseApi.listRestaurantLoyaltyRewardRedemptions(token, restaurantId)
+            backendPrefs.edit()
+                .putString("restaurant_loyalty_rewards_json", rewards.toString())
+                .putString("restaurant_loyalty_redemptions_json", redemptions.toString())
+                .apply()
+            rewards.length().toString()
+        }) { count ->
+            if (activePage == "Pontos") renderApp()
+            Toast.makeText(this, count + " recompensas carregadas.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showLoyaltyRewardEditor(existing: LoyaltyReward?) {
+        if (backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") {
+            AlertDialog.Builder(this)
+                .setMessage("Só o proprietário pode criar ou editar recompensas.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        val nameField = inputField(
+            "Nome do prémio",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        )
+        val descriptionField = inputField(
+            "Descrição",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+        )
+        val pointsField = inputField("Pontos necessários", InputType.TYPE_CLASS_NUMBER)
+        val stockField = inputField("Stock (vazio = ilimitado)", InputType.TYPE_CLASS_NUMBER)
+        existing?.let {
+            nameField.setText(it.name)
+            descriptionField.setText(it.description)
+            pointsField.setText(it.pointsCost.toString())
+            stockField.setText(it.stockLimit?.toString().orEmpty())
+        }
+        val activeCheck = android.widget.CheckBox(this).apply {
+            text = "Disponível para os clientes"
+            isChecked = existing?.isActive ?: true
+            setTextColor(ink)
+        }
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(4))
+        }
+        form.addView(label("NOME", 10f, true, forestSoft))
+        form.addView(nameField, fieldParams())
+        addGap(form, 4)
+        form.addView(label("DESCRIÇÃO", 10f, true, forestSoft))
+        form.addView(descriptionField, fieldParams())
+        addGap(form, 4)
+        form.addView(label("CUSTO EM PONTOS", 10f, true, forestSoft))
+        form.addView(pointsField, fieldParams())
+        addGap(form, 4)
+        form.addView(label("LIMITE DE STOCK", 10f, true, forestSoft))
+        form.addView(stockField, fieldParams())
+        form.addView(activeCheck)
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(if (existing == null) "Nova recompensa" else "Editar recompensa")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Guardar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val name = nameField.text.toString().trim()
+                val description = descriptionField.text.toString().trim()
+                val points = pointsField.text.toString().trim().toIntOrNull()
+                val rawStock = stockField.text.toString().trim()
+                val stock = if (rawStock.isBlank()) null else rawStock.toIntOrNull()
+                when {
+                    name.isBlank() || name.length > 100 ->
+                        nameField.error = "Introduz um nome entre 1 e 100 caracteres"
+                    description.length > 500 ->
+                        descriptionField.error = "A descrição pode ter no máximo 500 caracteres"
+                    points == null || points !in 1..1_000_000 ->
+                        pointsField.error = "Introduz entre 1 e 1 000 000 pontos"
+                    rawStock.isNotBlank() && (stock == null || stock < 0) ->
+                        stockField.error = "O stock deve ser zero ou um número positivo"
+                    else -> {
+                        val rewardId = existing?.id ?: java.util.UUID.randomUUID().toString()
+                        runBackend({
+                            SupabaseApi.saveLoyaltyReward(
+                                backendToken(),
+                                backendRestaurantId(),
+                                rewardId,
+                                name,
+                                description,
+                                points,
+                                stock,
+                                activeCheck.isChecked
+                            )
+                            "OK"
+                        }) {
+                            dialog.dismiss()
+                            refreshRestaurantLoyaltyShop()
+                        }
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun confirmLoyaltyRewardDelivery(redemptionId: String) {
+        AlertDialog.Builder(this)
+            .setTitle("Confirmar entrega?")
+            .setMessage("O pedido será marcado como entregue. Os pontos já foram descontados quando o cliente pediu a recompensa.")
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Confirmar entrega") { _, _ ->
+                runBackend({
+                    SupabaseApi.fulfillLoyaltyRewardRedemption(backendToken(), redemptionId)
+                    "OK"
+                }) {
+                    refreshRestaurantLoyaltyShop()
+                }
+            }
+            .show()
     }
 
     private fun showAddCustomerDialog() {
@@ -2883,7 +3130,7 @@ class MainActivity : Activity() {
     }
 
     private fun renderCustomerApp() {
-        if (activeCustomerPage !in setOf("Cartão", "Carta", "Conta")) activeCustomerPage = "Cartão"
+        if (activeCustomerPage !in setOf("Cartão", "Prémios", "Carta", "Conta")) activeCustomerPage = "Cartão"
         appRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(paper)
@@ -2926,6 +3173,7 @@ class MainActivity : Activity() {
         }
         when (activeCustomerPage) {
             "Cartão" -> renderCustomerLoyaltyPage(content)
+            "Prémios" -> renderCustomerRewardsPage(content)
             "Carta" -> renderCustomerMenuPage(content)
             "Conta" -> renderCustomerAccountPage(content)
         }
@@ -2939,7 +3187,7 @@ class MainActivity : Activity() {
             setBackgroundColor(white)
             elevation = dp(6).toFloat()
         }
-        listOf("Cartão", "Carta", "Conta").forEach { page ->
+        listOf("Cartão", "Prémios", "Carta", "Conta").forEach { page ->
             val selected = activeCustomerPage == page
             val item = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
@@ -2952,6 +3200,7 @@ class MainActivity : Activity() {
                 setOnClickListener {
                     activeCustomerPage = page
                     renderCustomerApp()
+                    if (page == "Prémios") refreshCustomerRewards()
                 }
             }
             item.addView(TextView(this).apply {
@@ -3007,6 +3256,201 @@ class MainActivity : Activity() {
             activeCustomerPage = "Carta"
             renderCustomerApp()
         }, LinearLayout.LayoutParams(-1, dp(48)))
+    }
+
+
+    private fun cachedCustomerRewards(): List<LoyaltyReward> {
+        val raw = backendPrefs.getString("customer_loyalty_rewards_json", "[]") ?: "[]"
+        return runCatching {
+            val rows = JSONArray(raw)
+            (0 until rows.length()).map { LoyaltyReward.fromJson(rows.getJSONObject(it)) }
+        }.getOrElse { emptyList() }
+    }
+
+    private fun cachedCustomerRewardHistory(): JSONArray =
+        runCatching {
+            JSONArray(backendPrefs.getString("customer_loyalty_redemptions_json", "[]") ?: "[]")
+        }.getOrElse { JSONArray() }
+
+    private fun refreshCustomerRewards() {
+        val token = backendToken()
+        val memberId = backendMemberId()
+        if (token.isBlank()) {
+            showAuthChooser { renderCustomerApp() }
+            return
+        }
+        if (memberId.isBlank()) {
+            showCustomerJoinDialog()
+            return
+        }
+        runBackend({
+            val rewards = SupabaseApi.listCustomerLoyaltyRewards(token, memberId)
+            val history = SupabaseApi.listMyLoyaltyRewardRedemptions(token)
+            backendPrefs.edit()
+                .putString("customer_loyalty_rewards_json", rewards.toString())
+                .putString("customer_loyalty_redemptions_json", history.toString())
+                .apply()
+            rewards.length().toString()
+        }) { count ->
+            if (activeCustomerPage == "Prémios") renderCustomerApp()
+            Toast.makeText(this, "Loja atualizada.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun renderCustomerRewardsPage(container: LinearLayout) {
+        container.addView(label("Prémios e recompensas", 25f, true, forestDeep))
+        addGap(container, 4)
+        container.addView(label("Troca os pontos que acumulaste por recompensas deste restaurante.", 13f, false, muted))
+        addGap(container, 11)
+
+        when {
+            backendToken().isBlank() -> {
+                container.addView(primaryButton("Criar conta / iniciar sessão") {
+                    showAuthChooser { renderCustomerApp() }
+                }, LinearLayout.LayoutParams(-1, dp(48)))
+                return
+            }
+            backendMemberId().isBlank() -> {
+                container.addView(primaryButton("Associar ao restaurante") {
+                    showCustomerJoinDialog()
+                }, LinearLayout.LayoutParams(-1, dp(48)))
+                return
+            }
+        }
+
+        val points = backendPrefs.getInt("member_points", 0).coerceAtLeast(0)
+        val balanceCard = makeCard(14, paleGreen)
+        balanceCard.addView(label("O TEU SALDO", 10f, true, forestSoft))
+        addGap(balanceCard, 4)
+        balanceCard.addView(label(points.toString() + " pontos", 22f, true, forestDeep))
+        container.addView(balanceCard, cardParams())
+        container.addView(secondaryButton("Atualizar loja e histórico") {
+            refreshCustomerRewards()
+        }, LinearLayout.LayoutParams(-1, dp(44)))
+        addGap(container, 8)
+
+        val rewards = cachedCustomerRewards()
+        if (rewards.isEmpty()) {
+            container.addView(emptyCard("Ainda não existem recompensas disponíveis. Volta a atualizar ou consulta mais tarde."))
+        } else {
+            rewards.forEach { reward ->
+                val card = makeCard(14)
+                card.addView(label(reward.name, 15f, true, forestDeep))
+                if (reward.description.isNotBlank()) {
+                    addGap(card, 4)
+                    card.addView(label(reward.description, 12f, false, ink))
+                }
+                addGap(card, 7)
+                card.addView(label(reward.pointsCost.toString() + " pontos", 13f, true, forest))
+                val available = reward.availableStock()
+                if (available != null) {
+                    val stockText = if (available == 1) "Última unidade disponível"
+                    else available.toString() + " unidades disponíveis"
+                    card.addView(label(stockText, 10.5f, false, muted))
+                }
+                addGap(card, 7)
+                if (reward.canRedeem(points)) {
+                    card.addView(primaryButton("Trocar por esta recompensa") {
+                        showRedeemLoyaltyRewardConfirmation(reward)
+                    }, LinearLayout.LayoutParams(-1, dp(44)))
+                } else {
+                    val reason = when {
+                        !reward.isActive -> "Indisponível neste momento."
+                        available == 0 -> "Esgotado."
+                        else -> "Faltam " + (reward.pointsCost - points).coerceAtLeast(0).toString() + " pontos."
+                    }
+                    card.addView(label(reason, 11f, true, muted))
+                }
+                container.addView(card, cardParams())
+            }
+        }
+
+        addGap(container, 12)
+        container.addView(label("OS TEUS PEDIDOS", 10f, true, forestSoft))
+        addGap(container, 5)
+        val history = cachedCustomerRewardHistory()
+        if (history.length() == 0) {
+            container.addView(emptyCard("Ainda não pediste nenhuma recompensa."))
+        } else {
+            for (index in 0 until history.length()) {
+                val row = history.optJSONObject(index) ?: continue
+                val card = makeCard(12)
+                card.addView(label(row.optString("reward_name", "Recompensa"), 13.5f, true, forestDeep))
+                addGap(card, 3)
+                val delivered = row.optString("status") == "fulfilled"
+                card.addView(label(
+                    row.optInt("points_spent", 0).toString() + " pontos · " +
+                        if (delivered) "Entregue" else "À espera de levantamento",
+                    11f, true, if (delivered) green else forest
+                ))
+                container.addView(card, cardParams())
+            }
+        }
+    }
+
+    private fun showRedeemLoyaltyRewardConfirmation(reward: LoyaltyReward) {
+        val points = backendPrefs.getInt("member_points", 0).coerceAtLeast(0)
+        if (!reward.canRedeem(points)) {
+            AlertDialog.Builder(this)
+                .setMessage("Esta recompensa já não está disponível ou o saldo de pontos mudou. Atualiza a loja.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Trocar pontos?")
+            .setMessage("Serão descontados " + reward.pointsCost + " pontos por «" + reward.name + "». O pedido ficará pendente até o restaurante confirmar a entrega.")
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Confirmar troca") { _, _ ->
+                val accountId = backendPrefs.getString("user_id", "").orEmpty()
+                val memberId = backendMemberId()
+                val signature = JSONObject()
+                    .put("member_id", memberId)
+                    .put("reward_id", reward.id)
+                    .toString()
+                val operation = "loyalty_reward_redeem"
+                val requestId = try {
+                    pendingRequestIds.getOrCreate(operation, accountId, signature)
+                } catch (error: Exception) {
+                    AlertDialog.Builder(this)
+                        .setMessage(error.message ?: "Não foi possível preparar o pedido.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                    return@setPositiveButton
+                }
+                runBackend({
+                    val result = SupabaseApi.redeemLoyaltyReward(backendToken(), reward.id, requestId)
+                    val remaining = result.optInt("points_remaining", -1)
+                    if (remaining < 0) throw IllegalStateException("O novo saldo de pontos não é válido.")
+                    val rewards = SupabaseApi.listCustomerLoyaltyRewards(backendToken(), memberId)
+                    val history = SupabaseApi.listMyLoyaltyRewardRedemptions(backendToken())
+                    backendPrefs.edit()
+                        .putInt("member_points", remaining)
+                        .putString("customer_loyalty_rewards_json", rewards.toString())
+                        .putString("customer_loyalty_redemptions_json", history.toString())
+                        .apply()
+                    JSONObject()
+                        .put("points_remaining", remaining)
+                        .put("points_spent", result.optInt("points_spent", reward.pointsCost))
+                        .put("reward_name", result.optString("reward_name", reward.name))
+                        .toString()
+                }) { response ->
+                    pendingRequestIds.complete(operation, accountId, signature, requestId)
+                    val result = JSONObject(response)
+                    renderCustomerApp()
+                    AlertDialog.Builder(this)
+                        .setTitle("Pedido registado")
+                        .setMessage(
+                            "A recompensa «" + result.optString("reward_name") + "» foi pedida. " +
+                                "Foram descontados " + result.optInt("points_spent") + " pontos.\n\n" +
+                                "Saldo atual: " + result.optInt("points_remaining") + " pontos. " +
+                                "O restaurante irá confirmar a entrega."
+                        )
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            }
+            .show()
     }
 
     private fun startInvoiceLoyaltyQrScan() {
