@@ -1,6 +1,5 @@
 package pt.studiomesa.app
 
-import org.json.JSONArray
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -10,7 +9,7 @@ class StaffPermissionSetTest {
     fun parsesOnlyKnownPermissionsAndRemovesDuplicates() {
         assertEquals(
             linkedSetOf("orders", "reservations"),
-            StaffPermissionSet.fromJson(JSONArray("[\"orders\",\"orders\",\"reservations\",\"unknown\"]"))
+            StaffPermissionSet.fromValues(listOf("orders", "orders", "reservations", "unknown"))
         )
     }
 
@@ -18,7 +17,7 @@ class StaffPermissionSetTest {
     fun serializesPermissionsInStableProductOrder() {
         assertEquals(
             "[\"orders\",\"tables\",\"loyalty\"]",
-            StaffPermissionSet.toJsonArray(setOf("loyalty", "tables", "orders")).toString()
+            StaffPermissionSet.orderedValues(setOf("loyalty", "tables", "orders"))
         )
     }
 
@@ -46,7 +45,7 @@ class StaffPermissionSetTest {
     @Test
     fun rejectsUnknownPermissionBeforeSendingItToTheServer() {
         assertThrows(IllegalArgumentException::class.java) {
-            StaffPermissionSet.toJsonArray(setOf("orders", "owner_access"))
+            StaffPermissionSet.orderedValues(setOf("orders", "owner_access"))
         }
     }
 }
