@@ -239,3 +239,31 @@ A atualização periódica é polling, não uma subscrição Supabase Realtime, 
 A migration `20261030120000_inventory_unit_cost_and_waste_snapshots.sql` tem de estar aplicada no Supabase antes de testar a nova versão Android. Estes casos exigem CI aprovada e testes ponta a ponta com contas descartáveis; a CI, por si só, não valida a configuração do projeto Supabase de produção.\n## Assistente económico ligado ao inventário\n\n| ID | Categoria | Ação / dados | Resultado esperado / estado |\n|---|---|---|---|\n| ASI-01 | Fonte de dados | Abrir o Assistente com o inventário Premium carregado | A IA recebe unidade, quantidade, limite mínimo e custo unitário atual de cada artigo |\n| ASI-02 | Stock específico | Arroz: 2 kg disponíveis, mínimo 5 kg e custo 3,5000 €/kg | Responde 2 kg, custo unitário, valor estimado de 7,00 € e custo indicativo de 10,50 € para voltar ao mínimo |\n| ASI-03 | Valor global | Somar artigos com custo conhecido e excluir artigo sem custo | Apresenta apenas a soma conhecida e indica quantos artigos ficaram excluídos |\n| ASI-04 | Dados em falta | Todos os artigos sem custo unitário | Não inventa o valor do stock; indica que é necessário preencher custos |\n| ASI-05 | Cache não confirmada | Perguntar pelo valor do stock antes de carregar/atualizar inventário | Não mostra valores guardados numa cache não confirmada |\n| ASI-06 | Reposição | Artigo abaixo do limite mínimo, com custo unitário conhecido | Calcula apenas a quantidade e o custo para atingir o limite mínimo configurado; não cria encomenda |\n| ASI-07 | Limite de recomendação | Artigo acima do limite mínimo | Não sugere reposição nem gasto desnecessário |\n| ASI-08 | Sem custo | Artigo abaixo do limite mas sem custo de compra | Mostra o alerta de stock baixo sem inventar custo de reposição |
 | ASI-09 | Frescura | Inventário atualizado há menos de cinco minutos e leitura bem-sucedida | A IA pode utilizar quantidades e custos confirmados |
 | ASI-10 | Cache antiga/falha | Última leitura há mais de cinco minutos, sem leitura nesta sessão ou falha da atualização | A IA não apresenta valores de stock e pede atualização na secção Stock |\n\nOs valores de stock são estimativas ao custo de compra atual e não incluem portes, embalagens, descontos, IVA recuperável, perdas futuras ou condições de fornecedor. Não são uma avaliação FIFO/custo médio nem uma ordem de compra.\n
+
+
+## Ensaios adicionais — loja de pontos, QR e segurança (obrigatórios antes da venda)
+
+| ID | Cenário | Resultado esperado |
+|---|---|---|
+| LOY-QR-01 | Cliente autenticado pede QR | É emitido um código aleatório válido por dois minutos, associado apenas ao seu cartão |
+| LOY-QR-02 | Cliente gera um segundo QR | O QR anterior ainda não utilizado deixa de ser aceite |
+| LOY-QR-03 | Funcionário autorizado lê QR válido | O servidor credita os pontos e consome o QR na mesma transação |
+| LOY-QR-04 | Segundo funcionário tenta usar o mesmo QR com outro pedido | O servidor rejeita; o saldo não volta a aumentar |
+| LOY-QR-05 | Repetição da mesma chamada após perda da resposta | O servidor devolve o resultado original sem creditar pontos novamente |
+| LOY-QR-06 | QR expirado, inventado ou de outro restaurante | O servidor rejeita sem alterar qualquer saldo |
+| LOY-QR-07 | Utilizador sem sessão ou cliente tenta creditar pontos | O servidor rejeita a operação |
+| LOY-SHOP-01 | Proprietário cria uma recompensa com custo e stock | A recompensa surge na loja dos clientes desse restaurante |
+| LOY-SHOP-02 | Funcionário tenta alterar a loja de pontos | Operação recusada pelo servidor |
+| LOY-SHOP-03 | Cliente tenta consultar catálogo de outro restaurante | Operação recusada pelo servidor |
+| LOY-SHOP-04 | Cliente sem pontos suficientes tenta resgatar | Resgate recusado; saldo e stock mantêm-se |
+| LOY-SHOP-05 | Cliente repete o mesmo resgate | É devolvido o resgate original; os pontos só são descontados uma vez |
+| LOY-SHOP-06 | Duas contas tentam resgatar a última unidade em simultâneo | Apenas uma consegue; stock nunca fica negativo nem abaixo de zero |
+| LOY-SHOP-07 | Funcionário confirma um resgate pendente | Estado passa a entregue e fica registado o funcionário |
+| LOY-SHOP-08 | Funcionário repete a confirmação ou pertence a outro restaurante | Repetição não altera o resultado; outro restaurante é recusado |
+| SEC-01 | Funcionário tenta gerir equipa, preços protegidos ou definições do proprietário | A autorização é recusada no servidor |
+| SEC-02 | Duas contas de restaurantes diferentes tentam aceder aos mesmos IDs | Só conseguem consultar e alterar os próprios dados |
+| SEC-03 | Internet falha em reserva, atribuição de pontos e resgate | Sem registos duplicados nem estados parciais após reconexão |
+| SEC-04 | Cliente inicia sessão noutro telemóvel | O cartão, saldo, movimentos e resgates são recuperados do servidor |
+| SEC-05 | Restauro a partir de cópia de segurança | Restauro concluído e conferido num projeto de teste separado |
+
+Todos os testes devem ser executados com contas e dados descartáveis. Registar o resultado, versão da app, migração aplicada e ambiente utilizado. Não testar eliminações ou restauros com dados reais de clientes.
