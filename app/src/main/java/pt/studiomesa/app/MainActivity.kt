@@ -2895,8 +2895,19 @@ class MainActivity : Activity() {
                 .remove("remote_inventory_json").remove("inventory_loaded")
                 .remove("remote_reservations_json").remove("reservations_loaded")
                 .apply()
+            currentStaffPermissions = null
+            staffPermissionRefreshInFlight = false
+            kitchenOrdersCache = null
+            kitchenQueueUpdatedAtMillis = 0L
+            kitchenQueueRefreshFailed = false
             reservationCache = JSONArray()
             reservationsLoaded = false
+            customerReservationsCache = JSONArray()
+            customerReservationsLoaded = false
+            customerReservationsAccountScope = ""
+            customerReservationsMemberScope = ""
+            customerReservationsRefreshInFlight = false
+            customerRedemptionHistory = JSONArray()
             renderApp()
         }, LinearLayout.LayoutParams(-1, dp(48)))
         addGap(container, 10)
