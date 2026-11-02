@@ -145,6 +145,7 @@ begin
     end if;
 
     if cardinality(p_permissions) > 6
+       or array_position(p_permissions, null) is not null
        or exists (
            select 1 from unnest(p_permissions) as requested(permission)
            where requested.permission not in ('orders','tables','reservations','menu','inventory','loyalty')
