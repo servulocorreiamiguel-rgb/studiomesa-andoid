@@ -83,6 +83,24 @@ class StaffPermissionSetTest {
     }
 
     @Test
+    fun bottomNavigationOmitsAreasNotGrantedToStaff() {
+        assertEquals(
+            listOf("Início", "Pedidos"),
+            StaffPermissionSet.bottomNavigationPages(listOf("Início", "Pedidos", "Conta"))
+        )
+    }
+
+    @Test
+    fun bottomNavigationKeepsAllThreeDestinationsWhenAvailable() {
+        assertEquals(
+            listOf("Início", "Mesas", "Pedidos"),
+            StaffPermissionSet.bottomNavigationPages(
+                listOf("Início", "Mesas", "Pedidos", "Conta")
+            )
+        )
+    }
+
+    @Test
     fun rejectsUnknownPermissionBeforeSendingItToTheServer() {
         assertThrows(IllegalArgumentException::class.java) {
             StaffPermissionSet.orderedValues(setOf("orders", "owner_access"))
