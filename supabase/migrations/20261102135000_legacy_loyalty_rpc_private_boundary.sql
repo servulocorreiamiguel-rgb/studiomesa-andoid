@@ -27,20 +27,33 @@ GRANT EXECUTE ON FUNCTION private.get_member_restaurant_menu_internal(uuid)
 GRANT EXECUTE ON FUNCTION private.get_my_loyalty_membership_internal()
     TO authenticated;
 
-CREATE FUNCTION public.get_member_restaurant_menu(p_member_id uuid)
-RETURNS TABLE (
-    item_id uuid,
-    name text,
-    price numeric
-)
-LANGUAGE sql
-STABLE
-SECURITY INVOKER
-SET search_path TO ''
-AS $function$
-    SELECT *
-    FROM private.get_member_restaurant_menu_internal(p_member_id);
-$function$;
+DO $wrapper$
+DECLARE
+    v_result_type text;
+BEGIN
+    -- Preserve the exact OUT-column contract from the deployment being migrated.
+    -- Hosted databases may contain a richer menu signature than the original
+    -- three-column migration baseline.
+    v_result_type := pg_get_function_result(
+        'private.get_member_restaurant_menu_internal(uuid)'::regprocedure
+    );
+    EXECUTE format(
+        $ddl$
+            CREATE FUNCTION public.get_member_restaurant_menu(p_member_id uuid)
+            RETURNS %s
+            LANGUAGE sql
+            STABLE
+            SECURITY INVOKER
+            SET search_path TO ''
+            AS $function$
+                SELECT *
+                FROM private.get_member_restaurant_menu_internal($1);
+            $function$;
+        $ddl$,
+        v_result_type
+    );
+END;
+$wrapper$;
 
 CREATE FUNCTION public.get_my_loyalty_membership()
 RETURNS TABLE (
