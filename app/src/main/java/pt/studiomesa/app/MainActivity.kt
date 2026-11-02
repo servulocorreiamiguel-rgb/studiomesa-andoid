@@ -1718,6 +1718,7 @@ class MainActivity : Activity() {
         if (isCustomerApp || token.isBlank()) return
 
         try {
+            val previousRestaurantId = backendRestaurantId()
             val restaurant = SupabaseApi.getMyRestaurant(token)
             val editor = backendPrefs.edit()
                 .remove("restaurant_id")
@@ -1728,6 +1729,26 @@ class MainActivity : Activity() {
             if (restaurant != null) {
                 val restaurantId = restaurant.optString("restaurant_id")
                 val role = restaurant.optString("user_role", "staff")
+                if (previousRestaurantId.isNotBlank() && previousRestaurantId != restaurantId) {
+                    // SharedPreferences caches are restaurant-scoped. A single account
+                    // joining a different restaurant must never inherit the previous
+                    // restaurant's stock, reservations, team, menu or loyalty snapshots.
+                    editor.remove("remote_members_json")
+                        .remove("remote_tables_json")
+                        .remove("remote_menu_json")
+                        .remove("remote_orders_json")
+                        .remove("remote_inventory_json")
+                        .remove("inventory_loaded")
+                        .remove("remote_reservations_json")
+                        .remove("reservations_loaded")
+                        .remove("restaurant_loyalty_rewards_json")
+                        .remove("restaurant_loyalty_redemptions_json")
+                        .remove("restaurant_loyalty_cache_restaurant_id")
+                    reservationCache = JSONArray()
+                    reservationsLoaded = false
+                    kitchenOrdersCache = null
+                    kitchenQueueUpdatedAtMillis = 0L
+                }
                 editor.putString("restaurant_id", restaurantId)
                     .putString("restaurant_name", restaurant.optString("restaurant_name"))
                     .putString("join_code", restaurant.optString("join_code"))
