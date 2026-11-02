@@ -424,7 +424,8 @@ class MainActivitySmokeTest {
             onView(withHint("Ex.: Como posso melhorar o preço dos pratos?"))
                 .perform(scrollTo(), replaceText("Como melhorar o preço?"))
             onView(withText("Analisar pergunta")).perform(scrollTo(), click())
-            onView(withText("Análise de preços")).perform(scrollTo()).check(matches(isDisplayed()))
+            // The answer title must already be visible after the app redraws; no manual scrolling.
+            onView(withText("Análise de preços")).check(matches(isDisplayed()))
             onView(withText(containsString("Não alterei nenhum preço.")))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
