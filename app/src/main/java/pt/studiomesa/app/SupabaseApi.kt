@@ -1212,6 +1212,75 @@ object SupabaseApi {
         return reservationId
     }
 
+    fun createCustomerReservationRequest(
+        token: String,
+        requestId: String,
+        guestName: String,
+        guestPhone: String,
+        partySize: Int,
+        reservationAt: String,
+        durationMinutes: Int,
+        notes: String
+    ): JSONObject {
+        require(runCatching { java.util.UUID.fromString(requestId).toString() == requestId }.getOrDefault(false)) {
+            "O identificador da tentativa de reserva não é válido."
+        }
+        val body = JSONObject()
+            .put("p_client_request_id", requestId)
+            .put("p_guest_name", guestName.trim())
+            .put("p_guest_phone", guestPhone.trim())
+            .put("p_party_size", partySize)
+            .put("p_reservation_at", reservationAt)
+            .put("p_duration_minutes", durationMinutes)
+            .put("p_notes", notes.trim())
+        val rows = JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/create_customer_reservation_request",
+            body,
+            token
+        ))
+        if (rows.length() == 0) throw IllegalStateException("O servidor não confirmou o pedido de reserva.")
+        val result = rows.getJSONObject(0)
+        if (result.optString("reservation_id").isBlank() || result.optString("status").isBlank()) {
+            throw IllegalStateException("O servidor devolveu uma confirmação de reserva inválida.")
+        }
+        return result
+    }
+
+    fun listMyRestaurantReservations(token: String): JSONArray {
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/get_my_restaurant_reservations",
+            JSONObject(),
+            token
+        ))
+    }
+
+    fun cancelMyRestaurantReservation(token: String, reservationId: String) {
+        require(runCatching { java.util.UUID.fromString(reservationId) }.isSuccess) {
+            "O identificador da reserva não é válido."
+        }
+        call(
+            "POST",
+            "/rest/v1/rpc/cancel_my_restaurant_reservation",
+            JSONObject().put("p_reservation_id", reservationId),
+            token
+        )
+    }
+
+    fun assignRestaurantReservationTable(token: String, reservationId: String, tableNumber: Int) {
+        require(runCatching { java.util.UUID.fromString(reservationId) }.isSuccess) {
+            "O identificador da reserva não é válido."
+        }
+        require(tableNumber in 1..100) { "Seleciona uma mesa válida." }
+        call(
+            "POST",
+            "/rest/v1/rpc/assign_restaurant_reservation_table",
+            JSONObject().put("p_reservation_id", reservationId).put("p_table_number", tableNumber),
+            token
+        )
+    }
+
     fun updateReservationStatus(token: String, reservationId: String, status: String) {
         require(status in setOf("Pendente", "Confirmada", "Cancelada", "Concluída", "Não compareceu")) {
             "Estado de reserva inválido."
