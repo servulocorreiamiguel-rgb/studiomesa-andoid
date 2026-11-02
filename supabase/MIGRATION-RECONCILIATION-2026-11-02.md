@@ -158,3 +158,45 @@ O Security Advisor mantém também o aviso de **Leaked Password Protection Disab
 ### Consequência para a preparação comercial
 
 A aplicação Android e a branch de desenvolvimento têm uma implementação de permissões mais recente do que a base alojada. Até reconciliar e aplicar a migração aprovada, não anunciar permissões individuais de funcionários como já activas em produção. A integração da PR #77 e o plano de migração continuam bloqueados pela reconciliação do histórico, não pela compilação Android.
+
+
+## Comparação por estado de catálogo — QR de fatura e loja de recompensas
+
+A comparação seguinte usa as definições efectivas do PostgreSQL alojado, não apenas nomes de ficheiros.
+
+### QR de fidelização associado à fatura
+
+O catálogo alojado apresenta o estado esperado pelas migrações locais:
+
+- A tabela `private.loyalty_invoice_qr_codes` tem as colunas, chaves estrangeiras, restrições de validade, unicidade da referência e idempotência descritas em `20261102102500_loyalty_invoice_qr.sql`.
+- Os índices `loyalty_invoice_qr_member_idx`, `loyalty_invoice_qr_expiry_idx`, `loyalty_invoice_qr_issued_by_idx` e `loyalty_invoice_qr_redeemed_by_idx` existem.
+- As funções privilegiadas estão em `private.issue_loyalty_invoice_qr_internal` e `private.redeem_loyalty_invoice_qr_internal`, com `SECURITY DEFINER`, `search_path` vazio e execução autenticada.
+- As funções públicas `issue_loyalty_invoice_qr` e `redeem_loyalty_invoice_qr` são wrappers SQL `SECURITY INVOKER`; `anon` não tem execução.
+
+O estado final corresponde à sequência local `20261102102500` + `20261102104100` + `20261102104800`. Isto é uma equivalência do estado pós-migração observável, não prova que os três ficheiros sejam os mesmos SQL históricos dos registos remotos `20261102103246`, `20261102103627` e `20261102104650`. Não alterar o histórico só com base nesta correspondência.
+
+### Loja de recompensas
+
+O catálogo alojado também apresenta o estado estrutural e funcional descrito pelas migrações locais `20261102112000` e `20261102113000`:
+
+- As tabelas `public.loyalty_rewards` e `public.loyalty_reward_redemptions` existem com restrições de stock, pontos, estado e chave de idempotência.
+- Os cinco índices de loja/resgates previstos em `20261102112000` existem.
+- As implementações privilegiadas da loja estão em funções `private.*_internal`; as funções públicas equivalentes são wrappers `SECURITY INVOKER`.
+- As tabelas de recompensas não concedem leitura ou escrita directa a `anon` ou `authenticated`; o acesso é feito pelas RPCs.
+
+Isto torna `20261102112000` e `20261102113000` candidatos fortes para reconciliar o estado final dos registos remotos `20261102113719` e `20261102113944`, mas não substitui a recuperação/comparação dos SQL originais nem autoriza reparar versões.
+
+### QR legado e reservas: diferenças ainda activas
+
+O estado alojado ainda contém endpoints antigos `SECURITY DEFINER` no schema `public`:
+
+- `create_loyalty_qr_token()`
+- `award_loyalty_points_from_qr(uuid, integer, uuid, text)`
+- `get_restaurant_reward_redemptions(uuid)`
+- As RPCs operacionais de reservas, incluindo `create_customer_reservation_request`, `cancel_my_restaurant_reservation`, `assign_restaurant_reservation_table`, `get_my_restaurant_reservations` e `update_restaurant_reservation_status`.
+
+Na leitura efectuada, estes endpoints não podem ser executados por `anon` ou `PUBLIC`, exigem autenticação e têm verificações de utilizador/restaurante no corpo. Contudo, continuam a ser funções privilegiadas directamente expostas no schema público e não aplicam a futura matriz granular de permissões.
+
+A migração local `20261102135000_legacy_loyalty_rpc_private_boundary.sql` prepara a passagem dos três RPCs legados de QR/resgates para implementações privadas com wrappers públicos `SECURITY INVOKER`. A migração `20261102141000_customer_reservation_flow_private_boundary.sql` prepara a mesma separação para o fluxo de reservas. A migração `20261102160000_granular_restaurant_staff_permissions.sql` introduz a matriz de seis áreas e substitui as políticas antigas por verificações de permissão. Nenhuma destas três migrações está aplicada ao projecto alojado.
+
+**Classificação actual:** o QR de fatura e a loja de recompensas apresentam correspondência forte no estado final com os candidatos locais; QR legado, reservas e permissões granulares continuam a precisar da sequência local posterior. Não executar reparação do histórico nem deploy até a sequência completa ser reproduzida e revista numa base descartável.
