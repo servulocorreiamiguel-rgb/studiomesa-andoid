@@ -2689,6 +2689,14 @@ class MainActivity : Activity() {
     }
 
     private fun confirmCodeRotation(staffCode: Boolean) {
+        if (!StaffPermissionSet.canManageRestaurantCodes(backendPrefs.getString("restaurant_role", ""))) {
+            AlertDialog.Builder(this)
+                .setTitle("Acesso reservado")
+                .setMessage("Só o proprietário pode renovar códigos de adesão.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
         val title = if (staffCode) "Renovar código da equipa?" else "Renovar código dos clientes?"
         val message = if (staffCode) {
             "O código atual deixa de aceitar novas adesões da equipa. Os funcionários já associados mantêm o acesso."
