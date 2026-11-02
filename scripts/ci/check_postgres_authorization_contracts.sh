@@ -1150,6 +1150,38 @@ then
   exit 1
 fi
 
+# A staff member with the loyalty area disabled cannot use a valid customer QR.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders','reservations']);
+COMMIT;
+SQL
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.award_loyalty_points_from_qr(
+  '$LOYALTY_QR_CURRENT'::uuid, 10, '77777777-7777-4777-8777-777777777778'::uuid, 'Blocked loyalty permission'
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: a staff member used the loyalty QR flow after the loyalty permission was disabled." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions(
+  '$USER_C'::uuid, ARRAY['orders','tables','reservations','menu','inventory','loyalty']
+);
+COMMIT;
+SQL
+
 # Correct staff member credits points. Same request ID is safe to replay;
 # a different request ID cannot consume the QR a second time.
 LOYALTY_FIRST="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
@@ -1254,6 +1286,36 @@ then
   echo "ERROR: staff from restaurant B unexpectedly fulfilled restaurant A's redemption." >&2
   exit 1
 fi
+
+# The loyalty permission also controls delivery confirmation.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders','reservations']);
+COMMIT;
+SQL
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT public.fulfill_loyalty_reward_redemption('$LOYALTY_REDEMPTION_ID'::uuid);
+COMMIT;
+SQL
+then
+  echo "ERROR: a staff member confirmed a reward delivery after loyalty permission was disabled." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions(
+  '$USER_C'::uuid, ARRAY['orders','tables','reservations','menu','inventory','loyalty']
+);
+COMMIT;
+SQL
 
 # The correct restaurant's staff confirms delivery; a second confirmation is a no-op.
 psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
