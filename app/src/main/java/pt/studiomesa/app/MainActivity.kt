@@ -579,7 +579,11 @@ class MainActivity : Activity() {
         appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(60)))
         setContentView(appRoot)
         if (activePage == "Pontos" && hasRemoteRestaurant() &&
-            (!backendPrefs.contains("restaurant_loyalty_rewards_json") ||
+            (!LoyaltyCacheScope.belongsTo(
+                backendPrefs.getString("restaurant_loyalty_cache_restaurant_id", null),
+                backendRestaurantId()
+            ) ||
+                !backendPrefs.contains("restaurant_loyalty_rewards_json") ||
                 !backendPrefs.contains("restaurant_loyalty_redemptions_json"))) {
             refreshRestaurantLoyaltyShop()
         }
@@ -1689,6 +1693,12 @@ class MainActivity : Activity() {
                     .putString("join_code", restaurant.optString("join_code"))
                     .putString("staff_join_code", restaurant.optString("staff_code"))
                     .putString("restaurant_role", restaurant.optString("user_role", "staff"))
+                val cachedRestaurantId = backendPrefs.getString("restaurant_loyalty_cache_restaurant_id", null)
+                if (!LoyaltyCacheScope.belongsTo(cachedRestaurantId, restaurantId)) {
+                    editor.remove("restaurant_loyalty_rewards_json")
+                        .remove("restaurant_loyalty_redemptions_json")
+                }
+                editor.putString("restaurant_loyalty_cache_restaurant_id", restaurantId)
             }
             editor.apply()
             if (restaurant != null) {
@@ -1705,6 +1715,9 @@ class MainActivity : Activity() {
                     .remove("inventory_loaded")
                     .remove("remote_reservations_json")
                     .remove("reservations_loaded")
+                    .remove("restaurant_loyalty_rewards_json")
+                    .remove("restaurant_loyalty_redemptions_json")
+                    .remove("restaurant_loyalty_cache_restaurant_id")
                     .apply()
                 reservationCache = JSONArray()
                 reservationsLoaded = false
@@ -1797,18 +1810,26 @@ class MainActivity : Activity() {
                     .putString("customer_menu_json", "[]")
                     .remove("customer_loyalty_rewards_json")
                     .remove("customer_loyalty_redemptions_json")
+                    .remove("customer_loyalty_cache_member_id")
                     .apply()
                 return
             }
 
             val memberId = member.optString("member_id")
-            val menu = if (memberId.isNotBlank()) SupabaseApi.listCustomerMenu(token, memberId) else org.json.JSONArray()
-            backendPrefs.edit()
-                .putString("member_id", memberId)
+            if (memberId.isBlank()) throw IllegalStateException("O servidor não devolveu um cartão de cliente válido.")
+            val menu = SupabaseApi.listCustomerMenu(token, memberId)
+            val cachedMemberId = backendPrefs.getString("customer_loyalty_cache_member_id", null)
+            val editor = backendPrefs.edit()
+            if (!LoyaltyCacheScope.belongsTo(cachedMemberId, memberId)) {
+                editor.remove("customer_loyalty_rewards_json")
+                    .remove("customer_loyalty_redemptions_json")
+            }
+            editor.putString("member_id", memberId)
                 .putString("member_code", member.optString("member_code"))
                 .putInt("member_points", member.optInt("points", 0))
                 .putString("member_restaurant_name", member.optString("restaurant_name"))
                 .putString("customer_menu_json", menu.toString())
+                .putString("customer_loyalty_cache_member_id", memberId)
                 .apply()
             val displayName = member.optString("display_name").trim()
             if (displayName.isNotBlank()) store.saveCustomerProfileName(displayName)
@@ -1844,7 +1865,10 @@ class MainActivity : Activity() {
             .remove("remote_members_json").remove("remote_tables_json")
             .remove("remote_menu_json").remove("remote_orders_json")
             .remove("customer_menu_json")
-                    .remove("customer_loyalty_rewards_json").remove("customer_loyalty_redemptions_json")
+            .remove("customer_loyalty_rewards_json").remove("customer_loyalty_redemptions_json")
+            .remove("customer_loyalty_cache_member_id")
+            .remove("restaurant_loyalty_rewards_json").remove("restaurant_loyalty_redemptions_json")
+            .remove("restaurant_loyalty_cache_restaurant_id")
             .remove("remote_inventory_json").remove("inventory_loaded")
             .remove("remote_reservations_json").remove("reservations_loaded")
             .apply()
@@ -2531,6 +2555,9 @@ class MainActivity : Activity() {
                 .remove("remote_members_json").remove("remote_tables_json")
                 .remove("remote_menu_json").remove("remote_orders_json").remove("customer_menu_json")
                 .remove("customer_loyalty_rewards_json").remove("customer_loyalty_redemptions_json")
+                .remove("customer_loyalty_cache_member_id")
+                .remove("restaurant_loyalty_rewards_json").remove("restaurant_loyalty_redemptions_json")
+                .remove("restaurant_loyalty_cache_restaurant_id")
                 .remove("remote_inventory_json").remove("inventory_loaded")
                 .remove("remote_reservations_json").remove("reservations_loaded")
                 .apply()
@@ -2734,6 +2761,8 @@ class MainActivity : Activity() {
 
 
     private fun cachedRestaurantRewards(): List<LoyaltyReward> {
+        val cachedRestaurantId = backendPrefs.getString("restaurant_loyalty_cache_restaurant_id", null)
+        if (!LoyaltyCacheScope.belongsTo(cachedRestaurantId, backendRestaurantId())) return emptyList()
         val raw = backendPrefs.getString("restaurant_loyalty_rewards_json", "[]") ?: "[]"
         return runCatching {
             val rows = JSONArray(raw)
@@ -2741,10 +2770,13 @@ class MainActivity : Activity() {
         }.getOrElse { emptyList() }
     }
 
-    private fun cachedRestaurantRewardRedemptions(): JSONArray =
-        runCatching {
+    private fun cachedRestaurantRewardRedemptions(): JSONArray {
+        val cachedRestaurantId = backendPrefs.getString("restaurant_loyalty_cache_restaurant_id", null)
+        if (!LoyaltyCacheScope.belongsTo(cachedRestaurantId, backendRestaurantId())) return JSONArray()
+        return runCatching {
             JSONArray(backendPrefs.getString("restaurant_loyalty_redemptions_json", "[]") ?: "[]")
         }.getOrElse { JSONArray() }
+    }
 
     private fun renderRestaurantLoyaltyShop(container: LinearLayout) {
         val isOwner = backendPrefs.getString("restaurant_role", "").orEmpty() == "owner"
@@ -2850,12 +2882,17 @@ class MainActivity : Activity() {
             return
         }
         runBackend({
+            val activeRestaurantId = backendRestaurantId()
+            if (activeRestaurantId != restaurantId) {
+                throw IllegalStateException("O restaurante ativo mudou. Atualiza novamente a loja.")
+            }
             val token = backendToken()
-            val rewards = SupabaseApi.listRestaurantLoyaltyRewards(token, restaurantId)
-            val redemptions = SupabaseApi.listRestaurantLoyaltyRewardRedemptions(token, restaurantId)
+            val rewards = SupabaseApi.listRestaurantLoyaltyRewards(token, activeRestaurantId)
+            val redemptions = SupabaseApi.listRestaurantLoyaltyRewardRedemptions(token, activeRestaurantId)
             backendPrefs.edit()
                 .putString("restaurant_loyalty_rewards_json", rewards.toString())
                 .putString("restaurant_loyalty_redemptions_json", redemptions.toString())
+                .putString("restaurant_loyalty_cache_restaurant_id", activeRestaurantId)
                 .apply()
             rewards.length().toString()
         }) { count ->
@@ -3210,6 +3247,10 @@ class MainActivity : Activity() {
                     activeCustomerPage = page
                     renderCustomerApp()
                     if (page == "Prémios" && backendToken().isNotBlank() && backendMemberId().isNotBlank() &&
+                        LoyaltyCacheScope.belongsTo(
+                            backendPrefs.getString("customer_loyalty_cache_member_id", null),
+                            backendMemberId()
+                        ) &&
                         backendPrefs.contains("customer_loyalty_rewards_json") &&
                         backendPrefs.contains("customer_loyalty_redemptions_json")) {
                         refreshCustomerRewards()
@@ -3235,7 +3276,11 @@ class MainActivity : Activity() {
         if (activeCustomerPage == "Prémios" &&
             backendToken().isNotBlank() &&
             backendMemberId().isNotBlank() &&
-            (!backendPrefs.contains("customer_loyalty_rewards_json") ||
+            (!LoyaltyCacheScope.belongsTo(
+                backendPrefs.getString("customer_loyalty_cache_member_id", null),
+                backendMemberId()
+            ) ||
+                !backendPrefs.contains("customer_loyalty_rewards_json") ||
                 !backendPrefs.contains("customer_loyalty_redemptions_json"))) {
             refreshCustomerRewards()
         }
@@ -3280,6 +3325,8 @@ class MainActivity : Activity() {
 
 
     private fun cachedCustomerRewards(): List<LoyaltyReward> {
+        val cachedMemberId = backendPrefs.getString("customer_loyalty_cache_member_id", null)
+        if (!LoyaltyCacheScope.belongsTo(cachedMemberId, backendMemberId())) return emptyList()
         val raw = backendPrefs.getString("customer_loyalty_rewards_json", "[]") ?: "[]"
         return runCatching {
             val rows = JSONArray(raw)
@@ -3287,10 +3334,13 @@ class MainActivity : Activity() {
         }.getOrElse { emptyList() }
     }
 
-    private fun cachedCustomerRewardHistory(): JSONArray =
-        runCatching {
+    private fun cachedCustomerRewardHistory(): JSONArray {
+        val cachedMemberId = backendPrefs.getString("customer_loyalty_cache_member_id", null)
+        if (!LoyaltyCacheScope.belongsTo(cachedMemberId, backendMemberId())) return JSONArray()
+        return runCatching {
             JSONArray(backendPrefs.getString("customer_loyalty_redemptions_json", "[]") ?: "[]")
         }.getOrElse { JSONArray() }
+    }
 
     private fun refreshCustomerRewards() {
         val token = backendToken()
@@ -3320,6 +3370,7 @@ class MainActivity : Activity() {
                 .putString("member_code", member.optString("member_code"))
                 .putString("customer_loyalty_rewards_json", rewards.toString())
                 .putString("customer_loyalty_redemptions_json", history.toString())
+                .putString("customer_loyalty_cache_member_id", memberId)
                 .apply()
             rewards.length().toString()
         }) { count ->
@@ -3459,6 +3510,7 @@ class MainActivity : Activity() {
                         .putInt("member_points", remaining)
                         .putString("customer_loyalty_rewards_json", rewards.toString())
                         .putString("customer_loyalty_redemptions_json", history.toString())
+                        .putString("customer_loyalty_cache_member_id", memberId)
                         .apply()
                     JSONObject()
                         .put("points_remaining", remaining)
