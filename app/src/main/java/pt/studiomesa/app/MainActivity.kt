@@ -1789,6 +1789,7 @@ class MainActivity : Activity() {
                     .remove("member_restaurant_name")
                     .putString("customer_menu_json", "[]")
                     .putString("customer_rewards_json", "[]")
+                    .putString("customer_redemptions_json", "[]")
                     .apply()
                 return
             }
@@ -1796,6 +1797,7 @@ class MainActivity : Activity() {
             val memberId = member.optString("member_id")
             val menu = if (memberId.isNotBlank()) SupabaseApi.listCustomerMenu(token, memberId) else org.json.JSONArray()
             val rewards = if (memberId.isNotBlank()) SupabaseApi.listCustomerRewards(token, memberId) else JSONArray()
+            val redemptions = if (memberId.isNotBlank()) SupabaseApi.listMyLoyaltyRewardRedemptions(token) else JSONArray()
             backendPrefs.edit()
                 .putString("member_id", memberId)
                 .putString("member_code", member.optString("member_code"))
@@ -1803,6 +1805,7 @@ class MainActivity : Activity() {
                 .putString("member_restaurant_name", member.optString("restaurant_name"))
                 .putString("customer_menu_json", menu.toString())
                 .putString("customer_rewards_json", rewards.toString())
+                .putString("customer_redemptions_json", redemptions.toString())
                 .apply()
             val displayName = member.optString("display_name").trim()
             if (displayName.isNotBlank()) store.saveCustomerProfileName(displayName)
@@ -2525,6 +2528,7 @@ class MainActivity : Activity() {
                 .remove("remote_members_json").remove("remote_tables_json")
                 .remove("remote_menu_json").remove("remote_orders_json").remove("customer_menu_json")
                 .remove("customer_rewards_json")
+                .remove("customer_redemptions_json")
                 .remove("remote_inventory_json").remove("inventory_loaded")
                 .remove("remote_reservations_json").remove("reservations_loaded")
                 .apply()
@@ -3120,6 +3124,7 @@ class MainActivity : Activity() {
                                 .putString("member_restaurant_name", member.optString("restaurant_name"))
                                 .putString("customer_menu_json", menu.toString())
                                 .putString("customer_rewards_json", rewards.toString())
+                                .putString("customer_redemptions_json", SupabaseApi.listMyLoyaltyRewardRedemptions(token).toString())
                                 .apply()
                             store.saveCustomerProfileName(name)
                             "OK"
@@ -3142,10 +3147,12 @@ class MainActivity : Activity() {
             val member = SupabaseApi.getMember(token, memberId)
             val menu = SupabaseApi.listCustomerMenu(token, memberId)
             val rewards = SupabaseApi.listCustomerRewards(token, memberId)
+            val redemptions = SupabaseApi.listMyLoyaltyRewardRedemptions(token)
             backendPrefs.edit().putInt("member_points", member.optInt("points", 0))
                 .putString("member_code", member.optString("member_code"))
                 .putString("customer_menu_json", menu.toString())
                 .putString("customer_rewards_json", rewards.toString())
+                .putString("customer_redemptions_json", redemptions.toString())
                 .apply()
             "OK"
         }) { renderCustomerApp() }
@@ -3276,6 +3283,7 @@ class MainActivity : Activity() {
                 LinearLayout.LayoutParams(-1, dp(48)))
             addGap(container, 14)
             renderCustomerRewards(container)
+            renderCustomerRedemptionHistory(container)
         }
         addGap(container, 5)
         container.addView(secondaryButton("Consultar a carta") {
@@ -3325,6 +3333,38 @@ class MainActivity : Activity() {
                     else -> "Indisponível"
                 }
                 card.addView(label(message, 11f, true, muted))
+            }
+            container.addView(card, cardParams())
+        }
+    }
+
+    private fun renderCustomerRedemptionHistory(container: LinearLayout) {
+        container.addView(label("OS MEUS RESGATES", 10f, true, forestSoft))
+        addGap(container, 5)
+        val redemptions = try {
+            JSONArray(backendPrefs.getString("customer_redemptions_json", "[]") ?: "[]")
+        } catch (_: Exception) {
+            JSONArray()
+        }
+        if (redemptions.length() == 0) {
+            container.addView(label("Ainda não resgataste nenhuma recompensa.", 12f, false, muted))
+            return
+        }
+        for (i in 0 until redemptions.length()) {
+            val item = redemptions.optJSONObject(i) ?: continue
+            val fulfilled = item.optString("status") == "fulfilled"
+            val card = makeCard(12)
+            card.addView(label(item.optString("reward_name"), 15f, true, forestDeep))
+            addGap(card, 4)
+            card.addView(label(
+                item.optInt("points_spent").toString() + " pontos · " +
+                    if (fulfilled) "Entregue" else "A aguardar entrega",
+                11f, true, if (fulfilled) green else forestSoft
+            ))
+            val redeemedAt = item.optString("redeemed_at").replace("T", " ").take(16)
+            if (redeemedAt.isNotBlank()) {
+                addGap(card, 3)
+                card.addView(label("Pedido em " + redeemedAt, 10f, false, muted))
             }
             container.addView(card, cardParams())
         }
@@ -3391,9 +3431,11 @@ class MainActivity : Activity() {
                     val result = SupabaseApi.redeemLoyaltyReward(backendToken(), rewardId, requestId)
                     val member = SupabaseApi.getMyLoyaltyMembership(backendToken())
                     val rewards = SupabaseApi.listCustomerRewards(backendToken(), backendMemberId())
+                    val redemptions = SupabaseApi.listMyLoyaltyRewardRedemptions(backendToken())
                     backendPrefs.edit()
                         .putInt("member_points", member?.optInt("points", result.optInt("points_remaining", 0)) ?: 0)
                         .putString("customer_rewards_json", rewards.toString())
+                        .putString("customer_redemptions_json", redemptions.toString())
                         .apply()
                     result.optInt("points_remaining", -1).toString()
                 }) { remaining ->
@@ -3534,6 +3576,7 @@ class MainActivity : Activity() {
                     .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
                     .remove("customer_menu_json")
                     .remove("customer_rewards_json")
+                    .remove("customer_redemptions_json")
                     .apply()
                 activeCustomerPage = "Cartão"
                 renderCustomerApp()
