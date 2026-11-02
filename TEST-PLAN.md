@@ -274,6 +274,25 @@ Todos os testes devem ser executados com contas e dados descartáveis. Registar 
 | LOY-HISTORY-03 | Resgate passa de pendente a entregue | O histórico do cliente mostra o estado atualizado depois de sincronizar |
 
 
+## Permissões granulares da equipa
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| STAFF-PERM-01 | Compatibilidade | Funcionário antigo sem matriz personalizada inicia sessão | Mantém as seis áreas operacionais até o proprietário guardar uma matriz |
+| STAFF-PERM-02 | Proprietário | Proprietário consulta e guarda as permissões de um funcionário do mesmo restaurante | O servidor devolve a matriz efetiva e confirma a alteração |
+| STAFF-PERM-03 | Autoelevação | Funcionário tenta alterar as próprias permissões | RPC recusada; matriz inalterada |
+| STAFF-PERM-04 | Isolamento | Proprietário de outro restaurante tenta alterar um funcionário | RPC recusada; nenhum dado alterado |
+| STAFF-PERM-05 | Valor inválido | Proprietário envia uma permissão desconhecida ou duplicada | RPC recusa a matriz |
+| STAFF-PERM-06 | Matriz vazia | Proprietário desativa todas as áreas | Funcionário deixa de consultar ou alterar módulos operacionais |
+| STAFF-PERM-07 | Pedidos | Ativar e depois desativar Pedidos; tentar atualizar diretamente por REST | Ativo: operação permitida; desativado: RLS recusa a escrita |
+| STAFF-PERM-08 | Mesas e carta | Desativar Mesas/Carta e tentar alterar diretamente as tabelas | Escritas recusadas pelo servidor; secções ocultas na navegação |
+| STAFF-PERM-09 | Reservas e stock | Ativar/desativar as áreas e chamar diretamente as RPCs | Só as operações com permissão ativa são aceites |
+| STAFF-PERM-10 | Fidelização | Desativar Fidelização e tentar atribuir pontos por QR ou confirmar entrega | RPC recusada; saldo, QR e resgate permanecem inalterados |
+| STAFF-PERM-11 | Dados de outro restaurante | Funcionário tenta consultar ou alterar dados por ID alheio | Sem acesso, mesmo com a área ativa no próprio restaurante |
+| STAFF-PERM-12 | Ações do proprietário | Funcionário tenta gerir equipa/códigos, catálogo de recompensas ou consultor económico | Operação recusada independentemente da matriz |
+| STAFF-PERM-13 | Revogação | Proprietário retira uma permissão enquanto o funcionário tem a app aberta | Nova operação é recusada no servidor; após sincronização a secção desaparece |
+| STAFF-PERM-14 | Troca de conta | Terminar sessão e iniciar outra conta no mesmo dispositivo | A matriz anterior não é reutilizada; permissões são carregadas do servidor |
+
 ## Pedidos de reserva pelo cliente e atribuição de mesa
 
 | ID | Cenário | Resultado esperado |
