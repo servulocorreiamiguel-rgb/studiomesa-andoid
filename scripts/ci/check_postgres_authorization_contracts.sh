@@ -868,6 +868,223 @@ then
 fi
 echo "PASS: cross-restaurant loyalty changes and changed idempotency payloads are rejected."
 
+# Restaurant-specific reward catalogue, one-time point redemption and fulfilment workflow.
+REWARD_ID="aaaa1111-1111-4111-8111-111111111111"
+EMPTY_REWARD_ID="bbbb2222-2222-4222-8222-222222222222"
+REWARD_REQUEST="cccc3333-3333-4333-8333-333333333333"
+REWARD_FOREIGN_REQUEST="dddd4444-4444-4444-8444-444444444444"
+
+save_reward() {
+  local user_id="$1" restaurant_id="$2" reward_id="$3" name="$4" points="$5" stock="$6" active="$7"
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT public.save_loyalty_reward(
+  '$restaurant_id'::uuid, '$reward_id'::uuid, '$name', 'CI reward catalogue test',
+  '$points'::integer, $stock::integer, '$active'::boolean
+);
+COMMIT;
+SQL
+}
+
+redeem_reward() {
+  local user_id="$1" reward_id="$2" request_id="$3"
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT redemption_id::text || '|' || reward_name || '|' ||
+       points_spent::text || '|' || points_remaining::text || '|' || status
+FROM public.redeem_loyalty_reward('$reward_id'::uuid, '$request_id'::uuid);
+COMMIT;
+SQL
+}
+
+REWARD_SAVED="$(save_reward "$USER_A" "$RESTAURANT_A" "$REWARD_ID" "CI Dessert" "15" "1" "true")"
+if [ "$REWARD_SAVED" != "$REWARD_ID" ]; then
+  echo "ERROR: restaurant owner could not create a loyalty reward." >&2
+  exit 1
+fi
+echo "PASS: the restaurant owner can create a reward with a points cost and stock limit."
+
+if save_reward "$USER_C" "$RESTAURANT_A" "eeee5555-5555-4555-8555-555555555555" "Staff reward" "5" "2" "true" >/dev/null 2>&1; then
+  echo "ERROR: a staff member unexpectedly created or edited a reward." >&2
+  exit 1
+fi
+if save_reward "$USER_B" "$RESTAURANT_B" "$REWARD_ID" "Cross restaurant edit" "1" "1" "true" >/dev/null 2>&1; then
+  echo "ERROR: restaurant B unexpectedly edited restaurant A's reward." >&2
+  exit 1
+fi
+
+EMPTY_REWARD_SAVED="$(save_reward "$USER_A" "$RESTAURANT_A" "$EMPTY_REWARD_ID" "CI Out of Stock" "5" "0" "true")"
+test "$EMPTY_REWARD_SAVED" = "$EMPTY_REWARD_ID"
+
+CUSTOMER_A_REWARD_COUNT="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*) FROM public.get_customer_loyalty_rewards('$MEMBER_A'::uuid);
+COMMIT;
+SQL
+)"
+CUSTOMER_B_REWARD_COUNT="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_F', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*) FROM public.get_customer_loyalty_rewards('$MEMBER_B'::uuid);
+COMMIT;
+SQL
+)"
+if [ "$CUSTOMER_A_REWARD_COUNT" != "1" ] || [ "$CUSTOMER_B_REWARD_COUNT" != "0" ]; then
+  echo "ERROR: customer reward catalogue did not isolate active and in-stock rewards by restaurant." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.get_customer_loyalty_rewards('$MEMBER_B'::uuid);
+COMMIT;
+SQL
+then
+  echo "ERROR: customer A unexpectedly queried another customer's reward catalogue." >&2
+  exit 1
+fi
+echo "PASS: customer catalogues are limited to their own restaurant and hide exhausted rewards."
+
+REWARD_FIRST="$(redeem_reward "$USER_E" "$REWARD_ID" "$REWARD_REQUEST")"
+REWARD_RETRY="$(redeem_reward "$USER_E" "$REWARD_ID" "$REWARD_REQUEST")"
+if [ "$REWARD_FIRST" != "$REWARD_RETRY" ]; then
+  echo "ERROR: repeating a reward redemption changed the result or spent points twice." >&2
+  exit 1
+fi
+IFS='|' read -r REWARD_REDEMPTION_ID REWARD_NAME REWARD_POINTS_SPENT REWARD_POINTS_LEFT REWARD_STATUS <<< "$REWARD_FIRST"
+if [ -z "$REWARD_REDEMPTION_ID" ] || [ "$REWARD_NAME" != "CI Dessert" ] ||
+   [ "$REWARD_POINTS_SPENT" != "15" ] || [ "$REWARD_POINTS_LEFT" != "15" ] ||
+   [ "$REWARD_STATUS" != "pending" ]; then
+  echo "ERROR: reward redemption returned an unexpected result." >&2
+  exit 1
+fi
+
+if redeem_reward "$USER_F" "$REWARD_ID" "$REWARD_FOREIGN_REQUEST" >/dev/null 2>&1; then
+  echo "ERROR: customer B unexpectedly redeemed a reward from restaurant A." >&2
+  exit 1
+fi
+if redeem_reward "$USER_E" "$EMPTY_REWARD_ID" "eeee6666-6666-4666-8666-666666666666" >/dev/null 2>&1; then
+  echo "ERROR: an exhausted reward was redeemed." >&2
+  exit 1
+fi
+
+reward_balance_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT points = 15 FROM public.loyalty_members WHERE id = '$MEMBER_A'::uuid;")"
+reward_stock_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT redeemed_count = 1 FROM public.loyalty_rewards WHERE id = '$REWARD_ID'::uuid;")"
+reward_redemption_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*) FROM public.loyalty_reward_redemptions WHERE member_id = '$MEMBER_A'::uuid AND reward_id = '$REWARD_ID'::uuid AND client_request_id = '$REWARD_REQUEST'::uuid;")"
+reward_transaction_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*) FROM public.loyalty_transactions WHERE member_id = '$MEMBER_A'::uuid AND client_request_id = '$REWARD_REQUEST'::uuid AND points_delta = -15;")"
+if [ "$reward_balance_ok" != "t" ] || [ "$reward_stock_ok" != "t" ] ||
+   [ "$reward_redemption_count" != "1" ] || [ "$reward_transaction_count" != "1" ]; then
+  echo "ERROR: reward redemption did not atomically deduct points, update stock and write one transaction." >&2
+  exit 1
+fi
+echo "PASS: reward redemptions are idempotent, enforce stock and deduct customer points exactly once."
+
+RESTAURANT_REWARD_QUEUE_COUNT="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*) FROM public.get_restaurant_loyalty_reward_redemptions('$RESTAURANT_A'::uuid);
+COMMIT;
+SQL
+)"
+STAFF_REWARD_QUEUE_COUNT="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*) FROM public.get_restaurant_loyalty_reward_redemptions('$RESTAURANT_A'::uuid);
+COMMIT;
+SQL
+)"
+if [ "$RESTAURANT_REWARD_QUEUE_COUNT" != "1" ] || [ "$STAFF_REWARD_QUEUE_COUNT" != "1" ]; then
+  echo "ERROR: the owner or staff could not view the restaurant's fulfilment queue." >&2
+  exit 1
+fi
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.get_restaurant_loyalty_reward_redemptions('$RESTAURANT_A'::uuid);
+COMMIT;
+SQL
+then
+  echo "ERROR: a customer unexpectedly read the restaurant's fulfilment queue." >&2
+  exit 1
+fi
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.get_restaurant_loyalty_reward_redemptions('$RESTAURANT_A'::uuid);
+COMMIT;
+SQL
+then
+  echo "ERROR: restaurant B unexpectedly read restaurant A's fulfilment queue." >&2
+  exit 1
+fi
+
+CUSTOMER_REWARD_HISTORY_COUNT="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*) FROM public.get_my_loyalty_reward_redemptions();
+COMMIT;
+SQL
+)"
+OTHER_CUSTOMER_HISTORY_COUNT="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_F', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*) FROM public.get_my_loyalty_reward_redemptions();
+COMMIT;
+SQL
+)"
+if [ "$CUSTOMER_REWARD_HISTORY_COUNT" != "1" ] || [ "$OTHER_CUSTOMER_HISTORY_COUNT" != "0" ]; then
+  echo "ERROR: customer redemption history was not scoped to the authenticated account." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT public.fulfill_loyalty_reward_redemption('$REWARD_REDEMPTION_ID'::uuid);
+SELECT public.fulfill_loyalty_reward_redemption('$REWARD_REDEMPTION_ID'::uuid);
+COMMIT;
+SQL
+reward_fulfilled_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT status = 'fulfilled' AND fulfilled_by = '$USER_C'::uuid FROM public.loyalty_reward_redemptions WHERE id = '$REWARD_REDEMPTION_ID'::uuid;")"
+if [ "$reward_fulfilled_ok" != "t" ]; then
+  echo "ERROR: staff fulfilment did not mark the reward as fulfilled exactly once." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.loyalty_rewards;
+SELECT * FROM public.loyalty_reward_redemptions;
+COMMIT;
+SQL
+then
+  echo "ERROR: an authenticated customer unexpectedly read loyalty reward tables directly." >&2
+  exit 1
+fi
+echo "PASS: restaurant-scoped rewards, customer history, single-use redemption and staff fulfilment are authorized."
+
 RESERVATION_REQUEST="99999999-9999-4999-8999-999999999999"
 RESERVATION_FOREIGN_REQUEST="abababab-abab-4bab-8bab-abababababab"
 RESERVATION_AT="$(date -u -d '+30 days' '+%Y-%m-%d %H:%M:%S+00:00')"
