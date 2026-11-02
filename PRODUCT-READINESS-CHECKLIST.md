@@ -76,6 +76,8 @@ Nenhum destes pontos deve ser anunciado como testado por existir apenas código,
 - [ ] Automatizar regras de acumulação/resgate só depois de definir regras comerciais e prevenção de fraude.
 - [ ] Limitar tentativas repetidas de adivinhar códigos e monitorizar abusos.
 - [ ] Testar saldos negativos, limites, concorrência e reconciliação dos movimentos.
+- [x] O cliente autenticado consegue consultar os seus próprios resgates (prémio, pontos e estado de entrega) através de uma RPC que resolve o cartão no servidor por `auth.uid()`; não recebe um ID de cartão para escolher.
+- [ ] Testar em duas contas reais que um cliente não consegue consultar o histórico de resgates de outro utilizador, nem por alteração de pedidos/respostas.
 - [ ] Proteger os dados dos clientes e confirmar que cada cliente só vê o próprio cartão/histórico.
 
 ## Stock e inventário
