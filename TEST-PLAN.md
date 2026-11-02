@@ -267,3 +267,8 @@ A migration `20261030120000_inventory_unit_cost_and_waste_snapshots.sql` tem de 
 | SEC-05 | Restauro a partir de cópia de segurança | Restauro concluído e conferido num projeto de teste separado |
 
 Todos os testes devem ser executados com contas e dados descartáveis. Registar o resultado, versão da app, migração aplicada e ambiente utilizado. Não testar eliminações ou restauros com dados reais de clientes.
+
+
+| LOY-HISTORY-01 | Cliente autenticado consulta os seus resgates | Só aparecem os prémios associados ao cartão da própria conta |
+| LOY-HISTORY-02 | Outra conta consulta o seu histórico | Não recebe os resgates do primeiro cliente; não existe parâmetro para escolher o cartão de terceiros |
+| LOY-HISTORY-03 | Resgate passa de pendente a entregue | O histórico do cliente mostra o estado atualizado depois de sincronizar |
