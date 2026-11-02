@@ -355,7 +355,7 @@ if [ "$table_write_rows" != "0" ] || [ "$menu_write_rows" != "0" ]; then
   echo "ERROR: a staff account wrote to an area disabled by its permission matrix." >&2
   exit 1
 fi
-if create_inventory_item "$USER_C" "$RESTAURANT_A" "Blocked stock item" "dddddddd-dddd-4ddd-8ddd-dddddddddddd" "1" >/dev/null 2>&1; then
+if create_inventory_item "$USER_C" "$RESTAURANT_A" "dddddddd-dddd-4ddd-8ddd-dddddddddddd" "Blocked stock item" "1" >/dev/null 2>&1; then
   echo "ERROR: a staff account created stock while the inventory permission was disabled." >&2
   exit 1
 fi
