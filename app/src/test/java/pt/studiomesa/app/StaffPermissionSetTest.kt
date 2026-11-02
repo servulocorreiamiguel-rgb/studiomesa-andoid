@@ -16,7 +16,7 @@ class StaffPermissionSetTest {
     @Test
     fun serializesPermissionsInStableProductOrder() {
         assertEquals(
-            "[\"orders\",\"tables\",\"loyalty\"]",
+            listOf("orders", "tables", "loyalty"),
             StaffPermissionSet.orderedValues(setOf("loyalty", "tables", "orders"))
         )
     }
