@@ -461,7 +461,9 @@ jobs:
               RAISE EXCEPTION 'The loyalty shop schema or one of its RPCs is missing after clean migration replay.';
             END IF;
 
-            IF (
+            IF pg_get_function_result('public.get_member_restaurant_menu(uuid)'::regprocedure)
+                 IS DISTINCT FROM
+               pg_get_function_result('private.get_member_restaurant_menu_internal(uuid)'::regprocedure) OR (
               SELECT count(*)
               FROM pg_proc p
               JOIN pg_namespace n ON n.oid = p.pronamespace
