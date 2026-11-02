@@ -578,6 +578,11 @@ class MainActivity : Activity() {
         }
         appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(60)))
         setContentView(appRoot)
+        if (activePage == "Pontos" && hasRemoteRestaurant() &&
+            (!backendPrefs.contains("restaurant_loyalty_rewards_json") ||
+                !backendPrefs.contains("restaurant_loyalty_redemptions_json"))) {
+            refreshRestaurantLoyaltyShop()
+        }
         updateKitchenAutoRefresh()
         updateInventoryAutoRefresh()
     }
@@ -2683,10 +2688,6 @@ class MainActivity : Activity() {
         if (remoteMode) {
             addGap(container, 13)
             renderRestaurantLoyaltyShop(container)
-            if (!backendPrefs.contains("restaurant_loyalty_rewards_json") ||
-                !backendPrefs.contains("restaurant_loyalty_redemptions_json")) {
-                refreshRestaurantLoyaltyShop()
-            }
         }
         addGap(container, 13)
 
@@ -3185,13 +3186,6 @@ class MainActivity : Activity() {
             "Carta" -> renderCustomerMenuPage(content)
             "Conta" -> renderCustomerAccountPage(content)
         }
-        if (activeCustomerPage == "Prémios" &&
-            backendToken().isNotBlank() &&
-            backendMemberId().isNotBlank() &&
-            (!backendPrefs.contains("customer_loyalty_rewards_json") ||
-                !backendPrefs.contains("customer_loyalty_redemptions_json"))) {
-            refreshCustomerRewards()
-        }
         scroll.addView(content)
         appRoot.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
@@ -3215,7 +3209,9 @@ class MainActivity : Activity() {
                 setOnClickListener {
                     activeCustomerPage = page
                     renderCustomerApp()
-                    if (page == "Prémios" && backendToken().isNotBlank() && backendMemberId().isNotBlank()) {
+                    if (page == "Prémios" && backendToken().isNotBlank() && backendMemberId().isNotBlank() &&
+                        backendPrefs.contains("customer_loyalty_rewards_json") &&
+                        backendPrefs.contains("customer_loyalty_redemptions_json")) {
                         refreshCustomerRewards()
                     }
                 }
@@ -3236,6 +3232,13 @@ class MainActivity : Activity() {
         }
         appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(60)))
         setContentView(appRoot)
+        if (activeCustomerPage == "Prémios" &&
+            backendToken().isNotBlank() &&
+            backendMemberId().isNotBlank() &&
+            (!backendPrefs.contains("customer_loyalty_rewards_json") ||
+                !backendPrefs.contains("customer_loyalty_redemptions_json"))) {
+            refreshCustomerRewards()
+        }
     }
 
     private fun renderCustomerLoyaltyPage(container: LinearLayout) {
