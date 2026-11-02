@@ -1811,22 +1811,27 @@ class MainActivity : Activity() {
             return
         }
         runBackend({
-            if (backendPrefs.getString("restaurant_role", "").orEmpty() == "staff") {
+            val isStaff = backendPrefs.getString("restaurant_role", "").orEmpty() == "staff"
+            if (isStaff) {
                 currentStaffPermissions = StaffPermissionSet.fromJson(
                     SupabaseApi.getMyRestaurantPermissions(backendToken())
                 )
+            } else {
+                currentStaffPermissions = StaffPermissionSet.all.toSet()
             }
             cacheRemoteOperations(backendToken(), restaurantId)
-            if ("inventory" !in currentStaffPermissions.orEmpty()) {
-                backendPrefs.edit().remove("remote_inventory_json").remove("inventory_loaded").apply()
-            }
-            if ("reservations" !in currentStaffPermissions.orEmpty()) {
-                backendPrefs.edit().remove("remote_reservations_json").remove("reservations_loaded").apply()
-                reservationCache = JSONArray()
-                reservationsLoaded = false
-            }
-            if ("loyalty" !in currentStaffPermissions.orEmpty()) {
-                backendPrefs.edit().remove("remote_members_json").remove("restaurant_rewards_json").apply()
+            if (isStaff) {
+                if ("inventory" !in currentStaffPermissions.orEmpty()) {
+                    backendPrefs.edit().remove("remote_inventory_json").remove("inventory_loaded").apply()
+                }
+                if ("reservations" !in currentStaffPermissions.orEmpty()) {
+                    backendPrefs.edit().remove("remote_reservations_json").remove("reservations_loaded").apply()
+                    reservationCache = JSONArray()
+                    reservationsLoaded = false
+                }
+                if ("loyalty" !in currentStaffPermissions.orEmpty()) {
+                    backendPrefs.edit().remove("remote_members_json").remove("restaurant_rewards_json").apply()
+                }
             }
             "OK"
         }) {
@@ -2754,6 +2759,7 @@ class MainActivity : Activity() {
                 .clear()
                 .putBoolean("local_demo_data_isolated_v1", true)
                 .apply()
+            currentStaffPermissions = null
             reservationCache = JSONArray()
             customerReservationsCache = JSONArray()
             customerRedemptionHistory = JSONArray()
