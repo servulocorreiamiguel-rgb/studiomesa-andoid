@@ -399,6 +399,10 @@ class MainActivitySmokeTest {
 
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir secção Cartão")).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Prémios")).perform(click())
+            onView(withText("Prémios e recompensas")).check(matches(isDisplayed()))
+            onView(withText("Criar conta / iniciar sessão")).check(matches(isDisplayed()))
+
             onView(withContentDescription("Abrir secção Carta")).perform(click())
             onView(withText("Exemplos de artigos")).check(matches(isDisplayed()))
 
