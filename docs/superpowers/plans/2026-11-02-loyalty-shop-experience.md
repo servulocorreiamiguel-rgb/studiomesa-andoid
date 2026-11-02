@@ -55,7 +55,7 @@
 - [x] Acrescentar testes de unidade para validação de custo/stock.
 - [x] Ligar os RPCs existentes sem conceder acesso direto às tabelas.
 - [x] Renderizar a loja de cliente e a gestão do restaurante com estados vazios e mensagens de erro da camada backend.
-- [ ] Executar todos os testes e build das cinco variantes.
+- [x] Compilar as variantes, executar testes unitários, lint e testes de interface Android 8/16 na versão anterior ao reforço final de sessão.\n- [x] Associar cache ao identificador do restaurante/cartão e testar isolamento.\n- [ ] Reexecutar CI completa após reforço da proteção de respostas assíncronas.
 
 ### Task 3: Fila de entregas e isolamento
 
@@ -72,7 +72,7 @@
 - [x] Escrever primeiro testes de integração para o catálogo, resgates, fila e isolamento; confirmar que a migração é necessária.
 - [x] Implementar RPC de fila com `SECURITY DEFINER`, `search_path` vazio, verificação de sessão e de equipa, sem execução para anon.
 - [x] Testar isolamento entre restaurantes, autorização e confirmação repetida da entrega.
-- [ ] Atualizar o contrato de migrações na CI, executar CI completa e rever o diff. (a revisão de privilégios converteu os 7 RPCs públicos em wrappers `SECURITY INVOKER`, com implementações privilegiadas no esquema `private`).
+- [x] Atualizar o contrato de migrações na CI e confirmar reprodução completa numa base limpa.\n- [x] Rever o diff e os privilégios: os 7 RPCs públicos são wrappers `SECURITY INVOKER`, com implementações privilegiadas no esquema `private`.\n- [ ] Executar novamente os ensaios Android depois do reforço de isolamento da sessão.
 
 ## Definition of Done
 A loja só é considerada ligada quando a app Restaurante consegue gerir prémios, a app Cliente consegue consultar e resgatar, a equipa consegue confirmar entregas, os testes de autorização passam e as cinco variantes Android compilam.
