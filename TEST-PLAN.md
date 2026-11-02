@@ -272,3 +272,19 @@ Todos os testes devem ser executados com contas e dados descartáveis. Registar 
 | LOY-HISTORY-01 | Cliente autenticado consulta os seus resgates | Só aparecem os prémios associados ao cartão da própria conta |
 | LOY-HISTORY-02 | Outra conta consulta o seu histórico | Não recebe os resgates do primeiro cliente; não existe parâmetro para escolher o cartão de terceiros |
 | LOY-HISTORY-03 | Resgate passa de pendente a entregue | O histórico do cliente mostra o estado atualizado depois de sincronizar |
+
+
+## Pedidos de reserva pelo cliente e atribuição de mesa
+
+| ID | Cenário | Resultado esperado |
+|---|---|---|
+| CRES-01 | Cliente autenticado e associado envia um pedido de reserva válido | Pedido guardado com estado pendente e sem mesa atribuída |
+| CRES-02 | Cliente repete o mesmo pedido após resposta perdida | É devolvido o pedido original; não é criado um segundo registo |
+| CRES-03 | Cliente consulta a lista de reservas | Só aparecem reservas criadas pela própria conta e associadas ao seu restaurante |
+| CRES-04 | Cliente tenta cancelar a reserva de outra conta | Operação recusada sem alterar o estado |
+| CRES-05 | Cliente cancela o seu pedido duas vezes | O estado permanece Cancelada sem erro na repetição |
+| CRES-06 | Equipa tenta confirmar pedido sem mesa atribuída | Operação recusada pelo servidor |
+| CRES-07 | Equipa atribui mesa com lugares suficientes e sem sobreposição | Mesa associada; reserva continua pendente até confirmação |
+| CRES-08 | Equipa tenta atribuir mesa com capacidade insuficiente ou horário ocupado | Operação recusada, sem mudar a reserva |
+| CRES-09 | Equipa de outro restaurante tenta atribuir mesa | Operação recusada |
+| CRES-10 | O restaurante atribui a mesa e o cliente repete o pedido original | O servidor devolve o mesmo pedido já tratado, sem duplicar nem desfazer a atribuição |
