@@ -2978,7 +2978,23 @@ class MainActivity : Activity() {
     }
 
     private fun showRestaurantJoinCode() {
-        val code = backendPrefs.getString("join_code", "") ?: ""
+        if (backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") {
+            AlertDialog.Builder(this)
+                .setTitle("Acesso reservado")
+                .setMessage("Só o proprietário pode consultar o código de adesão dos clientes.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        val code = backendPrefs.getString("join_code", "")?.trim().orEmpty()
+        if (code.isBlank()) {
+            AlertDialog.Builder(this)
+                .setTitle("Código indisponível")
+                .setMessage("Não foi possível obter o código de adesão. Atualiza a conta do restaurante e tenta novamente.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
         AlertDialog.Builder(this)
             .setTitle("Código de adesão")
             .setMessage("Código: $code\n\nO cliente deve abrir a aplicação «StudioMesa - Cliente», criar conta ou iniciar sessão e escolher «Associar ao restaurante».")
@@ -2998,8 +3014,10 @@ class MainActivity : Activity() {
         container.addView(notice, cardParams())
         if (remoteMode) {
             container.addView(primaryButton("Atualizar clientes do servidor") { refreshRemoteCustomers() }, LinearLayout.LayoutParams(-1, dp(48)))
-            addGap(container, 6)
-            container.addView(secondaryButton("Ver código de adesão") { showRestaurantJoinCode() }, LinearLayout.LayoutParams(-1, dp(48)))
+            if (backendPrefs.getString("restaurant_role", "").orEmpty() == "owner") {
+                addGap(container, 6)
+                container.addView(secondaryButton("Ver código de adesão") { showRestaurantJoinCode() }, LinearLayout.LayoutParams(-1, dp(48)))
+            }
         } else {
             container.addView(primaryButton("+  Adicionar cliente (local)") { showAddCustomerDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
         }
