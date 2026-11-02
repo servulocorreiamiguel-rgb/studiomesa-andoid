@@ -1265,6 +1265,22 @@ object SupabaseApi {
         )
     }
 
+    fun assignReservationTable(token: String, reservationId: String, tableNumber: Int) {
+        require(token.isNotBlank()) { "Inicia sessão para atribuir uma mesa." }
+        require(runCatching { java.util.UUID.fromString(reservationId).toString() == reservationId }.getOrDefault(false)) {
+            "O identificador da reserva não é válido."
+        }
+        require(tableNumber in 1..100) { "Seleciona uma mesa entre 1 e 100." }
+        call(
+            "POST",
+            "/rest/v1/rpc/assign_restaurant_reservation_table",
+            JSONObject()
+                .put("p_reservation_id", reservationId)
+                .put("p_table_number", tableNumber),
+            token
+        )
+    }
+
     fun createCustomerReservationRequest(
         token: String,
         requestId: String,
