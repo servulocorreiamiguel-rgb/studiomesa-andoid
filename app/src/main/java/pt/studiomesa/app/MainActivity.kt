@@ -2348,6 +2348,10 @@ class MainActivity : Activity() {
                 ))
                 if (role == "staff") {
                     addGap(card, 8)
+                    card.addView(secondaryButton("Gerir permissões") {
+                        showStaffPermissionsDialog(userId, email)
+                    }, LinearLayout.LayoutParams(-1, dp(44)))
+                    addGap(card, 6)
                     card.addView(secondaryButton("Remover acesso") {
                         AlertDialog.Builder(this)
                             .setTitle("Remover acesso à equipa?")
@@ -2391,6 +2395,88 @@ class MainActivity : Activity() {
                 .create()
             teamDialog.show()
             teamDialog.window?.setLayout(-1, dp(560))
+        }
+    }
+
+    private fun showStaffPermissionsDialog(userId: String, email: String) {
+        if (backendToken().isBlank() ||
+            backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") {
+            Toast.makeText(this, "Só o proprietário pode gerir permissões.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        runBackend({
+            SupabaseApi.getRestaurantStaffPermissions(backendToken(), userId).toString()
+        }) { raw ->
+            val current = StaffPermissionSet.fromJson(JSONArray(raw))
+            val options = listOf(
+                "orders" to "Pedidos e cozinha",
+                "tables" to "Mesas",
+                "reservations" to "Reservas",
+                "menu" to "Carta e preços",
+                "inventory" to "Stock e inventário",
+                "loyalty" to "Fidelização operacional"
+            )
+            val checks = linkedMapOf<String, android.widget.CheckBox>()
+            val content = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(18), dp(8), dp(18), dp(8))
+            }
+            content.addView(label(
+                "Escolhe as áreas a que $email pode aceder. As alterações são verificadas no servidor.",
+                12f, false, muted
+            ))
+            addGap(content, 8)
+            for ((key, title) in options) {
+                val check = android.widget.CheckBox(this).apply {
+                    text = title
+                    textSize = 14f
+                    setTextColor(ink)
+                    isChecked = key in current
+                    minHeight = dp(48)
+                    contentDescription = "Permissão: $title"
+                }
+                checks[key] = check
+                content.addView(check, LinearLayout.LayoutParams(-1, dp(48)))
+            }
+            val warning = makeCard(10, copperPale)
+            warning.addView(label(
+                "A gestão da equipa, códigos de acesso, loja de recompensas, consultor económico e definições do restaurante continuam reservados ao proprietário.",
+                11.5f, false, ink
+            ))
+            addGap(content, 8)
+            content.addView(warning, cardParams())
+
+            val scroll = ScrollView(this).apply { addView(content) }
+            val dialog = AlertDialog.Builder(this)
+                .setTitle("Permissões do funcionário")
+                .setView(scroll)
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Guardar", null)
+                .create()
+            dialog.setOnShowListener {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                    val selected = checks.filterValues { it.isChecked }.keys.toSet()
+                    runBackend({
+                        SupabaseApi.setRestaurantStaffPermissions(
+                            backendToken(), userId, selected
+                        )
+                        val confirmed = StaffPermissionSet.fromJson(
+                            SupabaseApi.getRestaurantStaffPermissions(backendToken(), userId)
+                        )
+                        if (confirmed != selected) {
+                            throw IllegalStateException("O servidor não confirmou todas as permissões selecionadas.")
+                        }
+                        "OK"
+                    }) {
+                        dialog.dismiss()
+                        Toast.makeText(this, "Permissões atualizadas no servidor.", Toast.LENGTH_LONG).show()
+                        renderApp()
+                    }
+                }
+            }
+            dialog.show()
+            dialog.window?.setLayout(-1, dp(620))
         }
     }
 
