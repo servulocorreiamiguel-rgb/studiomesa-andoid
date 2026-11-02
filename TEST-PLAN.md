@@ -259,5 +259,7 @@ A matriz configurável pelo proprietário contém seis áreas: pedidos/cozinha, 
 | PERM-10 | Proprietário revoga acesso enquanto o funcionário tem a app aberta | A próxima operação é recusada no servidor; ao regressar à app, a matriz é actualizada e as caches revogadas são limpas. |
 | PERM-11 | Funcionário removido ou sessão expirada | Não consegue operar no restaurante nem reutilizar permissões em cache. |
 | PERM-12 | Proprietário tenta ser limitado pela matriz | Mantém acesso total; acções económicas e administrativas continuam owner-only. |
+| PERM-13 | Proprietário volta a conceder uma área antes revogada | Ao regressar à app, o funcionário volta a carregar os dados autorizados do servidor; não depende de uma cache que foi apagada. |
+| PERM-14 | Funcionário regressa sem ligação após uma alteração de permissões | A app fecha o acesso local por defeito até conseguir confirmar novamente a matriz e os dados no servidor. |
 
-Estado: os casos estão incluídos na suite PostgreSQL da branch PR #77. A execução CI exacta tem de terminar com sucesso antes de marcar a funcionalidade como validada. A migração ainda não foi aplicada à base de dados alojada.
+Estado: os testes PostgreSQL de permissões, isolamento e chamadas diretas passaram na execução CI [41481734799](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/41481734799). Os ajustes posteriores para fail-closed ao regressar à app e recarregar dados das áreas recém-concedidas ainda exigem uma nova execução CI. STAFF/PERM-10 e PERM-11 continuam a exigir validação manual em dois dispositivos reais. A migração ainda não foi aplicada à base de dados alojada.
