@@ -643,7 +643,7 @@ class MainActivity : Activity() {
         actionCard(container, "03", "Carta e custos", "Artigos de exemplo, preços e custos.", "ABRIR CARTA") {
             activePage = "Carta"; renderApp()
         }
-        actionCard(container, "04", "Pontos de fidelização", "Cria cartões de cliente e ajusta saldos de pontos.", "GERIR CLIENTES") {
+        actionCard(container, "04", "Pontos de fidelização", "Gere cartões, recompensas e pedidos de troca de pontos.", "GERIR FIDELIZAÇÃO") {
             activePage = "Pontos"; renderApp()
         }
         if (hasCalculator) {
@@ -2885,6 +2885,7 @@ class MainActivity : Activity() {
             pointsField.setText(it.pointsCost.toString())
             stockField.setText(it.stockLimit?.toString().orEmpty())
         }
+        val rewardIdForDialog = existing?.id ?: java.util.UUID.randomUUID().toString()
         val activeCheck = android.widget.CheckBox(this).apply {
             text = "Disponível para os clientes"
             isChecked = existing?.isActive ?: true
@@ -2930,7 +2931,7 @@ class MainActivity : Activity() {
                     rawStock.isNotBlank() && (stock == null || stock < 0) ->
                         stockField.error = "O stock deve ser zero ou um número positivo"
                     else -> {
-                        val rewardId = existing?.id ?: java.util.UUID.randomUUID().toString()
+                        val rewardId = rewardIdForDialog
                         runBackend({
                             SupabaseApi.saveLoyaltyReward(
                                 backendToken(),
