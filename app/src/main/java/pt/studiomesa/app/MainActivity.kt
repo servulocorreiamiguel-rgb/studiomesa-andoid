@@ -3581,8 +3581,10 @@ class MainActivity : Activity() {
             .format(calendar.time)
         fun formatTime(): String = SimpleDateFormat("HH:mm", Locale.ROOT).format(calendar.time)
 
-        lateinit var dateButton: Button
-        dateButton = secondaryButton(formatDate().replaceFirstChar { it.uppercase(Locale("pt", "PT")) }) {
+        val dateButton = secondaryButton(
+            formatDate().replaceFirstChar { it.uppercase(Locale("pt", "PT")) }
+        ) { }
+        dateButton.setOnClickListener {
             DatePickerDialog(
                 this,
                 { _, year, month, day ->
@@ -3599,8 +3601,8 @@ class MainActivity : Activity() {
         form.addView(label("Data", 10f, true, forestSoft))
         form.addView(dateButton, LinearLayout.LayoutParams(-1, dp(44)))
         addGap(form, 6)
-        lateinit var timeButton: Button
-        timeButton = secondaryButton("Hora: " + formatTime()) {
+        val timeButton = secondaryButton("Hora: " + formatTime()) { }
+        timeButton.setOnClickListener {
             TimePickerDialog(
                 this,
                 { _, hour, minute ->
