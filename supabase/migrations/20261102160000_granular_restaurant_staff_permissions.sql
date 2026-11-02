@@ -231,6 +231,11 @@ alter policy menu_items_staff_all on public.menu_items
 alter policy restaurant_orders_staff_all on public.restaurant_orders
     using (private.has_restaurant_permission(restaurant_id, 'orders'))
     with check (private.has_restaurant_permission(restaurant_id, 'orders'));
+-- Order audit history is a separate table and must obey the same permission as
+-- the live order queue; otherwise staff could still read kitchen/order history
+-- after the owner disables the orders area.
+alter policy restaurant_order_events_staff_read on public.restaurant_order_events
+    using (private.has_restaurant_permission(restaurant_id, 'orders'));
 alter policy restaurant_inventory_items_staff_read on public.restaurant_inventory_items
     using (private.has_restaurant_permission(restaurant_id, 'inventory'));
 alter policy restaurant_inventory_movements_staff_read on public.restaurant_inventory_movements
