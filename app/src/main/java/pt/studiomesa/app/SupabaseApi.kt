@@ -707,6 +707,127 @@ object SupabaseApi {
         return if (memberships.length() == 0) null else memberships.getJSONObject(0)
     }
 
+    fun listRestaurantLoyaltyRewards(token: String, restaurantId: String): JSONArray {
+        require(runCatching { java.util.UUID.fromString(restaurantId) }.isSuccess) {
+            "O restaurante não está identificado."
+        }
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/get_restaurant_loyalty_rewards",
+            JSONObject().put("p_restaurant_id", restaurantId),
+            token
+        ))
+    }
+
+    fun listCustomerLoyaltyRewards(token: String, memberId: String): JSONArray {
+        require(runCatching { java.util.UUID.fromString(memberId) }.isSuccess) {
+            "O cartão de cliente não é válido."
+        }
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/get_customer_loyalty_rewards",
+            JSONObject().put("p_member_id", memberId),
+            token
+        ))
+    }
+
+    fun saveLoyaltyReward(
+        token: String,
+        restaurantId: String,
+        rewardId: String,
+        name: String,
+        description: String,
+        pointsCost: Int,
+        stockLimit: Int?,
+        isActive: Boolean
+    ): String {
+        require(runCatching { java.util.UUID.fromString(restaurantId) }.isSuccess &&
+            runCatching { java.util.UUID.fromString(rewardId) }.isSuccess) {
+            "O restaurante ou a recompensa não estão identificados."
+        }
+        val normalizedName = name.trim()
+        val normalizedDescription = description.trim()
+        require(normalizedName.length in 1..100 &&
+            normalizedDescription.length <= 500 &&
+            pointsCost in 1..1_000_000 &&
+            (stockLimit == null || stockLimit >= 0)) {
+            "Confirma o nome, a descrição, os pontos e o stock da recompensa."
+        }
+        val body = JSONObject()
+            .put("p_restaurant_id", restaurantId)
+            .put("p_reward_id", rewardId)
+            .put("p_name", normalizedName)
+            .put("p_description", normalizedDescription)
+            .put("p_points_cost", pointsCost)
+            .put("p_stock_limit", stockLimit ?: JSONObject.NULL)
+            .put("p_is_active", isActive)
+        val savedId = call("POST", "/rest/v1/rpc/save_loyalty_reward", body, token)
+            .trim().trim('"')
+        require(savedId == rewardId) {
+            "O servidor não confirmou a gravação desta recompensa."
+        }
+        return savedId
+    }
+
+    fun redeemLoyaltyReward(token: String, rewardId: String, requestId: String): JSONObject {
+        require(runCatching { java.util.UUID.fromString(rewardId) }.isSuccess &&
+            runCatching { java.util.UUID.fromString(requestId).toString() == requestId }.getOrDefault(false)) {
+            "A recompensa ou o identificador do pedido não são válidos."
+        }
+        val rows = JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/redeem_loyalty_reward",
+            JSONObject()
+                .put("p_reward_id", rewardId)
+                .put("p_client_request_id", requestId),
+            token
+        ))
+        if (rows.length() == 0) {
+            throw IllegalStateException("O servidor não confirmou a troca dos pontos.")
+        }
+        val result = rows.getJSONObject(0)
+        require(result.optString("redemption_id").isNotBlank() &&
+            result.optString("reward_name").isNotBlank() &&
+            result.optInt("points_spent", 0) in 1..1_000_000 &&
+            result.optInt("points_remaining", -1) >= 0 &&
+            result.optString("status") in setOf("pending", "fulfilled")) {
+            "O servidor devolveu um resultado de resgate inválido."
+        }
+        return result
+    }
+
+    fun listMyLoyaltyRewardRedemptions(token: String): JSONArray =
+        JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/get_my_loyalty_reward_redemptions",
+            JSONObject(),
+            token
+        ))
+
+    fun listRestaurantLoyaltyRewardRedemptions(token: String, restaurantId: String): JSONArray {
+        require(runCatching { java.util.UUID.fromString(restaurantId) }.isSuccess) {
+            "O restaurante não está identificado."
+        }
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/get_restaurant_loyalty_reward_redemptions",
+            JSONObject().put("p_restaurant_id", restaurantId),
+            token
+        ))
+    }
+
+    fun fulfillLoyaltyRewardRedemption(token: String, redemptionId: String) {
+        require(runCatching { java.util.UUID.fromString(redemptionId) }.isSuccess) {
+            "O pedido de recompensa não é válido."
+        }
+        call(
+            "POST",
+            "/rest/v1/rpc/fulfill_loyalty_reward_redemption",
+            JSONObject().put("p_redemption_id", redemptionId),
+            token
+        )
+    }
+
     fun listCustomerMenu(token: String, memberId: String): JSONArray {
         val response = call(
             "POST",
