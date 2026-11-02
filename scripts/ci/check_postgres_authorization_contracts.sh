@@ -826,8 +826,12 @@ if [ "$LOYALTY_FIRST" != "$LOYALTY_RETRY" ]; then
   echo "ERROR: repeating a loyalty-points request returned a different balance." >&2
   exit 1
 fi
+if [ "$LOYALTY_FIRST" != "30" ]; then
+  echo "ERROR: the loyalty adjustment returned '$LOYALTY_FIRST'; expected a total balance of 30 after the invoice QR award." >&2
+  exit 1
+fi
 loyalty_balance_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
-  -c "SELECT points = 10 FROM public.loyalty_members WHERE id = '$MEMBER_A'::uuid;")"
+  -c "SELECT points = 30 FROM public.loyalty_members WHERE id = '$MEMBER_A'::uuid;")"
 loyalty_transaction_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
   -c "SELECT count(*) = 1 FROM public.loyalty_transactions WHERE created_by = '$USER_A'::uuid AND client_request_id = '$LOYALTY_REQUEST'::uuid;")"
 if [ "$loyalty_balance_ok" != "t" ] || [ "$loyalty_transaction_ok" != "t" ]; then
