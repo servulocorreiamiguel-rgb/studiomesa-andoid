@@ -99,6 +99,14 @@ class MainActivity : Activity() {
     // Reservation contacts are kept in memory only, not persisted to SharedPreferences.
     private var reservationCache = JSONArray()
     private var reservationsLoaded = false
+    private var reservationsRefreshInFlight = false
+    private var reservationsRefreshError: String? = null
+    private var reservationActionError: String? = null
+    private var customerMembershipResolved = false
+    private var customerMembershipRefreshInFlight = false
+    private var customerMembershipError: String? = null
+    private var customerMenuLoaded = false
+    private var customerMenuError: String? = null
 
     private val flavor = BuildConfig.FLAVOR.lowercase(Locale.ROOT)
     private val isCustomerApp = flavor.contains("cliente")
@@ -150,7 +158,7 @@ class MainActivity : Activity() {
         // Refresh shared data when an already-authenticated user opens the app,
         // but do not start a second request while processing an OAuth callback.
         if (intent?.data == null && backendToken().isNotBlank()) {
-            if (isCustomerApp && backendMemberId().isNotBlank()) {
+            if (isCustomerApp) {
                 refreshCustomerMembership()
             } else if (!isCustomerApp && hasRemoteRestaurant()) {
                 refreshRemoteOperations()
@@ -1624,6 +1632,15 @@ class MainActivity : Activity() {
         backendPrefs.getString("member_restaurant_name", null)?.trim()?.takeIf { it.isNotEmpty() }
             ?: "StudioMesa"
 
+    private fun customerMembershipPresentation(): CustomerMembershipPresentation =
+        CustomerMembershipPresentationResolver.resolve(
+            isSignedIn = backendToken().isNotBlank(),
+            isResolved = customerMembershipResolved,
+            isLoading = customerMembershipRefreshInFlight,
+            hasError = customerMembershipError != null,
+            hasMembership = backendMemberId().isNotBlank()
+        )
+
     @Synchronized
     private fun refreshSessionIfNeeded() {
         val accessToken = backendToken()
@@ -1680,6 +1697,9 @@ class MainActivity : Activity() {
                     .apply()
                 reservationCache = JSONArray()
                 reservationsLoaded = false
+                reservationsRefreshInFlight = false
+                reservationsRefreshError = null
+                reservationActionError = null
             }
         } catch (_: Exception) {
             // Keep authentication successful if restoring cloud data temporarily fails.
@@ -1758,6 +1778,10 @@ class MainActivity : Activity() {
 
     private fun restoreCustomerMembership(token: String) {
         if (!isCustomerApp || token.isBlank()) return
+        customerMembershipRefreshInFlight = true
+        customerMembershipError = null
+        customerMenuError = null
+        customerMembershipResolved = false
         try {
             val member = SupabaseApi.getMyLoyaltyMembership(token)
             if (member == null) {
@@ -1768,22 +1792,40 @@ class MainActivity : Activity() {
                     .remove("member_restaurant_name")
                     .putString("customer_menu_json", "[]")
                     .apply()
+                customerMembershipResolved = true
+                customerMenuLoaded = true
                 return
             }
 
             val memberId = member.optString("member_id")
-            val menu = if (memberId.isNotBlank()) SupabaseApi.listCustomerMenu(token, memberId) else org.json.JSONArray()
+            if (memberId.isBlank()) {
+                throw IllegalStateException("O servidor não devolveu a associação de fidelização.")
+            }
+            if (backendMemberId() != memberId) {
+                backendPrefs.edit().putString("customer_menu_json", "[]").apply()
+                customerMenuLoaded = false
+            }
             backendPrefs.edit()
                 .putString("member_id", memberId)
                 .putString("member_code", member.optString("member_code"))
                 .putInt("member_points", member.optInt("points", 0))
                 .putString("member_restaurant_name", member.optString("restaurant_name"))
-                .putString("customer_menu_json", menu.toString())
                 .apply()
+            customerMembershipResolved = true
             val displayName = member.optString("display_name").trim()
             if (displayName.isNotBlank()) store.saveCustomerProfileName(displayName)
-        } catch (_: Exception) {
-            // Do not discard a valid login if the membership is temporarily unavailable.
+            try {
+                val menu = SupabaseApi.listCustomerMenu(token, memberId)
+                backendPrefs.edit().putString("customer_menu_json", menu.toString()).apply()
+                customerMenuLoaded = true
+            } catch (error: Exception) {
+                customerMenuError = friendlyBackendError(error.message)
+            }
+        } catch (error: Exception) {
+            // Keep the authenticated session, but show that membership could not be confirmed.
+            customerMembershipError = friendlyBackendError(error.message)
+        } finally {
+            customerMembershipRefreshInFlight = false
         }
     }
 
@@ -1820,6 +1862,14 @@ class MainActivity : Activity() {
 
         reservationCache = JSONArray()
         reservationsLoaded = false
+        reservationsRefreshInFlight = false
+        reservationsRefreshError = null
+        reservationActionError = null
+        customerMembershipResolved = false
+        customerMembershipRefreshInFlight = false
+        customerMembershipError = null
+        customerMenuLoaded = false
+        customerMenuError = null
     }
 
     private fun backendToken(): String = secureSession.accessToken()
@@ -2504,6 +2554,14 @@ class MainActivity : Activity() {
                 .apply()
             reservationCache = JSONArray()
             reservationsLoaded = false
+            reservationsRefreshInFlight = false
+            reservationsRefreshError = null
+            reservationActionError = null
+            customerMembershipResolved = false
+            customerMembershipRefreshInFlight = false
+            customerMembershipError = null
+            customerMenuLoaded = false
+            customerMenuError = null
             renderApp()
         }, LinearLayout.LayoutParams(-1, dp(48)))
         addGap(container, 10)
@@ -2574,6 +2632,14 @@ class MainActivity : Activity() {
                 .apply()
             reservationCache = JSONArray()
             reservationsLoaded = false
+            reservationsRefreshInFlight = false
+            reservationsRefreshError = null
+            reservationActionError = null
+            customerMembershipResolved = false
+            customerMembershipRefreshInFlight = false
+            customerMembershipError = null
+            customerMenuLoaded = false
+            customerMenuError = null
 
             if (isCustomerApp) renderCustomerApp() else renderApp()
 
@@ -2826,6 +2892,10 @@ class MainActivity : Activity() {
                                 .putString("member_restaurant_name", member.optString("restaurant_name"))
                                 .putString("customer_menu_json", menu.toString())
                                 .apply()
+                            customerMembershipResolved = true
+                            customerMembershipError = null
+                            customerMenuLoaded = true
+                            customerMenuError = null
                             store.saveCustomerProfileName(name)
                             "OK"
                         }) {
@@ -2840,18 +2910,28 @@ class MainActivity : Activity() {
     }
 
     private fun refreshCustomerMembership() {
-        val memberId = backendMemberId()
-        if (backendToken().isBlank() || memberId.isBlank()) { showCustomerJoinDialog(); return }
+        if (backendToken().isBlank()) {
+            showAuthChooser { renderCustomerApp() }
+            return
+        }
+        if (customerMembershipRefreshInFlight) return
+        customerMembershipRefreshInFlight = true
+        customerMembershipError = null
+        customerMenuError = null
+        renderCustomerApp()
         runBackend({
             val token = backendToken()
-            val member = SupabaseApi.getMember(token, memberId)
-            val menu = SupabaseApi.listCustomerMenu(token, memberId)
-            backendPrefs.edit().putInt("member_points", member.optInt("points", 0))
-                .putString("member_code", member.optString("member_code"))
-                .putString("customer_menu_json", menu.toString())
-                .apply()
+            restoreCustomerMembership(token)
+            customerMembershipError?.let { throw IllegalStateException(it) }
             "OK"
-        }) { renderCustomerApp() }
+        }, onError = { error ->
+            customerMembershipRefreshInFlight = false
+            customerMembershipError = friendlyBackendError(error.message)
+            renderCustomerApp()
+        }) {
+            customerMembershipRefreshInFlight = false
+            renderCustomerApp()
+        }
     }
 
     private fun renderCustomerApp() {
@@ -2950,25 +3030,38 @@ class MainActivity : Activity() {
         addGap(container, 5)
         container.addView(label("Cartão de fidelização do restaurante.", 13.5f, false, muted))
         addGap(container, 12)
-        when {
-            backendToken().isBlank() -> container.addView(primaryButton("Criar conta / iniciar sessão") { showAuthChooser { renderCustomerApp() } }, LinearLayout.LayoutParams(-1, dp(48)))
-            backendMemberId().isBlank() -> container.addView(primaryButton("Associar ao restaurante") { showCustomerJoinDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
-            else -> container.addView(primaryButton("Atualizar saldo no servidor") { refreshCustomerMembership() }, LinearLayout.LayoutParams(-1, dp(48)))
+        val membershipPresentation = customerMembershipPresentation()
+        when (membershipPresentation) {
+            CustomerMembershipPresentation.SIGNED_OUT -> container.addView(primaryButton("Criar conta / iniciar sessão") { showAuthChooser { renderCustomerApp() } }, LinearLayout.LayoutParams(-1, dp(48)))
+            CustomerMembershipPresentation.ERROR -> {
+                container.addView(emptyCard("Não foi possível confirmar o teu cartão: ${customerMembershipError}. Tenta novamente."), cardParams())
+                addGap(container, 6)
+                container.addView(primaryButton("Tentar novamente") { refreshCustomerMembership() }, LinearLayout.LayoutParams(-1, dp(48)))
+            }
+            CustomerMembershipPresentation.LOADING -> container.addView(emptyCard("A confirmar a associação e o saldo no servidor…"), cardParams())
+            CustomerMembershipPresentation.UNLINKED -> container.addView(primaryButton("Associar ao restaurante") { showCustomerJoinDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
+            CustomerMembershipPresentation.LINKED -> container.addView(primaryButton("Atualizar saldo no servidor") { refreshCustomerMembership() }, LinearLayout.LayoutParams(-1, dp(48)))
         }
+        if (membershipPresentation != CustomerMembershipPresentation.SIGNED_OUT &&
+            membershipPresentation != CustomerMembershipPresentation.LINKED) return
         addGap(container, 15)
 
         val loyalty = makeCard(18, forest)
         loyalty.addView(label("O meu cartão", 10.5f, true, copperPale))
         addGap(loyalty, 10)
-        loyalty.addView(label(backendPrefs.getInt("member_points", 0).toString(), 42f, true, white))
-        loyalty.addView(label(if (backendMemberId().isBlank()) "Pontos de demonstração" else "Pontos disponíveis", 10f, true, copperPale))
+        val hasMembership = membershipPresentation == CustomerMembershipPresentation.LINKED
+        loyalty.addView(label(if (hasMembership) backendPrefs.getInt("member_points", 0).toString() else "0", 42f, true, white))
+        loyalty.addView(label(if (hasMembership) {
+            if (customerMembershipError != null) "Último saldo guardado · atualização pendente" else "Pontos disponíveis"
+        } else "Pontos de demonstração", 10f, true, copperPale))
         addGap(loyalty, 13)
-        val code = backendPrefs.getString("member_code", "")?.takeIf { it.isNotBlank() } ?: store.getCustomerMemberCode()
+        val code = if (hasMembership) backendPrefs.getString("member_code", "").orEmpty()
+            else store.getCustomerMemberCode()
         loyalty.addView(label("Código de cliente", 11f, false, copperPale))
         addGap(loyalty, 3)
         loyalty.addView(label(code, 20f, true, white))
         addGap(loyalty, 9)
-        loyalty.addView(label(if (backendMemberId().isBlank()) "Este é um cartão demonstrativo. Cria sessão e associa-o ao código do restaurante para consultar os pontos reais." else "Saldo obtido do sistema de fidelização partilhado. A atribuição de pontos é controlada pelo restaurante.", 12f, false, Color.rgb(229, 235, 228)))
+        loyalty.addView(label(if (membershipPresentation == CustomerMembershipPresentation.SIGNED_OUT) "Este é um cartão demonstrativo. Cria sessão e associa-o ao código do restaurante para consultar os pontos reais." else "Saldo obtido do sistema de fidelização partilhado. A atribuição de pontos é controlada pelo restaurante.", 12f, false, Color.rgb(229, 235, 228)))
         container.addView(loyalty, cardParams())
         addGap(container, 5)
         container.addView(secondaryButton("Consultar a carta") {
@@ -2985,22 +3078,69 @@ class MainActivity : Activity() {
         container.addView(label("Consulta os artigos, descrições e preços disponíveis.", 13.5f, false, muted))
         addGap(container, 12)
         val menuCard = makeCard(16)
-        val isLinkedToRestaurant = backendMemberId().isNotBlank()
-        menuCard.addView(label(if (isLinkedToRestaurant) "Carta do restaurante" else "Carta de demonstração", 10f, true, forestSoft))
+        val membershipPresentation = customerMembershipPresentation()
+        val isSignedIn = membershipPresentation != CustomerMembershipPresentation.SIGNED_OUT
+        val isLinkedToRestaurant = membershipPresentation == CustomerMembershipPresentation.LINKED
+        menuCard.addView(label(
+            when {
+                isLinkedToRestaurant -> "Carta do restaurante"
+                isSignedIn -> "Associação ao restaurante"
+                else -> "Carta de demonstração"
+            }, 10f, true, forestSoft
+        ))
         addGap(menuCard, 7)
-        menuCard.addView(label(if (isLinkedToRestaurant) "A nossa carta" else "Exemplos de artigos", 18f, true, forestDeep))
+        menuCard.addView(label(
+            when {
+                isLinkedToRestaurant -> "A nossa carta"
+                isSignedIn -> "A confirmar a associação"
+                else -> "Exemplos de artigos"
+            }, 18f, true, forestDeep
+        ))
         addGap(menuCard, 4)
         menuCard.addView(label(
-            if (isLinkedToRestaurant) "Preços publicados pelo restaurante. Os custos internos não são mostrados."
-            else "Nomes e preços de exemplo; associa a tua conta a um restaurante para veres a carta real.",
+            when {
+                isLinkedToRestaurant -> "Preços publicados pelo restaurante. Os custos internos não são mostrados."
+                isSignedIn -> "A carta e os pontos só aparecem depois de confirmar os dados no servidor."
+                else -> "Nomes e preços de exemplo; associa a tua conta a um restaurante para veres a carta real."
+            },
             12f, false, muted
         ))
         addGap(menuCard, 10)
         if (isLinkedToRestaurant) {
             val publishedMenu = savedRemoteArray("customer_menu_json")
-            if (publishedMenu.length() == 0) {
-                menuCard.addView(label("O restaurante ainda não publicou artigos ativos na carta.", 13f, false, muted))
-            } else {
+            val presentation = RemoteListPresentationResolver.resolve(
+                hasLoadedData = customerMenuLoaded,
+                isLoading = customerMembershipRefreshInFlight,
+                hasError = customerMenuError != null,
+                isEmpty = publishedMenu.length() == 0
+            )
+            when (presentation) {
+                RemoteListPresentation.LOADING -> menuCard.addView(
+                    label("A carregar a carta publicada pelo restaurante…", 13f, false, muted)
+                )
+                RemoteListPresentation.RETRY -> {
+                    menuCard.addView(label(
+                        "Não foi possível carregar a carta: ${customerMenuError}. Tenta novamente.",
+                        13f, false, red
+                    ))
+                    addGap(menuCard, 8)
+                    menuCard.addView(secondaryButton("Tentar novamente") { refreshCustomerMembership() },
+                        LinearLayout.LayoutParams(-1, dp(44)))
+                }
+                RemoteListPresentation.EMPTY -> menuCard.addView(
+                    label("O restaurante ainda não publicou artigos ativos na carta.", 13f, false, muted)
+                )
+                RemoteListPresentation.STALE_CONTENT -> {
+                    menuCard.addView(label(
+                        "Não foi possível atualizar a carta: ${customerMenuError}. A mostrar a última versão confirmada.",
+                        12f, false, red
+                    ))
+                    addGap(menuCard, 8)
+                }
+                RemoteListPresentation.CONTENT -> Unit
+            }
+            if (presentation == RemoteListPresentation.CONTENT ||
+                presentation == RemoteListPresentation.STALE_CONTENT) {
                 for (index in 0 until publishedMenu.length()) {
                     val item = publishedMenu.optJSONObject(index) ?: continue
                     val itemCard = makeCard(12, paper)
@@ -3030,7 +3170,7 @@ class MainActivity : Activity() {
                     menuCard.addView(itemCard, cardParams())
                 }
             }
-        } else {
+        } else if (backendToken().isBlank()) {
             store.getMenu().forEach { item ->
                 val itemCard = makeCard(12, paper)
                 itemCard.addView(label(item.category, 10f, true, forestSoft))
@@ -3056,6 +3196,25 @@ class MainActivity : Activity() {
                 ))
                 menuCard.addView(itemCard, cardParams())
             }
+        } else if (!customerMembershipResolved) {
+            menuCard.addView(label(
+                customerMembershipError?.let { "Não foi possível confirmar a associação: $it" }
+                    ?: "A confirmar a associação com o restaurante no servidor…",
+                13f, false, if (customerMembershipError == null) muted else red
+            ))
+            if (customerMembershipError != null) {
+                addGap(menuCard, 8)
+                menuCard.addView(secondaryButton("Tentar novamente") { refreshCustomerMembership() },
+                    LinearLayout.LayoutParams(-1, dp(44)))
+            }
+        } else {
+            menuCard.addView(label(
+                "Esta conta ainda não está associada a um restaurante. Associa-a para consultar a carta publicada.",
+                13f, false, muted
+            ))
+            addGap(menuCard, 8)
+            menuCard.addView(secondaryButton("Associar ao restaurante") { showCustomerJoinDialog() },
+                LinearLayout.LayoutParams(-1, dp(44)))
         }
         container.addView(menuCard, cardParams())
     }
@@ -3065,16 +3224,23 @@ class MainActivity : Activity() {
         addGap(container, 4)
         container.addView(label("Perfil, associação ao restaurante e segurança.", 13.5f, false, muted))
         addGap(container, 13)
-        when {
-            backendToken().isBlank() -> container.addView(
+        when (customerMembershipPresentation()) {
+            CustomerMembershipPresentation.SIGNED_OUT -> container.addView(
                 primaryButton("Criar conta / iniciar sessão") { showAuthChooser { renderCustomerApp() } },
                 LinearLayout.LayoutParams(-1, dp(48))
             )
-            backendMemberId().isBlank() -> container.addView(
+            CustomerMembershipPresentation.ERROR -> container.addView(
+                primaryButton("Tentar novamente") { refreshCustomerMembership() },
+                LinearLayout.LayoutParams(-1, dp(48))
+            )
+            CustomerMembershipPresentation.LOADING -> container.addView(
+                emptyCard("A confirmar a associação no servidor…"), cardParams()
+            )
+            CustomerMembershipPresentation.UNLINKED -> container.addView(
                 primaryButton("Associar ao restaurante") { showCustomerJoinDialog() },
                 LinearLayout.LayoutParams(-1, dp(48))
             )
-            else -> container.addView(
+            CustomerMembershipPresentation.LINKED -> container.addView(
                 primaryButton("Atualizar saldo no servidor") { refreshCustomerMembership() },
                 LinearLayout.LayoutParams(-1, dp(48))
             )
@@ -3084,9 +3250,22 @@ class MainActivity : Activity() {
             LinearLayout.LayoutParams(-1, dp(48)))
         addGap(container, 12)
         val syncNote = makeCard(13)
-        syncNote.addView(label(if (backendMemberId().isBlank()) "CARTÃO AINDA NÃO ASSOCIADO" else "CONTA LIGADA", 10f, true, if (backendMemberId().isBlank()) red else green))
+        val syncStatus = when {
+            backendToken().isBlank() -> "CARTÃO AINDA NÃO ASSOCIADO"
+            customerMembershipError != null && !customerMembershipResolved -> "NÃO FOI POSSÍVEL CONFIRMAR"
+            !customerMembershipResolved -> "A CONFIRMAR ASSOCIAÇÃO"
+            backendMemberId().isBlank() -> "CARTÃO AINDA NÃO ASSOCIADO"
+            else -> "CONTA LIGADA"
+        }
+        syncNote.addView(label(syncStatus, 10f, true, if (syncStatus == "CONTA LIGADA") green else red))
         addGap(syncNote, 5)
-        syncNote.addView(label(if (backendMemberId().isBlank()) "Para ver o saldo real, inicia sessão e associa a conta com o código fornecido pelo restaurante." else "Restaurante associado: " + (backendPrefs.getString("member_restaurant_name", "Restaurante") ?: "Restaurante") + ". Atualiza o saldo quando quiseres consultar as alterações mais recentes.", 12f, false, muted))
+        val syncMessage = when {
+            customerMembershipError != null && !customerMembershipResolved -> "Não foi possível confirmar os dados: ${customerMembershipError}. O erro não significa que o cartão esteja desligado. Tenta novamente."
+            !customerMembershipResolved -> "A verificar a associação e o saldo no servidor."
+            backendMemberId().isBlank() -> "Para ver o saldo real, associa a conta com o código fornecido pelo restaurante."
+            else -> "Restaurante associado: " + (backendPrefs.getString("member_restaurant_name", "Restaurante") ?: "Restaurante") + ". Atualiza o saldo quando quiseres consultar as alterações mais recentes."
+        }
+        syncNote.addView(label(syncMessage, 12f, false, muted))
         container.addView(syncNote, cardParams())
         if (backendToken().isNotBlank()) {
             container.addView(secondaryButton("Eliminar conta permanentemente") {
@@ -3105,6 +3284,11 @@ class MainActivity : Activity() {
                     .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
                     .remove("customer_menu_json")
                     .apply()
+                customerMembershipResolved = false
+                customerMembershipRefreshInFlight = false
+                customerMembershipError = null
+                customerMenuLoaded = false
+                customerMenuError = null
                 activeCustomerPage = "Cartão"
                 renderCustomerApp()
             }, LinearLayout.LayoutParams(-1, dp(48)))
@@ -3294,12 +3478,25 @@ class MainActivity : Activity() {
                 .setPositiveButton("OK", null).show()
             return
         }
+        if (reservationsRefreshInFlight) return
+        reservationsRefreshInFlight = true
+        reservationsRefreshError = null
         runBackend({
             val reservations = SupabaseApi.listReservations(backendToken(), backendRestaurantId())
             reservationCache = reservations
             reservationsLoaded = true
+            reservationActionError = null
             "OK"
-        }) { renderApp() }
+        }, onError = { error ->
+            reservationsRefreshInFlight = false
+            reservationsRefreshError = friendlyBackendError(error.message)
+            if (activePage == "Reservas") renderApp()
+        }) {
+            reservationsRefreshInFlight = false
+            reservationsRefreshError = null
+            reservationActionError = null
+            renderApp()
+        }
     }
 
     private fun renderReservations(container: LinearLayout) {
@@ -3315,17 +3512,39 @@ class MainActivity : Activity() {
         container.addView(secondaryButton("Atualizar reservas") { refreshReservations() },
             LinearLayout.LayoutParams(-1, dp(48)))
         addGap(container, 12)
-
-        if (!reservationsLoaded) {
-            container.addView(emptyCard("A carregar as reservas do servidor…"))
-            refreshReservations()
-            return
+        reservationActionError?.let { error ->
+            container.addView(emptyCard("Não foi possível guardar a alteração da reserva: $error"), cardParams())
+            addGap(container, 8)
         }
 
         val reservations = remoteReservations()
-        if (reservations.length() == 0) {
-            container.addView(emptyCard("Ainda não há reservas. Usa «Nova reserva» para registar a primeira."))
-            return
+        if (!reservationsLoaded && !reservationsRefreshInFlight && reservationsRefreshError == null) {
+            refreshReservations()
+        }
+        when (RemoteListPresentationResolver.resolve(
+            hasLoadedData = reservationsLoaded,
+            isLoading = reservationsRefreshInFlight,
+            hasError = reservationsRefreshError != null,
+            isEmpty = reservations.length() == 0
+        )) {
+            RemoteListPresentation.LOADING -> {
+                container.addView(emptyCard("A carregar as reservas do servidor…"))
+                return
+            }
+            RemoteListPresentation.RETRY -> {
+                container.addView(emptyCard(
+                    "Não foi possível carregar as reservas: ${reservationsRefreshError}. Tenta novamente."
+                ))
+                return
+            }
+            RemoteListPresentation.STALE_CONTENT -> container.addView(emptyCard(
+                "Não foi possível atualizar as reservas: ${reservationsRefreshError}. A mostrar a última leitura confirmada."
+            ), cardParams())
+            RemoteListPresentation.EMPTY -> {
+                container.addView(emptyCard("Ainda não há reservas. Usa «Nova reserva» para registar a primeira."))
+                return
+            }
+            RemoteListPresentation.CONTENT -> Unit
         }
 
         val displayFormat = SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "PT"))
@@ -3390,11 +3609,22 @@ class MainActivity : Activity() {
     private fun setReservationStatus(reservationId: String, status: String) {
         runBackend({
             SupabaseApi.updateReservationStatus(backendToken(), reservationId, status)
-            val latest = SupabaseApi.listReservations(backendToken(), backendRestaurantId())
-            reservationCache = latest
-            reservationsLoaded = true
+            try {
+                val latest = SupabaseApi.listReservations(backendToken(), backendRestaurantId())
+                reservationCache = latest
+                reservationsLoaded = true
+                reservationsRefreshError = null
+            } catch (error: Exception) {
+                reservationsRefreshError = friendlyBackendError(error.message)
+            }
             "OK"
-        }) { renderApp() }
+        }, onError = { error ->
+            reservationActionError = friendlyBackendError(error.message)
+            renderApp()
+        }) {
+            reservationActionError = null
+            renderApp()
+        }
     }
 
     private fun showReservationDialog() {
@@ -3485,9 +3715,14 @@ class MainActivity : Activity() {
                                 normalizedPhone, partySize, reservationAt, durationMinutes,
                                 tableNumber, normalizedNotes
                             )
-                            val latest = SupabaseApi.listReservations(backendToken(), restaurantId)
-                            reservationCache = latest
-                            reservationsLoaded = true
+                            try {
+                                val latest = SupabaseApi.listReservations(backendToken(), restaurantId)
+                                reservationCache = latest
+                                reservationsLoaded = true
+                                reservationsRefreshError = null
+                            } catch (error: Exception) {
+                                reservationsRefreshError = friendlyBackendError(error.message)
+                            }
                             "OK"
                         }) {
                             // Close the form only after the server confirmed the save.
@@ -3496,6 +3731,10 @@ class MainActivity : Activity() {
                             dialog.dismiss()
                             renderApp()
                             pendingRequestIds.complete(requestOperation, requestAccountId, signature, requestId)
+                            reservationsRefreshError?.let { error ->
+                                reservationActionError = "A reserva foi guardada, mas não foi possível atualizar a lista: $error"
+                                renderApp()
+                            }
                         }
                     }
                 }
