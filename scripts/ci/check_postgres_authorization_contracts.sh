@@ -289,6 +289,89 @@ if [ "$custom_staff_permission" != "true|true|false" ]; then
   exit 1
 fi
 
+owner_permission_matrix="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT array_to_string(public.get_my_restaurant_permissions(), ',');
+ROLLBACK;
+SQL
+)"
+staff_permission_matrix="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT array_to_string(public.get_my_restaurant_permissions(), ',');
+ROLLBACK;
+SQL
+)"
+if [ "$owner_permission_matrix" != "orders,tables,reservations,menu,inventory,loyalty" ] ||
+   [ "$staff_permission_matrix" != "orders,reservations" ]; then
+  echo "ERROR: current-user permission RPC returned an unexpected effective matrix." >&2
+  printf 'Owner: %s; staff: %s\\n' "$owner_permission_matrix" "$staff_permission_matrix" >&2
+  exit 1
+fi
+
+# A restricted employee cannot write to tables, menu or stock through direct
+# table access or the stock RPC, even though the Android client is bypassed.
+MENU_PERMISSION_PROBE="88888888-8888-4888-8888-888888888888"
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO public.menu_items (
+  id, restaurant_id, name, category, description, price, cost, allergens, is_active
+) VALUES (
+  '$MENU_PERMISSION_PROBE'::uuid, '$RESTAURANT_A'::uuid, 'Permission probe',
+  'Prato principal', '', 5.00, 2.00, '', true
+);
+SQL
+
+table_write_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+WITH changed AS (
+  UPDATE public.restaurant_tables
+  SET area = area
+  WHERE restaurant_id = '$RESTAURANT_A'::uuid AND table_number = 1
+  RETURNING id
+)
+SELECT count(*)::text FROM changed;
+ROLLBACK;
+SQL
+)"
+menu_write_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+WITH changed AS (
+  UPDATE public.menu_items SET price = price
+  WHERE id = '$MENU_PERMISSION_PROBE'::uuid
+  RETURNING id
+)
+SELECT count(*)::text FROM changed;
+ROLLBACK;
+SQL
+)"
+if [ "$table_write_rows" != "0" ] || [ "$menu_write_rows" != "0" ]; then
+  echo "ERROR: a staff account wrote to an area disabled by its permission matrix." >&2
+  exit 1
+fi
+if create_inventory_item "$USER_C" "$RESTAURANT_A" "Blocked stock item" "dddddddd-dddd-4ddd-8ddd-dddddddddddd" "1" >/dev/null 2>&1; then
+  echo "ERROR: a staff account created stock while the inventory permission was disabled." >&2
+  exit 1
+fi
+
+# Restore full operational access for later legacy staff-flow tests in this script.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions(
+  '$USER_C'::uuid, ARRAY['orders','tables','reservations','menu','inventory','loyalty']
+);
+COMMIT;
+SQL
+echo "PASS: owner/staff effective matrices and direct database denial for restricted areas."
+
 if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
