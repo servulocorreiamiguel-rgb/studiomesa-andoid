@@ -318,8 +318,8 @@ jobs:
             psql --no-psqlrc --set ON_ERROR_STOP=1 --file "${migration}"
             count=$((count + 1))
           done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
-          test "${count}" -eq 50
-          echo "Successfully replayed ${count} versioned migration files, including price-adviser actor indexes."
+          test "${count}" -eq 51
+          echo "Successfully replayed ${count} versioned migration files, including price-adviser actor indexes and granular staff permissions."
 
       - name: Assert core schema, RLS and RPCs exist
         run: |
@@ -332,6 +332,7 @@ jobs:
               OR to_regclass('public.restaurant_inventory_items') IS NULL
               OR to_regclass('public.loyalty_members') IS NULL
               OR to_regclass('private.restaurant_join_codes') IS NULL
+              OR to_regclass('private.restaurant_staff_permissions') IS NULL
               OR to_regclass('private.restaurant_price_adviser_audit_acted_by_idx') IS NULL
               OR to_regclass('private.restaurant_price_adviser_settings_updated_by_idx') IS NULL THEN
               RAISE EXCEPTION 'Core StudioMesa tables are missing after clean migration replay.';
@@ -340,7 +341,10 @@ jobs:
             IF to_regprocedure('public.create_restaurant(text,text)') IS NULL
               OR to_regprocedure('public.create_restaurant_reservation_idempotent(uuid,uuid,text,text,integer,timestamp with time zone,integer,integer,text)') IS NULL
               OR to_regprocedure('public.adjust_inventory_stock_idempotent(uuid,uuid,numeric,text)') IS NULL
-              OR to_regprocedure('public.adjust_loyalty_points_idempotent(uuid,uuid,integer,text)') IS NULL THEN
+              OR to_regprocedure('public.adjust_loyalty_points_idempotent(uuid,uuid,integer,text)') IS NULL
+              OR to_regprocedure('public.get_my_restaurant_permissions()') IS NULL
+              OR to_regprocedure('public.get_restaurant_staff_permissions(uuid)') IS NULL
+              OR to_regprocedure('public.set_restaurant_staff_permissions(uuid,text[])') IS NULL THEN
               RAISE EXCEPTION 'A required RPC is missing after clean migration replay.';
             END IF;
 
