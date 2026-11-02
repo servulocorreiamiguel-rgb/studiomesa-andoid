@@ -654,45 +654,64 @@ class MainActivity : Activity() {
                 status != "Concluído" && status != "Cancelado"
             }
         } else store.getOrders().count { it.status != "Concluído" && it.status != "Cancelado" }
+        val accessiblePages = availablePages().toSet()
         val stats = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        stats.addView(statCard("MESAS OCUPADAS", "$occupied / $tableTotal", if (occupied > 0) copper else forestSoft),
-            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), 0) })
-        stats.addView(statCard("PEDIDOS ATIVOS", activeOrders.toString(), if (activeOrders > 0) copper else forestSoft),
-            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, 0) })
-        container.addView(stats)
+        if ("Mesas" in accessiblePages) {
+            stats.addView(statCard("MESAS OCUPADAS", "$occupied / $tableTotal", if (occupied > 0) copper else forestSoft),
+                LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), 0) })
+        }
+        if ("Pedidos" in accessiblePages) {
+            stats.addView(statCard("PEDIDOS ATIVOS", activeOrders.toString(), if (activeOrders > 0) copper else forestSoft),
+                LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(if (stats.childCount > 0) dp(6) else 0, 0, 0, 0) })
+        }
+        if (stats.childCount > 0) container.addView(stats)
 
         addGap(container, 21)
         sectionHeading(container, "Acesso rápido", "Escolhe uma área para continuar.")
-        actionCard(container, "01", "Mesas", "Consulta as " + tableTotal + " mesas do restaurante.", "ABRIR MESAS") {
-            activePage = "Mesas"; renderApp()
+        if ("Mesas" in accessiblePages) {
+            actionCard(container, "01", "Mesas", "Consulta as " + tableTotal + " mesas do restaurante.", "ABRIR MESAS") {
+                activePage = "Mesas"; renderApp()
+            }
         }
-        actionCard(container, "02", "Pedidos", "Regista pedidos e acompanha a conclusão.", "ABRIR PEDIDOS") {
-            activePage = "Pedidos"; renderApp()
+        if ("Pedidos" in accessiblePages) {
+            actionCard(container, "02", "Pedidos", "Regista pedidos e acompanha a conclusão.", "ABRIR PEDIDOS") {
+                activePage = "Pedidos"; renderApp()
+            }
         }
-        actionCard(container, "03", "Carta e custos", "Artigos de exemplo, preços e custos.", "ABRIR CARTA") {
-            activePage = "Carta"; renderApp()
+        if ("Carta" in accessiblePages) {
+            actionCard(container, "03", "Carta e custos", "Artigos de exemplo, preços e custos.", "ABRIR CARTA") {
+                activePage = "Carta"; renderApp()
+            }
         }
-        actionCard(container, "04", "Pontos de fidelização", "Gere cartões, recompensas e pedidos de troca de pontos.", "GERIR FIDELIZAÇÃO") {
-            activePage = "Pontos"; renderApp()
+        if ("Pontos" in accessiblePages) {
+            actionCard(container, "04", "Pontos de fidelização", "Gere cartões, recompensas e pedidos de troca de pontos.", "GERIR FIDELIZAÇÃO") {
+                activePage = "Pontos"; renderApp()
+            }
         }
-        if (hasCalculator) {
+        if ("Reservas" in accessiblePages) {
             actionCard(container, "05", "Reservas", "Regista reservas, capacidade e disponibilidade de mesas.", "GERIR RESERVAS") {
                 activePage = "Reservas"; renderApp()
             }
+        }
+        if ("Preço Justo" in accessiblePages) {
             actionCard(container, "06", "Preço Justo", "Calcula um preço indicativo a partir do custo.", "ABRIR CALCULADORA") {
                 activePage = "Preço Justo"; renderApp()
             }
         }
-        if (isPremium) {
+        if ("Stock" in accessiblePages) {
             actionCard(container, "07", "Stock e inventário", "Controla quantidades, níveis mínimos e movimentos.", "GERIR STOCK") {
                 activePage = "Stock"; renderApp()
             }
+        }
+        if ("Análise" in accessiblePages) {
             actionCard(container, "08", "Análise operacional", "Resumo dos pedidos, artigos e custos registados.", "VER ANÁLISE") {
                 activePage = "Análise"; renderApp()
             }
         }
-        actionCard(container, "IA", "Assistente StudioMesa", "Sugestões de operação e preços com os dados disponíveis.", "ABRIR ASSISTENTE") {
-            activePage = "Assistente"; renderApp()
+        if ("Assistente" in accessiblePages) {
+            actionCard(container, "IA", "Assistente StudioMesa", "Sugestões de operação e preços com os dados disponíveis.", "ABRIR ASSISTENTE") {
+                activePage = "Assistente"; renderApp()
+            }
         }
 
         addGap(container, 6)
