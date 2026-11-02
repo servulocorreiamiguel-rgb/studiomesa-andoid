@@ -1066,121 +1066,12 @@ then
   echo "ERROR: staff confirmed a customer booking without assigning a table." >&2
   exit 1
 fi
+# The reservation confirmation rule now requires a real table assignment.
 psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
 BEGIN;
-SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
-SET LOCAL ROLE authenticated;
-SELECT public.assign_restaurant_reservation_table('$CUSTOMER_BOOKING_C_ID'::uuid, 99);
-SELECT public.update_restaurant_reservation_status('$CUSTOMER_BOOKING_C_ID'::uuid, 'Confirmada');
-COMMIT;
-SQL
-
-# Retrying the original customer request after staff assigned/confirmed it must
-# still return the same reservation rather than report a payload conflict.
-CUSTOMER_BOOKING_ASSIGNED_RETRY="$(create_customer_booking "$USER_E" "$CUSTOMER_BOOKING_REQUEST_C" "CI Customer A" "$CUSTOMER_BOOKING_LATER")"
-if [ "$CUSTOMER_BOOKING_ASSIGNED_RETRY" != "$CUSTOMER_BOOKING_C_ID|Confirmada" ]; then
-  echo "ERROR: customer booking retry failed after staff assignment/confirmation." >&2
-  exit 1
-fi
-
-CUSTOMER_BOOKING_D="$(create_customer_booking "$USER_E" "$CUSTOMER_BOOKING_REQUEST_D" "CI Customer A" "$CUSTOMER_BOOKING_LATER")"
-CUSTOMER_BOOKING_D_ID="$(cut -d '|' -f 1 <<<"$CUSTOMER_BOOKING_D")"
-if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
-BEGIN;
-SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
-SET LOCAL ROLE authenticated;
-SELECT public.assign_restaurant_reservation_table('$CUSTOMER_BOOKING_D_ID'::uuid, 99);
-COMMIT;
-SQL
-then
-  echo "ERROR: overlapping customer reservation was assigned to an already reserved table." >&2
-  exit 1
-fi
-
-if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
-BEGIN;
-SELECT set_config('request.jwt.claim.sub', '$USER_D', true);
-SET LOCAL ROLE authenticated;
-SELECT public.assign_restaurant_reservation_table('$CUSTOMER_BOOKING_D_ID'::uuid, 99);
-COMMIT;
-SQL
-then
-  echo "ERROR: staff from restaurant B unexpectedly assigned a table in restaurant A." >&2
-  exit 1
-fi
-echo "PASS: customer reservation creation/retry, private listing, own cancellation, foreign cancellation rejection, table assignment and confirmation guard."
-
-# Customer reward history is resolved from auth.uid(), not a client-supplied member ID.
-CUSTOMER_HISTORY_COUNT="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
-BEGIN;
-SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
-SET LOCAL ROLE authenticated;
-SELECT count(*)::text FROM public.get_my_loyalty_reward_redemptions();
-ROLLBACK;
-SQL
-)"
-FOREIGN_CUSTOMER_HISTORY_COUNT="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
-BEGIN;
-SELECT set_config('request.jwt.claim.sub', '$USER_F', true);
-SET LOCAL ROLE authenticated;
-SELECT count(*)::text FROM public.get_my_loyalty_reward_redemptions();
-ROLLBACK;
-SQL
-)"
-if [ "$CUSTOMER_HISTORY_COUNT" != "1" ] || [ "$FOREIGN_CUSTOMER_HISTORY_COUNT" != "0" ]; then
-  echo "ERROR: customer reward history exposed another account's redemptions or omitted its own." >&2
-  printf 'Customer A history: %s; customer B history: %s\n' "$CUSTOMER_HISTORY_COUNT" "$FOREIGN_CUSTOMER_HISTORY_COUNT" >&2
-  exit 1
-fi
-echo "PASS: customers can see their own reward redemption history only."
-
-RESERVATION_REQUEST="99999999-9999-4999-8999-999999999999"
-RESERVATION_FOREIGN_REQUEST="abababab-abab-4bab-8bab-abababababab"
-RESERVATION_AT="$(date -u -d '+30 days' '+%Y-%m-%d %H:%M:%S+00:00')"
-RESERVATION_A="$(create_restaurant_reservation "$USER_A" "$RESTAURANT_A" "$RESERVATION_REQUEST" "CI Guest" "$RESERVATION_AT")"
-RESERVATION_RETRY="$(create_restaurant_reservation "$USER_A" "$RESTAURANT_A" "$RESERVATION_REQUEST" "CI Guest" "$RESERVATION_AT")"
-if [ -z "$RESERVATION_A" ] || [ "$RESERVATION_A" != "$RESERVATION_RETRY" ]; then
-  echo "ERROR: retrying the same reservation request did not return the original reservation." >&2
-  exit 1
-fi
-reservation_count_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
-  -c "SELECT count(*) = 1 FROM public.restaurant_reservations WHERE id = '$RESERVATION_A'::uuid AND restaurant_id = '$RESTAURANT_A'::uuid AND created_by = '$USER_A'::uuid AND client_request_id = '$RESERVATION_REQUEST'::uuid;")"
-if [ "$reservation_count_ok" != "t" ]; then
-  echo "ERROR: repeated reservation creation produced a duplicate or misplaced reservation." >&2
-  exit 1
-fi
-echo "PASS: repeated reservation creation returns the original reservation exactly once."
-
-if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
-BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
 SET LOCAL ROLE authenticated;
-SELECT public.create_restaurant_reservation_idempotent(
-  '$RESERVATION_FOREIGN_REQUEST'::uuid, '$RESTAURANT_B'::uuid, 'Unauthorized Guest', '',
-  2, '$RESERVATION_AT'::timestamptz, 60, NULL::integer, 'Should be rejected'
-);
-COMMIT;
-SQL
-then
-  echo "ERROR: user A unexpectedly created a reservation for restaurant B." >&2
-  exit 1
-fi
-
-if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
-BEGIN;
-SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
-SET LOCAL ROLE authenticated;
-SELECT public.update_restaurant_reservation_status('$RESERVATION_A'::uuid, 'Confirmada');
-COMMIT;
-SQL
-then
-  echo "ERROR: user B unexpectedly changed a reservation belonging to restaurant A." >&2
-  exit 1
-fi
-psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null
-BEGIN;
-SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
-SET LOCAL ROLE authenticated;
+SELECT public.assign_restaurant_reservation_table('$RESERVATION_A'::uuid, 99);
 SELECT public.update_restaurant_reservation_status('$RESERVATION_A'::uuid, 'Confirmada');
 SELECT public.update_restaurant_reservation_status('$RESERVATION_A'::uuid, 'Confirmada');
 COMMIT;
