@@ -1,6 +1,5 @@
 package pt.studiomesa.app
 
-import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -54,17 +53,13 @@ class LoyaltyRewardTest {
 
     @Test
     fun customerRpcPayloadDefaultsMissingActiveFieldToTrue() {
-        val item = LoyaltyReward.fromJson(
-            JSONObject(
-                """{
-                    "id":"c9c0a19a-7da8-4c94-a12f-04a7c75c138d",
-                    "name":"Sobremesa",
-                    "description":"Uma sobremesa à escolha",
-                    "points_cost":100,
-                    "stock_limit":5,
-                    "redeemed_count":2
-                }"""
-            )
+        val item = LoyaltyReward(
+            id = "c9c0a19a-7da8-4c94-a12f-04a7c75c138d",
+            name = "Sobremesa",
+            description = "Uma sobremesa à escolha",
+            pointsCost = 100,
+            stockLimit = 5,
+            redeemedCount = 2
         )
 
         assertTrue(item.isActive)
