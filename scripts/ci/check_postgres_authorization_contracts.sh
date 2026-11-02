@@ -225,6 +225,83 @@ if [ "$STAFF_C_RESTAURANT" != "$RESTAURANT_A" ]; then
   exit 1
 fi
 echo "PASS: staff join RPC works, repeated joins are idempotent, and a staff account cannot join a second restaurant."
+
+# Granular staff permissions: owner-only management, per-restaurant isolation,
+# backward-compatible defaults, and no self-escalation.
+default_staff_permission="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT private.has_restaurant_permission('$RESTAURANT_A'::uuid, 'orders')::text
+       || '|' || private.has_restaurant_permission('$RESTAURANT_A'::uuid, 'inventory')::text;
+ROLLBACK;
+SQL
+)"
+if [ "$default_staff_permission" != "true|true" ]; then
+  echo "ERROR: legacy staff without a custom permission row did not retain operational access." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders']);
+COMMIT;
+SQL
+then
+  echo "ERROR: staff unexpectedly changed their own permissions." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders']);
+COMMIT;
+SQL
+then
+  echo "ERROR: owner B unexpectedly changed permissions for staff in restaurant A." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders','reservations']);
+COMMIT;
+SQL
+
+custom_staff_permission="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT private.has_restaurant_permission('$RESTAURANT_A'::uuid, 'orders')::text
+       || '|' || private.has_restaurant_permission('$RESTAURANT_A'::uuid, 'reservations')::text
+       || '|' || private.has_restaurant_permission('$RESTAURANT_A'::uuid, 'inventory')::text;
+ROLLBACK;
+SQL
+)"
+if [ "$custom_staff_permission" != "true|true|false" ]; then
+  echo "ERROR: custom staff permissions were not enforced as configured." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_D'::uuid, ARRAY['orders']);
+COMMIT;
+SQL
+then
+  echo "ERROR: staff A unexpectedly changed permissions for a different restaurant member." >&2
+  exit 1
+fi
+echo "PASS: staff permissions default safely, are owner-managed, isolated and cannot be self-escalated."
+
 # A separate staff user belongs to restaurant B for cross-restaurant QR/rescue tests.
 STAFF_JOIN_D="$(join_staff_member "$USER_D" "$STAFF_CODE_B")"
 EXPECTED_STAFF_JOIN_D="$RESTAURANT_B|CI Restaurant B|staff"
