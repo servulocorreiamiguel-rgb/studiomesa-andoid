@@ -635,7 +635,14 @@ class MainActivity : Activity() {
         addGap(container, 5)
         container.addView(label("A sala, num relance.", 27f, true, forestDeep))
         addGap(container, 5)
-        container.addView(label("Demonstração StudioMesa. Os dados, a carta e os pedidos são exemplos; configura o restaurante e introduz dados aprovados antes de qualquer utilização real.", 14f, false, muted))
+        container.addView(label(
+            if (hasRemoteRestaurant()) {
+                "Dados do restaurante sincronizados com o servidor. As áreas disponíveis dependem das permissões atribuídas à tua conta."
+            } else {
+                "Demonstração StudioMesa. Os dados, a carta e os pedidos são exemplos; configura o restaurante e introduz dados aprovados antes de qualquer utilização real."
+            },
+            14f, false, muted
+        ))
         addGap(container, 18)
 
         val tableTotal: Int
