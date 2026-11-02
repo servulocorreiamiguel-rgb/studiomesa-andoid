@@ -176,19 +176,6 @@ COMMIT;
 SQL
 }
 
-adjust_loyalty_points() {
-  local user_id="$1" member_id="$2" request_id="$3" delta="$4" note="$5"
-  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
-BEGIN;
-SELECT set_config('request.jwt.claim.sub', '$user_id', true);
-SET LOCAL ROLE authenticated;
-SELECT points FROM public.adjust_loyalty_points_idempotent(
-  '$request_id'::uuid, '$member_id'::uuid, '$delta'::integer, '$note'
-);
-COMMIT;
-SQL
-}
-
 create_restaurant_reservation() {
   local user_id="$1" restaurant_id="$2" request_id="$3" guest_name="$4" reservation_at="$5"
   psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
@@ -718,51 +705,263 @@ then
 fi
 echo "PASS: a customer can query only the menu associated with their own loyalty card."
 
-LOYALTY_REQUEST="77777777-7777-4777-8777-777777777777"
-LOYALTY_FOREIGN_REQUEST="88888888-8888-4888-8888-888888888888"
-LOYALTY_FIRST="$(adjust_loyalty_points "$USER_A" "$MEMBER_A" "$LOYALTY_REQUEST" "10" "CI loyalty retry")"
-LOYALTY_RETRY="$(adjust_loyalty_points "$USER_A" "$MEMBER_A" "$LOYALTY_REQUEST" "10" "CI loyalty retry")"
-if [ "$LOYALTY_FIRST" != "$LOYALTY_RETRY" ]; then
-  echo "ERROR: repeating a loyalty-points request returned a different balance." >&2
+# Loyalty security and QR lifecycle: points are credited only from a single-use
+# customer QR. The test data lives in this disposable PostgreSQL CI database.
+LOYALTY_QR_REQUEST="77777777-7777-4777-8777-777777777777"
+LOYALTY_QR_SECOND_REQUEST="88888888-8888-4888-8888-888888888888"
+LOYALTY_REDEEM_REQUEST="99999999-1111-4111-8111-111111111111"
+LOYALTY_REWARD_ID="99999999-2222-4222-8222-222222222222"
+
+# The previous generic adjustment RPC must no longer be callable by clients.
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.adjust_loyalty_points_idempotent(
+  '$LOYALTY_QR_REQUEST'::uuid, '$MEMBER_A'::uuid, 10, 'Bypass attempt'
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: legacy direct loyalty point adjustment is still executable by authenticated users." >&2
   exit 1
 fi
-loyalty_balance_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
-  -c "SELECT points = 10 FROM public.loyalty_members WHERE id = '$MEMBER_A'::uuid;")"
-loyalty_transaction_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
-  -c "SELECT count(*) = 1 FROM public.loyalty_transactions WHERE created_by = '$USER_A'::uuid AND client_request_id = '$LOYALTY_REQUEST'::uuid;")"
-if [ "$loyalty_balance_ok" != "t" ] || [ "$loyalty_transaction_ok" != "t" ]; then
-  echo "ERROR: repeated loyalty adjustment changed the balance twice or recorded duplicate transactions." >&2
-  exit 1
-fi
-echo "PASS: repeated loyalty-point adjustments are idempotent and create one transaction."
+
+# Owner creates the reward; staff cannot change the catalogue.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.save_loyalty_reward(
+  '$RESTAURANT_A'::uuid, '$LOYALTY_REWARD_ID'::uuid,
+  'CI Coffee Reward', 'One coffee for the customer', 10, 1, true
+);
+COMMIT;
+SQL
 
 if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
 BEGIN;
-SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
 SET LOCAL ROLE authenticated;
-SELECT * FROM public.adjust_loyalty_points_idempotent(
-  '$LOYALTY_FOREIGN_REQUEST'::uuid, '$MEMBER_B'::uuid, 10, 'Cross-restaurant attempt'
+SELECT public.save_loyalty_reward(
+  '$RESTAURANT_A'::uuid, '$LOYALTY_REWARD_ID'::uuid,
+  'Changed by staff', 'Unauthorized', 1, 1, true
 );
 COMMIT;
 SQL
 then
-  echo "ERROR: owner A unexpectedly adjusted points for a member of restaurant B." >&2
+  echo "ERROR: staff unexpectedly changed the owner-managed loyalty shop." >&2
   exit 1
 fi
+
+customer_reward_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text FROM public.get_customer_loyalty_rewards('$MEMBER_A'::uuid);
+ROLLBACK;
+SQL
+)"
+if [ "$customer_reward_count" != "1" ]; then
+  echo "ERROR: customer A did not see exactly their restaurant's active reward." >&2
+  exit 1
+fi
+
 if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
 BEGIN;
-SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
 SET LOCAL ROLE authenticated;
-SELECT * FROM public.adjust_loyalty_points_idempotent(
-  '$LOYALTY_REQUEST'::uuid, '$MEMBER_A'::uuid, -5, 'CI loyalty retry'
+SELECT * FROM public.get_customer_loyalty_rewards('$MEMBER_B'::uuid);
+COMMIT;
+SQL
+then
+  echo "ERROR: customer A unexpectedly queried the loyalty catalogue through customer B's card." >&2
+  exit 1
+fi
+
+# A new QR replaces a previous unused QR. A staff member from another restaurant
+# cannot use the current token.
+LOYALTY_QR_OLD="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT qr_token::text FROM public.create_loyalty_qr_token();
+COMMIT;
+SQL
+)"
+LOYALTY_QR_CURRENT="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT qr_token::text FROM public.create_loyalty_qr_token();
+COMMIT;
+SQL
+)"
+test -n "$LOYALTY_QR_OLD"
+test -n "$LOYALTY_QR_CURRENT"
+test "$LOYALTY_QR_OLD" != "$LOYALTY_QR_CURRENT"
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.award_loyalty_points_from_qr(
+  '$LOYALTY_QR_OLD'::uuid, 10, '$LOYALTY_QR_REQUEST'::uuid, 'CI receipt'
 );
 COMMIT;
 SQL
 then
-  echo "ERROR: loyalty idempotency key was accepted with a changed delta." >&2
+  echo "ERROR: a superseded customer QR was accepted." >&2
   exit 1
 fi
-echo "PASS: cross-restaurant loyalty changes and changed idempotency payloads are rejected."
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_D', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.award_loyalty_points_from_qr(
+  '$LOYALTY_QR_CURRENT'::uuid, 10, '$LOYALTY_QR_REQUEST'::uuid, 'CI receipt'
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: staff from restaurant B unexpectedly credited a QR belonging to restaurant A." >&2
+  exit 1
+fi
+
+# Correct staff member credits points. Same request ID is safe to replay;
+# a different request ID cannot consume the QR a second time.
+LOYALTY_FIRST="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT points::text FROM public.award_loyalty_points_from_qr(
+  '$LOYALTY_QR_CURRENT'::uuid, 10, '$LOYALTY_QR_REQUEST'::uuid, 'CI receipt'
+);
+COMMIT;
+SQL
+)"
+LOYALTY_RETRY="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT points::text FROM public.award_loyalty_points_from_qr(
+  '$LOYALTY_QR_CURRENT'::uuid, 10, '$LOYALTY_QR_REQUEST'::uuid, 'CI receipt'
+);
+COMMIT;
+SQL
+)"
+if [ "$LOYALTY_FIRST" != "10" ] || [ "$LOYALTY_RETRY" != "$LOYALTY_FIRST" ]; then
+  echo "ERROR: the QR award or its safe retry returned an unexpected balance." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.award_loyalty_points_from_qr(
+  '$LOYALTY_QR_CURRENT'::uuid, 10, '$LOYALTY_QR_SECOND_REQUEST'::uuid, 'Second use'
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: the same single-use QR was accepted with a second request identifier." >&2
+  exit 1
+fi
+
+loyalty_balance_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT points = 10 FROM public.loyalty_members WHERE id = '$MEMBER_A'::uuid;")"
+loyalty_transaction_ok="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*) = 1 FROM public.loyalty_transactions WHERE member_id = '$MEMBER_A'::uuid AND created_by = '$USER_C'::uuid AND client_request_id = '$LOYALTY_QR_REQUEST'::uuid;")"
+qr_consumed="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT used_at IS NOT NULL FROM private.loyalty_qr_tokens WHERE token = '$LOYALTY_QR_CURRENT'::uuid;")"
+if [ "$loyalty_balance_ok" != "t" ] || [ "$loyalty_transaction_ok" != "t" ] || [ "$qr_consumed" != "t" ]; then
+  echo "ERROR: QR award did not atomically update the balance, ledger and one-use token." >&2
+  exit 1
+fi
+echo "PASS: QR replacement, restaurant authorization, one-use enforcement and safe retry."
+
+# Customer redeems the reward once. The same request key returns the original
+# redemption; points and stock are updated atomically.
+LOYALTY_REDEMPTION_FIRST="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT redemption_id::text || '|' || points_remaining::text || '|' || status
+FROM public.redeem_loyalty_reward('$LOYALTY_REWARD_ID'::uuid, '$LOYALTY_REDEEM_REQUEST'::uuid);
+COMMIT;
+SQL
+)"
+LOYALTY_REDEMPTION_RETRY="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT redemption_id::text || '|' || points_remaining::text || '|' || status
+FROM public.redeem_loyalty_reward('$LOYALTY_REWARD_ID'::uuid, '$LOYALTY_REDEEM_REQUEST'::uuid);
+COMMIT;
+SQL
+)"
+if [ "$LOYALTY_REDEMPTION_FIRST" != "$LOYALTY_REDEMPTION_RETRY" ] ||
+   [[ "$LOYALTY_REDEMPTION_FIRST" != *"|0|pending" ]]; then
+  echo "ERROR: reward redemption was not idempotent or did not deduct the expected points." >&2
+  printf 'First: %s\nRetry: %s\n' "$LOYALTY_REDEMPTION_FIRST" "$LOYALTY_REDEMPTION_RETRY" >&2
+  exit 1
+fi
+LOYALTY_REDEMPTION_ID="$(cut -d '|' -f 1 <<<"$LOYALTY_REDEMPTION_FIRST")"
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_F', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.redeem_loyalty_reward('$LOYALTY_REWARD_ID'::uuid, '$LOYALTY_QR_SECOND_REQUEST'::uuid);
+COMMIT;
+SQL
+then
+  echo "ERROR: a customer from restaurant B unexpectedly redeemed restaurant A's reward." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_D', true);
+SET LOCAL ROLE authenticated;
+SELECT public.fulfill_loyalty_reward_redemption('$LOYALTY_REDEMPTION_ID'::uuid);
+COMMIT;
+SQL
+then
+  echo "ERROR: staff from restaurant B unexpectedly fulfilled restaurant A's redemption." >&2
+  exit 1
+fi
+
+# The correct restaurant's staff confirms delivery; a second confirmation is a no-op.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT public.fulfill_loyalty_reward_redemption('$LOYALTY_REDEMPTION_ID'::uuid);
+SELECT public.fulfill_loyalty_reward_redemption('$LOYALTY_REDEMPTION_ID'::uuid);
+COMMIT;
+SQL
+
+loyalty_redemption_state="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT status || '|' || fulfilled_by::text FROM public.loyalty_reward_redemptions WHERE id = '$LOYALTY_REDEMPTION_ID'::uuid;")"
+loyalty_final_balance="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT points::text FROM public.loyalty_members WHERE id = '$MEMBER_A'::uuid;")"
+loyalty_ledger_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*) FROM public.loyalty_transactions WHERE member_id = '$MEMBER_A'::uuid;")"
+reward_stock_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT redeemed_count FROM public.loyalty_rewards WHERE id = '$LOYALTY_REWARD_ID'::uuid;")"
+if [ "$loyalty_redemption_state" != "fulfilled|$USER_C" ] ||
+   [ "$loyalty_final_balance" != "0" ] ||
+   [ "$loyalty_ledger_count" != "2" ] ||
+   [ "$reward_stock_count" != "1" ]; then
+  echo "ERROR: reward fulfillment, points ledger, balance or stock count is inconsistent." >&2
+  printf 'Redemption: %s; balance: %s; ledger rows: %s; stock count: %s\n' \
+    "$loyalty_redemption_state" "$loyalty_final_balance" "$loyalty_ledger_count" "$reward_stock_count" >&2
+  exit 1
+fi
+echo "PASS: reward redemption is one-time, stock-limited, customer-scoped and staff-fulfilled."
 
 RESERVATION_REQUEST="99999999-9999-4999-8999-999999999999"
 RESERVATION_FOREIGN_REQUEST="abababab-abab-4bab-8bab-abababababab"
