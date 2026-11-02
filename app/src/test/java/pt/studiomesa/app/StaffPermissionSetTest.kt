@@ -101,6 +101,14 @@ class StaffPermissionSetTest {
     }
 
     @Test
+    fun onlyOwnersCanManageRestaurantJoinCodes() {
+        assertEquals(true, StaffPermissionSet.canManageRestaurantCodes("owner"))
+        assertEquals(false, StaffPermissionSet.canManageRestaurantCodes("staff"))
+        assertEquals(false, StaffPermissionSet.canManageRestaurantCodes(null))
+        assertEquals(false, StaffPermissionSet.canManageRestaurantCodes(""))
+    }
+
+    @Test
     fun rejectsUnknownPermissionBeforeSendingItToTheServer() {
         assertThrows(IllegalArgumentException::class.java) {
             StaffPermissionSet.orderedValues(setOf("orders", "owner_access"))
