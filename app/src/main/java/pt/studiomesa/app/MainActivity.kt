@@ -2664,7 +2664,7 @@ class MainActivity : Activity() {
 
     private fun showStaffJoinCode() {
         val role = backendPrefs.getString("restaurant_role", "") ?: ""
-        if (role != "owner") {
+        if (!StaffPermissionSet.canManageRestaurantCodes(role)) {
             AlertDialog.Builder(this)
                 .setTitle("Código não disponível")
                 .setMessage("Só o proprietário pode consultar o código de acesso à equipa.")
@@ -2978,7 +2978,7 @@ class MainActivity : Activity() {
     }
 
     private fun showRestaurantJoinCode() {
-        if (backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") {
+        if (!StaffPermissionSet.canManageRestaurantCodes(backendPrefs.getString("restaurant_role", ""))) {
             AlertDialog.Builder(this)
                 .setTitle("Acesso reservado")
                 .setMessage("Só o proprietário pode consultar o código de adesão dos clientes.")
@@ -3014,7 +3014,7 @@ class MainActivity : Activity() {
         container.addView(notice, cardParams())
         if (remoteMode) {
             container.addView(primaryButton("Atualizar clientes do servidor") { refreshRemoteCustomers() }, LinearLayout.LayoutParams(-1, dp(48)))
-            if (backendPrefs.getString("restaurant_role", "").orEmpty() == "owner") {
+            if (StaffPermissionSet.canManageRestaurantCodes(backendPrefs.getString("restaurant_role", ""))) {
                 addGap(container, 6)
                 container.addView(secondaryButton("Ver código de adesão") { showRestaurantJoinCode() }, LinearLayout.LayoutParams(-1, dp(48)))
             }
