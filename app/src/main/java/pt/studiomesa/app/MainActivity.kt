@@ -2523,6 +2523,7 @@ class MainActivity : Activity() {
                 .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
                 .remove("remote_members_json").remove("remote_tables_json")
                 .remove("remote_menu_json").remove("remote_orders_json").remove("customer_menu_json")
+                .remove("customer_loyalty_rewards_json").remove("customer_loyalty_redemptions_json")
                 .remove("remote_inventory_json").remove("inventory_loaded")
                 .remove("remote_reservations_json").remove("reservations_loaded")
                 .apply()
@@ -2661,7 +2662,7 @@ class MainActivity : Activity() {
     }
 
     private fun renderCustomers(container: LinearLayout) {
-        pageIntro(container, "Fidelização por pontos", "Regista clientes e gere pontos manualmente.")
+        pageIntro(container, "Fidelização por pontos", "Gere cartões de clientes, pontos e recompensas.")
         addGap(container, 9)
 
         val remoteMode = backendToken().isNotBlank() && backendRestaurantId().isNotBlank()
@@ -2680,6 +2681,10 @@ class MainActivity : Activity() {
         if (remoteMode) {
             addGap(container, 13)
             renderRestaurantLoyaltyShop(container)
+            if (!backendPrefs.contains("restaurant_loyalty_rewards_json") ||
+                !backendPrefs.contains("restaurant_loyalty_redemptions_json")) {
+                refreshRestaurantLoyaltyShop()
+            }
         }
         addGap(container, 13)
 
@@ -3200,7 +3205,9 @@ class MainActivity : Activity() {
                 setOnClickListener {
                     activeCustomerPage = page
                     renderCustomerApp()
-                    if (page == "Prémios") refreshCustomerRewards()
+                    if (page == "Prémios" && backendToken().isNotBlank() && backendMemberId().isNotBlank()) {
+                        refreshCustomerRewards()
+                    }
                 }
             }
             item.addView(TextView(this).apply {
