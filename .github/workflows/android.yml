@@ -318,7 +318,7 @@ jobs:
             psql --no-psqlrc --set ON_ERROR_STOP=1 --file "${migration}"
             count=$((count + 1))
           done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
-          test "${count}" -eq 48
+          test "${count}" -eq 49
           echo "Successfully replayed ${count} versioned migration files."
 
       - name: Assert core schema, RLS and RPCs exist
@@ -340,6 +340,47 @@ jobs:
               OR to_regprocedure('public.adjust_inventory_stock_idempotent(uuid,uuid,numeric,text)') IS NULL
               OR to_regprocedure('public.adjust_loyalty_points_idempotent(uuid,uuid,integer,text)') IS NULL THEN
               RAISE EXCEPTION 'A required RPC is missing after clean migration replay.';
+            END IF;
+
+            IF to_regprocedure('public.create_customer_reservation_request(uuid,text,text,integer,timestamp with time zone,integer,text)') IS NULL
+              OR to_regprocedure('public.get_my_restaurant_reservations()') IS NULL
+              OR to_regprocedure('public.cancel_my_restaurant_reservation(uuid)') IS NULL
+              OR to_regprocedure('public.assign_restaurant_reservation_table(uuid,integer)') IS NULL THEN
+              RAISE EXCEPTION 'A customer reservation RPC is missing after clean migration replay.';
+            END IF;
+
+            IF (
+              SELECT count(*)
+              FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'public'
+                AND p.proname IN (
+                  'create_customer_reservation_request',
+                  'get_my_restaurant_reservations',
+                  'cancel_my_restaurant_reservation',
+                  'assign_restaurant_reservation_table'
+                )
+                AND NOT p.prosecdef
+                AND p.proconfig @> ARRAY['search_path=""']
+                AND NOT has_function_privilege('anon', p.oid, 'EXECUTE')
+                AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
+            ) <> 4 OR (
+              SELECT count(*)
+              FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'private'
+                AND p.proname IN (
+                  'create_customer_reservation_request_internal',
+                  'get_my_restaurant_reservations_internal',
+                  'cancel_my_restaurant_reservation_internal',
+                  'assign_restaurant_reservation_table_internal'
+                )
+                AND p.prosecdef
+                AND p.proconfig @> ARRAY['search_path=""']
+                AND NOT has_function_privilege('anon', p.oid, 'EXECUTE')
+                AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
+            ) <> 4 THEN
+              RAISE EXCEPTION 'Customer reservation RPCs must use authenticated-only invoker wrappers and pinned private implementations.';
             END IF;
 
             IF to_regclass('private.loyalty_invoice_qr_codes') IS NULL
