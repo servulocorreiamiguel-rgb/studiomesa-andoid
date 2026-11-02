@@ -43,6 +43,46 @@ class StaffPermissionSetTest {
     }
 
     @Test
+    fun emptyMatrixLeavesOnlyHomeAccountAndDoesNotExposeOperationalPages() {
+        val pages = listOf(
+            "Início", "Mesas", "Pedidos", "Cozinha", "Carta", "Pontos",
+            "Assistente", "Conta", "Reservas", "Preço Justo", "Stock", "Análise"
+        )
+        assertEquals(
+            listOf("Início", "Conta"),
+            StaffPermissionSet.filterPages(pages, emptySet(), isStaff = true)
+        )
+    }
+
+    @Test
+    fun staffNeverReceiveOwnerOnlyEconomicAndAnalysisPages() {
+        val pages = listOf(
+            "Início", "Mesas", "Pedidos", "Cozinha", "Carta", "Pontos",
+            "Assistente", "Conta", "Reservas", "Preço Justo", "Stock", "Análise"
+        )
+        assertEquals(
+            listOf("Início", "Mesas", "Pedidos", "Cozinha", "Carta", "Pontos", "Conta", "Reservas", "Stock"),
+            StaffPermissionSet.filterPages(pages, StaffPermissionSet.all.toSet(), isStaff = true)
+        )
+    }
+
+    @Test
+    fun eachOperationalPermissionControlsItsMatchingPage() {
+        val pages = listOf("Mesas", "Pedidos", "Cozinha", "Carta", "Pontos", "Reservas", "Stock")
+        val cases = listOf(
+            setOf("tables") to listOf("Mesas"),
+            setOf("orders") to listOf("Pedidos", "Cozinha"),
+            setOf("menu") to listOf("Carta"),
+            setOf("loyalty") to listOf("Pontos"),
+            setOf("reservations") to listOf("Reservas"),
+            setOf("inventory") to listOf("Stock")
+        )
+        cases.forEach { (permissions, expected) ->
+            assertEquals(expected, StaffPermissionSet.filterPages(pages, permissions, isStaff = true))
+        }
+    }
+
+    @Test
     fun rejectsUnknownPermissionBeforeSendingItToTheServer() {
         assertThrows(IllegalArgumentException::class.java) {
             StaffPermissionSet.orderedValues(setOf("orders", "owner_access"))
