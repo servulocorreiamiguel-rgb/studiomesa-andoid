@@ -52,9 +52,9 @@ Alguns nomes indicam funcionalidades semelhantes (por exemplo, QR de fidelizaç�
 
 - PR **#75** (`feature/loyalty-shop-qr-security`) é uma branch paralela baseada em `main`. Inclui QR de utilização única, reservas e permissões granulares de funcionários.
 - PR **#76** (`feature/invoice-loyalty-qr`) também parte de `main`. Inclui QR de fidelização associado à fatura e loja de recompensas. Tem migrações com versões diferentes das que aparecem no histórico remoto.
-- PR **#77** (`feature/customer-reservations`) está empilhada sobre #76. Além das reservas do cliente, a branch já contém a loja/QR, permissões granulares da equipa e a actualização da matriz ao regressar à app; as novas alterações aguardam CI completa.
+- PR **#77** (`feature/customer-reservations`) está empilhada sobre #76. Além das reservas do cliente, a branch contém a loja/QR, permissões granulares da equipa e a actualização da matriz ao regressar à app.
 - As três branches alteram ficheiros centrais como `MainActivity.kt`, `SupabaseApi.kt` e/ou o workflow Android. Não devem ser integradas em sequência sem uma revisão explícita das sobreposições.
-- A implementação granular da PR #75 foi portada e adaptada em #77. A migração `20261102160000_granular_staff_permissions.sql` aplica as seis áreas no servidor e conserva os wrappers privados existentes; a validação está pendente.
+- A implementação granular da PR #75 foi portada e adaptada em #77. A migração `20261102160000_granular_staff_permissions.sql` aplica as seis áreas no servidor e conserva os wrappers privados existentes.
 
 ## Alteração de desempenho acrescentada à branch #77
 
@@ -68,9 +68,9 @@ Foram acrescentadas as migrações `20261102150000_add_price_adviser_actor_fk_in
 Validação da nova cadeia de permissões:
 - A primeira tentativa de replay falhou porque `private.loyalty_qr_tokens` era usada pelo QR legado mas não era criada na sequência limpa local.
 - A migração `20261102135000_legacy_loyalty_rpc_private_boundary.sql` foi corrigida para criar a tabela QR com `IF NOT EXISTS`, RLS, índices e privilégios directos revogados, preservando dados caso já exista.
-- A execução CI para o commit corrigido `cf89f480c9d4632580410241eb15e80a76d587ca` está pendente; só declarar a fase aprovada após o replay, testes PostgreSQL, build, Lint e emuladores Android 8/16 passarem.
-- Compilação Android e testes de interface: em execução no momento da última consulta.
-- Execução mais recente: https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/41479056962
+- O workflow completo passou na execução [41481734799](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/41481734799), no commit `247ed883b514e514826e2ca56be4b7156d126a9b`: replay das 51 migrações locais desde base vazia, testes de autorização/idempotência PostgreSQL, compilação, unit tests de todas as variantes, Android Lint e smoke tests em Android 8 e Android 16.
+- Depois dessa execução foram acrescentados ajustes de fail-closed/recarga da cache e mais testes unitários (`d113f3d` e `58bf586`). A CI tem de voltar a passar no commit mais recente antes de considerar a revisão atual aprovada.
+- O sucesso da CI de desenvolvimento não corrige a divergência de migrações do projeto alojado e não autoriza deploy.
 
 ## Estado de segurança observado no projeto alojado
 > A migração `20261102160000_granular_staff_permissions.sql` e a recuperação versionada da tabela QR existem apenas na branch. Não foram aplicadas ao projecto Supabase alojado.
