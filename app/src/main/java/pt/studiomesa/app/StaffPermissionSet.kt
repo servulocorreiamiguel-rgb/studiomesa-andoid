@@ -32,6 +32,9 @@ internal object StaffPermissionSet {
     fun toJsonArray(selected: Set<String>): JSONArray =
         JSONArray().apply { orderedValues(selected).forEach { put(it) } }
 
+    fun bottomNavigationPages(visiblePages: List<String>): List<String> =
+        listOf("Início", "Mesas", "Pedidos").filter { it in visiblePages }
+
     fun filterPages(pages: List<String>, permissions: Set<String>, isStaff: Boolean): List<String> {
         if (!isStaff) return pages
         val visible = pages.toMutableList()
