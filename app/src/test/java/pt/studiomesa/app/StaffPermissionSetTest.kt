@@ -23,6 +23,27 @@ class StaffPermissionSetTest {
     }
 
     @Test
+    fun staffOnlySeeOperationalPagesForEnabledAreas() {
+        val pages = listOf(
+            "Início", "Mesas", "Pedidos", "Cozinha", "Carta", "Pontos",
+            "Assistente", "Conta", "Reservas", "Preço Justo", "Stock", "Análise"
+        )
+        assertEquals(
+            listOf("Início", "Pedidos", "Cozinha", "Conta", "Reservas"),
+            StaffPermissionSet.filterPages(pages, setOf("orders", "reservations"), isStaff = true)
+        )
+    }
+
+    @Test
+    fun ownerNavigationIsNotFilteredByStaffPermissions() {
+        val pages = listOf("Início", "Mesas", "Pedidos", "Assistente", "Conta")
+        assertEquals(
+            pages,
+            StaffPermissionSet.filterPages(pages, emptySet(), isStaff = false)
+        )
+    }
+
+    @Test
     fun rejectsUnknownPermissionBeforeSendingItToTheServer() {
         assertThrows(IllegalArgumentException::class.java) {
             StaffPermissionSet.toJsonArray(setOf("orders", "owner_access"))
