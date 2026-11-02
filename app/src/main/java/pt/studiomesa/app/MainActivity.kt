@@ -103,8 +103,9 @@ class MainActivity : Activity() {
     private val backendPrefs by lazy { getSharedPreferences("studiomesa_backend", MODE_PRIVATE) }
     private val secureSession by lazy { SecureSessionStore(this) }
     private val pendingRequestIds by lazy { PendingRequestIds(this) }
-    // Reservation contacts are kept in memory only, not persisted to SharedPreferences.
+    // Reservation contacts and customer reward history are memory-only.
     private var reservationCache = JSONArray()
+    private var customerRedemptionHistory = JSONArray()
     private var reservationsLoaded = false
 
     private val flavor = BuildConfig.FLAVOR.lowercase(Locale.ROOT)
@@ -1789,8 +1790,8 @@ class MainActivity : Activity() {
                     .remove("member_restaurant_name")
                     .putString("customer_menu_json", "[]")
                     .putString("customer_rewards_json", "[]")
-                    .putString("customer_redemptions_json", "[]")
                     .apply()
+                customerRedemptionHistory = JSONArray()
                 return
             }
 
@@ -1798,6 +1799,7 @@ class MainActivity : Activity() {
             val menu = if (memberId.isNotBlank()) SupabaseApi.listCustomerMenu(token, memberId) else org.json.JSONArray()
             val rewards = if (memberId.isNotBlank()) SupabaseApi.listCustomerRewards(token, memberId) else JSONArray()
             val redemptions = if (memberId.isNotBlank()) SupabaseApi.listMyLoyaltyRewardRedemptions(token) else JSONArray()
+            customerRedemptionHistory = redemptions
             backendPrefs.edit()
                 .putString("member_id", memberId)
                 .putString("member_code", member.optString("member_code"))
@@ -1805,7 +1807,6 @@ class MainActivity : Activity() {
                 .putString("member_restaurant_name", member.optString("restaurant_name"))
                 .putString("customer_menu_json", menu.toString())
                 .putString("customer_rewards_json", rewards.toString())
-                .putString("customer_redemptions_json", redemptions.toString())
                 .apply()
             val displayName = member.optString("display_name").trim()
             if (displayName.isNotBlank()) store.saveCustomerProfileName(displayName)
@@ -1847,6 +1848,7 @@ class MainActivity : Activity() {
             .apply()
 
         reservationCache = JSONArray()
+        customerRedemptionHistory = JSONArray()
         reservationsLoaded = false
     }
 
@@ -3124,8 +3126,8 @@ class MainActivity : Activity() {
                                 .putString("member_restaurant_name", member.optString("restaurant_name"))
                                 .putString("customer_menu_json", menu.toString())
                                 .putString("customer_rewards_json", rewards.toString())
-                                .putString("customer_redemptions_json", SupabaseApi.listMyLoyaltyRewardRedemptions(token).toString())
                                 .apply()
+                            customerRedemptionHistory = SupabaseApi.listMyLoyaltyRewardRedemptions(token)
                             store.saveCustomerProfileName(name)
                             "OK"
                         }) {
@@ -3148,11 +3150,11 @@ class MainActivity : Activity() {
             val menu = SupabaseApi.listCustomerMenu(token, memberId)
             val rewards = SupabaseApi.listCustomerRewards(token, memberId)
             val redemptions = SupabaseApi.listMyLoyaltyRewardRedemptions(token)
+            customerRedemptionHistory = redemptions
             backendPrefs.edit().putInt("member_points", member.optInt("points", 0))
                 .putString("member_code", member.optString("member_code"))
                 .putString("customer_menu_json", menu.toString())
                 .putString("customer_rewards_json", rewards.toString())
-                .putString("customer_redemptions_json", redemptions.toString())
                 .apply()
             "OK"
         }) { renderCustomerApp() }
@@ -3341,11 +3343,7 @@ class MainActivity : Activity() {
     private fun renderCustomerRedemptionHistory(container: LinearLayout) {
         container.addView(label("OS MEUS RESGATES", 10f, true, forestSoft))
         addGap(container, 5)
-        val redemptions = try {
-            JSONArray(backendPrefs.getString("customer_redemptions_json", "[]") ?: "[]")
-        } catch (_: Exception) {
-            JSONArray()
-        }
+        val redemptions = customerRedemptionHistory
         if (redemptions.length() == 0) {
             container.addView(label("Ainda não resgataste nenhuma recompensa.", 12f, false, muted))
             return
@@ -3432,10 +3430,10 @@ class MainActivity : Activity() {
                     val member = SupabaseApi.getMyLoyaltyMembership(backendToken())
                     val rewards = SupabaseApi.listCustomerRewards(backendToken(), backendMemberId())
                     val redemptions = SupabaseApi.listMyLoyaltyRewardRedemptions(backendToken())
+                    customerRedemptionHistory = redemptions
                     backendPrefs.edit()
                         .putInt("member_points", member?.optInt("points", result.optInt("points_remaining", 0)) ?: 0)
                         .putString("customer_rewards_json", rewards.toString())
-                        .putString("customer_redemptions_json", redemptions.toString())
                         .apply()
                     result.optInt("points_remaining", -1).toString()
                 }) { remaining ->
@@ -3576,8 +3574,8 @@ class MainActivity : Activity() {
                     .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
                     .remove("customer_menu_json")
                     .remove("customer_rewards_json")
-                    .remove("customer_redemptions_json")
                     .apply()
+                customerRedemptionHistory = JSONArray()
                 activeCustomerPage = "Cartão"
                 renderCustomerApp()
             }, LinearLayout.LayoutParams(-1, dp(48)))
