@@ -2677,6 +2677,7 @@ class MainActivity : Activity() {
                 .remove("remote_inventory_json").remove("inventory_loaded")
                 .remove("remote_reservations_json").remove("reservations_loaded")
                 .apply()
+            currentStaffPermissions = null
             reservationCache = JSONArray()
             reservationsLoaded = false
             renderApp()
