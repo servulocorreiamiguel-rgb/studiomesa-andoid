@@ -2907,7 +2907,6 @@ class MainActivity : Activity() {
             customerReservationsAccountScope = ""
             customerReservationsMemberScope = ""
             customerReservationsRefreshInFlight = false
-            customerRedemptionHistory = JSONArray()
             renderApp()
         }, LinearLayout.LayoutParams(-1, dp(48)))
         addGap(container, 10)
