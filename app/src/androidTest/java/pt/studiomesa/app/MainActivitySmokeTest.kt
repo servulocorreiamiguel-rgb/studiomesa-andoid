@@ -13,6 +13,9 @@ import androidx.test.espresso.matcher.ViewMatchers.withHint
 import androidx.test.espresso.matcher.ViewMatchers.withContentDescription
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.platform.app.InstrumentationRegistry
+import org.json.JSONObject
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.hamcrest.Matchers.containsString
 import org.hamcrest.Matchers.not
 import org.junit.Assume.assumeFalse
@@ -58,6 +61,27 @@ class MainActivitySmokeTest {
             onView(withText(containsString("Rever e aplicar")))
                 .check(doesNotExist())
         }
+    }
+
+    @Test
+    fun customerRewardRpcPayloadParsesWithExpectedDefaultsOnAndroidRuntime() {
+        val reward = LoyaltyReward.fromJson(
+            JSONObject(
+                """{
+                    "id":"c9c0a19a-7da8-4c94-a12f-04a7c75c138d",
+                    "name":"Sobremesa",
+                    "description":"Uma sobremesa à escolha",
+                    "points_cost":100,
+                    "stock_limit":5,
+                    "redeemed_count":2
+                }"""
+            )
+        )
+
+        assertTrue(reward.isActive)
+        assertEquals(100, reward.pointsCost)
+        assertEquals(3, reward.availableStock())
+        assertTrue(reward.canRedeem(100))
     }
 
     @Test
