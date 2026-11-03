@@ -162,7 +162,7 @@ Deno.serve(
         503,
       );
     }
-    const model = Deno.env.get("STUDIOMESA_OPENAI_MODEL") ?? "gpt-6-luna";
+    const model = Deno.env.get("STUDIOMESA_OPENAI_MODEL") ?? "gpt-6-astra";
 
     // Every RPC below independently verifies that this JWT belongs to the
     // restaurant owner. No service-role or admin client is used in this function.
