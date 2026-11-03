@@ -358,3 +358,56 @@ No momento desta verificação:
 O pipeline de CI usa uma base PostgreSQL descartável; não testa nem altera a base de dados alojada. O replay limpo prova a sequência local de migrações, mas não substitui a reprodução isolada do estado actual do projecto alojado.
 
 **Conclusão desta passagem:** o código e os testes da matriz granular estão preparados na branch, mas o projecto alojado ainda não tem permissões granulares. Continuam bloqueados a reparação do histórico e o deploy até existir uma cópia isolada do estado real, backup com restauro comprovado e revisão final das quatro migrações pendentes.
+
+
+---
+
+## Fecho da CI e inventário de integrações — 03/11/2026
+
+### Execução completa da branch de reservas
+
+A execução **41528216195** terminou com conclusão global **success**, no commit `19d34d982a135c80b672ff4b13817f83ec1ecadd`.
+
+Todos os quatro jobs terminaram com sucesso:
+
+1. **Compilação Android:** auditoria de pins/actions, dependências Edge Functions, segurança da eliminação de conta, compilação, testes unitários de todas as variantes, Android Lint, validação da configuração comercial e publicação do artefacto DEBUG.
+2. **Base de dados descartável:** replay das 51 migrações, verificação de esquema/RLS/RPCs e testes de autorização entre restaurantes e idempotência.
+3. **Emulador Android 8 (API 26):** smoke tests concluídos.
+4. **Emulador Android 16:** smoke tests concluídos.
+
+A execução anterior `41526996865` foi cancelada durante os smoke tests, mas foi substituída pela execução completa acima, no commit actualizado. Não deve ser usada como resultado final.
+
+Link da execução completa: https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/41528216195
+
+### Artefactos de demonstração
+
+A execução produziu o artefacto `StudioMesa-1.5.0-Demo-APKs`, com cinco variantes DEBUG:
+
+- Essencial — Restaurante
+- Profissional — Restaurante
+- Profissional — Cliente
+- Premium — Restaurante
+- Premium — Cliente
+
+O projecto declara `versionName = 1.5.0`, `versionCode = 7`, `minSdk = 24` e aplicação de demonstração `pt.studiomesa.preview` com sufixos por plano/tipo. Os APKs são de demonstração/teste; não são os pacotes RELEASE assinados para venda ou Play Store.
+
+O ZIP descarregado nesta revisão foi comparado com o digest SHA-256 do artefacto fornecido pelo GitHub e coincide. Os cinco APKs passaram a verificação de integridade ZIP. Isto não substitui a instalação e teste físico em dispositivos reais.
+
+O artefacto do GitHub tem expiração indicada para **16/11/2026 às 21:31 UTC**.
+
+### Mapa actual das propostas de integração
+
+| PR | Conteúdo | Estado/decisão técnica |
+|---|---|---|
+| #72 | Receitas, snapshots de pedidos/custos, gestor económico e reservas | Base funcional ampla, CI final da revisão actual ainda por executar; integrar apenas numa sequência controlada |
+| #74 | Redesenho e navegação móvel, conversões de unidades e custos de receita | Depende de #72, mas actualmente está `dirty`/não mergeable; precisa de rebase ou reconstrução sobre o head actualizado de #72 e bateria completa de testes |
+| #75 | Loja de fidelização, QR e permissões granulares — implementação paralela | CI própria passou; sobrepõe funcionalidades e ficheiros à cadeia #76/#77. Não combinar às cegas com essa cadeia |
+| #76 | QR de fidelização associado à referência da fatura e loja de recompensas | CI própria passou; base da cadeia de reservas |
+| #77 | Reservas de cliente, wrappers privados e matriz granular de permissões | CI completa passou; depende de #76 |
+| #78 | Visibilidade imediata da resposta do assistente | PR independente; CI completa passou |
+
+A sequência local mais coerente para o fluxo de QR/fidelização e reservas é **#76 → #77**. A PR #78 é independente. A implementação #75 é uma linha paralela e deve ser comparada com #76/#77 antes de qualquer integração, para evitar duplicar ou sobrepor migrações e lógica. A PR #74 não deve avançar antes de resolver a divergência com a sua base #72. A PR #71 está identificada na própria #72 como supersedida e não deve ser integrada separadamente.
+
+Mesmo com CI verde em cada PR, as linhas #72/#74 e #76/#77 alteram ficheiros centrais comuns, como `MainActivity.kt` e `SupabaseApi.kt`. O conjunto integrado necessita de uma nova bateria de regressão depois de reconciliar essas branches.
+
+**Estado final desta revisão:** CI da branch #77 concluída com sucesso e APKs DEBUG disponíveis para teste. Nenhum PR foi integrado, nenhuma migração foi aplicada ao Supabase alojado e a preparação comercial continua bloqueada por backup/restauro, autenticação real, teste físico, política de privacidade e assinatura RELEASE.
