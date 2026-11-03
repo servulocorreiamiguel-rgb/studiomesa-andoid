@@ -249,7 +249,7 @@ class MainActivity : Activity() {
                 Thread {
                     try {
                         val csv = buildInvoiceCsv(scope)
-                        appRoot.context.contentResolver.openOutputStream(uri, "wt")?.use { output ->
+                        contentResolver.openOutputStream(uri, "wt")?.use { output ->
                             output.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()))
                             output.write(csv.toByteArray(Charsets.UTF_8))
                             output.flush()
@@ -5637,7 +5637,17 @@ class MainActivity : Activity() {
         val scope = economicScopeKey ?: return
         if (hasRemoteRestaurant() && backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") return
         runCatching {
-            assistantChatStore.saveEconomicState(scope, economicManagerEnabled, economicInputs)
+            val storedValues = economicInputs.toMutableMap().apply {
+                put("reportEconomic", economicReportText)
+                put("reportRecipe", recipeReportText)
+                put("reportReorder", reorderReportText)
+                put("reportWaste", wasteReportText)
+                put("reportSupplier", supplierReportText)
+                put("reportBudget", budgetReportText)
+                put("reportUsage", usageReportText)
+                put("reportLabour", labourReportText)
+            }
+            assistantChatStore.saveEconomicState(scope, economicManagerEnabled, storedValues)
         }.onFailure {
             assistantChatError = "Não foi possível guardar os dados económicos cifrados."
         }
@@ -5663,7 +5673,16 @@ class MainActivity : Activity() {
             clearEconomicManagerState()
             economicScopeKey = scope
             runCatching {
-                economicInputs.putAll(assistantChatStore.readEconomicInputs(scope))
+                val storedValues = assistantChatStore.readEconomicInputs(scope).toMutableMap()
+                economicReportText = storedValues.remove("reportEconomic").orEmpty()
+                recipeReportText = storedValues.remove("reportRecipe").orEmpty()
+                reorderReportText = storedValues.remove("reportReorder").orEmpty()
+                wasteReportText = storedValues.remove("reportWaste").orEmpty()
+                supplierReportText = storedValues.remove("reportSupplier").orEmpty()
+                budgetReportText = storedValues.remove("reportBudget").orEmpty()
+                usageReportText = storedValues.remove("reportUsage").orEmpty()
+                labourReportText = storedValues.remove("reportLabour").orEmpty()
+                economicInputs.putAll(storedValues)
                 economicManagerEnabled = assistantChatStore.isEconomicManagerEnabled(scope)
             }.onFailure {
                 economicManagerEnabled = false
