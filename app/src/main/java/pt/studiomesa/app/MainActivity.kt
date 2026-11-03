@@ -5008,6 +5008,16 @@ class MainActivity : Activity() {
             Toast.makeText(this, "Escreve uma mensagem primeiro.", Toast.LENGTH_SHORT).show()
             return
         }
+        if (localAssistantModelManager.isModelInstalled() &&
+            question.length > LocalAssistantModelManager.MAX_USER_MESSAGE_CHARS) {
+            Toast.makeText(
+                this,
+                "Divide a pergunta em mensagens mais curtas (máximo " +
+                    LocalAssistantModelManager.MAX_USER_MESSAGE_CHARS + " caracteres com o modelo local).",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
 
         val scope = assistantChatScope()
         try {
