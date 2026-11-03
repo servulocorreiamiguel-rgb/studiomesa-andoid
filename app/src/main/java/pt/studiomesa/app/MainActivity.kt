@@ -4927,6 +4927,15 @@ class MainActivity : Activity() {
             }
         }
 
+        val asksForBriefing = listOf(
+            "resumo da operacao", "resumo da operação", "faz um resumo",
+            "resume a operacao", "resume o restaurante", "ponto de situacao"
+        ).any { normalized.contains(it) }
+        if (asksForBriefing) {
+            val briefing = StudioMesaAdvisor.dailyBriefing(assistantSnapshot())
+            return "${briefing.title}\\n\\n${briefing.response}"
+        }
+
         val asksAboutInvoices = listOf(
             "fatura", "faturas", "factura", "facturas", "saft", "documento contabilistico",
             "fatura de fornecedor", "despesa de fornecedor", "compras a fornecedor",
@@ -5063,11 +5072,14 @@ class MainActivity : Activity() {
         }
         form.addView(notes, LinearLayout.LayoutParams(-1, dp(110)))
         val scroll = ScrollView(this).apply { addView(form) }
-        AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this)
             .setTitle("Novo documento financeiro")
             .setView(scroll)
             .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Guardar") { _, _ ->
+            .setPositiveButton("Guardar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 try {
                     val parsedDate = SimpleDateFormat("dd/MM/yyyy", Locale("pt", "PT")).apply {
                         isLenient = false
@@ -5097,8 +5109,9 @@ class MainActivity : Activity() {
                         createdAtMillis = System.currentTimeMillis()
                     )
                     assistantChatStore.saveInvoice(scope, invoice)
+                    dialog.dismiss()
                     Toast.makeText(this, "Documento guardado no arquivo cifrado.", Toast.LENGTH_SHORT).show()
-                    showAssistantInvoiceDetails(scope, invoice.id)
+                    window.decorView.post { showAssistantInvoiceDetails(scope, invoice.id) }
                 } catch (error: Exception) {
                     AlertDialog.Builder(this)
                         .setTitle("Não foi possível guardar")
@@ -5107,7 +5120,8 @@ class MainActivity : Activity() {
                         .show()
                 }
             }
-            .show()
+        }
+        dialog.show()
     }
 
     private fun showAssistantInvoiceList(scope: String) {
