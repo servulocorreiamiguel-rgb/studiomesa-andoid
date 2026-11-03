@@ -338,6 +338,85 @@ jobs:
               RAISE EXCEPTION 'Core StudioMesa tables are missing after clean migration replay.';
             END IF;
 
+            IF to_regclass('private.studiomesa_assistant_conversations') IS NULL
+              OR to_regclass('private.studiomesa_assistant_messages') IS NULL
+              OR to_regclass('private.studiomesa_financial_invoices') IS NULL THEN
+              RAISE EXCEPTION 'StudioMesa assistant history or invoice archive tables are missing.';
+            END IF;
+
+            IF (
+              SELECT count(*)
+              FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'private'
+                AND c.relname IN (
+                  'studiomesa_assistant_conversations',
+                  'studiomesa_assistant_messages',
+                  'studiomesa_financial_invoices'
+                )
+                AND c.relrowsecurity
+            ) <> 3 THEN
+              RAISE EXCEPTION 'Assistant conversations, messages and invoice metadata must all have RLS enabled.';
+            END IF;
+
+            IF (
+              SELECT count(*)
+              FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'public'
+                AND p.proname IN (
+                  'studiomesa_assistant_list_conversations',
+                  'studiomesa_assistant_create_conversation',
+                  'studiomesa_assistant_list_messages',
+                  'studiomesa_assistant_append_message',
+                  'studiomesa_assistant_delete_conversation',
+                  'studiomesa_assistant_register_invoice',
+                  'studiomesa_assistant_complete_invoice_upload',
+                  'studiomesa_assistant_list_invoices',
+                  'studiomesa_assistant_get_invoice_files',
+                  'studiomesa_assistant_get_business_context'
+                )
+                AND NOT p.prosecdef
+                AND p.proconfig @> ARRAY['search_path=""']
+                AND NOT has_function_privilege('anon', p.oid, 'EXECUTE')
+                AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
+            ) <> 10 OR (
+              SELECT count(*)
+              FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'private'
+                AND p.proname IN (
+                  'studiomesa_assistant_list_conversations_internal',
+                  'studiomesa_assistant_create_conversation_internal',
+                  'studiomesa_assistant_list_messages_internal',
+                  'studiomesa_assistant_append_message_internal',
+                  'studiomesa_assistant_delete_conversation_internal',
+                  'studiomesa_assistant_register_invoice_internal',
+                  'studiomesa_assistant_complete_invoice_upload_internal',
+                  'studiomesa_assistant_list_invoices_internal',
+                  'studiomesa_assistant_get_invoice_files_internal',
+                  'studiomesa_assistant_business_context_internal'
+                )
+                AND p.prosecdef
+                AND p.proconfig @> ARRAY['search_path=""']
+                AND NOT has_function_privilege('anon', p.oid, 'EXECUTE')
+                AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
+            ) <> 10 THEN
+              RAISE EXCEPTION 'StudioMesa assistant RPCs must use authenticated invoker wrappers backed by private, pinned functions.';
+            END IF;
+
+            IF has_function_privilege(
+              'authenticated',
+              'private.studiomesa_assistant_owner_restaurant_id()',
+              'EXECUTE'
+            ) OR has_function_privilege(
+              'anon',
+              'private.studiomesa_assistant_owner_restaurant_id()',
+              'EXECUTE'
+            ) THEN
+              RAISE EXCEPTION 'The internal assistant owner lookup must not be directly executable by API roles.';
+            END IF;
+
             IF to_regprocedure('public.create_restaurant(text,text)') IS NULL
               OR to_regprocedure('public.create_restaurant_reservation_idempotent(uuid,uuid,text,text,integer,timestamp with time zone,integer,integer,text)') IS NULL
               OR to_regprocedure('public.adjust_inventory_stock_idempotent(uuid,uuid,numeric,text)') IS NULL
