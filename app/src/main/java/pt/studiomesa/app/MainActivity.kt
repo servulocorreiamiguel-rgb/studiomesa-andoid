@@ -2,9 +2,14 @@ package pt.studiomesa.app
 
 import android.app.Activity
 import android.app.Dialog
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.res.ColorStateList
+import android.net.Uri
+import android.provider.OpenableColumns
+import java.io.ByteArrayOutputStream
 import android.app.AlertDialog
 import android.graphics.Color
 import android.graphics.Bitmap
@@ -86,6 +91,22 @@ class MainActivity : Activity() {
     }
     private var assistantQuestion = ""
     private var assistantAnswer: StudioMesaAssistantAnswer? = null
+    private var assistantConversations = JSONArray()
+    private var assistantMessages = JSONArray()
+    private var assistantInvoices = JSONArray()
+    private var assistantCurrentConversationId = ""
+    private var assistantHistoryQuery = ""
+    private var assistantDraft = ""
+    private var assistantWebSearchEnabled = false
+    private val assistantSelectedInvoiceIds = linkedSetOf<String>()
+    private var assistantShowLocalTools = false
+    private var assistantWorkspaceScope = ""
+    private var assistantWorkspaceLoaded = false
+    private var assistantWorkspaceLoading = false
+    private var assistantWorkspaceError = ""
+    private var assistantMessagesLoading = false
+    private var assistantBusy = false
+    private val requestAssistantInvoice = 4201
     private var selectedAnalysisPeriod = SalesAnalysisPeriod.ALL_TIME
 
     // Owner-controlled economic tools: session-only until persistent authorization is designed.
@@ -106,26 +127,38 @@ class MainActivity : Activity() {
     // Reservation contacts are kept in memory only, not persisted to SharedPreferences.
     private var reservationCache = JSONArray()
     private var reservationsLoaded = false
+    // Customer reservation details contain names, telephone numbers and notes.
+    // Keep this snapshot in memory only and scope every refresh to the active account/card.
+    private var customerReservationsCache = JSONArray()
+    private var customerReservationsLoaded = false
+    private var customerReservationsRefreshInFlight = false
+    private var customerReservationsAccountScope = ""
+    private var customerReservationsMemberScope = ""
+    private var customerReservationsError = ""
+    // Authoritative session snapshot used for navigation only; server RPC/RLS is the security boundary.
+    private var currentStaffPermissions: Set<String>? = null
+    private var staffPermissionRefreshInFlight = false
 
     private val flavor = BuildConfig.FLAVOR.lowercase(Locale.ROOT)
     private val isCustomerApp = flavor.contains("cliente")
     private val isPremium = flavor.contains("premium")
     private val hasCalculator = flavor.contains("profissional") || isPremium
 
-    private val forest = Color.rgb(57, 78, 67)
-    private val forestDeep = Color.rgb(43, 59, 50)
-    private val forestSoft = Color.rgb(77, 101, 87)
-    private val copper = Color.rgb(211, 177, 139)
-    private val copperPale = Color.rgb(245, 237, 224)
-    private val paper = Color.rgb(248, 248, 244)
+    // StudioMesa visual system: deep petrol, warm brass and soft stone surfaces.
+    private val forest = Color.rgb(43, 74, 72)
+    private val forestDeep = Color.rgb(24, 43, 45)
+    private val forestSoft = Color.rgb(82, 119, 113)
+    private val copper = Color.rgb(205, 169, 113)
+    private val copperPale = Color.rgb(246, 239, 226)
+    private val paper = Color.rgb(245, 246, 243)
     private val white = Color.WHITE
-    private val ink = Color.rgb(47, 57, 51)
-    private val muted = Color.rgb(106, 116, 108)
-    private val line = Color.rgb(230, 229, 220)
-    private val paleGreen = Color.rgb(235, 242, 236)
-    private val paleRed = Color.rgb(249, 237, 233)
+    private val ink = Color.rgb(35, 51, 51)
+    private val muted = Color.rgb(105, 120, 117)
+    private val line = Color.rgb(225, 231, 227)
+    private val paleGreen = Color.rgb(232, 241, 237)
+    private val paleRed = Color.rgb(250, 237, 234)
     private val red = Color.rgb(157, 65, 56)
-    private val green = Color.rgb(55, 105, 72)
+    private val green = Color.rgb(46, 116, 91)
 
     private val planTitle: String
         get() = when {
@@ -168,6 +201,9 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         activityResumed = true
+        // Close restricted screens and start authorization refresh before auto-refresh
+        // can query stock or kitchen data from the previous foreground session.
+        refreshStaffPermissionsSilently()
         updateKitchenAutoRefresh()
         updateInventoryAutoRefresh()
     }
@@ -185,12 +221,16 @@ class MainActivity : Activity() {
         handleAuthCallback(intent)
     }
 
-    @Deprecated("The embedded QR scanner currently uses Activity result callbacks.")
+    @Deprecated("The embedded QR scanner and PDF picker currently use Activity result callbacks.")
     override fun onActivityResult(
         requestCode: Int,
         resultCode: Int,
         data: android.content.Intent?
     ) {
+        if (requestCode == requestAssistantInvoice) {
+            if (resultCode == RESULT_OK) data?.data?.let { uploadAssistantInvoiceFromUri(it) }
+            return
+        }
         val scan = IntentIntegrator.parseActivityResult(requestCode, resultCode, data)
         if (scan != null) {
             val contents = scan.contents
@@ -280,7 +320,13 @@ class MainActivity : Activity() {
             pages.add("Stock")
             pages.add("Análise")
         }
-        return pages
+        val isStaff = hasRemoteRestaurant() &&
+            backendPrefs.getString("restaurant_role", "staff") == "staff"
+        return StaffPermissionSet.filterPages(
+            pages,
+            currentStaffPermissions.orEmpty(),
+            isStaff
+        )
     }
 
     private fun showNavigationDrawer() {
@@ -517,8 +563,16 @@ class MainActivity : Activity() {
         val separator = View(this).apply { setBackgroundColor(Color.argb(65, 255, 255, 255)) }
         header.addView(separator, LinearLayout.LayoutParams(-1, dp(1)))
         addGap(header, 12)
-        header.addView(label(if (hasRemoteRestaurant()) "Restaurante configurado · dados do servidor" else "Demonstração · Dados de exemplo", 10.5f, true, copperPale))
-        header.addView(label("Uma experiência de gestão pensada para o ritmo da sala.", 13f, false, Color.rgb(229, 235, 228)))
+        val headerStatus = label(
+            if (hasRemoteRestaurant()) "CONTA CONFIGURADA" else "MODO DE DEMONSTRAÇÃO",
+            9.5f, true, forestDeep
+        ).apply {
+            setPadding(dp(9), dp(6), dp(9), dp(6))
+            background = rounded(copper, 10)
+        }
+        header.addView(headerStatus, LinearLayout.LayoutParams(-2, -2))
+        addGap(header, 6)
+        header.addView(label("Gestão de sala, sem complicações.", 13f, false, Color.rgb(229, 235, 228)))
 
         val headerParams = LinearLayout.LayoutParams(-1, -2).apply {
             setMargins(dp(12), dp(10), dp(12), dp(5))
@@ -543,11 +597,11 @@ class MainActivity : Activity() {
         val nav = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(6), dp(4), dp(6), dp(4))
-            setBackgroundColor(white)
-            elevation = dp(6).toFloat()
+            setPadding(dp(6), dp(5), dp(6), dp(5))
+            background = cardSurface(white, 19)
+            elevation = dp(7).toFloat()
         }
-        listOf("Início", "Mesas", "Pedidos").forEach { page ->
+        StaffPermissionSet.bottomNavigationPages(availablePages()).forEach { page ->
             val selected = activePage == page
             val item = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
@@ -576,7 +630,9 @@ class MainActivity : Activity() {
                 setMargins(dp(3), 0, dp(3), 0)
             })
         }
-        appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(60)))
+        appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(66)).apply {
+            setMargins(dp(12), dp(3), dp(12), dp(8))
+        })
         setContentView(appRoot)
         if (activePage == "Pontos" && hasRemoteRestaurant() &&
             (!LoyaltyCacheScope.belongsTo(
@@ -611,12 +667,17 @@ class MainActivity : Activity() {
     }
 
     private fun renderHome(container: LinearLayout) {
-        container.addView(label("Painel de operação", 10f, true, forestSoft))
+        container.addView(label("STUDIOMESA  /  PAINEL DE GESTÃO", 10f, true, forestSoft).apply {
+            letterSpacing = 0.12f
+        })
+        addGap(container, 7)
+        container.addView(label("A sala, sob controlo.", 29f, true, forestDeep))
         addGap(container, 5)
-        container.addView(label("A sala, num relance.", 27f, true, forestDeep))
-        addGap(container, 5)
-        container.addView(label("Demonstração StudioMesa. Os dados, a carta e os pedidos são exemplos; configura o restaurante e introduz dados aprovados antes de qualquer utilização real.", 14f, false, muted))
-        addGap(container, 18)
+        container.addView(label(
+            "O essencial da operação, organizado num só lugar.",
+            13.5f, false, muted
+        ))
+        addGap(container, 15)
 
         val tableTotal: Int
         val occupied = if (hasRemoteRestaurant()) {
@@ -634,55 +695,106 @@ class MainActivity : Activity() {
                 status != "Concluído" && status != "Cancelado"
             }
         } else store.getOrders().count { it.status != "Concluído" && it.status != "Cancelado" }
-        val stats = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        stats.addView(statCard("MESAS OCUPADAS", "$occupied / $tableTotal", if (occupied > 0) copper else forestSoft),
-            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), 0) })
-        stats.addView(statCard("PEDIDOS ATIVOS", activeOrders.toString(), if (activeOrders > 0) copper else forestSoft),
-            LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, 0) })
-        container.addView(stats)
+        val accessiblePages = availablePages().toSet()
 
-        addGap(container, 21)
-        sectionHeading(container, "Acesso rápido", "Escolhe uma área para continuar.")
-        actionCard(container, "01", "Mesas", "Consulta as " + tableTotal + " mesas do restaurante.", "ABRIR MESAS") {
-            activePage = "Mesas"; renderApp()
+        val statusCard = makeCard(14, forestDeep).apply {
+            background = rounded(forestDeep, 20)
         }
-        actionCard(container, "02", "Pedidos", "Regista pedidos e acompanha a conclusão.", "ABRIR PEDIDOS") {
-            activePage = "Pedidos"; renderApp()
+        val statusRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
         }
-        actionCard(container, "03", "Carta e custos", "Artigos de exemplo, preços e custos.", "ABRIR CARTA") {
-            activePage = "Carta"; renderApp()
+        statusRow.addView(statusDot(if (hasRemoteRestaurant()) Color.rgb(116, 190, 151) else copper),
+            LinearLayout.LayoutParams(dp(8), dp(8)).apply { setMargins(0, 0, dp(9), 0) })
+        statusRow.addView(label(
+            if (hasRemoteRestaurant()) "CONTA DO RESTAURANTE CONFIGURADA" else "AMBIENTE DE DEMONSTRAÇÃO",
+            9.5f, true, copperPale
+        ))
+        statusCard.addView(statusRow)
+        addGap(statusCard, 6)
+        statusCard.addView(label(
+            if (hasRemoteRestaurant())
+                "As áreas disponíveis respeitam as permissões atribuídas à tua conta."
+            else
+                "Explora a aplicação com dados de exemplo. Liga uma conta para ativar a gestão partilhada.",
+            12f, false, Color.rgb(226, 235, 231)
+        ))
+        container.addView(statusCard, cardParams())
+
+        addGap(container, 7)
+        sectionHeading(container, "Resumo da operação", "Indicadores disponíveis nesta aplicação.")
+        val stats = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.TOP
         }
-        actionCard(container, "04", "Pontos de fidelização", "Gere cartões, recompensas e pedidos de troca de pontos.", "GERIR FIDELIZAÇÃO") {
-            activePage = "Pontos"; renderApp()
+        if ("Mesas" in accessiblePages) {
+            stats.addView(statCard("MESAS OCUPADAS", occupied.toString() + " / " + tableTotal, forestSoft),
+                LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), 0) })
         }
-        if (hasCalculator) {
-            actionCard(container, "05", "Reservas", "Regista reservas, capacidade e disponibilidade de mesas.", "GERIR RESERVAS") {
+        if ("Pedidos" in accessiblePages) {
+            stats.addView(statCard("PEDIDOS ATIVOS", activeOrders.toString(), copper),
+                LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(if (stats.childCount > 0) dp(6) else 0, 0, 0, 0) })
+        }
+        if (stats.childCount > 0) container.addView(stats)
+
+        addGap(container, 17)
+        sectionHeading(container, "Acesso rápido", "Entra diretamente nas áreas que mais utilizas.")
+        if ("Mesas" in accessiblePages) {
+            actionCard(container, "01", "Mesas", "Consulta as " + tableTotal + " mesas do restaurante.", "ABRIR MESAS") {
+                activePage = "Mesas"; renderApp()
+            }
+        }
+        if ("Pedidos" in accessiblePages) {
+            actionCard(container, "02", "Pedidos", "Regista pedidos e acompanha a conclusão.", "ABRIR PEDIDOS") {
+                activePage = "Pedidos"; renderApp()
+            }
+        }
+        if ("Carta" in accessiblePages) {
+            actionCard(container, "03", "Carta e custos", "Artigos, preços e custos do menu.", "ABRIR CARTA") {
+                activePage = "Carta"; renderApp()
+            }
+        }
+        if ("Pontos" in accessiblePages) {
+            actionCard(container, "04", "Fidelização", "Cartões, recompensas e pedidos de troca.", "GERIR FIDELIZAÇÃO") {
+                activePage = "Pontos"; renderApp()
+            }
+        }
+        if ("Reservas" in accessiblePages) {
+            actionCard(container, "05", "Reservas", "Pedidos, capacidade e atribuição de mesas.", "GERIR RESERVAS") {
                 activePage = "Reservas"; renderApp()
             }
-            actionCard(container, "06", "Preço Justo", "Calcula um preço indicativo a partir do custo.", "ABRIR CALCULADORA") {
+        }
+        if ("Preço Justo" in accessiblePages) {
+            actionCard(container, "06", "Preço Justo", "Calcula preços indicativos a partir dos custos.", "ABRIR CALCULADORA") {
                 activePage = "Preço Justo"; renderApp()
             }
         }
-        if (isPremium) {
-            actionCard(container, "07", "Stock e inventário", "Controla quantidades, níveis mínimos e movimentos.", "GERIR STOCK") {
+        if ("Stock" in accessiblePages) {
+            actionCard(container, "07", "Stock e inventário", "Quantidades, mínimos e movimentos.", "GERIR STOCK") {
                 activePage = "Stock"; renderApp()
             }
-            actionCard(container, "08", "Análise operacional", "Resumo dos pedidos, artigos e custos registados.", "VER ANÁLISE") {
+        }
+        if ("Análise" in accessiblePages) {
+            actionCard(container, "08", "Análise operacional", "Resumo dos pedidos, artigos e custos.", "VER ANÁLISE") {
                 activePage = "Análise"; renderApp()
             }
         }
-        actionCard(container, "IA", "Assistente StudioMesa", "Sugestões de operação e preços com os dados disponíveis.", "ABRIR ASSISTENTE") {
-            activePage = "Assistente"; renderApp()
+        if ("Assistente" in accessiblePages) {
+            actionCard(container, "IA", "Assistente StudioMesa", "Sugestões de operação e preços.", "ABRIR ASSISTENTE") {
+                activePage = "Assistente"; renderApp()
+            }
         }
 
-        addGap(container, 6)
+        addGap(container, 5)
         val note = makeCard(14, copperPale)
-        note.addView(label(if (hasRemoteRestaurant()) "OPERAÇÃO PARTILHADA" else "DEMONSTRAÇÃO", 10f, true, forest))
-        addGap(note, 4)
+        note.addView(label("NOTA SOBRE OS DADOS", 9.5f, true, forest))
+        addGap(note, 5)
         note.addView(label(
-            if (hasRemoteRestaurant()) "Mesas, carta, pedidos e estados ficam guardados no servidor e podem ser consultados pela equipa autenticada. Ainda não existe integração com caixa registadora, pagamentos ou impressora de cozinha."
-            else "O modo de demonstração guarda mesas, carta e pedidos apenas neste telemóvel. Liga uma conta e configura o restaurante para usar os dados partilhados no servidor.",
-            12.5f, false, ink
+            if (hasRemoteRestaurant())
+                "Mesas, carta e pedidos são partilhados com a equipa autenticada. Ainda não existe integração com caixa registadora, pagamentos ou impressora de cozinha."
+            else
+                "O modo de demonstração guarda os registos neste telemóvel. Não representa dados reais de um restaurante.",
+            12f, false, ink
         ))
         container.addView(note, cardParams())
     }
@@ -1679,6 +1791,7 @@ class MainActivity : Activity() {
         if (isCustomerApp || token.isBlank()) return
 
         try {
+            val previousRestaurantId = backendRestaurantId()
             val restaurant = SupabaseApi.getMyRestaurant(token)
             val editor = backendPrefs.edit()
                 .remove("restaurant_id")
@@ -1688,11 +1801,32 @@ class MainActivity : Activity() {
                 .remove("restaurant_role")
             if (restaurant != null) {
                 val restaurantId = restaurant.optString("restaurant_id")
+                val role = restaurant.optString("user_role", "staff")
+                if (previousRestaurantId.isNotBlank() && previousRestaurantId != restaurantId) {
+                    // SharedPreferences caches are restaurant-scoped. A single account
+                    // joining a different restaurant must never inherit the previous
+                    // restaurant's stock, reservations, team, menu or loyalty snapshots.
+                    editor.remove("remote_members_json")
+                        .remove("remote_tables_json")
+                        .remove("remote_menu_json")
+                        .remove("remote_orders_json")
+                        .remove("remote_inventory_json")
+                        .remove("inventory_loaded")
+                        .remove("remote_reservations_json")
+                        .remove("reservations_loaded")
+                        .remove("restaurant_loyalty_rewards_json")
+                        .remove("restaurant_loyalty_redemptions_json")
+                        .remove("restaurant_loyalty_cache_restaurant_id")
+                    reservationCache = JSONArray()
+                    reservationsLoaded = false
+                    kitchenOrdersCache = null
+                    kitchenQueueUpdatedAtMillis = 0L
+                }
                 editor.putString("restaurant_id", restaurantId)
                     .putString("restaurant_name", restaurant.optString("restaurant_name"))
                     .putString("join_code", restaurant.optString("join_code"))
                     .putString("staff_join_code", restaurant.optString("staff_code"))
-                    .putString("restaurant_role", restaurant.optString("user_role", "staff"))
+                    .putString("restaurant_role", role)
                 val cachedRestaurantId = backendPrefs.getString("restaurant_loyalty_cache_restaurant_id", null)
                 if (!LoyaltyCacheScope.belongsTo(cachedRestaurantId, restaurantId)) {
                     editor.remove("restaurant_loyalty_rewards_json")
@@ -1702,8 +1836,17 @@ class MainActivity : Activity() {
             }
             editor.apply()
             if (restaurant != null) {
+                val role = restaurant.optString("user_role", "staff")
+                currentStaffPermissions = if (role == "owner") {
+                    StaffPermissionSet.all.toSet()
+                } else {
+                    // Fail closed for navigation if the server cannot provide the effective matrix.
+                    StaffPermissionSet.fromJson(SupabaseApi.getMyRestaurantPermissions(token))
+                }
                 cacheRemoteOperations(token, restaurant.optString("restaurant_id"))
+                clearUnavailableStaffCaches()
             } else {
+                currentStaffPermissions = null
                 // The server confirmed this account no longer belongs to a restaurant.
                 // Remove data that would otherwise remain on this device after revocation.
                 backendPrefs.edit()
@@ -1723,7 +1866,24 @@ class MainActivity : Activity() {
                 reservationsLoaded = false
             }
         } catch (_: Exception) {
-            // Keep authentication successful if restoring cloud data temporarily fails.
+            // Authentication can remain active during a transient failure, but staff UI fails closed.
+            if (backendPrefs.getString("restaurant_role", "") == "staff") {
+                currentStaffPermissions = emptySet()
+                backendPrefs.edit()
+                    .remove("remote_members_json")
+                    .remove("remote_tables_json")
+                    .remove("remote_menu_json")
+                    .remove("remote_orders_json")
+                    .remove("remote_inventory_json")
+                    .remove("inventory_loaded")
+                    .remove("remote_reservations_json")
+                    .remove("reservations_loaded")
+                    .remove("restaurant_loyalty_rewards_json")
+                    .remove("restaurant_loyalty_redemptions_json")
+                    .apply()
+                reservationCache = JSONArray()
+                reservationsLoaded = false
+            }
         }
     }
 
@@ -1765,16 +1925,154 @@ class MainActivity : Activity() {
         return result
     }
 
-    private fun cacheRemoteOperations(token: String, restaurantId: String) {
+    private fun cacheRemoteOperations(
+        token: String,
+        restaurantId: String,
+        permissionsOverride: Set<String>? = null
+    ) {
         if (token.isBlank() || restaurantId.isBlank()) return
-        val tables = SupabaseApi.listTables(token, restaurantId)
-        val menu = SupabaseApi.listMenuItems(token, restaurantId)
-        val orders = SupabaseApi.listOrders(token, restaurantId)
-        backendPrefs.edit()
-            .putString("remote_tables_json", tables.toString())
-            .putString("remote_menu_json", menu.toString())
-            .putString("remote_orders_json", orders.toString())
-            .apply()
+        val isOwner = backendPrefs.getString("restaurant_role", "") == "owner"
+        val permissions = permissionsOverride ?: currentStaffPermissions.orEmpty()
+        val editor = backendPrefs.edit()
+
+        if (isOwner || "tables" in permissions) {
+            editor.putString("remote_tables_json", SupabaseApi.listTables(token, restaurantId).toString())
+        } else {
+            editor.remove("remote_tables_json")
+        }
+        if (isOwner || "menu" in permissions) {
+            editor.putString("remote_menu_json", SupabaseApi.listMenuItems(token, restaurantId).toString())
+        } else {
+            editor.remove("remote_menu_json")
+        }
+        if (isOwner || "orders" in permissions) {
+            editor.putString("remote_orders_json", SupabaseApi.listOrders(token, restaurantId).toString())
+        } else {
+            editor.remove("remote_orders_json")
+        }
+        editor.apply()
+    }
+
+    private fun clearUnavailableStaffCaches() {
+        if (backendPrefs.getString("restaurant_role", "") != "staff") return
+        val permissions = currentStaffPermissions.orEmpty()
+        val editor = backendPrefs.edit()
+        if ("tables" !in permissions) editor.remove("remote_tables_json")
+        if ("menu" !in permissions) editor.remove("remote_menu_json")
+        if ("orders" !in permissions) editor.remove("remote_orders_json")
+        if ("inventory" !in permissions) {
+            editor.remove("remote_inventory_json").remove("inventory_loaded")
+        }
+        if ("reservations" !in permissions) {
+            editor.remove("remote_reservations_json").remove("reservations_loaded")
+            reservationCache = JSONArray()
+            reservationsLoaded = false
+        }
+        if ("loyalty" !in permissions) {
+            editor.remove("remote_members_json")
+                .remove("restaurant_loyalty_rewards_json")
+                .remove("restaurant_loyalty_redemptions_json")
+        }
+        editor.apply()
+    }
+
+    /**
+     * Re-fetch the authoritative matrix when a staff member returns to the app.
+     * Revoked areas are removed from navigation and local caches; server-side
+     * RPC/RLS checks still reject direct requests immediately.
+     */
+    private fun refreshStaffPermissionsSilently() {
+        if (isCustomerApp || staffPermissionRefreshInFlight ||
+            backendPrefs.getString("restaurant_role", "") != "staff") return
+
+        val startingUserId = backendPrefs.getString("user_id", "").orEmpty()
+        val startingRestaurantId = backendRestaurantId()
+        if (startingUserId.isBlank() || startingRestaurantId.isBlank() || backendToken().isBlank()) return
+
+        // Fail closed before the network round-trip: do not leave a previously open
+        // restricted page or its cached data visible while a revocation is checked.
+        val hadPermissions = currentStaffPermissions?.isNotEmpty() == true
+        currentStaffPermissions = emptySet()
+        // Keep the old cache stored but unreachable while the screen is closed behind
+        // the home fallback. After the server answers, purge only revoked areas; on
+        // network/auth failure the final empty matrix purges every operational cache.
+        if (activePage !in availablePages()) activePage = "Início"
+        if (hadPermissions) renderApp()
+
+        staffPermissionRefreshInFlight = true
+        Thread {
+            val permissions = try {
+                refreshSessionIfNeeded()
+                val token = backendToken()
+                val currentUserId = backendPrefs.getString("user_id", "").orEmpty()
+                val currentRestaurantId = backendRestaurantId()
+                if (token.isBlank() || currentUserId != startingUserId) {
+                    runOnUiThread { staffPermissionRefreshInFlight = false }
+                    return@Thread
+                }
+                if (currentRestaurantId != startingRestaurantId ||
+                    backendPrefs.getString("restaurant_role", "") != "staff") {
+                    // Session refresh may have confirmed that the account was removed
+                    // from this restaurant or promoted to owner. Restore the whole view
+                    // from the new server-confirmed membership instead of leaving an old page on screen.
+                    runOnUiThread {
+                        staffPermissionRefreshInFlight = false
+                        if (!isFinishing &&
+                            backendPrefs.getString("user_id", "").orEmpty() == startingUserId) {
+                            activePage = "Início"
+                            renderApp()
+                        }
+                    }
+                    return@Thread
+                }
+
+                val confirmedMembership = SupabaseApi.getMyRestaurant(token)
+                val confirmedMembershipId = confirmedMembership?.optString("restaurant_id").orEmpty()
+                val confirmedRole = confirmedMembership?.optString("user_role").orEmpty()
+                if (confirmedMembership == null || confirmedMembershipId != startingRestaurantId ||
+                    confirmedRole != "staff") {
+                    // A removed member receives an empty permission list, which alone
+                    // cannot distinguish removal from a deliberately empty matrix.
+                    // Reconcile the actual membership first so Account cannot keep
+                    // showing a restaurant that no longer recognizes this session.
+                    restoreOwnedRestaurant(token)
+                    runOnUiThread {
+                        staffPermissionRefreshInFlight = false
+                        if (!isFinishing &&
+                            backendPrefs.getString("user_id", "").orEmpty() == startingUserId) {
+                            activePage = "Início"
+                            renderApp()
+                        }
+                    }
+                    return@Thread
+                }
+
+                val confirmed = StaffPermissionSet.fromJson(
+                    SupabaseApi.getMyRestaurantPermissions(token)
+                )
+                // Refresh newly granted areas as well as the permission matrix. If
+                // the data fetch fails, the whole refresh fails closed rather than
+                // exposing an empty or stale page as if it were current.
+                cacheRemoteOperations(token, currentRestaurantId, confirmed)
+                confirmed
+            } catch (_: Exception) {
+                // A failed authorization or data refresh must not leave an old area exposed.
+                emptySet()
+            }
+
+            runOnUiThread {
+                staffPermissionRefreshInFlight = false
+                if (isFinishing) return@runOnUiThread
+                if (backendPrefs.getString("user_id", "").orEmpty() != startingUserId ||
+                    backendRestaurantId() != startingRestaurantId ||
+                    backendPrefs.getString("restaurant_role", "") != "staff") return@runOnUiThread
+
+                currentStaffPermissions = permissions
+                clearUnavailableStaffCaches()
+                if (activePage !in availablePages()) activePage = "Início"
+                renderApp()
+            }
+        }.start()
     }
 
     private fun refreshRemoteOperations() {
@@ -1873,8 +2171,13 @@ class MainActivity : Activity() {
             .remove("remote_reservations_json").remove("reservations_loaded")
             .apply()
 
+        currentStaffPermissions = null
         reservationCache = JSONArray()
         reservationsLoaded = false
+        customerReservationsCache = JSONArray()
+        customerReservationsLoaded = false
+        customerReservationsAccountScope = ""
+        customerReservationsMemberScope = ""
     }
 
     private fun backendToken(): String = secureSession.accessToken()
@@ -2325,6 +2628,10 @@ class MainActivity : Activity() {
                 ))
                 if (role == "staff") {
                     addGap(card, 8)
+                    card.addView(secondaryButton("Gerir permissões") {
+                        showStaffPermissionsDialog(userId, email)
+                    }, LinearLayout.LayoutParams(-1, dp(44)))
+                    addGap(card, 6)
                     card.addView(secondaryButton("Remover acesso") {
                         AlertDialog.Builder(this)
                             .setTitle("Remover acesso à equipa?")
@@ -2371,9 +2678,89 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun showStaffPermissionsDialog(userId: String, email: String) {
+        if (backendToken().isBlank() ||
+            backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") {
+            Toast.makeText(this, "Só o proprietário pode gerir permissões.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        runBackend({
+            SupabaseApi.getRestaurantStaffPermissions(backendToken(), userId).toString()
+        }) { raw ->
+            val current = StaffPermissionSet.fromJson(JSONArray(raw))
+            val options = listOf(
+                "orders" to "Pedidos e cozinha",
+                "tables" to "Mesas",
+                "reservations" to "Reservas",
+                "menu" to "Carta",
+                "inventory" to "Stock e inventário",
+                "loyalty" to "Fidelização operacional"
+            )
+            val checks = linkedMapOf<String, android.widget.CheckBox>()
+            val content = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(18), dp(8), dp(18), dp(8))
+            }
+            content.addView(label(
+                "Escolhe as áreas operacionais a que $email pode aceder. O servidor confirma todas as alterações.",
+                12f, false, muted
+            ))
+            addGap(content, 8)
+            for ((key, title) in options) {
+                val check = android.widget.CheckBox(this).apply {
+                    text = title
+                    textSize = 14f
+                    setTextColor(ink)
+                    isChecked = key in current
+                    minHeight = dp(48)
+                    contentDescription = "Permissão: $title"
+                }
+                checks[key] = check
+                content.addView(check, LinearLayout.LayoutParams(-1, dp(48)))
+            }
+            val warning = makeCard(10, copperPale)
+            warning.addView(label(
+                "Gerir a equipa e códigos, alterar recompensas, consultar ferramentas económicas e eliminar o restaurante continuam a ser ações exclusivas do proprietário.",
+                11.5f, false, ink
+            ))
+            addGap(content, 8)
+            content.addView(warning, cardParams())
+
+            val scroll = ScrollView(this).apply { addView(content) }
+            val dialog = AlertDialog.Builder(this)
+                .setTitle("Permissões do funcionário")
+                .setView(scroll)
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Guardar", null)
+                .create()
+            dialog.setOnShowListener {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                    val selected = checks.filterValues { it.isChecked }.keys.toSet()
+                    runBackend({
+                        SupabaseApi.setRestaurantStaffPermissions(backendToken(), userId, selected)
+                        val confirmed = StaffPermissionSet.fromJson(
+                            SupabaseApi.getRestaurantStaffPermissions(backendToken(), userId)
+                        )
+                        if (confirmed != selected) {
+                            throw IllegalStateException("O servidor não confirmou todas as permissões selecionadas.")
+                        }
+                        "OK"
+                    }) {
+                        dialog.dismiss()
+                        Toast.makeText(this, "Permissões atualizadas no servidor.", Toast.LENGTH_LONG).show()
+                        renderApp()
+                    }
+                }
+            }
+            dialog.show()
+            dialog.window?.setLayout(-1, dp(620))
+        }
+    }
+
     private fun showStaffJoinCode() {
         val role = backendPrefs.getString("restaurant_role", "") ?: ""
-        if (role != "owner") {
+        if (!StaffPermissionSet.canManageRestaurantCodes(role)) {
             AlertDialog.Builder(this)
                 .setTitle("Código não disponível")
                 .setMessage("Só o proprietário pode consultar o código de acesso à equipa.")
@@ -2398,6 +2785,14 @@ class MainActivity : Activity() {
     }
 
     private fun confirmCodeRotation(staffCode: Boolean) {
+        if (!StaffPermissionSet.canManageRestaurantCodes(backendPrefs.getString("restaurant_role", ""))) {
+            AlertDialog.Builder(this)
+                .setTitle("Acesso reservado")
+                .setMessage("Só o proprietário pode renovar códigos de adesão.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
         val title = if (staffCode) "Renovar código da equipa?" else "Renovar código dos clientes?"
         val message = if (staffCode) {
             "O código atual deixa de aceitar novas adesões da equipa. Os funcionários já associados mantêm o acesso."
@@ -2527,9 +2922,12 @@ class MainActivity : Activity() {
             } else {
                 card.addView(label("Esta conta está associada à equipa deste restaurante. As alterações operacionais são guardadas no servidor.", 12f, false, ink))
             }
-            addGap(card, 12)
-            card.addView(primaryButton("Atualizar lista de clientes") { refreshRemoteCustomers() },
-                LinearLayout.LayoutParams(-1, dp(48)))
+            val canAccessLoyalty = role == "owner" || "loyalty" in currentStaffPermissions.orEmpty()
+            if (canAccessLoyalty) {
+                addGap(card, 12)
+                card.addView(primaryButton("Atualizar lista de clientes") { refreshRemoteCustomers() },
+                    LinearLayout.LayoutParams(-1, dp(48)))
+            }
         }
         container.addView(card, cardParams())
         addGap(container, 3)
@@ -2561,8 +2959,18 @@ class MainActivity : Activity() {
                 .remove("remote_inventory_json").remove("inventory_loaded")
                 .remove("remote_reservations_json").remove("reservations_loaded")
                 .apply()
+            currentStaffPermissions = null
+            staffPermissionRefreshInFlight = false
+            kitchenOrdersCache = null
+            kitchenQueueUpdatedAtMillis = 0L
+            kitchenQueueRefreshFailed = false
             reservationCache = JSONArray()
             reservationsLoaded = false
+            customerReservationsCache = JSONArray()
+            customerReservationsLoaded = false
+            customerReservationsAccountScope = ""
+            customerReservationsMemberScope = ""
+            customerReservationsRefreshInFlight = false
             renderApp()
         }, LinearLayout.LayoutParams(-1, dp(48)))
         addGap(container, 10)
@@ -2687,7 +3095,23 @@ class MainActivity : Activity() {
     }
 
     private fun showRestaurantJoinCode() {
-        val code = backendPrefs.getString("join_code", "") ?: ""
+        if (!StaffPermissionSet.canManageRestaurantCodes(backendPrefs.getString("restaurant_role", ""))) {
+            AlertDialog.Builder(this)
+                .setTitle("Acesso reservado")
+                .setMessage("Só o proprietário pode consultar o código de adesão dos clientes.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        val code = backendPrefs.getString("join_code", "")?.trim().orEmpty()
+        if (code.isBlank()) {
+            AlertDialog.Builder(this)
+                .setTitle("Código indisponível")
+                .setMessage("Não foi possível obter o código de adesão. Atualiza a conta do restaurante e tenta novamente.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
         AlertDialog.Builder(this)
             .setTitle("Código de adesão")
             .setMessage("Código: $code\n\nO cliente deve abrir a aplicação «StudioMesa - Cliente», criar conta ou iniciar sessão e escolher «Associar ao restaurante».")
@@ -2707,8 +3131,10 @@ class MainActivity : Activity() {
         container.addView(notice, cardParams())
         if (remoteMode) {
             container.addView(primaryButton("Atualizar clientes do servidor") { refreshRemoteCustomers() }, LinearLayout.LayoutParams(-1, dp(48)))
-            addGap(container, 6)
-            container.addView(secondaryButton("Ver código de adesão") { showRestaurantJoinCode() }, LinearLayout.LayoutParams(-1, dp(48)))
+            if (StaffPermissionSet.canManageRestaurantCodes(backendPrefs.getString("restaurant_role", ""))) {
+                addGap(container, 6)
+                container.addView(secondaryButton("Ver código de adesão") { showRestaurantJoinCode() }, LinearLayout.LayoutParams(-1, dp(48)))
+            }
         } else {
             container.addView(primaryButton("+  Adicionar cliente (local)") { showAddCustomerDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
         }
@@ -3186,7 +3612,7 @@ class MainActivity : Activity() {
     }
 
     private fun renderCustomerApp() {
-        if (activeCustomerPage !in setOf("Cartão", "Prémios", "Carta", "Conta")) activeCustomerPage = "Cartão"
+        if (activeCustomerPage !in setOf("Cartão", "Prémios", "Reservas", "Carta", "Conta")) activeCustomerPage = "Cartão"
         appRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(paper)
@@ -3195,27 +3621,54 @@ class MainActivity : Activity() {
 
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(15), dp(18), dp(15))
+            setPadding(dp(18), dp(17), dp(18), dp(17))
             background = GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
                 intArrayOf(forestDeep, forest, forestSoft)
-            ).apply { cornerRadius = dp(22).toFloat() }
+            ).apply { cornerRadius = dp(24).toFloat() }
         }
-        header.addView(label(displayCustomerRestaurantName(), 23f, true, white).apply {
+        val brandRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        brandRow.addView(TextView(this).apply {
+            text = "SM"
+            textSize = 15f
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setTextColor(forestDeep)
+            background = rounded(copper, 14)
+        }, LinearLayout.LayoutParams(dp(42), dp(42)))
+        val brandText = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(11), 0, 0, 0)
+        }
+        brandText.addView(label(displayCustomerRestaurantName(), 20f, true, white).apply {
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
         })
-        addGap(header, 4)
-        header.addView(label("Cartão digital de cliente · " + planTitle, 10.5f, true, copperPale))
-        addGap(header, 9)
-        header.addView(label("A tua experiência, num só lugar.", 16f, true, white))
+        brandText.addView(label("STUDIOMESA  /  CLIENTE", 9f, true, copperPale).apply {
+            letterSpacing = 0.09f
+        })
+        brandRow.addView(brandText, LinearLayout.LayoutParams(0, -2, 1f))
+        brandRow.addView(label(planTitle, 9f, true, forestDeep).apply {
+            setPadding(dp(9), dp(7), dp(9), dp(7))
+            background = rounded(copper, 10)
+        })
+        header.addView(brandRow)
+        addGap(header, 15)
+        header.addView(View(this).apply { setBackgroundColor(Color.argb(70, 255, 255, 255)) },
+            LinearLayout.LayoutParams(-1, dp(1)))
+        addGap(header, 11)
+        header.addView(label("A tua experiência, num só lugar.", 17f, true, white))
+        addGap(header, 3)
         header.addView(label(
-            if (backendMemberId().isBlank()) "Consulta a carta e acompanha os teus pontos."
-            else "O teu cartão de fidelização.",
-            12f, false, copperPale
+            if (backendMemberId().isBlank()) "Cartão digital de cliente · associa-te ao restaurante para acompanhar os pontos."
+            else "Cartão de fidelização e serviços do restaurante.",
+            12f, false, Color.rgb(229, 235, 228)
         ))
         appRoot.addView(header, LinearLayout.LayoutParams(-1, -2).apply {
-            setMargins(dp(12), dp(8), dp(12), dp(4))
+            setMargins(dp(12), dp(8), dp(12), dp(5))
         })
 
         val scroll = ScrollView(this).apply {
@@ -3225,11 +3678,12 @@ class MainActivity : Activity() {
         }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(14), dp(16), dp(18))
+            setPadding(dp(16), dp(15), dp(16), dp(20))
         }
         when (activeCustomerPage) {
             "Cartão" -> renderCustomerLoyaltyPage(content)
             "Prémios" -> renderCustomerRewardsPage(content)
+            "Reservas" -> renderCustomerReservationsPage(content)
             "Carta" -> renderCustomerMenuPage(content)
             "Conta" -> renderCustomerAccountPage(content)
         }
@@ -3239,17 +3693,17 @@ class MainActivity : Activity() {
         val nav = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(6), dp(4), dp(6), dp(4))
-            setBackgroundColor(white)
-            elevation = dp(6).toFloat()
+            setPadding(dp(5), dp(5), dp(5), dp(5))
+            background = cardSurface(white, 19)
+            elevation = dp(7).toFloat()
         }
-        listOf("Cartão", "Prémios", "Carta", "Conta").forEach { page ->
+        listOf("Cartão", "Prémios", "Reservas", "Carta", "Conta").forEach { page ->
             val selected = activeCustomerPage == page
             val item = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setPadding(dp(3), dp(3), dp(3), dp(3))
-                background = rippleBackground(if (selected) paleGreen else white, 12)
+                setPadding(dp(3), dp(4), dp(3), dp(4))
+                background = rounded(if (selected) copperPale else white, 12)
                 contentDescription = "Abrir secção " + page
                 isClickable = true
                 isFocusable = true
@@ -3265,6 +3719,9 @@ class MainActivity : Activity() {
                         backendPrefs.contains("customer_loyalty_redemptions_json")) {
                         refreshCustomerRewards()
                     }
+                    if (page == "Reservas" && backendToken().isNotBlank() && backendMemberId().isNotBlank()) {
+                        refreshCustomerReservations()
+                    }
                 }
             }
             item.addView(TextView(this).apply {
@@ -3278,11 +3735,20 @@ class MainActivity : Activity() {
                 maxLines = 1
             })
             nav.addView(item, LinearLayout.LayoutParams(0, dp(52), 1f).apply {
-                setMargins(dp(3), 0, dp(3), 0)
+                setMargins(dp(2), 0, dp(2), 0)
             })
         }
-        appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(60)))
+        appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(66)).apply {
+            setMargins(dp(12), dp(3), dp(12), dp(8))
+        })
         setContentView(appRoot)
+        if (activeCustomerPage == "Reservas" &&
+            backendToken().isNotBlank() &&
+            backendMemberId().isNotBlank() &&
+            !customerReservationsLoaded &&
+            customerReservationsError.isBlank()) {
+            refreshCustomerReservations()
+        }
         if (activeCustomerPage == "Prémios" &&
             backendToken().isNotBlank() &&
             backendMemberId().isNotBlank() &&
@@ -3333,6 +3799,406 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(-1, dp(48)))
     }
 
+
+    private fun customerReservationScopeMatches(): Boolean =
+        LoyaltySessionScope.matches(
+            customerReservationsAccountScope,
+            backendPrefs.getString("user_id", "").orEmpty(),
+            customerReservationsMemberScope,
+            backendMemberId()
+        )
+
+    private fun formatCustomerReservationDate(raw: String): String {
+        val patterns = listOf(
+            "yyyy-MM-dd'T'HH:mm:ssXXX",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXX",
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"
+        )
+        for (pattern in patterns) {
+            val parsed = runCatching {
+                SimpleDateFormat(pattern, Locale.ROOT).parse(raw)
+            }.getOrNull()
+            if (parsed != null) {
+                return SimpleDateFormat("dd/MM/yyyy 'às' HH:mm", Locale("pt", "PT")).format(parsed)
+            }
+        }
+        return raw.replace("T", " ").take(19)
+    }
+
+    private fun refreshCustomerReservations() {
+        val token = backendToken()
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        val memberId = backendMemberId()
+        if (token.isBlank() || accountId.isBlank()) {
+            showAuthChooser { renderCustomerApp() }
+            return
+        }
+        if (memberId.isBlank()) {
+            showCustomerJoinDialog()
+            return
+        }
+        if (customerReservationsRefreshInFlight) return
+        customerReservationsRefreshInFlight = true
+        customerReservationsError = ""
+
+        runBackend({
+            if (!LoyaltySessionScope.matches(
+                    accountId,
+                    backendPrefs.getString("user_id", "").orEmpty(),
+                    memberId,
+                    backendMemberId()
+                )) {
+                throw IllegalStateException("A conta ou o cartão mudou. Inicia a atualização novamente.")
+            }
+            val rows = SupabaseApi.listMyCustomerReservations(backendToken())
+            if (!LoyaltySessionScope.matches(
+                    accountId,
+                    backendPrefs.getString("user_id", "").orEmpty(),
+                    memberId,
+                    backendMemberId()
+                )) {
+                throw IllegalStateException("A conta ou o cartão mudou durante a atualização das reservas.")
+            }
+            customerReservationsCache = rows
+            customerReservationsAccountScope = accountId
+            customerReservationsMemberScope = memberId
+            customerReservationsLoaded = true
+            customerReservationsError = ""
+            "OK"
+        }, onError = { error ->
+            customerReservationsRefreshInFlight = false
+            customerReservationsError = friendlyBackendError(error.message)
+            if (activeCustomerPage == "Reservas") renderCustomerApp()
+            AlertDialog.Builder(this)
+                .setTitle("Não foi possível atualizar")
+                .setMessage(customerReservationsError)
+                .setPositiveButton("OK", null)
+                .show()
+        }) {
+            customerReservationsRefreshInFlight = false
+            if (activeCustomerPage == "Reservas" && customerReservationScopeMatches()) {
+                renderCustomerApp()
+            }
+            Toast.makeText(this, "Reservas atualizadas.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun renderCustomerReservationsPage(container: LinearLayout) {
+        container.addView(label("As minhas reservas", 25f, true, forestDeep))
+        addGap(container, 4)
+        container.addView(label(
+            "Pede uma mesa e acompanha a resposta do restaurante.",
+            13f, false, muted
+        ))
+        addGap(container, 11)
+
+        when {
+            backendToken().isBlank() -> {
+                container.addView(primaryButton("Criar conta / iniciar sessão") {
+                    showAuthChooser { renderCustomerApp() }
+                }, LinearLayout.LayoutParams(-1, dp(48)))
+                return
+            }
+            backendMemberId().isBlank() -> {
+                container.addView(primaryButton("Associar ao restaurante") {
+                    showCustomerJoinDialog()
+                }, LinearLayout.LayoutParams(-1, dp(48)))
+                return
+            }
+        }
+
+        container.addView(primaryButton("+  Pedir uma reserva") {
+            showCustomerReservationRequestDialog()
+        }, LinearLayout.LayoutParams(-1, dp(48)))
+        addGap(container, 6)
+        container.addView(secondaryButton("Atualizar reservas") {
+            refreshCustomerReservations()
+        }, LinearLayout.LayoutParams(-1, dp(44)))
+        addGap(container, 10)
+
+        if (!customerReservationScopeMatches()) {
+            customerReservationsCache = JSONArray()
+            customerReservationsLoaded = false
+        }
+        if (!customerReservationsLoaded) {
+            container.addView(emptyCard(
+                if (customerReservationsRefreshInFlight) "A consultar as tuas reservas…"
+                else customerReservationsError.ifBlank { "Ainda não consultaste as tuas reservas." }
+            ))
+            return
+        }
+
+        if (customerReservationsCache.length() == 0) {
+            container.addView(emptyCard("Ainda não tens reservas. Quando pedires uma, aparece aqui o estado do pedido."))
+            return
+        }
+
+        for (index in 0 until customerReservationsCache.length()) {
+            val row = customerReservationsCache.optJSONObject(index) ?: continue
+            val reservationId = row.optString("reservation_id")
+            val status = row.optString("status", "Pendente")
+            val card = makeCard(14)
+            card.addView(label(formatCustomerReservationDate(row.optString("reservation_at")), 15f, true, forestDeep))
+            addGap(card, 5)
+            card.addView(label(
+                row.optInt("party_size", 0).toString() +
+                    if (row.optInt("party_size", 0) == 1) " pessoa" else " pessoas",
+                12f, false, ink
+            ))
+            val tableNumber = if (row.isNull("table_number")) 0 else row.optInt("table_number", 0)
+            if (tableNumber > 0) {
+                card.addView(label("Mesa atribuída: $tableNumber", 11.5f, true, forestSoft))
+            }
+            addGap(card, 5)
+            val statusColor = when (status) {
+                "Confirmada" -> green
+                "Cancelada", "Não compareceu" -> red
+                "Concluída" -> forestSoft
+                else -> copper
+            }
+            card.addView(label("Estado: $status", 12f, true, statusColor))
+            val notes = row.optString("notes").trim()
+            if (notes.isNotBlank()) {
+                addGap(card, 4)
+                card.addView(label("Nota: $notes", 11f, false, muted))
+            }
+            if (status in setOf("Pendente", "Confirmada") && reservationId.isNotBlank()) {
+                addGap(card, 8)
+                card.addView(secondaryButton("Cancelar pedido") {
+                    AlertDialog.Builder(this)
+                        .setTitle("Cancelar reserva?")
+                        .setMessage("A reserva será marcada como cancelada. O restaurante deixará de a tratar como ativa.")
+                        .setNegativeButton("Manter reserva", null)
+                        .setPositiveButton("Cancelar reserva") { _, _ ->
+                            cancelCustomerReservation(reservationId)
+                        }
+                        .show()
+                }, LinearLayout.LayoutParams(-1, dp(42)))
+            }
+            container.addView(card, cardParams())
+        }
+    }
+
+    private fun showCustomerReservationRequestDialog() {
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        val memberId = backendMemberId()
+        val sessionToken = backendToken()
+        if (accountId.isBlank() || memberId.isBlank() || sessionToken.isBlank()) {
+            AlertDialog.Builder(this)
+                .setMessage("Inicia sessão e associa o teu cartão ao restaurante antes de pedir uma reserva.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+
+        val calendar = Calendar.getInstance().apply {
+            add(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.HOUR_OF_DAY, 19)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(10), dp(22), dp(4))
+        }
+        form.addView(label("Nome", 10f, true, forestSoft))
+        val nameField = inputField("Nome para a reserva", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS)
+        nameField.setText(store.getCustomerProfileName())
+        form.addView(nameField, fieldParams())
+        addGap(form, 7)
+        form.addView(label("Telefone (opcional)", 10f, true, forestSoft))
+        val phoneField = inputField("Contacto telefónico", InputType.TYPE_CLASS_PHONE)
+        form.addView(phoneField, fieldParams())
+        addGap(form, 7)
+        form.addView(label("Número de pessoas", 10f, true, forestSoft))
+        val partySpinner = Spinner(this)
+        partySpinner.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            (1..12).map { if (it == 1) "1 pessoa" else "$it pessoas" }
+        )
+        partySpinner.setSelection(1)
+        form.addView(partySpinner, LinearLayout.LayoutParams(-1, dp(48)))
+        addGap(form, 7)
+
+        fun formatDate(): String = SimpleDateFormat("EEEE, d 'de' MMMM yyyy", Locale("pt", "PT"))
+            .format(calendar.time)
+        fun formatTime(): String = SimpleDateFormat("HH:mm", Locale.ROOT).format(calendar.time)
+
+        val dateButton = secondaryButton(
+            formatDate().replaceFirstChar { it.uppercase(Locale("pt", "PT")) }
+        ) { }
+        dateButton.setOnClickListener {
+            DatePickerDialog(
+                this,
+                { _, year, month, day ->
+                    calendar.set(Calendar.YEAR, year)
+                    calendar.set(Calendar.MONTH, month)
+                    calendar.set(Calendar.DAY_OF_MONTH, day)
+                    dateButtonLabel(dateButton, formatDate())
+                },
+                calendar.get(Calendar.YEAR),
+                calendar.get(Calendar.MONTH),
+                calendar.get(Calendar.DAY_OF_MONTH)
+            ).show()
+        }
+        form.addView(label("Data", 10f, true, forestSoft))
+        form.addView(dateButton, LinearLayout.LayoutParams(-1, dp(44)))
+        addGap(form, 6)
+        val timeButton = secondaryButton("Hora: " + formatTime()) { }
+        timeButton.setOnClickListener {
+            TimePickerDialog(
+                this,
+                { _, hour, minute ->
+                    calendar.set(Calendar.HOUR_OF_DAY, hour)
+                    calendar.set(Calendar.MINUTE, minute)
+                    calendar.set(Calendar.SECOND, 0)
+                    calendar.set(Calendar.MILLISECOND, 0)
+                    timeButton.text = "Hora: " + formatTime()
+                },
+                calendar.get(Calendar.HOUR_OF_DAY),
+                calendar.get(Calendar.MINUTE),
+                true
+            ).show()
+        }
+        form.addView(label("Hora", 10f, true, forestSoft))
+        form.addView(timeButton, LinearLayout.LayoutParams(-1, dp(44)))
+        addGap(form, 7)
+        form.addView(label("Notas para o restaurante (opcional)", 10f, true, forestSoft))
+        val notesField = inputField(
+            "Ex.: cadeira de bebé, ocasião especial…",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+        )
+        notesField.minLines = 2
+        notesField.maxLines = 3
+        form.addView(notesField, fieldParams())
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Pedir uma reserva")
+            .setView(form)
+            .setNegativeButton("Fechar", null)
+            .setPositiveButton("Enviar pedido", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val guestName = nameField.text.toString().trim()
+                val guestPhone = phoneField.text.toString().trim()
+                val notes = notesField.text.toString().trim()
+                val partySize = partySpinner.selectedItemPosition + 1
+                val reservationAt = SimpleDateFormat(
+                    "yyyy-MM-dd'T'HH:mm:ssXXX",
+                    Locale.ROOT
+                ).format(calendar.time)
+                when {
+                    guestName.isBlank() || guestName.length > 100 -> nameField.error = "Indica um nome válido"
+                    guestPhone.length > 40 -> phoneField.error = "O telefone é demasiado longo"
+                    notes.length > 1000 -> notesField.error = "As notas são demasiado longas"
+                    calendar.timeInMillis <= System.currentTimeMillis() -> {
+                        AlertDialog.Builder(this)
+                            .setMessage("Escolhe uma data e hora futuras.")
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
+                    else -> {
+                        val signature = JSONObject()
+                            .put("member_id", memberId)
+                            .put("guest_name", guestName)
+                            .put("guest_phone", guestPhone)
+                            .put("party_size", partySize)
+                            .put("reservation_at", reservationAt)
+                            .put("duration_minutes", 90)
+                            .put("notes", notes)
+                            .toString()
+                        val operation = "customer_reservation"
+                        val requestId = try {
+                            pendingRequestIds.getOrCreate(operation, accountId, signature)
+                        } catch (error: Exception) {
+                            AlertDialog.Builder(this)
+                                .setMessage(error.message ?: "Não foi possível preparar o pedido.")
+                                .setPositiveButton("OK", null)
+                                .show()
+                            return@setOnClickListener
+                        }
+
+                        runBackend({
+                            if (!LoyaltySessionScope.matches(
+                                    accountId,
+                                    backendPrefs.getString("user_id", "").orEmpty(),
+                                    memberId,
+                                    backendMemberId()
+                                )) {
+                                throw IllegalStateException("A conta ou o cartão mudou. Inicia novamente o pedido.")
+                            }
+                            val result = SupabaseApi.createCustomerReservationRequest(
+                                backendToken(), requestId, guestName, guestPhone,
+                                partySize, reservationAt, 90, notes
+                            )
+                            if (!LoyaltySessionScope.matches(
+                                    accountId,
+                                    backendPrefs.getString("user_id", "").orEmpty(),
+                                    memberId,
+                                    backendMemberId()
+                                )) {
+                                throw IllegalStateException("O pedido foi processado, mas a conta mudou. Atualiza as reservas da conta correta.")
+                            }
+                            pendingRequestIds.complete(operation, accountId, signature, requestId)
+                            customerReservationsLoaded = false
+                            result.optString("status", "Pendente")
+                        }) {
+                            dialog.dismiss()
+                            Toast.makeText(this, "Pedido de reserva enviado.", Toast.LENGTH_LONG).show()
+                            activeCustomerPage = "Reservas"
+                            refreshCustomerReservations()
+                        }
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun dateButtonLabel(button: Button, rawDate: String) {
+        button.text = rawDate.replaceFirstChar { it.uppercase(Locale("pt", "PT")) }
+    }
+
+    private fun cancelCustomerReservation(reservationId: String) {
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        val memberId = backendMemberId()
+        if (accountId.isBlank() || memberId.isBlank() || backendToken().isBlank()) return
+        runBackend({
+            if (!LoyaltySessionScope.matches(
+                    accountId,
+                    backendPrefs.getString("user_id", "").orEmpty(),
+                    memberId,
+                    backendMemberId()
+                )) {
+                throw IllegalStateException("A conta ou o cartão mudou. Atualiza novamente.")
+            }
+            // runBackend refreshes an expiring session before this task, so read the
+            // current token only after verifying that it still belongs to this account.
+            val requestToken = backendToken()
+            if (requestToken.isBlank()) {
+                throw IllegalStateException("A sessão expirou. Inicia novamente para cancelar a reserva.")
+            }
+            SupabaseApi.cancelMyCustomerReservation(requestToken, reservationId)
+            if (!LoyaltySessionScope.matches(
+                    accountId,
+                    backendPrefs.getString("user_id", "").orEmpty(),
+                    memberId,
+                    backendMemberId()
+                )) {
+                throw IllegalStateException(
+                    "O cancelamento foi concluído na sessão que o iniciou, mas a conta atual mudou. Atualiza as reservas da conta atual."
+                )
+            }
+            customerReservationsLoaded = false
+            "OK"
+        }) {
+            Toast.makeText(this, "Reserva cancelada.", Toast.LENGTH_SHORT).show()
+            refreshCustomerReservations()
+        }
+    }
 
     private fun cachedCustomerRewards(): List<LoyaltyReward> {
         val cachedMemberId = backendPrefs.getString("customer_loyalty_cache_member_id", null)
@@ -4249,6 +5115,12 @@ class MainActivity : Activity() {
             val notes = reservation.optString("notes").trim()
             if (notes.isNotBlank()) card.addView(label("Notas: $notes", 11.5f, false, muted))
             addGap(card, 10)
+            if (status == "Pendente" && tableNo <= 0) {
+                card.addView(secondaryButton("Atribuir mesa") {
+                    showAssignReservationTableDialog(id, reservation.optInt("party_size", 1))
+                }, LinearLayout.LayoutParams(-1, dp(44)))
+                addGap(card, 5)
+            }
             when (status) {
                 "Pendente" -> card.addView(primaryButton("Confirmar reserva") {
                     setReservationStatus(id, "Confirmada")
@@ -4275,6 +5147,62 @@ class MainActivity : Activity() {
                 }, LinearLayout.LayoutParams(-1, dp(48)))
             }
             container.addView(card, cardParams())
+        }
+    }
+
+    private fun showAssignReservationTableDialog(reservationId: String, partySize: Int) {
+        if (!hasRemoteRestaurant()) return
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        val restaurantId = backendRestaurantId()
+        var eligibleTables = emptyList<JSONObject>()
+
+        runBackend({
+            if (accountId.isBlank() || restaurantId.isBlank() ||
+                backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                backendRestaurantId() != restaurantId) {
+                throw IllegalStateException("A conta ou o restaurante mudou. Atualiza as reservas.")
+            }
+            val rows = SupabaseApi.listTables(backendToken(), restaurantId)
+            eligibleTables = (0 until rows.length())
+                .mapNotNull { rows.optJSONObject(it) }
+                .filter { it.optInt("seats", 0) >= partySize }
+                .sortedBy { it.optInt("table_number", 0) }
+            if (eligibleTables.isEmpty()) {
+                throw IllegalStateException("Não existem mesas com capacidade para $partySize pessoa(s). Adiciona ou configura uma mesa.")
+            }
+            "OK"
+        }) {
+            val labels = eligibleTables.map { table ->
+                val number = table.optInt("table_number")
+                val area = table.optString("area").ifBlank { "Sala principal" }
+                val seats = table.optInt("seats", 0)
+                "Mesa $number · $area · $seats lugares"
+            }.toTypedArray()
+
+            AlertDialog.Builder(this)
+                .setTitle("Atribuir mesa")
+                .setItems(labels) { _, which ->
+                    val tableNumber = eligibleTables.getOrNull(which)?.optInt("table_number", 0) ?: 0
+                    if (tableNumber !in 1..100) return@setItems
+                    runBackend({
+                        if (backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                            backendRestaurantId() != restaurantId) {
+                            throw IllegalStateException("A conta ou o restaurante mudou. Atualiza as reservas.")
+                        }
+                        SupabaseApi.assignReservationTable(
+                            backendToken(), reservationId, tableNumber
+                        )
+                        val latest = SupabaseApi.listReservations(backendToken(), restaurantId)
+                        reservationCache = latest
+                        reservationsLoaded = true
+                        "OK"
+                    }) {
+                        renderApp()
+                        Toast.makeText(this, "Mesa $tableNumber atribuída.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .setNegativeButton("Cancelar", null)
+                .show()
         }
     }
 
@@ -5488,95 +6416,783 @@ class MainActivity : Activity() {
         value.stripTrailingZeros().toPlainString().replace('.', ',')
 
     private fun renderAssistant(container: LinearLayout) {
-        val snapshot = assistantSnapshot()
-        pageIntro(container, "Assistente StudioMesa", "Apoio à operação com os dados que já estão disponíveis.")
+        pageIntro(
+            container,
+            "Assistente StudioMesa",
+            "Conversa, pesquisa e apoio à gestão financeira do restaurante."
+        )
         addGap(container, 8)
 
-        val privacyCard = makeCard(15, forest)
-        privacyCard.addView(label("ASSISTENTE LOCAL · SEM API PAGA", 10f, true, copper))
-        addGap(privacyCard, 5)
-        privacyCard.addView(label(
-            "As análises são calculadas neste dispositivo. As perguntas não são enviadas nem guardadas como histórico. Esta versão usa regras e cálculos locais, não um modelo generativo; não altera registos por ti.",
-            12.5f, false, white
+        if (!hasRemoteRestaurant()) {
+            val demo = makeCard(16, forestDeep)
+            demo.addView(label("ASSISTENTE EM MODO DE DEMONSTRAÇÃO", 10f, true, copper))
+            addGap(demo, 7)
+            demo.addView(label(
+                "Liga uma conta de proprietário e configura o serviço de IA para ativar conversas, histórico, pesquisa na Internet e arquivo privado de faturas. As ferramentas locais continuam disponíveis abaixo.",
+                12.5f, false, white
+            ))
+            container.addView(demo, cardParams())
+            renderAssistantLocalTools(container)
+            return
+        }
+
+        if (backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") {
+            container.addView(emptyCard(
+                "O Assistente e o Gestor Financeiro estão reservados ao proprietário do restaurante. Esta conta não recebe nem consulta conversas ou documentos financeiros."
+            ), cardParams())
+            return
+        }
+
+        val scope = backendRestaurantId() + ":" + backendPrefs.getString("user_id", "").orEmpty()
+        if (assistantWorkspaceScope.isNotBlank() && assistantWorkspaceScope != scope) {
+            clearAssistantWorkspace()
+        }
+        if (!assistantWorkspaceLoaded && !assistantWorkspaceLoading) {
+            refreshAssistantWorkspace()
+        }
+
+        val intro = makeCard(15, forestDeep)
+        val introRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        introRow.addView(statusDot(Color.rgb(120, 194, 153)),
+            LinearLayout.LayoutParams(dp(8), dp(8)).apply { setMargins(0, 0, dp(8), 0) })
+        introRow.addView(label("STUDIOMESA INTELLIGENCE", 9.5f, true, copperPale))
+        intro.addView(introRow)
+        addGap(intro, 6)
+        intro.addView(label("O teu consultor de negócio.", 21f, true, white))
+        addGap(intro, 4)
+        intro.addView(label(
+            "Pergunta sobre margens, compras, desperdício, clientes, tendências e estratégia. A pesquisa na Internet e a leitura de faturas são opcionais.",
+            12f, false, Color.rgb(229, 235, 228)
         ))
-        container.addView(privacyCard, cardParams())
+        container.addView(intro, cardParams())
 
-        addGap(container, 9)
+        if (assistantWorkspaceLoading) {
+            container.addView(emptyCard("A carregar o histórico e o arquivo privado do restaurante…"), cardParams())
+            return
+        }
+        if (!assistantWorkspaceLoaded) {
+            container.addView(emptyCard(
+                assistantWorkspaceError.ifBlank {
+                    "Não foi possível carregar o espaço do assistente. Verifica a ligação e tenta atualizar."
+                }
+            ), cardParams())
+            container.addView(secondaryButton("Tentar novamente") {
+                refreshAssistantWorkspace(force = true)
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+            return
+        }
+
+        sectionHeading(container, "Histórico de conversas", "As conversas ficam guardadas na conta deste restaurante.")
+        val historySearch = inputField("Pesquisar conversas e mensagens", InputType.TYPE_CLASS_TEXT).apply {
+            setText(assistantHistoryQuery)
+            setSelection(text.length)
+        }
+        val historyRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        historyRow.addView(historySearch, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
+            setMargins(0, 0, dp(6), 0)
+        })
+        historyRow.addView(secondaryButton("Pesquisar") {
+            assistantHistoryQuery = historySearch.text.toString().trim().take(100)
+            refreshAssistantHistory()
+        }, LinearLayout.LayoutParams(dp(104), dp(44)))
+        container.addView(historyRow)
+        addGap(container, 7)
+        container.addView(primaryButton("+ Nova conversa") {
+            createAssistantConversation()
+        }, LinearLayout.LayoutParams(-1, dp(46)))
+        addGap(container, 7)
+
+        if (assistantConversations.length() == 0) {
+            container.addView(emptyCard(
+                if (assistantHistoryQuery.isBlank())
+                    "Ainda não existem conversas. Começa uma nova conversa para guardar perguntas, respostas e fontes."
+                else
+                    "Não encontrei conversas ou mensagens com esse termo."
+            ), cardParams())
+        } else {
+            val visibleCount = minOf(assistantConversations.length(), 12)
+            for (index in 0 until visibleCount) {
+                val conversation = assistantConversations.optJSONObject(index) ?: continue
+                val id = conversation.optString("conversation_id")
+                val title = conversation.optString("title", "Conversa")
+                val preview = conversation.optString("last_message_preview")
+                val selected = id == assistantCurrentConversationId
+                val item = makeCard(12, if (selected) copperPale else white)
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                val text = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                text.addView(label(title, 14f, true, forestDeep))
+                if (preview.isNotBlank()) {
+                    addGap(text, 3)
+                    text.addView(label(preview, 11f, false, muted).apply {
+                        maxLines = 2
+                        ellipsize = android.text.TextUtils.TruncateAt.END
+                    })
+                }
+                row.addView(text, LinearLayout.LayoutParams(0, -2, 1f))
+                row.addView(label(if (selected) "●" else "›", 17f, true, if (selected) forest else copper))
+                item.addView(row)
+                item.isClickable = true
+                item.isFocusable = true
+                item.contentDescription = "Abrir conversa " + title
+                item.setOnClickListener {
+                    if (id.isNotBlank() && id != assistantCurrentConversationId) openAssistantConversation(id)
+                }
+                container.addView(item, cardParams())
+            }
+        }
+
+        addGap(container, 5)
+        sectionHeading(container, "Conversa", "As respostas e as fontes ficam guardadas no histórico.")
+        if (assistantCurrentConversationId.isBlank()) {
+            container.addView(emptyCard("Escolhe uma conversa do histórico ou carrega em «Nova conversa»."), cardParams())
+        } else {
+            val current = (0 until assistantConversations.length())
+                .mapNotNull { assistantConversations.optJSONObject(it) }
+                .firstOrNull { it.optString("conversation_id") == assistantCurrentConversationId }
+            val conversationHeader = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            conversationHeader.addView(label(
+                current?.optString("title").orEmpty().ifBlank { "Nova conversa" },
+                15f, true, forestDeep
+            ), LinearLayout.LayoutParams(0, -2, 1f))
+            conversationHeader.addView(secondaryButton("Eliminar") {
+                confirmDeleteAssistantConversation()
+            }, LinearLayout.LayoutParams(dp(92), dp(40)))
+            container.addView(conversationHeader)
+            addGap(container, 7)
+
+            if (assistantMessagesLoading) {
+                container.addView(emptyCard("A carregar as mensagens…"), cardParams())
+            } else if (assistantMessages.length() == 0) {
+                container.addView(emptyCard("Escreve a primeira pergunta. O histórico será guardado nesta conta."), cardParams())
+            } else {
+                renderAssistantMessages(container)
+            }
+
+            addGap(container, 8)
+            val composer = makeCard(13)
+            composer.addView(label("A TUA PERGUNTA", 9.5f, true, forestSoft))
+            addGap(composer, 4)
+            val messageField = multilineInputField(
+                "Ex.: Analisa os custos e sugere três formas de aumentar a margem."
+            ).apply {
+                minLines = 3
+                maxLines = 6
+                setText(assistantDraft)
+            }
+            composer.addView(messageField, multilineFieldParams())
+
+            val optionsRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            optionsRow.addView(secondaryButton(
+                if (assistantWebSearchEnabled) "Pesquisa web: ligada" else "Pesquisa web: desligada"
+            ) {
+                assistantWebSearchEnabled = !assistantWebSearchEnabled
+                renderApp()
+            }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(0, 0, dp(5), 0) })
+            optionsRow.addView(secondaryButton(
+                "Faturas (" + assistantSelectedInvoiceIds.size + ")"
+            ) {
+                showAssistantInvoicePickerDialog()
+            }, LinearLayout.LayoutParams(0, dp(42), 1f))
+            composer.addView(optionsRow)
+            addGap(composer, 5)
+
+            val invoiceActions = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            invoiceActions.addView(secondaryButton("Adicionar fatura PDF") {
+                chooseAssistantInvoicePdf()
+            }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(0, 0, dp(5), 0) })
+            invoiceActions.addView(secondaryButton("Atualizar faturas") {
+                refreshAssistantInvoices()
+            }, LinearLayout.LayoutParams(0, dp(42), 1f))
+            composer.addView(invoiceActions)
+            if (assistantSelectedInvoiceIds.isNotEmpty()) {
+                addGap(composer, 5)
+                composer.addView(label(
+                    assistantSelectedInvoiceIds.size.toString() +
+                        " fatura(s) selecionada(s). Só serão enviadas para análise quando enviares esta pergunta.",
+                    10.5f, false, muted
+                ))
+            }
+            addGap(composer, 7)
+            composer.addView(primaryButton(if (assistantBusy) "A enviar…" else "Enviar mensagem") {
+                assistantDraft = messageField.text.toString().trim()
+                sendAssistantChatMessage()
+            }, LinearLayout.LayoutParams(-1, dp(48)))
+            container.addView(composer, cardParams())
+        }
+
+        addGap(container, 5)
+        container.addView(secondaryButton(
+            if (assistantShowLocalTools) "Ocultar gestor económico e análises locais"
+            else "Abrir gestor económico e ferramentas locais"
+        ) {
+            assistantShowLocalTools = !assistantShowLocalTools
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(46)))
+        if (assistantShowLocalTools) {
+            addGap(container, 8)
+            renderAssistantLocalTools(container)
+        }
+
+        container.addView(label(
+            "Privacidade: o chat e os PDFs pertencem a este restaurante. A pesquisa na Internet é opcional. A análise de faturas é automática e deve ser conferida antes de decisões contabilísticas ou fiscais.",
+            10.5f, false, muted
+        ))
+    }
+
+    private fun renderAssistantMessages(container: LinearLayout) {
+        val start = maxOf(0, assistantMessages.length() - 40)
+        for (index in start until assistantMessages.length()) {
+            val message = assistantMessages.optJSONObject(index) ?: continue
+            val isUser = message.optString("role") == "user"
+            val card = makeCard(13, if (isUser) paleGreen else white)
+            card.addView(label(if (isUser) "TU" else "STUDIOMESA", 9f, true, if (isUser) forest else forestSoft))
+            addGap(card, 5)
+            card.addView(label(message.optString("content"), 13f, false, ink))
+            val citations = message.optJSONArray("citations") ?: JSONArray()
+            for (citationIndex in 0 until minOf(citations.length(), 10)) {
+                val citation = citations.optJSONObject(citationIndex) ?: continue
+                val url = citation.optString("url")
+                if (!url.startsWith("https://") && !url.startsWith("http://")) continue
+                val title = citation.optString("title").ifBlank { Uri.parse(url).host.orEmpty() }
+                addGap(card, 5)
+                card.addView(secondaryButton("Fonte: " + title.take(70)) {
+                    runCatching {
+                        startActivity(android.content.Intent(
+                            android.content.Intent.ACTION_VIEW,
+                            Uri.parse(url)
+                        ))
+                    }.onFailure {
+                        Toast.makeText(this, "Não foi possível abrir a fonte.", Toast.LENGTH_SHORT).show()
+                    }
+                }, LinearLayout.LayoutParams(-1, dp(40)))
+            }
+            container.addView(card, cardParams())
+        }
+    }
+
+    private fun clearAssistantWorkspace() {
+        assistantConversations = JSONArray()
+        assistantMessages = JSONArray()
+        assistantInvoices = JSONArray()
+        assistantCurrentConversationId = ""
+        assistantSelectedInvoiceIds.clear()
+        assistantWorkspaceLoaded = false
+        assistantWorkspaceScope = ""
+        assistantWorkspaceError = ""
+        assistantHistoryQuery = ""
+    }
+
+    private fun refreshAssistantWorkspace(force: Boolean = false) {
+        if (!hasRemoteRestaurant() ||
+            backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") return
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        val restaurantId = backendRestaurantId()
+        val scope = restaurantId + ":" + accountId
+        if (assistantWorkspaceScope.isNotBlank() && assistantWorkspaceScope != scope) {
+            clearAssistantWorkspace()
+        }
+        if (assistantWorkspaceLoading || (assistantWorkspaceLoaded && !force)) return
+
+        assistantWorkspaceLoading = true
+        var loadedConversations = JSONArray()
+        var loadedInvoices = JSONArray()
+        runBackend(
+            task = {
+                if (accountId.isBlank() || restaurantId.isBlank() ||
+                    backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId) {
+                    throw IllegalStateException("A conta ou o restaurante mudou. Atualiza o assistente.")
+                }
+                val token = backendToken()
+                loadedConversations = SupabaseApi.listAssistantConversations(token, assistantHistoryQuery)
+                loadedInvoices = SupabaseApi.listAssistantInvoices(token)
+                if (backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId) {
+                    throw IllegalStateException("A conta ou o restaurante mudou durante a atualização.")
+                }
+                "OK"
+            },
+            onError = { error ->
+                assistantWorkspaceLoading = false
+                assistantWorkspaceError = friendlyBackendError(error.message)
+                renderApp()
+            },
+            onSuccess = {
+                if (backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId) {
+                    clearAssistantWorkspace()
+                    assistantWorkspaceLoading = false
+                    return@runBackend
+                }
+                assistantConversations = loadedConversations
+                assistantInvoices = loadedInvoices
+                assistantWorkspaceScope = scope
+                assistantWorkspaceLoaded = true
+                assistantWorkspaceLoading = false
+                assistantWorkspaceError = ""
+                renderApp()
+            }
+        )
+    }
+
+    private fun refreshAssistantHistory() {
+        if (!hasRemoteRestaurant() || assistantWorkspaceLoading) return
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        val restaurantId = backendRestaurantId()
+        var rows = JSONArray()
+        assistantWorkspaceLoading = true
+        runBackend(
+            task = {
+                if (backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId) {
+                    throw IllegalStateException("A conta ou o restaurante mudou.")
+                }
+                rows = SupabaseApi.listAssistantConversations(backendToken(), assistantHistoryQuery)
+                "OK"
+            },
+            onError = { error ->
+                assistantWorkspaceLoading = false
+                assistantWorkspaceError = friendlyBackendError(error.message)
+                renderApp()
+            },
+            onSuccess = {
+                assistantWorkspaceLoading = false
+                if (backendPrefs.getString("user_id", "").orEmpty() == accountId &&
+                    backendRestaurantId() == restaurantId) {
+                    assistantConversations = rows
+                    assistantWorkspaceError = ""
+                }
+                renderApp()
+            }
+        )
+    }
+
+    private fun refreshAssistantInvoices() {
+        if (!hasRemoteRestaurant() || assistantWorkspaceLoading) return
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        val restaurantId = backendRestaurantId()
+        var rows = JSONArray()
+        assistantWorkspaceLoading = true
+        runBackend(
+            task = {
+                if (backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId) {
+                    throw IllegalStateException("A conta ou o restaurante mudou.")
+                }
+                rows = SupabaseApi.listAssistantInvoices(backendToken())
+                "OK"
+            },
+            onError = { error ->
+                assistantWorkspaceLoading = false
+                assistantWorkspaceError = friendlyBackendError(error.message)
+                renderApp()
+            },
+            onSuccess = {
+                assistantWorkspaceLoading = false
+                if (backendPrefs.getString("user_id", "").orEmpty() == accountId &&
+                    backendRestaurantId() == restaurantId) {
+                    assistantInvoices = rows
+                    assistantWorkspaceError = ""
+                }
+                renderApp()
+            }
+        )
+    }
+
+    private fun createAssistantConversation() {
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        val restaurantId = backendRestaurantId()
+        var createdId = ""
+        var refreshed = JSONArray()
+        runBackend(
+            task = {
+                if (accountId.isBlank() || restaurantId.isBlank() ||
+                    backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId) {
+                    throw IllegalStateException("A conta ou o restaurante mudou.")
+                }
+                val token = backendToken()
+                val row = SupabaseApi.createAssistantConversation(token)
+                createdId = row.optString("conversation_id")
+                if (createdId.isBlank()) throw IllegalStateException("O servidor não devolveu a conversa.")
+                refreshed = SupabaseApi.listAssistantConversations(token, assistantHistoryQuery)
+                "OK"
+            },
+            onError = { error ->
+                assistantWorkspaceError = friendlyBackendError(error.message)
+                renderApp()
+            },
+            onSuccess = {
+                if (backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId) return@runBackend
+                assistantCurrentConversationId = createdId
+                assistantMessages = JSONArray()
+                assistantConversations = refreshed
+                assistantDraft = ""
+                assistantSelectedInvoiceIds.clear()
+                assistantWorkspaceError = ""
+                renderApp()
+            }
+        )
+    }
+
+    private fun openAssistantConversation(conversationId: String) {
+        if (conversationId.isBlank() || assistantMessagesLoading) return
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        val restaurantId = backendRestaurantId()
+        var rows = JSONArray()
+        assistantMessagesLoading = true
+        runBackend(
+            task = {
+                if (backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId) {
+                    throw IllegalStateException("A conta ou o restaurante mudou.")
+                }
+                rows = SupabaseApi.listAssistantMessages(backendToken(), conversationId)
+                "OK"
+            },
+            onError = { error ->
+                assistantMessagesLoading = false
+                assistantWorkspaceError = friendlyBackendError(error.message)
+                renderApp()
+            },
+            onSuccess = {
+                assistantMessagesLoading = false
+                if (backendPrefs.getString("user_id", "").orEmpty() == accountId &&
+                    backendRestaurantId() == restaurantId) {
+                    assistantCurrentConversationId = conversationId
+                    assistantMessages = rows
+                    assistantSelectedInvoiceIds.clear()
+                    assistantWorkspaceError = ""
+                }
+                renderApp()
+            }
+        )
+    }
+
+    private fun sendAssistantChatMessage() {
+        val message = assistantDraft.trim()
+        if (message.isBlank()) {
+            Toast.makeText(this, "Escreve uma pergunta antes de enviar.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (assistantBusy) return
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        val restaurantId = backendRestaurantId()
+        val selectedInvoices = assistantSelectedInvoiceIds.toList()
+        val webSearch = assistantWebSearchEnabled
+        var targetConversationId = assistantCurrentConversationId
+        var latestMessages = JSONArray()
+        var latestConversations = JSONArray()
+
+        assistantBusy = true
+        runBackend(
+            task = {
+                if (accountId.isBlank() || restaurantId.isBlank() ||
+                    backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId ||
+                    backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") {
+                    throw IllegalStateException("A conta já não tem acesso ao assistente deste restaurante.")
+                }
+                val token = backendToken()
+                if (targetConversationId.isBlank()) {
+                    targetConversationId = SupabaseApi.createAssistantConversation(token).optString("conversation_id")
+                }
+                if (targetConversationId.isBlank()) throw IllegalStateException("Não foi possível criar a conversa.")
+                SupabaseApi.sendAssistantMessage(
+                    token, targetConversationId, message, webSearch, selectedInvoices
+                )
+                latestMessages = SupabaseApi.listAssistantMessages(token, targetConversationId)
+                latestConversations = SupabaseApi.listAssistantConversations(token, assistantHistoryQuery)
+                if (backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId) {
+                    throw IllegalStateException("A conta ou o restaurante mudou durante a resposta.")
+                }
+                "OK"
+            },
+            onError = { error ->
+                assistantBusy = false
+                assistantWorkspaceError = friendlyBackendError(error.message)
+                renderApp()
+            },
+            onSuccess = {
+                assistantBusy = false
+                if (backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId) {
+                    clearAssistantWorkspace()
+                    renderApp()
+                    return@runBackend
+                }
+                assistantCurrentConversationId = targetConversationId
+                assistantMessages = latestMessages
+                assistantConversations = latestConversations
+                assistantDraft = ""
+                assistantSelectedInvoiceIds.clear()
+                assistantWorkspaceError = ""
+                renderApp()
+            }
+        )
+    }
+
+    private fun confirmDeleteAssistantConversation() {
+        val conversationId = assistantCurrentConversationId
+        if (conversationId.isBlank()) return
+        AlertDialog.Builder(this)
+            .setTitle("Eliminar conversa?")
+            .setMessage("As mensagens desta conversa serão eliminadas do histórico deste restaurante. Esta ação não pode ser anulada.")
+            .setNegativeButton("Manter", null)
+            .setPositiveButton("Eliminar") { _, _ ->
+                val accountId = backendPrefs.getString("user_id", "").orEmpty()
+                val restaurantId = backendRestaurantId()
+                runBackend(
+                    task = {
+                        if (backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                            backendRestaurantId() != restaurantId) {
+                            throw IllegalStateException("A conta ou o restaurante mudou.")
+                        }
+                        SupabaseApi.deleteAssistantConversation(backendToken(), conversationId)
+                        "OK"
+                    },
+                    onSuccess = {
+                        assistantCurrentConversationId = ""
+                        assistantMessages = JSONArray()
+                        refreshAssistantWorkspace(force = true)
+                    }
+                )
+            }
+            .show()
+    }
+
+    private fun showAssistantInvoicePickerDialog() {
+        val available = mutableListOf<JSONObject>()
+        for (i in 0 until assistantInvoices.length()) {
+            assistantInvoices.optJSONObject(i)?.let { available.add(it) }
+        }
+        if (available.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle("Arquivo de faturas")
+                .setMessage("Ainda não existem PDFs guardados neste restaurante. Adiciona uma fatura para a poderes anexar a uma pergunta.")
+                .setNegativeButton("Fechar", null)
+                .setPositiveButton("Adicionar PDF") { _, _ -> chooseAssistantInvoicePdf() }
+                .show()
+            return
+        }
+        val labels = available.map { invoice ->
+            val name = invoice.optString("file_name")
+            val sizeKb = (invoice.optLong("file_size_bytes", 0L) / 1024L).coerceAtLeast(1L)
+            "$name · $sizeKb KB"
+        }.toTypedArray()
+        val selected = BooleanArray(available.size) { index ->
+            available[index].optString("invoice_id") in assistantSelectedInvoiceIds
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Selecionar faturas (máximo 3)")
+            .setMultiChoiceItems(labels, selected) { _, which, checked ->
+                val id = available.getOrNull(which)?.optString("invoice_id").orEmpty()
+                if (id.isNotBlank()) {
+                    if (checked && assistantSelectedInvoiceIds.size < 3) {
+                        assistantSelectedInvoiceIds.add(id)
+                    } else if (checked) {
+                        Toast.makeText(this, "Só podes anexar três faturas por pergunta.", Toast.LENGTH_SHORT).show()
+                    } else {
+                        assistantSelectedInvoiceIds.remove(id)
+                    }
+                }
+            }
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Confirmar") { _, _ -> renderApp() }
+            .show()
+    }
+
+    private fun chooseAssistantInvoicePdf() {
+        if (!hasRemoteRestaurant() ||
+            backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") {
+            Toast.makeText(this, "O arquivo de faturas é exclusivo do proprietário.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val intent = android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(android.content.Intent.CATEGORY_OPENABLE)
+            type = "application/pdf"
+            putExtra(android.content.Intent.EXTRA_MIME_TYPES, arrayOf("application/pdf"))
+        }
+        startActivityForResult(intent, requestAssistantInvoice)
+    }
+
+    private fun uploadAssistantInvoiceFromUri(uri: Uri) {
+        if (!hasRemoteRestaurant() ||
+            backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") return
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        val restaurantId = backendRestaurantId()
+        var latestInvoices = JSONArray()
+        runBackend(
+            task = {
+                if (accountId.isBlank() || restaurantId.isBlank() ||
+                    backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId) {
+                    throw IllegalStateException("A conta ou o restaurante mudou.")
+                }
+                val fileName = queryAssistantInvoiceFileName(uri)
+                    .substringAfterLast('/')
+                    .substringAfterLast('\\')
+                if (!fileName.endsWith(".pdf", ignoreCase = true)) {
+                    throw IllegalArgumentException("Seleciona um documento PDF.")
+                }
+                val bytes = readAssistantInvoicePdf(uri)
+                val invoiceId = java.util.UUID.randomUUID().toString()
+                val token = backendToken()
+                val upload = SupabaseApi.registerAssistantInvoice(
+                    token, invoiceId, fileName, bytes.size
+                )
+                SupabaseApi.uploadAssistantInvoicePdf(token, upload.storagePath, bytes)
+                SupabaseApi.completeAssistantInvoiceUpload(token, invoiceId)
+                if (backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId) {
+                    throw IllegalStateException("A conta ou o restaurante mudou durante o carregamento.")
+                }
+                latestInvoices = SupabaseApi.listAssistantInvoices(token)
+                "OK"
+            },
+            onSuccess = {
+                if (backendPrefs.getString("user_id", "").orEmpty() == accountId &&
+                    backendRestaurantId() == restaurantId) {
+                    assistantInvoices = latestInvoices
+                    assistantWorkspaceLoaded = true
+                    assistantWorkspaceScope = restaurantId + ":" + accountId
+                    assistantWorkspaceError = ""
+                    Toast.makeText(this, "Fatura guardada no arquivo privado do restaurante.", Toast.LENGTH_LONG).show()
+                }
+                renderApp()
+            }
+        )
+    }
+
+    private fun queryAssistantInvoiceFileName(uri: Uri): String {
+        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (column >= 0 && cursor.moveToFirst()) {
+                cursor.getString(column)?.takeIf { it.isNotBlank() }?.let { return it.take(180) }
+            }
+        }
+        return "fatura.pdf"
+    }
+
+    private fun readAssistantInvoicePdf(uri: Uri): ByteArray {
+        val output = ByteArrayOutputStream()
+        contentResolver.openInputStream(uri)?.use { input ->
+            val buffer = ByteArray(8192)
+            var total = 0
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                total += read
+                if (total > 10 * 1024 * 1024) {
+                    throw IllegalArgumentException("O PDF excede o limite de 10 MB.")
+                }
+                output.write(buffer, 0, read)
+            }
+        } ?: throw IllegalArgumentException("Não foi possível ler o PDF selecionado.")
+        val bytes = output.toByteArray()
+        if (bytes.size < 5 || String(bytes, 0, 5, Charsets.US_ASCII) != "%PDF-") {
+            throw IllegalArgumentException("O ficheiro selecionado não parece ser um PDF válido.")
+        }
+        return bytes
+    }
+
+    private fun renderAssistantLocalTools(container: LinearLayout) {
+        val snapshot = assistantSnapshot()
+        sectionHeading(container, "Gestor económico", "Ferramentas locais para análise e controlo dos valores registados.")
         renderEconomicManager(container)
-
         if (isPremium) {
-            addGap(container, 9)
+            addGap(container, 8)
             renderRestaurantPriceAdvisor(container)
         }
 
-        addGap(container, 5)
-        sectionHeading(container, "Pergunta ao assistente", "Experimenta perguntar sobre custos, preços, pedidos, stock, reservas ou um problema de sincronização.")
+        sectionHeading(container, "Análise local", "As sugestões abaixo usam os dados operacionais guardados pela aplicação.")
         val questionField = multilineInputField("Ex.: Como posso melhorar o preço dos pratos?")
         questionField.setText(assistantQuestion)
         container.addView(questionField, multilineFieldParams())
-        container.addView(primaryButton("Analisar pergunta") {
+        val localActions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        localActions.addView(primaryButton("Analisar") {
             assistantQuestion = questionField.text.toString().trim().take(400)
-            assistantAnswer = StudioMesaAdvisor.answerQuestion(assistantQuestion, snapshot)
+            assistantAnswer = StudioMesaAdvisor.answerQuestion(assistantQuestion, assistantSnapshot())
             renderApp()
-        }, LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(container, 5)
-        container.addView(secondaryButton("Gerar resumo da operação") {
-            // Keep the user's question intact; the briefing is a separate action.
+        }, LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(0, 0, dp(5), 0) })
+        localActions.addView(secondaryButton("Resumo diário") {
             assistantAnswer = StudioMesaAdvisor.dailyBriefing(assistantSnapshot())
             renderApp()
-        }, LinearLayout.LayoutParams(-1, dp(46)))
-        addGap(container, 12)
-
+        }, LinearLayout.LayoutParams(0, dp(46), 1f))
+        container.addView(localActions)
         assistantAnswer?.let { answer ->
-            val answerCard = makeCard(16, copperPale)
-            answerCard.addView(label(answer.title, 17f, true, forestDeep))
-            addGap(answerCard, 7)
-            answerCard.addView(label(answer.response, 12.5f, false, ink))
+            val answerCard = makeCard(14, copperPale)
+            answerCard.addView(label(answer.title, 16f, true, forestDeep))
+            addGap(answerCard, 5)
+            answerCard.addView(label(answer.response, 12f, false, ink))
             assistantActionTarget(answer.actionPage)?.let { target ->
-                addGap(answerCard, 10)
+                addGap(answerCard, 7)
                 answerCard.addView(secondaryButton("Abrir " + target) {
                     activePage = target
                     renderApp()
-                }, LinearLayout.LayoutParams(-1, dp(44)))
+                }, LinearLayout.LayoutParams(-1, dp(42)))
             }
             container.addView(answerCard, cardParams())
-            addGap(container, 6)
         }
 
-        sectionHeading(container, "Sugestões para rever", "Prioridades estimadas. Confirma os dados e decide antes de alterar qualquer coisa.")
+        sectionHeading(container, "Sugestões para rever", "Prioridades estimadas; confirma os dados antes de decidir.")
         StudioMesaAdvisor.recommendations(snapshot).forEach { recommendation ->
             val (priorityText, textColor, backColor) = when (recommendation.priority) {
                 AssistantPriority.URGENT -> Triple("PRIORIDADE ALTA", red, paleRed)
                 AssistantPriority.ATTENTION -> Triple("A REVER", forestDeep, copperPale)
                 AssistantPriority.TIP -> Triple("SUGESTÃO", forestSoft, paleGreen)
             }
-            val card = makeCard(15)
+            val card = makeCard(14)
             card.addView(label(priorityText, 9f, true, textColor).apply {
                 setPadding(dp(8), dp(5), dp(8), dp(5))
                 background = rounded(backColor, 10)
             }, LinearLayout.LayoutParams(-2, -2))
-            addGap(card, 8)
-            card.addView(label(recommendation.title, 16f, true, forestDeep))
-            addGap(card, 5)
-            card.addView(label(recommendation.detail, 12.5f, false, muted))
+            addGap(card, 6)
+            card.addView(label(recommendation.title, 15f, true, forestDeep))
+            addGap(card, 4)
+            card.addView(label(recommendation.detail, 12f, false, muted))
             assistantActionTarget(recommendation.actionPage)?.let { target ->
-                addGap(card, 10)
+                addGap(card, 8)
                 card.addView(secondaryButton("Abrir " + target) {
                     activePage = target
                     renderApp()
-                }, LinearLayout.LayoutParams(-1, dp(44)))
+                }, LinearLayout.LayoutParams(-1, dp(42)))
             }
             container.addView(card, cardParams())
         }
-        sectionHeading(container, "Engenharia da carta", "Combina unidades de pedidos concluídos com a contribuição estimada por artigo.")
+
+        sectionHeading(container, "Engenharia da carta", "Vendas concluídas, procura e contribuição estimada por artigo.")
         val engineering = StudioMesaAdvisor.menuEngineering(snapshot)
         if (!engineering.hasEnoughSales) {
             container.addView(emptyCard(
-                "Ainda não há pelo menos ${engineering.requiredUnits} unidades concluídas que correspondam aos artigos atuais (${engineering.completedUnits} encontradas). A análise não inventa popularidade."
+                "Ainda não há pelo menos " + engineering.requiredUnits + " unidades concluídas que correspondam aos artigos atuais (" + engineering.completedUnits + " encontradas)."
             ), cardParams())
         } else {
             if (!engineering.hasMarginData) {
-                container.addView(emptyCard("Existem vendas, mas faltam custos válidos nos artigos vendidos para comparar a contribuição. Confirma os custos na Carta."), cardParams())
+                container.addView(emptyCard("Existem vendas, mas faltam custos válidos nos artigos vendidos para comparar a contribuição."), cardParams())
             }
             engineering.items.forEach { item ->
                 val title = when (item.classification) {
@@ -5591,56 +7207,53 @@ class MainActivity : Activity() {
                     MenuEngineeringClass.WORKHORSE, MenuEngineeringClass.PUZZLE -> copperPale
                     MenuEngineeringClass.DOG, MenuEngineeringClass.MISSING_COST -> paleRed
                 }
-                val card = makeCard(14)
+                val card = makeCard(13)
                 card.addView(label(title, 9f, true, forestDeep).apply {
                     setPadding(dp(8), dp(5), dp(8), dp(5))
                     background = rounded(backColor, 10)
                 }, LinearLayout.LayoutParams(-2, -2))
                 addGap(card, 7)
-                card.addView(label(item.itemName, 16f, true, forestDeep))
+                card.addView(label(item.itemName, 15f, true, forestDeep))
                 addGap(card, 4)
                 card.addView(label(
-                    "${item.unitsSold} unidade(s) concluídas · ${item.popularitySharePercent}% das unidades correspondentes · contribuição atual: ${item.contributionPerUnit?.let { money(it) } ?: "custo em falta"} por unidade.",
-                    11.5f, true, muted
+                    item.unitsSold.toString() + " unidade(s) concluídas · " + item.popularitySharePercent +
+                        "% das unidades correspondentes · contribuição atual: " +
+                        (item.contributionPerUnit?.let { money(it) } ?: "custo em falta") + " por unidade.",
+                    11f, true, muted
                 ))
-                addGap(card, 5)
-                card.addView(label(item.recommendation, 12.5f, false, ink))
+                addGap(card, 4)
+                card.addView(label(item.recommendation, 12f, false, ink))
                 container.addView(card, cardParams())
             }
             container.addView(label(
-                "Triagem com pedidos concluídos e preço/custo atuais; não é lucro contabilístico nem custo histórico e não inclui IVA, mão de obra, desperdício ou encargos.",
+                "Triagem com preços e custos atuais; não é lucro contabilístico nem custo histórico e não inclui IVA, mão de obra ou encargos.",
                 10.5f, false, muted
             ))
         }
 
-        sectionHeading(container, "Ideias de conteúdo", "Rascunhos para revisão; só usam nomes, descrições e preços registados na carta.")
+        sectionHeading(container, "Ideias de conteúdo", "Rascunhos para revisão, com base nos artigos da carta.")
         val drafts = StudioMesaAdvisor.marketingDrafts(snapshot)
         if (drafts.isEmpty()) {
             container.addView(emptyCard("Adiciona artigos com nome e preço válidos para criar rascunhos."), cardParams())
         } else {
             drafts.forEach { draft ->
-                val card = makeCard(14)
-                card.addView(label(draft.itemName, 16f, true, forestDeep))
-                addGap(card, 6)
-                card.addView(label(draft.caption, 13f, false, ink))
+                val card = makeCard(13)
+                card.addView(label(draft.itemName, 15f, true, forestDeep))
                 addGap(card, 5)
-                card.addView(label(draft.basis, 10.5f, false, muted))
-                addGap(card, 8)
+                card.addView(label(draft.caption, 12f, false, ink))
+                addGap(card, 7)
                 card.addView(secondaryButton("Copiar rascunho") {
                     copyAssistantText(draft.caption)
-                }, LinearLayout.LayoutParams(-1, dp(44)))
+                }, LinearLayout.LayoutParams(-1, dp(42)))
                 container.addView(card, cardParams())
             }
         }
-
-        addGap(container, 4)
         container.addView(label(
-            if (snapshot.isDemo) "Fonte atual: dados de demonstração locais. Liga um restaurante na secção Conta para analisar dados partilhados."
-            else "Fonte atual: dados guardados em cache pela aplicação. Confirma a última atualização antes de decidir; esta análise não verifica a conectividade em tempo real.",
-            11f, false, muted
+            if (snapshot.isDemo) "Fonte: dados de demonstração locais."
+            else "Fonte: dados em cache. Confirma a última atualização antes de decidir.",
+            10.5f, false, muted
         ))
     }
-
 
     private fun clearEconomicManagerState() {
         economicManagerEnabled = false
@@ -6489,45 +8102,98 @@ class MainActivity : Activity() {
     }
 
     private fun pageIntro(container: LinearLayout, title: String, subtitle: String) {
-        container.addView(label("Gestão de restaurante", 10.5f, true, forestSoft))
-        addGap(container, 5)
-        container.addView(label(title, 27f, true, forestDeep))
-        addGap(container, 5)
-        container.addView(label(subtitle, 14f, false, muted))
+        container.addView(label("STUDIOMESA  /  GESTÃO", 9.5f, true, forestSoft).apply {
+            letterSpacing = 0.1f
+        })
+        addGap(container, 6)
+        container.addView(label(title, 28f, true, forestDeep))
+        addGap(container, 4)
+        container.addView(label(subtitle, 13f, false, muted))
+        addGap(container, 7)
+        container.addView(View(this).apply { setBackgroundColor(copper) },
+            LinearLayout.LayoutParams(dp(34), dp(3)))
     }
 
     private fun sectionHeading(container: LinearLayout, title: String, subtitle: String) {
         container.addView(label(title, 18f, true, forestDeep))
         addGap(container, 3)
-        container.addView(label(subtitle, 12.5f, false, muted))
-        addGap(container, 10)
+        container.addView(label(subtitle, 12f, false, muted))
+        addGap(container, 9)
     }
 
-    private fun actionCard(parent: LinearLayout, number: String, title: String, subtitle: String, actionText: String, action: () -> Unit) {
-        val card = makeCard(14)
+    private fun actionCard(
+        parent: LinearLayout,
+        number: String,
+        title: String,
+        subtitle: String,
+        actionText: String,
+        action: () -> Unit
+    ) {
+        val glyph = when {
+            title.contains("Mesa", ignoreCase = true) -> "▦"
+            title.contains("Pedido", ignoreCase = true) -> "≡"
+            title.contains("Carta", ignoreCase = true) -> "▤"
+            title.contains("Fidelização", ignoreCase = true) -> "◎"
+            title.contains("Reserv", ignoreCase = true) -> "◷"
+            title.contains("Preço", ignoreCase = true) -> "€"
+            title.contains("Stock", ignoreCase = true) -> "▣"
+            title.contains("Análise", ignoreCase = true) -> "↗"
+            else -> "✦"
+        }
+        val card = makeCard(13)
+        card.background = outlinedRippleBackground(white, 19, line)
+        card.isClickable = true
+        card.isFocusable = true
+        card.contentDescription = title + ". " + subtitle + ". " + actionText
+        card.setOnClickListener { action() }
+
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        row.addView(label(number, 11f, true, forestSoft), LinearLayout.LayoutParams(dp(28), -2))
-        val text = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        text.addView(label(title, 16f, true, ink))
+        row.addView(TextView(this).apply {
+            text = glyph
+            textSize = 22f
+            gravity = Gravity.CENTER
+            setTextColor(forest)
+            background = rounded(if (number == "IA") copperPale else paleGreen, 14)
+        }, LinearLayout.LayoutParams(dp(48), dp(48)).apply {
+            setMargins(0, 0, dp(12), 0)
+        })
+
+        val text = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        text.addView(label(title, 15f, true, ink))
         addGap(text, 3)
-        text.addView(label(subtitle, 12.5f, false, muted))
+        text.addView(label(subtitle, 11.5f, false, muted))
+        addGap(text, 6)
+        text.addView(label(actionText, 9f, true, forestSoft).apply {
+            letterSpacing = 0.06f
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { action() }
+        })
         row.addView(text, LinearLayout.LayoutParams(0, -2, 1f))
+        row.addView(label("›", 27f, false, copper).apply {
+            gravity = Gravity.CENTER
+            isClickable = true
+            setOnClickListener { action() }
+        }, LinearLayout.LayoutParams(dp(24), dp(48)))
         card.addView(row)
-        addGap(card, 12)
-        card.addView(secondaryButton(actionText, action), LinearLayout.LayoutParams(-1, dp(48)))
         parent.addView(card, cardParams())
     }
 
     private fun statCard(title: String, value: String, accent: Int): LinearLayout {
-        val card = makeCard(14)
-        card.addView(label(title, 9.5f, true, muted))
-        addGap(card, 7)
-        card.addView(label(value, 24f, true, forestDeep))
-        addGap(card, 7)
-        card.addView(View(this).apply { setBackgroundColor(accent) }, LinearLayout.LayoutParams(dp(26), dp(3)))
+        val card = makeCard(15)
+        card.addView(View(this).apply { setBackgroundColor(accent) },
+            LinearLayout.LayoutParams(dp(28), dp(3)))
+        addGap(card, 10)
+        card.addView(label(title, 9f, true, muted).apply {
+            letterSpacing = 0.04f
+        })
+        addGap(card, 6)
+        card.addView(label(value, 27f, true, forestDeep))
         return card
     }
 
@@ -6566,9 +8232,33 @@ class MainActivity : Activity() {
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(padding), dp(padding), dp(padding), dp(padding))
-            background = rounded(color, 19)
-            elevation = dp(1).toFloat()
+            background = cardSurface(color, 20)
+            elevation = dp(2).toFloat()
         }
+
+    private fun cardSurface(color: Int, radius: Int): GradientDrawable =
+        rounded(color, radius).apply {
+            setStroke(dp(1), line)
+        }
+
+    private fun outlinedRippleBackground(
+        color: Int,
+        radius: Int,
+        strokeColor: Int
+    ): Drawable {
+        val base = rounded(color, radius).apply {
+            setStroke(dp(1), strokeColor)
+        }
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            RippleDrawable(
+                ColorStateList.valueOf(Color.argb(30, 43, 74, 72)),
+                base,
+                rounded(Color.WHITE, radius)
+            )
+        } else {
+            base
+        }
+    }
 
     private fun cardParams(): LinearLayout.LayoutParams =
         LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 0, 0, dp(11)) }
@@ -6612,10 +8302,11 @@ class MainActivity : Activity() {
             textSize = 13f
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
             isAllCaps = false
-            setTextColor(forestDeep)
-            background = rippleBackground(copper, 15)
-            elevation = dp(1).toFloat()
-            setPadding(dp(12), dp(3), dp(12), dp(3))
+            setTextColor(white)
+            background = rippleBackground(forestDeep, 15)
+            elevation = dp(2).toFloat()
+            setPadding(dp(14), dp(4), dp(14), dp(4))
+            minHeight = dp(48)
             setOnClickListener { action() }
         }
 
@@ -6626,9 +8317,10 @@ class MainActivity : Activity() {
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
             isAllCaps = false
             setTextColor(forest)
-            background = rippleBackground(paleGreen, 14)
+            background = outlinedRippleBackground(white, 14, line)
             elevation = 0f
-            setPadding(dp(8), dp(2), dp(8), dp(2))
+            setPadding(dp(10), dp(3), dp(10), dp(3))
+            minHeight = dp(44)
             setOnClickListener { action() }
         }
 
@@ -6637,7 +8329,7 @@ class MainActivity : Activity() {
             text = value
             textSize = size
             setTextColor(color)
-            if (bold) typeface = Typeface.create(if (size >= 23f) "serif" else "sans-serif", Typeface.BOLD)
+            if (bold) typeface = Typeface.create("sans-serif", Typeface.BOLD)
             setLineSpacing(dp(2).toFloat(), 1.0f)
         }
 

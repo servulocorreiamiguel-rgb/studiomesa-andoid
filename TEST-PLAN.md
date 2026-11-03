@@ -132,6 +132,7 @@ Estes casos estão cobertos pela limpeza local no código, mas continuam pendent
 |---|---|---|---|
 | CACHE-01 | Privacidade / sessão | Encerrar sessão, mudar a adesão/permissões da mesma conta no servidor e iniciar sessão novamente | Os dados de restaurante guardados no dispositivo são removidos antes do carregamento; só os dados atuais devolvidos pelo servidor voltam a aparecer |
 | CACHE-02 | Privacidade / troca de conta | Iniciar sessão com outra conta no mesmo dispositivo | Não são apresentados cartões de cliente, reservas, stock, mesas, carta ou pedidos da conta anterior |
+| CACHE-03 | Privacidade / troca de restaurante | A mesma conta perde a associação a um restaurante e passa a pertencer a outro | São eliminadas todas as caches do restaurante anterior, incluindo equipa, mesas, carta, pedidos, stock, reservas e fidelização; só são carregados dados do novo restaurante |
 
 Estes casos estão protegidos no código por limpeza da cache ao estabelecer uma nova sessão, mas continuam pendentes de execução manual num Android real.
 
@@ -239,3 +240,31 @@ A atualização periódica é polling, não uma subscrição Supabase Realtime, 
 A migration `20261030120000_inventory_unit_cost_and_waste_snapshots.sql` tem de estar aplicada no Supabase antes de testar a nova versão Android. Estes casos exigem CI aprovada e testes ponta a ponta com contas descartáveis; a CI, por si só, não valida a configuração do projeto Supabase de produção.\n## Assistente económico ligado ao inventário\n\n| ID | Categoria | Ação / dados | Resultado esperado / estado |\n|---|---|---|---|\n| ASI-01 | Fonte de dados | Abrir o Assistente com o inventário Premium carregado | A IA recebe unidade, quantidade, limite mínimo e custo unitário atual de cada artigo |\n| ASI-02 | Stock específico | Arroz: 2 kg disponíveis, mínimo 5 kg e custo 3,5000 €/kg | Responde 2 kg, custo unitário, valor estimado de 7,00 € e custo indicativo de 10,50 € para voltar ao mínimo |\n| ASI-03 | Valor global | Somar artigos com custo conhecido e excluir artigo sem custo | Apresenta apenas a soma conhecida e indica quantos artigos ficaram excluídos |\n| ASI-04 | Dados em falta | Todos os artigos sem custo unitário | Não inventa o valor do stock; indica que é necessário preencher custos |\n| ASI-05 | Cache não confirmada | Perguntar pelo valor do stock antes de carregar/atualizar inventário | Não mostra valores guardados numa cache não confirmada |\n| ASI-06 | Reposição | Artigo abaixo do limite mínimo, com custo unitário conhecido | Calcula apenas a quantidade e o custo para atingir o limite mínimo configurado; não cria encomenda |\n| ASI-07 | Limite de recomendação | Artigo acima do limite mínimo | Não sugere reposição nem gasto desnecessário |\n| ASI-08 | Sem custo | Artigo abaixo do limite mas sem custo de compra | Mostra o alerta de stock baixo sem inventar custo de reposição |
 | ASI-09 | Frescura | Inventário atualizado há menos de cinco minutos e leitura bem-sucedida | A IA pode utilizar quantidades e custos confirmados |
 | ASI-10 | Cache antiga/falha | Última leitura há mais de cinco minutos, sem leitura nesta sessão ou falha da atualização | A IA não apresenta valores de stock e pede atualização na secção Stock |\n\nOs valores de stock são estimativas ao custo de compra atual e não incluem portes, embalagens, descontos, IVA recuperável, perdas futuras ou condições de fornecedor. Não são uma avaliação FIFO/custo médio nem uma ordem de compra.\n
+
+
+## Permissões granulares da equipa — cenários de autorização
+
+A matriz configurável pelo proprietário contém seis áreas: pedidos/cozinha, mesas, reservas, carta, stock e fidelização. A autorização tem de ser aplicada no Supabase; esconder secções na app é apenas uma medida de interface.
+
+| ID | Cenário | Resultado esperado |
+|---|---|---|
+| PERM-01 | Funcionário antigo sem linha de configuração | Mantém temporariamente as seis áreas operacionais até o proprietário guardar uma matriz. |
+| PERM-02 | Proprietário guarda apenas Pedidos e Reservas | O funcionário só vê e usa essas áreas; as restantes operações são negadas no servidor. |
+| PERM-03 | Proprietário guarda matriz vazia | Todas as áreas operacionais ficam bloqueadas para o funcionário. |
+| PERM-04 | Funcionário tenta alterar as próprias permissões | O servidor recusa a chamada RPC. |
+| PERM-05 | Funcionário de outro restaurante tenta consultar ou alterar a matriz | O servidor recusa por falta de âmbito. |
+| PERM-06 | Funcionário sem Mesas/Carta/Pedidos tenta escrita REST directa | RLS não permite a alteração. |
+| PERM-07 | Funcionário sem Stock tenta criar/alterar inventário por RPC | A RPC recusa a operação. |
+| PERM-08 | Funcionário sem Reservas tenta criar, atribuir mesa ou alterar estado | A RPC recusa a operação. |
+| PERM-09 | Funcionário sem Fidelização tenta emitir QR de pontos, consultar catálogo/fila ou confirmar entrega | As RPCs recusam a operação. |
+| PERM-10 | Proprietário revoga acesso enquanto o funcionário tem a app aberta | A próxima operação é recusada no servidor; ao regressar à app, a matriz é actualizada e as caches revogadas são limpas. |
+| PERM-11 | Funcionário removido ou sessão expirada | A app confirma a associação no servidor, limpa o restaurante/caches quando já não pertence e não reutiliza permissões em cache. |
+| PERM-12 | Proprietário tenta ser limitado pela matriz | Mantém acesso total; acções económicas e administrativas continuam owner-only. |
+| PERM-13 | Proprietário volta a conceder uma área antes revogada | Ao regressar à app, o funcionário volta a carregar os dados autorizados do servidor; não depende de uma cache que foi apagada. |
+| PERM-14 | Funcionário regressa sem ligação após uma alteração de permissões | A app fecha o acesso local por defeito até conseguir confirmar novamente a matriz e os dados no servidor. |
+| PERM-15 | Funcionário não tem acesso a Mesas ou Pedidos | Os atalhos correspondentes também desaparecem da barra inferior; não ficam controlos sem ação.
+| PERM-16 | Funcionário abre a fidelização e tenta consultar os códigos de adesão de clientes/equipa | Os códigos não são apresentados nem podem ser abertos pelo método direto; apenas o proprietário tem acesso. |
+| PERM-17 | Proprietário envia uma matriz com um valor `NULL` ou identificador desconhecido | A RPC rejeita todo o payload; não normaliza silenciosamente permissões malformadas. |
+| PERM-18 | Funcionário sem Fidelização abre Conta | O atalho para atualizar a lista de clientes não aparece; a leitura é bloqueada também pela política/RPC do servidor. |
+
+Estado: os testes PostgreSQL de permissões, isolamento e chamadas diretas passaram na execução CI [41481734799](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/41481734799). A execução [41495700617](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/41495700617) está a validar o commit `6c14e6d`, que já inclui a rejeição de matrizes com NULL e os controlos owner-only dos códigos. A verificação live da associação ao restaurante foi acrescentada depois (`3bb5d53)) e ainda precisa de uma execução CI no head atual. STAFF/PERM-10 e PERM-11 continuam a exigir validação manual em dois dispositivos reais. A migração ainda não foi aplicada à base de dados alojada.

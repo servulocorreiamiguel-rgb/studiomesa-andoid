@@ -6,6 +6,8 @@ import java.math.BigDecimal
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLSocketFactory
 
 /**
  * Minimal Supabase REST/Auth client. Only the public publishable key is embedded here.
@@ -14,6 +16,47 @@ import java.net.URLEncoder
 object SupabaseApi {
     private const val BASE_URL = "https://svwvkfsyevuyabelrtjk.supabase.co"
     private const val API_KEY = "sb_publishable_ioJIukpwd0_Fyajd41QL_Q_M6WKE0UH"
+
+    private data class InstrumentationTestEndpoint(
+        val baseUrl: String,
+        val sslSocketFactory: SSLSocketFactory
+    )
+
+    @Volatile
+    private var instrumentationTestEndpoint: InstrumentationTestEndpoint? = null
+
+    /**
+     * Allows Android instrumentation tests to point the real HTTP client at a local HTTPS
+     * mock server. The hook is debug-only and rejects non-loopback or non-HTTPS endpoints.
+     */
+    internal fun configureInstrumentationTestEndpoint(
+        baseUrl: String?,
+        sslSocketFactory: SSLSocketFactory? = null
+    ) {
+        check(BuildConfig.DEBUG) { "Instrumentation endpoints are only available in debug builds." }
+        if (baseUrl == null) {
+            instrumentationTestEndpoint = null
+            return
+        }
+
+        val uri = java.net.URI(baseUrl)
+        require(
+            uri.scheme.equals("https", ignoreCase = true) &&
+                uri.host in setOf("localhost", "127.0.0.1", "::1") &&
+                uri.rawUserInfo == null &&
+                uri.rawQuery == null &&
+                uri.rawFragment == null &&
+                (uri.path.isNullOrEmpty() || uri.path == "/")
+        ) {
+            "The instrumentation endpoint must be an HTTPS loopback URL."
+        }
+        instrumentationTestEndpoint = InstrumentationTestEndpoint(
+            baseUrl.removeSuffix("/"),
+            requireNotNull(sslSocketFactory) {
+                "A test-only TLS socket factory is required."
+            }
+        )
+    }
 
     data class Session(val accessToken: String, val userId: String, val email: String, val refreshToken: String)
 
@@ -24,7 +67,14 @@ object SupabaseApi {
         accessToken: String? = null,
         returnRepresentation: Boolean = false
     ): String {
-        val connection = (URL(BASE_URL + path).openConnection() as HttpURLConnection).apply {
+        val testEndpoint = if (BuildConfig.DEBUG) instrumentationTestEndpoint else null
+        val requestBaseUrl = testEndpoint?.baseUrl ?: BASE_URL
+        val connection = (URL(requestBaseUrl + path).openConnection() as HttpURLConnection).apply {
+            if (testEndpoint != null) {
+                val secureConnection = this as? HttpsURLConnection
+                    ?: throw IllegalStateException("The instrumentation endpoint must use HTTPS.")
+                secureConnection.sslSocketFactory = testEndpoint.sslSocketFactory
+            }
             requestMethod = method
             connectTimeout = 12000
             readTimeout = 12000
@@ -55,7 +105,7 @@ object SupabaseApi {
                 // proxy response body to the user, and always cap the displayed message.
                 val message = try {
                     val error = JSONObject(text)
-                    sequenceOf("msg", "message", "error_description")
+                    sequenceOf("msg", "message", "error_description", "error")
                         .map { key -> error.optString(key, "") }
                         .firstOrNull { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
                 } catch (_: Exception) {
@@ -1265,6 +1315,129 @@ object SupabaseApi {
         )
     }
 
+    fun assignReservationTable(token: String, reservationId: String, tableNumber: Int) {
+        require(token.isNotBlank()) { "Inicia sessão para atribuir uma mesa." }
+        require(runCatching { java.util.UUID.fromString(reservationId).toString() == reservationId }.getOrDefault(false)) {
+            "O identificador da reserva não é válido."
+        }
+        require(tableNumber in 1..100) { "Seleciona uma mesa entre 1 e 100." }
+        call(
+            "POST",
+            "/rest/v1/rpc/assign_restaurant_reservation_table",
+            JSONObject()
+                .put("p_reservation_id", reservationId)
+                .put("p_table_number", tableNumber),
+            token
+        )
+    }
+
+    fun createCustomerReservationRequest(
+        token: String,
+        requestId: String,
+        guestName: String,
+        guestPhone: String,
+        partySize: Int,
+        reservationAt: String,
+        durationMinutes: Int,
+        notes: String
+    ): JSONObject {
+        require(token.isNotBlank()) { "Inicia sessão para pedir uma reserva." }
+        require(runCatching { java.util.UUID.fromString(requestId).toString() == requestId }.getOrDefault(false)) {
+            "O identificador da tentativa de reserva não é válido."
+        }
+        require(partySize in 1..60) { "O número de pessoas deve estar entre 1 e 60." }
+        require(durationMinutes in 30..480) { "A duração deve estar entre 30 e 480 minutos." }
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/create_customer_reservation_request",
+            JSONObject()
+                .put("p_client_request_id", requestId)
+                .put("p_guest_name", guestName.trim())
+                .put("p_guest_phone", guestPhone.trim())
+                .put("p_party_size", partySize)
+                .put("p_reservation_at", reservationAt)
+                .put("p_duration_minutes", durationMinutes)
+                .put("p_notes", notes.trim()),
+            token
+        )
+        val rows = try { JSONArray(response) } catch (_: Exception) {
+            throw IllegalStateException("O servidor não confirmou o pedido de reserva.")
+        }
+        if (rows.length() != 1) throw IllegalStateException("O servidor não confirmou o pedido de reserva.")
+        val row = rows.getJSONObject(0)
+        val id = row.optString("reservation_id")
+        require(runCatching { java.util.UUID.fromString(id).toString() == id }.getOrDefault(false)) {
+            "O servidor não devolveu um identificador válido para a reserva."
+        }
+        return row
+    }
+
+    fun listMyCustomerReservations(token: String): JSONArray {
+        require(token.isNotBlank()) { "Inicia sessão para consultar as tuas reservas." }
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/get_my_restaurant_reservations",
+            JSONObject(),
+            token
+        )
+        return JSONArray(response)
+    }
+
+    fun cancelMyCustomerReservation(token: String, reservationId: String) {
+        require(token.isNotBlank()) { "Inicia sessão para cancelar uma reserva." }
+        require(runCatching { java.util.UUID.fromString(reservationId).toString() == reservationId }.getOrDefault(false)) {
+            "O identificador da reserva não é válido."
+        }
+        call(
+            "POST",
+            "/rest/v1/rpc/cancel_my_restaurant_reservation",
+            JSONObject().put("p_reservation_id", reservationId),
+            token
+        )
+    }
+
+
+    fun getMyRestaurantPermissions(token: String): JSONArray {
+        require(token.isNotBlank()) { "Inicia sessão para consultar as permissões." }
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/get_my_restaurant_permissions",
+            JSONObject(),
+            token
+        ))
+    }
+
+    fun getRestaurantStaffPermissions(token: String, userId: String): JSONArray {
+        require(token.isNotBlank()) { "Inicia sessão para consultar as permissões da equipa." }
+        require(runCatching { java.util.UUID.fromString(userId).toString() == userId }.getOrDefault(false)) {
+            "Seleciona um funcionário válido."
+        }
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/get_restaurant_staff_permissions",
+            JSONObject().put("p_user_id", userId),
+            token
+        ))
+    }
+
+    fun setRestaurantStaffPermissions(
+        token: String,
+        userId: String,
+        permissions: Set<String>
+    ): JSONArray {
+        require(token.isNotBlank()) { "Inicia sessão para alterar as permissões da equipa." }
+        require(runCatching { java.util.UUID.fromString(userId).toString() == userId }.getOrDefault(false)) {
+            "Seleciona um funcionário válido."
+        }
+        val payload = StaffPermissionSet.toJsonArray(permissions)
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/set_restaurant_staff_permissions",
+            JSONObject().put("p_user_id", userId).put("p_permissions", payload),
+            token
+        ))
+    }
+
     fun listRestaurantTeam(token: String): JSONArray {
         return JSONArray(call(
             "POST",
@@ -1283,5 +1456,191 @@ object SupabaseApi {
             token
         )
     }
+
+
+    data class AssistantInvoiceUpload(val invoiceId: String, val storagePath: String)
+
+    fun listAssistantConversations(token: String, query: String = ""): JSONArray {
+        require(token.isNotBlank()) { "Inicia sessão para consultar o histórico do assistente." }
+        require(query.length <= 100) { "A pesquisa do histórico é demasiado longa." }
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/studiomesa_assistant_list_conversations",
+            JSONObject().put("p_query", query),
+            token
+        ))
+    }
+
+    fun createAssistantConversation(token: String, title: String = "Nova conversa"): JSONObject {
+        require(token.isNotBlank()) { "Inicia sessão para criar uma conversa." }
+        val rows = JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/studiomesa_assistant_create_conversation",
+            JSONObject().put("p_title", title.take(120)),
+            token
+        ))
+        return rows.optJSONObject(0) ?: throw IllegalStateException(
+            "O servidor não devolveu a nova conversa."
+        )
+    }
+
+    fun listAssistantMessages(token: String, conversationId: String): JSONArray {
+        require(token.isNotBlank()) { "Inicia sessão para consultar a conversa." }
+        require(isCanonicalUuid(conversationId)) { "A conversa selecionada não é válida." }
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/studiomesa_assistant_list_messages",
+            JSONObject().put("p_conversation_id", conversationId),
+            token
+        ))
+    }
+
+    fun deleteAssistantConversation(token: String, conversationId: String) {
+        require(token.isNotBlank()) { "Inicia sessão para eliminar a conversa." }
+        require(isCanonicalUuid(conversationId)) { "A conversa selecionada não é válida." }
+        call(
+            "POST",
+            "/rest/v1/rpc/studiomesa_assistant_delete_conversation",
+            JSONObject().put("p_conversation_id", conversationId),
+            token
+        )
+    }
+
+    fun sendAssistantMessage(
+        token: String,
+        conversationId: String,
+        message: String,
+        webSearch: Boolean,
+        invoiceIds: List<String>
+    ): JSONObject {
+        require(token.isNotBlank()) { "Inicia sessão para utilizar o assistente." }
+        require(isCanonicalUuid(conversationId)) { "A conversa selecionada não é válida." }
+        require(message.trim().length in 1..5000) { "A pergunta deve ter entre 1 e 5000 caracteres." }
+        require(invoiceIds.size <= 3 && invoiceIds.all(::isCanonicalUuid) && invoiceIds.distinct().size == invoiceIds.size) {
+            "Seleciona no máximo três faturas válidas."
+        }
+        val body = JSONObject()
+            .put("conversation_id", conversationId)
+            .put("message", message.trim())
+            .put("web_search", webSearch)
+            .put("invoice_ids", JSONArray(invoiceIds))
+        return JSONObject(call(
+            "POST",
+            "/functions/v1/studiomesa-assistant",
+            body,
+            token
+        ))
+    }
+
+    fun listAssistantInvoices(token: String): JSONArray {
+        require(token.isNotBlank()) { "Inicia sessão para consultar o arquivo de faturas." }
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/studiomesa_assistant_list_invoices",
+            JSONObject(),
+            token
+        ))
+    }
+
+    fun registerAssistantInvoice(
+        token: String,
+        invoiceId: String,
+        fileName: String,
+        fileSizeBytes: Int
+    ): AssistantInvoiceUpload {
+        require(token.isNotBlank()) { "Inicia sessão para guardar a fatura." }
+        require(isCanonicalUuid(invoiceId)) { "O identificador da fatura não é válido." }
+        require(fileSizeBytes in 1..(10 * 1024 * 1024)) { "O PDF excede o limite de 10 MB." }
+        val rows = JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/studiomesa_assistant_register_invoice",
+            JSONObject()
+                .put("p_invoice_id", invoiceId)
+                .put("p_file_name", fileName.take(180))
+                .put("p_file_size_bytes", fileSizeBytes),
+            token
+        ))
+        val row = rows.optJSONObject(0)
+            ?: throw IllegalStateException("O servidor não preparou o arquivo da fatura.")
+        val returnedId = row.optString("invoice_id")
+        val storagePath = row.optString("storage_path")
+        require(returnedId == invoiceId && storagePath.matches(
+            Regex("^[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}\\.pdf$")
+        )) {
+            "O servidor devolveu um destino de arquivo inválido."
+        }
+        return AssistantInvoiceUpload(returnedId, storagePath)
+    }
+
+    fun uploadAssistantInvoicePdf(token: String, storagePath: String, bytes: ByteArray) {
+        require(token.isNotBlank()) { "Inicia sessão para carregar a fatura." }
+        require(bytes.isNotEmpty() && bytes.size <= 10 * 1024 * 1024) {
+            "O PDF deve ter até 10 MB."
+        }
+        require(storagePath.matches(
+            Regex("^[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}\\.pdf$")
+        )) {
+            "O caminho privado da fatura não é válido."
+        }
+        val endpoint = if (BuildConfig.DEBUG) instrumentationTestEndpoint else null
+        val baseUrl = endpoint?.baseUrl ?: BASE_URL
+        val connection = (URL(
+            baseUrl + "/storage/v1/object/restaurant-financial-invoices/" + storagePath
+        ).openConnection() as HttpURLConnection).apply {
+            if (endpoint != null) {
+                val secure = this as? HttpsURLConnection
+                    ?: throw IllegalStateException("O arquivo de teste tem de usar HTTPS.")
+                secure.sslSocketFactory = endpoint.sslSocketFactory
+            }
+            requestMethod = "POST"
+            connectTimeout = 15000
+            readTimeout = 30000
+            instanceFollowRedirects = false
+            useCaches = false
+            doOutput = true
+            setRequestProperty("apikey", API_KEY)
+            setRequestProperty("Authorization", "Bearer $token")
+            setRequestProperty("Content-Type", "application/pdf")
+            setRequestProperty("Accept", "application/json")
+            setRequestProperty("x-upsert", "false")
+        }
+        try {
+            connection.outputStream.use { it.write(bytes) }
+            val code = connection.responseCode
+            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+            val response = ResponseBodyReader.read(stream)
+            if (code !in 200..299) {
+                val message = try {
+                    val error = JSONObject(response)
+                    sequenceOf("message", "error", "msg")
+                        .map { error.optString(it, "") }
+                        .firstOrNull { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+                } catch (_: Exception) {
+                    null
+                }
+                throw BackendHttpException(
+                    code,
+                    "/storage/v1/object/restaurant-financial-invoices",
+                    ApiErrorMessage.sanitize(message, code)
+                )
+            }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    fun completeAssistantInvoiceUpload(token: String, invoiceId: String) {
+        require(token.isNotBlank()) { "Inicia sessão para confirmar a fatura." }
+        require(isCanonicalUuid(invoiceId)) { "O identificador da fatura não é válido." }
+        call(
+            "POST",
+            "/rest/v1/rpc/studiomesa_assistant_complete_invoice_upload",
+            JSONObject().put("p_invoice_id", invoiceId),
+            token
+        )
+    }
+
+    private fun isCanonicalUuid(value: String): Boolean =
+        runCatching { java.util.UUID.fromString(value).toString() == value }.getOrDefault(false)
 
 }

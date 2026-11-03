@@ -6,6 +6,29 @@
 -- in hosted projects, so those are migrated conditionally when present.
 BEGIN;
 
+-- The short-lived legacy loyalty QR table is present in the hosted project,
+-- but older clean migration replays did not create it. Reconcile the schema
+-- before wrapping the legacy RPCs so every later permission migration can
+-- reference the same row type and indexes.
+CREATE TABLE IF NOT EXISTS private.loyalty_qr_tokens (
+    token uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    restaurant_id uuid NOT NULL REFERENCES public.restaurants(id) ON DELETE CASCADE,
+    member_id uuid NOT NULL REFERENCES public.loyalty_members(id) ON DELETE CASCADE,
+    issued_at timestamptz NOT NULL DEFAULT now(),
+    expires_at timestamptz NOT NULL,
+    used_at timestamptz
+);
+
+CREATE INDEX IF NOT EXISTS loyalty_qr_tokens_member_expiry_idx
+    ON private.loyalty_qr_tokens (member_id, expires_at DESC);
+
+CREATE INDEX IF NOT EXISTS loyalty_qr_tokens_restaurant_id_idx
+    ON private.loyalty_qr_tokens (restaurant_id);
+
+ALTER TABLE private.loyalty_qr_tokens ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE private.loyalty_qr_tokens
+    FROM PUBLIC, anon, authenticated, service_role;
+
 GRANT USAGE ON SCHEMA private TO authenticated;
 
 -- These two RPCs are part of the versioned migration history.
