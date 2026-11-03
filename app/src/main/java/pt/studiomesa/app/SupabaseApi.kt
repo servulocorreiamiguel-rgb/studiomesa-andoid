@@ -22,12 +22,13 @@ object SupabaseApi {
         path: String,
         body: JSONObject? = null,
         accessToken: String? = null,
-        returnRepresentation: Boolean = false
+        returnRepresentation: Boolean = false,
+        readTimeoutMillis: Int = 12000
     ): String {
         val connection = (URL(BASE_URL + path).openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = 12000
-            readTimeout = 12000
+            readTimeout = readTimeoutMillis
             // Supabase REST/Auth endpoints should return API responses, not redirects.
             // Fail closed instead of following a redirect with session headers.
             instanceFollowRedirects = false
@@ -1132,7 +1133,8 @@ object SupabaseApi {
             "POST",
             "/functions/v1/studiomesa-assistant",
             body,
-            token
+            token,
+            readTimeoutMillis = 60000
         )
         val result = if (response.isBlank()) JSONObject() else JSONObject(response)
         val answer = result.optString("answer").trim()
