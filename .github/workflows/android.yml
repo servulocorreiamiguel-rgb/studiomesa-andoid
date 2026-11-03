@@ -318,8 +318,8 @@ jobs:
             psql --no-psqlrc --set ON_ERROR_STOP=1 --file "${migration}"
             count=$((count + 1))
           done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
-          test "${count}" -eq 51
-          echo "Successfully replayed ${count} versioned migration files, including price-adviser actor indexes and granular staff permissions."
+          test "${count}" -eq 52
+          echo "Successfully replayed ${count} versioned migration files, including assistant history, private invoice archive and granular staff permissions."
 
       - name: Assert core schema, RLS and RPCs exist
         run: |
