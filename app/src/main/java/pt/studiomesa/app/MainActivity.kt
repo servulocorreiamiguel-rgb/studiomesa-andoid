@@ -4763,6 +4763,8 @@ class MainActivity : Activity() {
             appendLine("Não és contabilista certificado. Não substituis aconselhamento fiscal, jurídico ou contabilístico. Distingue valores com IVA e sem IVA.")
             appendLine("Não podes alterar preços, stock, pedidos, reservas, pagamentos, permissões ou documentos. Apenas analisa e recomenda; qualquer operação exige confirmação humana através dos controlos da aplicação.")
             appendLine("Não afirmes que tens acesso à Internet, a bancos, a programas de faturação ou a faturas que não estejam importadas.")
+            appendLine("Quando precisares de dados atuais da app, usa as ferramentas de leitura disponíveis: get_restaurant_data para resumo, carta, pedidos, stock ou reservas; calculate_menu_price_reference para calcular uma referência com o custo registado.")
+            appendLine("As ferramentas são exclusivamente de leitura. Não inventes os seus resultados, não repitas chamadas desnecessárias e nunca afirmes que alteraste registos.")
             appendLine()
             appendLine("CONTEXTO ATUAL DO STUDIO MESA")
             appendLine("Restaurante: $restaurantName")
@@ -5041,6 +5043,7 @@ class MainActivity : Activity() {
 
                 localAssistantModelManager.generate(
                     systemInstruction = buildLocalAssistantSystemInstruction(scope),
+                    snapshot = assistantSnapshot(),
                     history = previousTurns,
                     userMessage = question,
                     onToken = { token ->
