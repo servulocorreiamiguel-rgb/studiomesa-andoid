@@ -70,6 +70,7 @@ class AssistantChatSmokeTest {
     private var previousPendingVerifier = ""
     private var previousPendingFlow = ""
 
+    private val workspaceListsReceived = CountDownLatch(2)
     private val createConversationReceived = CountDownLatch(1)
     private val assistantRequestReceived = CountDownLatch(1)
     private val messagesAfterAnswerReceived = CountDownLatch(1)
@@ -174,7 +175,7 @@ class AssistantChatSmokeTest {
             awaitText("+ Nova conversa")
             assertTrue(
                 "The assistant workspace did not load its conversation and invoice lists.",
-                historySearchReceived.await(10, TimeUnit.SECONDS)
+                workspaceListsReceived.await(10, TimeUnit.SECONDS)
             )
 
             onView(withText("+ Nova conversa")).perform(scrollTo(), click())
@@ -231,14 +232,17 @@ class AssistantChatSmokeTest {
             return when (path) {
                 "/rest/v1/rpc/studiomesa_assistant_list_conversations" -> {
                     val payload = JSONObject(request.body.readUtf8())
+                    workspaceListsReceived.countDown()
                     if (payload.optString("p_query") == "desperdício") {
                         historySearchReceived.countDown()
                     }
                     jsonResponse(conversationRows())
                 }
 
-                "/rest/v1/rpc/studiomesa_assistant_list_invoices" ->
+                "/rest/v1/rpc/studiomesa_assistant_list_invoices" -> {
+                    workspaceListsReceived.countDown()
                     jsonResponse("[]")
+                }
 
                 "/rest/v1/rpc/studiomesa_assistant_create_conversation" -> {
                     createConversationReceived.countDown()
