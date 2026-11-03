@@ -1565,7 +1565,7 @@ object SupabaseApi {
         val returnedId = row.optString("invoice_id")
         val storagePath = row.optString("storage_path")
         require(returnedId == invoiceId && storagePath.matches(
-            Regex("^[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}\\\\.pdf$")
+            Regex("^[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}\\.pdf$")
         )) {
             "O servidor devolveu um destino de arquivo inválido."
         }
@@ -1578,7 +1578,7 @@ object SupabaseApi {
             "O PDF deve ter até 10 MB."
         }
         require(storagePath.matches(
-            Regex("^[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}\\\\.pdf$")
+            Regex("^[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}\\.pdf$")
         )) {
             "O caminho privado da fatura não é válido."
         }
