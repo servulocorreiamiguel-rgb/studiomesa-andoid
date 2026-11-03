@@ -43,7 +43,7 @@ class AssistantChatUiInstrumentedTest {
                 onView(withText("Histórico de conversas")).check(matches(isDisplayed()))
                 onView(withText("Fechar")).perform(click())
 
-                onView(withText("Memória")).check(matches(isDisplayed())).perform(click())
+                onView(withText("Memória")).perform(scrollTo()).check(matches(isDisplayed())).perform(click())
                 onView(withText("Memória do assistente")).check(matches(isDisplayed()))
                 onView(withText("Cancelar")).perform(click())
 
