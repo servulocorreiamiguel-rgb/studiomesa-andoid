@@ -23,11 +23,11 @@ class ReportCsvExporterTest {
     fun neutralisesSpreadsheetFormulaInjectionAndNormalisesControlCharacters() {
         val csv = ReportCsvExporter.toCsv(
             listOf(
-        assertTrue(csv.contains("\"' =HYPERLINK(\"\"https://example.invalid\"\")\""))
+                OrderReportRecord("=1+1", "", 1, "\t=HYPERLINK(\"https://example.invalid\")", 1, BigDecimal("1.00"), "+RUN")
             )
         )
         assertTrue(csv.contains("\"'=1+1\""))
-        assertTrue(csv.contains("\" =HYPERLINK(\"\"https://example.invalid\"\")\""))
+        assertTrue(csv.contains("\"' =HYPERLINK(\"\"https://example.invalid\"\")\""))
         assertTrue(csv.contains(";\"'+RUN\""))
     }
 
