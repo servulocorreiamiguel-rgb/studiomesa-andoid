@@ -92,6 +92,8 @@ class MainActivity : Activity() {
     private var assistantChatScopeKey: String? = null
     private var assistantComposerDraft = ""
     private var assistantChatError: String? = null
+    private var assistantReplyPending = false
+    private val assistantSettingsPrefs by lazy { getSharedPreferences("studiomesa_assistant_settings_v1", MODE_PRIVATE) }
     private var assistantFinancialToolsExpanded = false
     private var assistantAnalysisExpanded = false
     private var selectedAnalysisPeriod = SalesAnalysisPeriod.ALL_TIME
@@ -4747,7 +4749,11 @@ class MainActivity : Activity() {
         statusCard.addView(label("ASSISTENTE STUDIO MESA", 9.5f, true, copper))
         addGap(statusCard, 5)
         statusCard.addView(label(
-            "O histórico e a memória ficam cifrados neste dispositivo e separados por conta. As respostas ainda usam o motor local do StudioMesa; a ligação a um modelo generativo e à pesquisa na Internet não está ativa.",
+            if (assistantGeminiEnabled()) {
+                "Gemini generativo ativo para conversa geral. Perguntas com faturas, dados fiscais, valores financeiros, dados pessoais ou números continuam no motor local; nunca são enviados anexos, OCR ou Memória."
+            } else {
+                "O histórico e a memória ficam cifrados neste dispositivo. O motor local trata das faturas e cálculos; podes ativar o Gemini gratuito para conversa geral, com envio de texto para a Google."
+            },
             11.5f, false, white
         ))
         container.addView(statusCard, cardParams())
@@ -4769,6 +4775,13 @@ class MainActivity : Activity() {
             showAssistantMemoryDialog()
         }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { setMargins(dp(4), 0, 0, 0) })
         container.addView(toolbar, LinearLayout.LayoutParams(-1, -2))
+        addGap(container, 5)
+        container.addView(secondaryButton(
+            if (assistantGeminiEnabled()) "Gemini generativo ativo · gerir consentimento"
+            else "Ativar conversa generativa gratuita"
+        ) {
+            showGenerativeAiConsentDialog()
+        }, LinearLayout.LayoutParams(-1, dp(42)))
         addGap(container, 10)
 
         val activeThread = runCatching {
@@ -4813,6 +4826,11 @@ class MainActivity : Activity() {
             turns.forEach { turn -> renderAssistantBubble(container, turn) }
         }
 
+        if (assistantReplyPending) {
+            val pendingCard = makeCard(11, copperPale)
+            pendingCard.addView(label("A IA está a preparar uma resposta…", 11.5f, true, forestDeep))
+            container.addView(pendingCard, cardParams())
+        }
         assistantChatError?.let { error ->
             val errorCard = makeCard(11, paleRed)
             errorCard.addView(label(error, 11.5f, true, red))
@@ -4900,12 +4918,74 @@ class MainActivity : Activity() {
         parent.addView(row, LinearLayout.LayoutParams(-1, -2))
     }
 
+    private fun assistantGeminiEnabled(): Boolean =
+        assistantSettingsPrefs.getBoolean("gemini_free_tier_enabled", false) &&
+            hasRemoteRestaurant() &&
+            backendPrefs.getString("restaurant_role", "").orEmpty() == "owner"
+
+    private fun showGenerativeAiConsentDialog() {
+        if (!hasRemoteRestaurant() || backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") {
+            AlertDialog.Builder(this)
+                .setTitle("IA generativa")
+                .setMessage("Esta ligação só pode ser ativada pelo proprietário de um restaurante configurado e autenticado.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        if (assistantGeminiEnabled()) {
+            AlertDialog.Builder(this)
+                .setTitle("Gemini generativo")
+                .setMessage("Desativar o envio de conversas gerais para o Gemini? O assistente continuará a responder com as ferramentas locais.")
+                .setNegativeButton("Manter ativo", null)
+                .setPositiveButton("Desativar") { _, _ ->
+                    assistantSettingsPrefs.edit().putBoolean("gemini_free_tier_enabled", false).apply()
+                    renderApp()
+                }
+                .show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Ativar Gemini gratuito")
+            .setMessage(
+                "Ao ativar, as mensagens de conversa geral e o contexto recente da conversa podem ser enviados à Google Gemini API para gerar respostas. No escalão gratuito, a Google indica que o conteúdo pode ser usado para melhorar os seus produtos e existem limites de utilização.\n\n" +
+                    "O StudioMesa bloqueia este envio quando deteta faturas, IVA, valores financeiros, dados pessoais ou números. Anexos, texto OCR/XML, Memória e histórico de faturas nunca são enviados por esta ligação. Essas perguntas continuam a ser tratadas localmente.\n\n" +
+                    "Não escrevas nomes, contactos, NIF, palavras-passe ou informação confidencial nas conversas enviadas. A chave Gemini fica no servidor, nunca na aplicação."
+            )
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Concordo e ativar") { _, _ ->
+                assistantSettingsPrefs.edit().putBoolean("gemini_free_tier_enabled", true).apply()
+                renderApp()
+            }
+            .show()
+    }
+
+    private fun shouldUseGemini(scope: String, conversationId: String): Boolean {
+        if (!assistantGeminiEnabled()) return false
+        val turns = runCatching { assistantChatStore.readTurns(scope, conversationId) }.getOrDefault(emptyList())
+        return turns.isNotEmpty() && GenerativeAssistantPrivacyFilter.isSafeToSend(turns.takeLast(10).map { it.content })
+    }
+
+    private fun buildGeminiMessages(scope: String, conversationId: String): JSONArray {
+        val turns = assistantChatStore.readTurns(scope, conversationId).takeLast(10)
+        require(turns.isNotEmpty() && GenerativeAssistantPrivacyFilter.isSafeToSend(turns.map { it.content })) {
+            "Esta conversa contém dados que devem permanecer no motor local."
+        }
+        return JSONArray().apply {
+            turns.forEach { turn ->
+                put(JSONObject()
+                    .put("role", if (turn.role == "assistant") "assistant" else "user")
+                    .put("text", turn.content.take(1600)))
+            }
+        }
+    }
+
     private fun sendAssistantMessage(rawMessage: String) {
         val question = rawMessage.trim().take(1000)
         if (question.isBlank()) {
             Toast.makeText(this, "Escreve uma mensagem primeiro.", Toast.LENGTH_SHORT).show()
             return
         }
+        if (assistantReplyPending) return
 
         val scope = assistantChatScope()
         try {
@@ -4916,10 +4996,43 @@ class MainActivity : Activity() {
                 question
             )
             activeAssistantConversationId = conversationId
+            assistantComposerDraft = ""
+            assistantChatError = null
+            if (shouldUseGemini(scope, conversationId)) {
+                assistantReplyPending = true
+                renderApp()
+                Thread {
+                    val result = runCatching {
+                        refreshSessionIfNeeded()
+                        SupabaseApi.generateRestaurantAssistantReply(
+                            backendToken(),
+                            backendRestaurantId(),
+                            buildGeminiMessages(scope, conversationId)
+                        )
+                    }
+                    runOnUiThread {
+                        assistantReplyPending = false
+                        val reply = result.getOrElse { error ->
+                            val local = runCatching {
+                                answerAssistantChatMessage(question, scope, conversationId)
+                            }.getOrElse { "Não foi possível gerar uma resposta neste momento." }
+                            "A IA generativa não está disponível neste momento (" +
+                                (error.message ?: "erro de ligação") + ").\n\nResposta local do StudioMesa:\n$local"
+                        }
+                        runCatching {
+                            assistantChatStore.appendTurn(scope, conversationId, "assistant", reply)
+                        }.onFailure {
+                            assistantChatError = "A resposta chegou, mas não foi possível guardá-la no histórico."
+                        }
+                        renderApp()
+                    }
+                }.start()
+                return
+            }
+
             val reply = answerAssistantChatMessage(question, scope, conversationId)
             assistantChatStore.appendTurn(scope, conversationId, "assistant", reply)
             assistantChatError = null
-            assistantComposerDraft = ""
         } catch (error: Exception) {
             assistantChatError = error.message ?: "Não foi possível guardar ou responder à mensagem."
         }
