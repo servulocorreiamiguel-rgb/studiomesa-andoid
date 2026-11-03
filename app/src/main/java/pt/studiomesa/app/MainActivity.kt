@@ -233,7 +233,11 @@ class MainActivity : Activity() {
                                     "Documento guardado. Texto reconhecido localmente em ${recognized.pagesProcessed} página(s). Confirma fornecedor, datas e valores antes de usar."
                             }
                             Toast.makeText(this, notice, Toast.LENGTH_LONG).show()
-                            showAssistantInvoiceDetails(scope, invoiceId)
+                            if (recognized != null) {
+                                showInvoiceExtractionSuggestions(scope, invoiceId, recognized.text)
+                            } else {
+                                showAssistantInvoiceDetails(scope, invoiceId)
+                            }
                         }
                     } catch (error: Exception) {
                         runOnUiThread {
@@ -4948,11 +4952,9 @@ class MainActivity : Activity() {
             }
         }
 
-        val asksForBriefing = listOf(
-            "resumo da operacao", "resumo da operação", "faz um resumo",
-            "resume a operacao", "resume o restaurante", "ponto de situacao"
-        ).any { normalized.contains(it) }
-        if (asksForBriefing) {
+        if (RestaurantAssistantIntentClassifier.classify(question).intent ==
+            RestaurantAssistantIntent.DAILY_BRIEFING
+        ) {
             val briefing = StudioMesaAdvisor.dailyBriefing(assistantSnapshot())
             return "${briefing.title}\n\n${briefing.response}"
         }
@@ -5072,7 +5074,10 @@ class MainActivity : Activity() {
         }
         val supplier = addField("Fornecedor", "Ex.: Distribuidor alimentar")
         val number = addField("Número do documento", "Ex.: FT A/2026/104")
-        val date = addField("Data (DD/MM/AAAA)", SimpleDateFormat("dd/MM/yyyy", Locale("pt", "PT")).format(Date()))
+        val defaultInvoiceDate = SimpleDateFormat("dd/MM/yyyy", Locale("pt", "PT")).format(Date())
+        val date = addField("Data (DD/MM/AAAA)", defaultInvoiceDate).apply {
+            setText(defaultInvoiceDate)
+        }
         val type = Spinner(this).apply {
             adapter = ArrayAdapter(
                 this@MainActivity,
@@ -5212,6 +5217,119 @@ class MainActivity : Activity() {
             override fun afterTextChanged(s: android.text.Editable?) = Unit
         })
         refresh("")
+        dialog.show()
+    }
+
+    private fun showInvoiceExtractionSuggestions(scope: String, invoiceId: String, extractedText: String) {
+        if (!canManageInvoices()) return
+        val invoice = runCatching {
+            assistantChatStore.listInvoices(scope).firstOrNull { it.id == invoiceId }
+        }.getOrNull() ?: return
+        val suggestions = InvoiceExtractionSuggestionParser.parse(extractedText)
+        if (suggestions.isEmpty()) {
+            showAssistantInvoiceDetails(scope, invoiceId)
+            return
+        }
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(6))
+        }
+        content.addView(label(
+            "O OCR identificou estes valores candidatos. Confirma-os visualmente com o documento original; o reconhecimento não é uma validação fiscal.",
+            12f, false, muted
+        ))
+        addGap(content, 9)
+
+        fun addCandidate(labelText: String, candidate: InvoiceExtractionSuggestionParser.Candidate?): EditText? {
+            if (candidate == null) return null
+            content.addView(label(
+                "$labelText · confiança estimada ${candidate.confidence}%",
+                11f, true, forestDeep
+            ))
+            content.addView(label("Fonte: ${candidate.evidence}", 9.5f, false, muted))
+            val input = inputField("Confirma ou corrige $labelText")
+            input.setText(candidate.value)
+            content.addView(input, LinearLayout.LayoutParams(-1, dp(44)).apply {
+                setMargins(0, dp(3), 0, dp(8))
+            })
+            return input
+        }
+
+        val supplierInput = addCandidate("Fornecedor", suggestions.supplier)
+        val numberInput = addCandidate("Número do documento", suggestions.documentNumber)
+        val dateInput = addCandidate("Data (AAAA-MM-DD)", suggestions.invoiceDate)
+        val netInput = addCandidate("Base tributável (€)", suggestions.netAmount?.let {
+            it.copy(value = it.value.replace('.', ','))
+        })
+        val vatInput = addCandidate("IVA (€)", suggestions.taxAmount?.let {
+            it.copy(value = it.value.replace('.', ','))
+        })
+        val totalInput = addCandidate("Total (€)", suggestions.totalAmount?.let {
+            it.copy(value = it.value.replace('.', ','))
+        })
+        val typeConfirmation = suggestions.invoiceType?.let { candidate ->
+            CheckBox(this).apply {
+                text = if (candidate.value == "credit_note") {
+                    "Confirmar que este documento é uma nota de crédito"
+                } else {
+                    "Confirmar que este documento é uma fatura"
+                }
+                isChecked = true
+                setTextColor(forestDeep)
+                textSize = 11.5f
+                content.addView(this)
+            }
+        }
+
+        val scroll = ScrollView(this).apply { addView(content) }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Confirmar dados reconhecidos")
+            .setView(scroll)
+            .setNegativeButton("Ignorar", null)
+            .setPositiveButton("Confirmar dados", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener {
+                dialog.dismiss()
+                showAssistantInvoiceDetails(scope, invoiceId)
+            }
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                try {
+                    fun candidateText(input: EditText?, old: String): String =
+                        input?.text?.toString()?.trim()?.takeIf { it.isNotBlank() } ?: old
+                    val nextNet = netInput?.let { parseInvoiceAmount(it.text.toString(), "base tributável") } ?: invoice.netAmount
+                    val nextVat = vatInput?.let { parseInvoiceAmount(it.text.toString(), "IVA") } ?: invoice.taxAmount
+                    val nextTotal = totalInput?.let { parseInvoiceAmount(it.text.toString(), "total") } ?: invoice.totalAmount
+                    val sum = BigDecimal(nextNet).add(BigDecimal(nextVat))
+                    require(sum.subtract(BigDecimal(nextTotal)).abs() <= BigDecimal("0.02")) {
+                        "A base tributável mais o IVA não coincide com o total. Corrige os campos ou ignora as sugestões."
+                    }
+                    val nextDate = dateInput?.text?.toString()?.trim()?.takeIf { it.isNotBlank() } ?: invoice.invoiceDate
+                    val updated = invoice.copy(
+                        supplier = candidateText(supplierInput, invoice.supplier),
+                        number = candidateText(numberInput, invoice.number),
+                        invoiceDate = nextDate,
+                        invoiceType = if (typeConfirmation?.isChecked == true) {
+                            suggestions.invoiceType?.value ?: invoice.invoiceType
+                        } else invoice.invoiceType,
+                        netAmount = nextNet,
+                        taxAmount = nextVat,
+                        totalAmount = nextTotal
+                    )
+                    assistantChatStore.saveInvoice(scope, updated)
+                    dialog.dismiss()
+                    Toast.makeText(this, "Os valores confirmados foram guardados. Revê o documento original.", Toast.LENGTH_LONG).show()
+                    window.decorView.post { showAssistantInvoiceDetails(scope, invoiceId) }
+                } catch (error: Exception) {
+                    AlertDialog.Builder(this)
+                        .setTitle("Não foi possível aplicar as sugestões")
+                        .setMessage(error.message ?: "Revê os campos e tenta novamente.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            }
+        }
         dialog.show()
     }
 
