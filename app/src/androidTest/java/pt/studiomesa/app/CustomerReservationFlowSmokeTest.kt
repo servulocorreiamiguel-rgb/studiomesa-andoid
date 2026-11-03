@@ -174,7 +174,7 @@ class CustomerReservationFlowSmokeTest {
 
             onView(withContentDescription("Abrir secção Reservas")).perform(click())
             assertTrue("The initial reservation list request was not received.", initialListReceived.await(10, TimeUnit.SECONDS))
-            awaitText("Ainda não tens reservas.")
+            awaitText("Ainda não tens reservas. Quando pedires uma, aparece aqui o estado do pedido.")
 
             onView(withText("+  Pedir uma reserva")).perform(scrollTo(), click())
             onView(withHint("Nome para a reserva")).perform(replaceText("Miguel Teste"))
