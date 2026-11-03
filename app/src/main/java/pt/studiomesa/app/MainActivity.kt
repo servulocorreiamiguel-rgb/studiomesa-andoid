@@ -5248,7 +5248,7 @@ class MainActivity : Activity() {
                 11f, true, forestDeep
             ))
             content.addView(label("Fonte: ${candidate.evidence}", 9.5f, false, muted))
-            val input = inputField("Confirma ou corrige $labelText")
+            val input = inputField("Confirma ou corrige $labelText", InputType.TYPE_CLASS_TEXT)
             input.setText(candidate.value)
             content.addView(input, LinearLayout.LayoutParams(-1, dp(44)).apply {
                 setMargins(0, dp(3), 0, dp(8))
@@ -5268,19 +5268,7 @@ class MainActivity : Activity() {
         val totalInput = addCandidate("Total (€)", suggestions.totalAmount?.let {
             it.copy(value = it.value.replace('.', ','))
         })
-        val typeConfirmation = suggestions.invoiceType?.let { candidate ->
-            CheckBox(this).apply {
-                text = if (candidate.value == "credit_note") {
-                    "Confirmar que este documento é uma nota de crédito"
-                } else {
-                    "Confirmar que este documento é uma fatura"
-                }
-                isChecked = true
-                setTextColor(forestDeep)
-                textSize = 11.5f
-                content.addView(this)
-            }
-        }
+        val confirmedInvoiceType = suggestions.invoiceType?.value
 
         val scroll = ScrollView(this).apply { addView(content) }
         val dialog = AlertDialog.Builder(this)
@@ -5310,9 +5298,7 @@ class MainActivity : Activity() {
                         supplier = candidateText(supplierInput, invoice.supplier),
                         number = candidateText(numberInput, invoice.number),
                         invoiceDate = nextDate,
-                        invoiceType = if (typeConfirmation?.isChecked == true) {
-                            suggestions.invoiceType?.value ?: invoice.invoiceType
-                        } else invoice.invoiceType,
+                        invoiceType = confirmedInvoiceType ?: invoice.invoiceType,
                         netAmount = nextNet,
                         taxAmount = nextVat,
                         totalAmount = nextTotal
