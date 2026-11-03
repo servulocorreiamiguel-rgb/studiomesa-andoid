@@ -87,6 +87,12 @@ class MainActivity : Activity() {
     private var assistantComposerDraft = ""
     private var assistantChatError: String? = null
     private var assistantSending = false
+    private var assistantStreamingTextView: TextView? = null
+    private var assistantModelDownloading = false
+    private var assistantModelProgressBytes = 0L
+    private var assistantModelError: String? = null
+    private val localAssistantModelManagerDelegate = lazy { LocalAssistantModelManager(this) }
+    private val localAssistantModelManager by localAssistantModelManagerDelegate
     private var assistantFinancialToolsExpanded = false
     private var assistantAnalysisExpanded = false
     private var selectedAnalysisPeriod = SalesAnalysisPeriod.ALL_TIME
@@ -180,6 +186,20 @@ class MainActivity : Activity() {
         stopKitchenAutoRefresh()
         stopInventoryAutoRefresh()
         super.onPause()
+    }
+
+    override fun onStop() {
+        if (localAssistantModelManagerDelegate.isInitialized()) {
+            localAssistantModelManager.releaseEngine()
+        }
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        if (localAssistantModelManagerDelegate.isInitialized()) {
+            localAssistantModelManager.close()
+        }
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: android.content.Intent) {
@@ -4616,55 +4636,137 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun assistantOnlinePreferenceKey(scope: String): String {
-        val digest = java.security.MessageDigest.getInstance("SHA-256")
-            .digest(scope.toByteArray(Charsets.UTF_8))
-        return "online_" + digest.joinToString("") { "%02x".format(it) }
+    private fun renderLocalAssistantModelCard(container: LinearLayout) {
+        val modelInstalled = localAssistantModelManager.isModelInstalled()
+        val card = makeCard(13, if (modelInstalled) paleGreen else copperPale)
+        card.addView(label("MODELO DE IA NO DISPOSITIVO", 9.5f, true, forestDeep))
+        addGap(card, 5)
+        val status = when {
+            assistantModelDownloading || localAssistantModelManager.isDownloading() ->
+                "A transferir o modelo: \${((assistantModelProgressBytes * 100) / localAssistantModelManager.modelSizeBytes()).coerceIn(0, 100)}%."
+            modelInstalled ->
+                "IA generativa instalada. As mensagens e os dados selecionados são processados no próprio telemóvel, sem API e sem cobrança por mensagem."
+            else ->
+                "O motor generativo local ainda não foi instalado. O assistente de regras continua disponível; transfere o modelo uma única vez para ativar a conversa generativa offline."
+        }
+        card.addView(label(status, 12f, false, ink))
+        addGap(card, 8)
+
+        if (assistantModelDownloading || localAssistantModelManager.isDownloading()) {
+            card.addView(label(
+                "Transferido: \${formatModelBytes(assistantModelProgressBytes)} de aproximadamente 736 MB",
+                10.5f, true, forest
+            ))
+        } else if (!modelInstalled) {
+            card.addView(secondaryButton("Transferir IA local · 736 MB") {
+                AlertDialog.Builder(this)
+                    .setTitle("Instalar IA local")
+                    .setMessage(
+                        "A transferência inicial é de aproximadamente 736 MB e requer Internet. O ficheiro fica guardado na área privada da aplicação. Depois de instalado, o modelo funciona sem Internet e não envia mensagens, memória ou dados do restaurante para servidores. A transferência pode consumir dados móveis; recomenda-se Wi-Fi."
+                    )
+                    .setNegativeButton("Cancelar", null)
+                    .setPositiveButton("Transferir") { _, _ -> startLocalAssistantModelDownload() }
+                    .show()
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+        } else {
+            card.addView(label("Modelo LFM2.5 1.2B · quantização INT4 · execução CPU local", 10.5f, true, forest))
+        }
+
+        assistantModelError?.let {
+            addGap(card, 6)
+            card.addView(label(it, 11f, true, red))
+        }
+        container.addView(card, cardParams())
     }
 
-    private fun isAssistantOnlineEnabled(scope: String = assistantChatScope()): Boolean =
-        getSharedPreferences("studiomesa_assistant_settings_v1", MODE_PRIVATE)
-            .getBoolean(assistantOnlinePreferenceKey(scope), false)
-
-    private fun setAssistantOnlineEnabled(enabled: Boolean, scope: String = assistantChatScope()) {
-        getSharedPreferences("studiomesa_assistant_settings_v1", MODE_PRIVATE)
-            .edit()
-            .putBoolean(assistantOnlinePreferenceKey(scope), enabled)
-            .apply()
+    private fun formatModelBytes(bytes: Long): String {
+        val megabytes = bytes.toDouble() / (1024.0 * 1024.0)
+        return String.format(Locale("pt", "PT"), "%.0f MB", megabytes)
     }
 
-    private fun configureAssistantOnlineMode(scope: String) {
-        if (isAssistantOnlineEnabled(scope)) {
-            AlertDialog.Builder(this)
-                .setTitle("Desativar IA generativa?")
-                .setMessage("As próximas mensagens deixam de ser enviadas ao modelo externo. O histórico cifrado que já está guardado neste dispositivo não é apagado.")
-                .setNegativeButton("Manter ativa", null)
-                .setPositiveButton("Desativar") { _, _ ->
-                    setAssistantOnlineEnabled(false, scope)
+    private fun startLocalAssistantModelDownload() {
+        if (assistantModelDownloading || localAssistantModelManager.isDownloading()) return
+        assistantModelDownloading = true
+        assistantModelProgressBytes = 0L
+        assistantModelError = null
+        renderApp()
+        var lastShownPercent = -1
+        localAssistantModelManager.downloadModel(
+            onProgress = { downloaded, total ->
+                runOnUiThread {
+                    assistantModelProgressBytes = downloaded
+                    val percent = if (total > 0L) ((downloaded * 100) / total).toInt() else 0
+                    if (percent != lastShownPercent) {
+                        lastShownPercent = percent
+                        renderApp()
+                    }
+                }
+            },
+            onComplete = { result ->
+                runOnUiThread {
+                    assistantModelDownloading = false
+                    result.fold(
+                        onSuccess = {
+                            assistantModelProgressBytes = localAssistantModelManager.modelSizeBytes()
+                            assistantModelError = null
+                            Toast.makeText(this, "IA local instalada e verificada.", Toast.LENGTH_LONG).show()
+                        },
+                        onFailure = { error ->
+                            assistantModelError = error.message ?: "Não foi possível instalar o modelo local."
+                        }
+                    )
                     renderApp()
                 }
-                .show()
-            return
-        }
-        if (backendToken().isBlank() || backendRestaurantId().isBlank()) {
-            AlertDialog.Builder(this)
-                .setTitle("Conta do restaurante necessária")
-                .setMessage("Para usar a IA generativa, inicia sessão e configura primeiro o restaurante na secção Conta. A versão local continua disponível.")
-                .setPositiveButton("OK", null)
-                .show()
-            return
-        }
-        AlertDialog.Builder(this)
-            .setTitle("Ativar IA generativa")
-            .setMessage(
-                "A StudioMesa vai enviar à Google Gemini a mensagem que escreveres, até 16 mensagens anteriores desta conversa e a Memória que guardaste. Esses dados passam pelo servidor da StudioMesa; a chave do modelo nunca fica no APK.\n\nNão são enviados automaticamente faturas, contactos de clientes, reservas, stock ou a base de dados completa. Não incluas palavras-passe nem dados pessoais desnecessários. A modalidade gratuita da API tem limites de utilização e pode usar conteúdo para melhorar os produtos Google. A pesquisa na Internet está desligada por defeito; se for ativada na configuração do servidor, pode gerar custos por pesquisa. Podes desativar esta ligação a qualquer momento."
-            )
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Concordo e ativar") { _, _ ->
-                setAssistantOnlineEnabled(true, scope)
-                renderApp()
             }
-            .show()
+        )
+    }
+
+    private fun buildLocalAssistantSystemInstruction(scope: String): String {
+        val snapshot = assistantSnapshot()
+        val restaurantName = backendPrefs.getString("restaurant_name", "").orEmpty().ifBlank { "Restaurante sem nome configurado" }
+        val memory = runCatching { assistantChatStore.readMemory(scope) }.getOrDefault("")
+        return buildString {
+            appendLine("És a IA local da StudioMesa, uma assistente inteligente especializada em gestão de restaurantes.")
+            appendLine("Responde sempre em português de Portugal, com clareza, rigor, naturalidade e espírito crítico.")
+            appendLine("Ajuda em gestão económica, custos, margens, preços, stock, desperdício, receitas, pedidos, reservas, equipa, marketing, planeamento e utilização da aplicação.")
+            appendLine("Compara alternativas, verifica contas, explica pressupostos e separa factos, estimativas e hipóteses. Não mostres raciocínio interno privado; apresenta conclusões, fórmulas e explicações verificáveis.")
+            appendLine("Nunca inventes valores, vendas, faturas, documentos, fornecedores, integrações ou ações. Quando faltarem dados, diz exatamente o que falta.")
+            appendLine("Não és contabilista certificado. Não substituis aconselhamento fiscal, jurídico ou contabilístico. Distingue valores com IVA e sem IVA.")
+            appendLine("Não podes alterar preços, stock, pedidos, reservas, pagamentos, permissões ou documentos. Apenas analisa e recomenda; qualquer operação exige confirmação humana através dos controlos da aplicação.")
+            appendLine("Não afirmes que tens acesso à Internet, a bancos, a programas de faturação ou a faturas que não estejam importadas.")
+            appendLine()
+            appendLine("CONTEXTO ATUAL DO STUDIO MESA")
+            appendLine("Restaurante: $restaurantName")
+            appendLine("Modo: \${if (snapshot.isDemo) "demonstração; os dados não representam um restaurante real" else "conta de restaurante autenticada"}")
+            appendLine("Artigos da carta carregados: \${snapshot.menuItems.size}")
+            snapshot.menuItems.take(40).forEach { item ->
+                val margin = if (item.sellingPrice > java.math.BigDecimal.ZERO) {
+                    item.sellingPrice.subtract(item.unitCost)
+                } else java.math.BigDecimal.ZERO
+                appendLine(
+                    "- \${item.name}: venda \${item.sellingPrice.toPlainString()} EUR; custo registado \${item.unitCost.toPlainString()} EUR; diferença bruta indicativa \${margin.toPlainString()} EUR; categoria \${item.category}."
+                )
+            }
+            appendLine("Pedidos ativos: \${snapshot.activeOrderCount}; em preparação: \${snapshot.preparationOrderCount}.")
+            appendLine("Stock disponível no contexto: \${if (snapshot.stockLoaded) "sim" else "não carregado ou não atualizado"}.")
+            if (snapshot.stockLoaded) {
+                snapshot.stockItems.take(50).forEach { item ->
+                    appendLine(
+                        "- Stock \${item.name}: \${item.quantity.toPlainString()} \${item.unit}; mínimo \${item.minimumQuantity.toPlainString()}; custo unitário \${item.unitCostPerUnit?.toPlainString() ?: "desconhecido"} EUR."
+                    )
+                }
+            }
+            appendLine("Reservas disponíveis no contexto: \${if (snapshot.reservationsLoaded) "sim" else "não carregadas"}.")
+            if (snapshot.reservationsLoaded) appendLine("Reservas pendentes: \${snapshot.pendingReservations}.")
+            appendLine("As faturas de fornecedores ainda não estão integradas nem armazenadas nesta aplicação.")
+            if (memory.isNotBlank()) {
+                appendLine()
+                appendLine("MEMÓRIA DO UTILIZADOR PARA ESTE RESTAURANTE")
+                appendLine(memory)
+            }
+            appendLine()
+            appendLine("Os dados acima são o único contexto operacional confirmado. Não extrapoles para dados que não foram fornecidos.")
+        }.take(6500)
     }
 
     private fun renderAssistant(container: LinearLayout) {
@@ -4686,21 +4788,12 @@ class MainActivity : Activity() {
         val statusCard = makeCard(13, forest)
         statusCard.addView(label("ASSISTENTE STUDIO MESA", 9.5f, true, copper))
         addGap(statusCard, 5)
-        val onlineEnabled = isAssistantOnlineEnabled(scope)
         statusCard.addView(label(
-            if (onlineEnabled) {
-                "Modo online selecionado. As mensagens, até 16 mensagens anteriores e a Memória são enviadas à Google Gemini através do servidor StudioMesa. A utilização efetiva depende de a chave do modelo estar configurada no backend. Não são enviados automaticamente documentos nem a base de dados do restaurante."
-            } else {
-                "Modo local ativo. O histórico e a Memória ficam cifrados neste dispositivo. Podes ativar a IA generativa para conversar com um modelo Gemini; a ativação envia as mensagens e a Memória para processamento externo."
-            },
+            "A StudioMesa pode usar um modelo generativo executado no próprio telemóvel. Depois da transferência inicial, as conversas e os dados do restaurante permanecem no dispositivo: sem API externa, sem chave e sem custo por mensagem.",
             11.5f, false, white
         ))
         container.addView(statusCard, cardParams())
-        container.addView(secondaryButton(
-            if (onlineEnabled) "IA generativa ativa · gerir ligação" else "Ativar IA generativa"
-        ) {
-            configureAssistantOnlineMode(scope)
-        }, LinearLayout.LayoutParams(-1, dp(44)))
+        renderLocalAssistantModelCard(container)
         addGap(container, 8)
 
         val toolbar = LinearLayout(this).apply {
@@ -4762,6 +4855,16 @@ class MainActivity : Activity() {
             }
         } else {
             turns.forEach { turn -> renderAssistantBubble(container, turn) }
+        }
+        if (assistantSending) {
+            val thinkingCard = makeCard(12)
+            thinkingCard.addView(label("STUDIOMESA · IA LOCAL", 9f, true, forestSoft))
+            addGap(thinkingCard, 5)
+            assistantStreamingTextView = label("A analisar no dispositivo…", 13f, false, ink)
+            thinkingCard.addView(assistantStreamingTextView)
+            container.addView(thinkingCard, cardParams())
+        } else {
+            assistantStreamingTextView = null
         }
 
         assistantChatError?.let { error ->
@@ -4871,7 +4974,7 @@ class MainActivity : Activity() {
 
     private fun sendAssistantMessage(rawMessage: String) {
         if (assistantSending) return
-        val question = rawMessage.trim().take(8000)
+        val question = rawMessage.trim().take(4000)
         if (question.isBlank()) {
             Toast.makeText(this, "Escreve uma mensagem primeiro.", Toast.LENGTH_SHORT).show()
             return
@@ -4889,53 +4992,43 @@ class MainActivity : Activity() {
             assistantComposerDraft = ""
             assistantChatError = null
 
-            if (isAssistantOnlineEnabled(scope)) {
-                if (backendToken().isBlank() || backendRestaurantId().isBlank()) {
-                    assistantChatError = "A sessão do restaurante terminou. Inicia sessão novamente para usar a IA generativa."
-                    renderApp()
-                    return
-                }
+            if (localAssistantModelManager.isModelInstalled()) {
                 assistantSending = true
                 renderApp()
-                runBackend(
-                    task = {
-                        val previousTurns = assistantChatStore.readTurns(scope, conversationId)
-                            .dropLast(1)
-                            .takeLast(16)
-                        val history = JSONArray()
-                        previousTurns.forEach { turn ->
-                            history.put(
-                                JSONObject()
-                                    .put("role", turn.role)
-                                    .put("content", turn.content)
-                            )
-                        }
-                        val response = SupabaseApi.askStudioMesaAssistant(
-                            backendToken(),
-                            backendRestaurantId(),
-                            question,
-                            history,
-                            assistantChatStore.readMemory(scope)
-                        )
-                        response.optString("answer").trim().ifBlank {
-                            throw IllegalStateException("A IA não devolveu uma resposta utilizável.")
+                val previousTurns = assistantChatStore.readTurns(scope, conversationId)
+                    .dropLast(1)
+                    .takeLast(LocalAssistantModelManager.MAX_HISTORY_MESSAGES)
+                    .map { turn -> LocalAssistantModelManager.Turn(turn.role, turn.content) }
+
+                localAssistantModelManager.generate(
+                    systemInstruction = buildLocalAssistantSystemInstruction(scope),
+                    history = previousTurns,
+                    userMessage = question,
+                    onToken = { token ->
+                        runOnUiThread {
+                            assistantStreamingTextView?.append(token)
                         }
                     },
-                    onError = { error ->
-                        assistantSending = false
-                        assistantChatError = friendlyBackendError(error.message)
-                        renderApp()
+                    onComplete = { result ->
+                        runOnUiThread {
+                            assistantSending = false
+                            assistantStreamingTextView = null
+                            result.fold(
+                                onSuccess = { reply ->
+                                    runCatching {
+                                        assistantChatStore.appendTurn(scope, conversationId, "assistant", reply)
+                                    }.onFailure { error ->
+                                        assistantChatError = error.message ?: "A resposta chegou, mas não foi possível guardar o histórico."
+                                    }
+                                },
+                                onFailure = { error ->
+                                    assistantChatError = error.message ?: "O modelo local não conseguiu responder."
+                                }
+                            )
+                            renderApp()
+                        }
                     }
-                ) { reply ->
-                    assistantSending = false
-                    try {
-                        assistantChatStore.appendTurn(scope, conversationId, "assistant", reply)
-                        assistantChatError = null
-                    } catch (error: Exception) {
-                        assistantChatError = error.message ?: "A resposta chegou, mas não foi possível guardá-la no histórico."
-                    }
-                    renderApp()
-                }
+                )
                 return
             }
 
@@ -4943,6 +5036,7 @@ class MainActivity : Activity() {
             assistantChatStore.appendTurn(scope, conversationId, "assistant", reply)
         } catch (error: Exception) {
             assistantSending = false
+            assistantStreamingTextView = null
             assistantChatError = error.message ?: "Não foi possível guardar ou responder à mensagem."
         }
         renderApp()
