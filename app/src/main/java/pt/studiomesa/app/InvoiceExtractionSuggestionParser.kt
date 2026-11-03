@@ -38,10 +38,10 @@ object InvoiceExtractionSuggestionParser {
         if (lines.isEmpty()) return Suggestions()
 
         val supplier = findText(lines, Regex(
-            """(?i)^\\s*(?:fornecedor|emitente|supplier|seller|nome do fornecedor)\\s*[:\\-]\\s*(.+?)\\s*$"""
+            """(?i)^\s*(?:fornecedor|emitente|supplier|seller|nome do fornecedor)\s*[:\-]\s*(.+?)\s*$"""
         ), 92)
         val number = findText(lines, Regex(
-            """(?i)^\\s*(?:n[.º°o]?\\s*(?:da\\s*)?(?:fatura|factura|nota de crédito|nota de credito|documento)|(?:n[uú]mero|numero)\\s*(?:da\\s*)?(?:fatura|factura|documento)|invoice\\s*no|document\\s*no|invoiceno|documentno)\\s*[:#\\-]?\\s*(\\S.*)$"""
+            """(?i)^\s*(?:n[.º°o]?\s*(?:da\s*)?(?:fatura|factura|nota de crédito|nota de credito|documento)|(?:n[uú]mero|numero)\s*(?:da\s*)?(?:fatura|factura|documento)|invoice\s*no|document\s*no|invoiceno|documentno)\s*[:#\-]?\s*(\S.*)$"""
         ), 90)
         val date = findDate(lines)
         val type = lines.firstOrNull { line ->
@@ -52,13 +52,13 @@ object InvoiceExtractionSuggestionParser {
                 ?.let { Candidate("invoice", 82, it.take(180)) }
 
         val net = findAmount(lines, Regex(
-            """(?i)^\\s*(?:base\\s*tribut[aá]vel|valor\\s*tribut[aá]vel|subtotal(?:\\s*sem\\s*iva)?|total\\s*l[ií]quido|net\\s*total|invoicenet)\\b(.*)$"""
+            """(?i)^\s*(?:base\s*tribut[aá]vel|valor\s*tribut[aá]vel|subtotal(?:\s*sem\s*iva)?|total\s*l[ií]quido|net\s*total|invoicenet)\b(.*)$"""
         ), 90)
         val vat = findAmount(lines, Regex(
-            """(?i)^\\s*(?:total\\s*iva|valor\\s*do\\s*iva|valor\\s*iva|iva(?:\\s*(?:total|a\\s*pagar))?|vat(?:\\s*amount)?|invoicetax)\\b(.*)$"""
+            """(?i)^\s*(?:total\s*iva|valor\s*do\s*iva|valor\s*iva|iva(?:\s*(?:total|a\s*pagar))?|vat(?:\s*amount)?|invoicetax)\b(.*)$"""
         ), 88)
         val total = findAmount(lines, Regex(
-            """(?i)^\\s*(?:total\\s*(?:a\\s*pagar|da\\s*fatura|da\\s*factura|do\\s*documento|geral)|valor\\s*total|grand\\s*total|gross\\s*total|invoicetotal)\\b(.*)$"""
+            """(?i)^\s*(?:total\s*(?:a\s*pagar|da\s*fatura|da\s*factura|do\s*documento|geral)|valor\s*total|grand\s*total|gross\s*total|invoicetotal)\b(.*)$"""
         ), 90)
 
         return Suggestions(
@@ -83,11 +83,11 @@ object InvoiceExtractionSuggestionParser {
 
     private fun findDate(lines: List<String>): Candidate? {
         val label = Regex(
-            """(?i)^\\s*(?:data(?:\\s*(?:do\\s*documento|da\\s*fatura|de\\s*emiss[aã]o|emiss[aã]o))?|date|invoicedate|docdate)\\s*[:\\-]?\\s*(.+)$"""
+            """(?i)^\s*(?:data(?:\s*(?:do\s*documento|da\s*fatura|de\s*emiss[aã]o|emiss[aã]o))?|date|invoicedate|docdate)\s*[:\-]?\s*(.+)$"""
         )
         for (line in lines) {
             val value = label.find(line)?.groupValues?.getOrNull(1)?.trim() ?: continue
-            val match = Regex("""\\b(\\d{4}-\\d{2}-\\d{2}|\\d{2}[./-]\\d{2}[./-]\\d{4})\\b""")
+            val match = Regex("""\b(\d{4}-\d{2}-\d{2}|\d{2}[./-]\d{2}[./-]\d{4})\b""")
                 .find(value)?.value ?: continue
             val formats = if (match.contains('-') && match.startsWith("20")) {
                 listOf("yyyy-MM-dd")
@@ -105,7 +105,7 @@ object InvoiceExtractionSuggestionParser {
     }
 
     private fun findAmount(lines: List<String>, label: Regex, confidence: Int): Candidate? {
-        val trailingAmount = Regex("""(-?\\d[\\d\\s.'’]*(?:[,.]\\d{1,2})?)\\s*(?:€|EUR)?\\s*$""", RegexOption.IGNORE_CASE)
+        val trailingAmount = Regex("""(-?\d[\d\s.'’]*(?:[,.]\d{1,2})?)\s*(?:€|EUR)?\s*$""", RegexOption.IGNORE_CASE)
         for (line in lines) {
             val remainder = label.find(line)?.groupValues?.getOrNull(1) ?: continue
             val match = trailingAmount.find(remainder) ?: continue
