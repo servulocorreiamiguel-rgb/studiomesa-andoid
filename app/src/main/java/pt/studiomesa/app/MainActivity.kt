@@ -4740,7 +4740,7 @@ class MainActivity : Activity() {
             invoiceCard.addView(label("FATURAS DO RESTAURANTE", 9.5f, true, forestDeep))
             addGap(invoiceCard, 6)
             invoiceCard.addView(label(
-                "A ligação a faturas contabilísticas ainda não está configurada. O projeto não tem um arquivo de faturas de fornecedores nem ligação a um programa de faturação. O QR de fatura existente serve o fluxo de fidelização e não dá acesso ao documento contabilístico.",
+                "A ligação a faturas contabilísticas ainda não está configurada. O projeto não tem um arquivo de faturas de fornecedores nem ligação a um programa de faturação/contabilidade. O QR usado na fidelização não dá acesso ao documento contabilístico. Importa também distinguir os dados de vendas das compras: a Autoridade Tributária esclarece que o SAF-T (PT) do adquirente não inclui os documentos comerciais emitidos pelos fornecedores. Para analisar essas faturas será necessária uma integração com o programa de contabilidade/gestão de compras ou uma importação segura dos documentos.",
                 12f, false, ink
             ))
             addGap(invoiceCard, 7)
@@ -4855,7 +4855,7 @@ class MainActivity : Activity() {
             "fatura de fornecedor", "despesa de fornecedor"
         ).any { normalized.contains(it) }
         if (asksAboutInvoices) {
-            return "Ainda não consigo consultar faturas contabilísticas nesta versão. O projeto não tem um arquivo de faturas de fornecedores nem uma ligação ao programa de faturação do restaurante. O QR existente está ligado à fidelização, não à leitura de documentos contabilísticos.\n\nQuando a integração estiver configurada, o agente poderá cruzar compras e custos com vendas e stock, sempre com acesso reservado ao proprietário."
+            return "Ainda não consigo consultar faturas contabilísticas nesta versão. O projeto não tem um arquivo de faturas de fornecedores nem uma ligação ao programa de faturação/contabilidade do restaurante. O QR existente está ligado à fidelização, não à leitura de documentos contabilísticos. A Autoridade Tributária esclarece que o SAF-T (PT) do adquirente não inclui os documentos comerciais a fornecedores; por isso, não basta assumir que um SAF-T de vendas contém as faturas de compras.\n\nQuando a integração estiver configurada, o agente poderá cruzar compras e custos com vendas e stock, sempre com acesso reservado ao proprietário."
         }
 
         val previousUserQuestion = runCatching {
