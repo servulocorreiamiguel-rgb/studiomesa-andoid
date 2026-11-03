@@ -14,6 +14,7 @@ import androidx.test.espresso.matcher.ViewMatchers.withContentDescription
 import androidx.test.espresso.matcher.ViewMatchers.withHint
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.hamcrest.Matchers.containsString
 import org.junit.Assume.assumeFalse
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -67,4 +68,50 @@ class AssistantChatUiInstrumentedTest {
             }
         }
     }
+    @Test
+    fun invoiceCanBeRegisteredAndUsedByTheFinancialChat() {
+        assumeFalse(BuildConfig.FLAVOR.lowercase().contains("cliente"))
+        val marker = UUID.randomUUID().toString().take(8)
+        val supplier = "Fornecedor $marker"
+        val number = "FT $marker"
+        val scope = "demo:${BuildConfig.FLAVOR}"
+        val store = AssistantChatStore(context)
+
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use {
+                onView(withContentDescription("Abrir menu de navegação")).perform(click())
+                onView(withContentDescription("Abrir secção Assistente")).perform(click())
+                onView(withText("＋ Ferramentas financeiras")).perform(scrollTo(), click())
+                onView(withText("＋ Registar fatura ou nota de crédito")).perform(scrollTo(), click())
+
+                onView(withHint("Ex.: Distribuidor alimentar"))
+                    .perform(scrollTo(), replaceText(supplier))
+                onView(withHint("Ex.: FT A/2026/104"))
+                    .perform(scrollTo(), replaceText(number))
+                onView(withHint("Ex.: 100,00")).perform(scrollTo(), replaceText("100,00"))
+                onView(withHint("Ex.: 23,00")).perform(scrollTo(), replaceText("23,00"))
+                onView(withHint("Ex.: 123,00")).perform(scrollTo(), replaceText("123,00"))
+                onView(withText("Guardar")).perform(scrollTo(), click())
+
+                onView(withText("Documento financeiro")).check(matches(isDisplayed()))
+                onView(withText(containsString(supplier))).check(matches(isDisplayed()))
+                onView(withText("Fechar")).perform(click())
+
+                val question = "Quanto gastei em compras do $supplier?"
+                onView(withHint("Escreve uma mensagem…"))
+                    .perform(scrollTo(), replaceText(question), closeSoftKeyboard())
+                onView(withText("Enviar mensagem  ↑")).perform(scrollTo(), click())
+                onView(withText(containsString("Compras líquidas registadas")))
+                    .perform(scrollTo())
+                    .check(matches(isDisplayed()))
+            }
+        } finally {
+            runCatching {
+                store.listInvoices(scope).filter { it.number == number }.forEach { invoice ->
+                    store.deleteInvoice(scope, invoice.id)?.let { AssistantInvoiceFileStore(context).delete(it) }
+                }
+            }
+        }
+    }
+
 }
