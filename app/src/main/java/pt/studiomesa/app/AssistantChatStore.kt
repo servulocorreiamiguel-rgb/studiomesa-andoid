@@ -49,7 +49,8 @@ class AssistantChatStore(context: Context) {
         val attachmentId: String?,
         val attachmentName: String?,
         val attachmentMimeType: String?,
-        val createdAtMillis: Long
+        val createdAtMillis: Long,
+        val extractedText: String = ""
     )
 
     private val preferences = context.applicationContext
@@ -190,7 +191,7 @@ class AssistantChatStore(context: Context) {
         }.filter { invoice ->
             normalizedQuery.isBlank() || listOf(
                 invoice.supplier, invoice.number, invoice.invoiceDate, invoice.notes,
-                invoice.attachmentName.orEmpty()
+                invoice.extractedText, invoice.attachmentName.orEmpty()
             ).any { normalizeSearchText(it).contains(normalizedQuery) }
         }.sortedWith(compareByDescending<Invoice> { it.invoiceDate }.thenByDescending { it.createdAtMillis })
     }
@@ -214,6 +215,9 @@ class AssistantChatStore(context: Context) {
         }
         require(invoice.invoiceType in setOf("invoice", "credit_note")) { "Tipo de documento inválido." }
         require(invoice.notes.length <= 4000) { "As notas da fatura são demasiado longas." }
+        require(invoice.extractedText.length <= MAX_INVOICE_TEXT_CHARS) {
+            "O texto reconhecido excede o limite suportado."
+        }
         fun validateAmount(value: String, label: String) {
             val amount = runCatching { java.math.BigDecimal(value) }.getOrNull()
                 ?: throw IllegalArgumentException("O valor de $label não é válido.")
@@ -256,6 +260,7 @@ class AssistantChatStore(context: Context) {
             .put("attachment_id", invoice.attachmentId ?: JSONObject.NULL)
             .put("attachment_name", invoice.attachmentName ?: JSONObject.NULL)
             .put("attachment_mime_type", invoice.attachmentMimeType ?: JSONObject.NULL)
+            .put("extracted_text", invoice.extractedText.take(MAX_INVOICE_TEXT_CHARS))
             .put("created_at", invoice.createdAtMillis)
         var replaced = false
         for (index in 0 until invoices.length()) {
@@ -292,6 +297,26 @@ class AssistantChatStore(context: Context) {
                 item.put("attachment_id", attachmentId)
                 item.put("attachment_name", attachmentName)
                 item.put("attachment_mime_type", attachmentMimeType)
+                found = true
+                break
+            }
+        }
+        require(found) { "A fatura já não existe no histórico." }
+        root.put("invoices", invoices)
+        save(scope, root)
+    }
+
+    @Synchronized
+    fun updateInvoiceExtractedText(scope: String, invoiceId: String, extractedText: String) {
+        val cleanText = extractedText.trim().take(MAX_INVOICE_TEXT_CHARS)
+        require(cleanText.isNotBlank()) { "Não existe texto reconhecido para guardar." }
+        val root = load(scope)
+        val invoices = root.optJSONArray("invoices") ?: JSONArray()
+        var found = false
+        for (index in 0 until invoices.length()) {
+            val item = invoices.optJSONObject(index) ?: continue
+            if (item.optString("id") == invoiceId) {
+                item.put("extracted_text", cleanText)
                 found = true
                 break
             }
@@ -398,6 +423,7 @@ class AssistantChatStore(context: Context) {
             taxAmount = tax,
             totalAmount = total,
             notes = item.optString("notes").take(4000),
+            extractedText = item.optString("extracted_text").take(MAX_INVOICE_TEXT_CHARS),
             attachmentId = item.optString("attachment_id").takeIf { it.isNotBlank() && it != "null" },
             attachmentName = item.optString("attachment_name").takeIf { it.isNotBlank() && it != "null" },
             attachmentMimeType = item.optString("attachment_mime_type").takeIf { it.isNotBlank() && it != "null" },
@@ -517,6 +543,7 @@ class AssistantChatStore(context: Context) {
         const val FORMAT_VERSION = 1
         const val MAX_CONVERSATIONS = 50
         const val MAX_INVOICES = 500
+        const val MAX_INVOICE_TEXT_CHARS = 20_000
         const val MAX_TURNS = 100
         const val MAX_MESSAGE_CHARS = 6000
         const val MAX_MEMORY_CHARS = 2500
