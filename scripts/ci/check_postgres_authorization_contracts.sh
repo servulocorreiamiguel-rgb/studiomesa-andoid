@@ -469,8 +469,7 @@ SELECT public.studiomesa_assistant_delete_conversation('$ASSISTANT_CONVERSATION_
 COMMIT;
 SQL
 
-ASSISTANT_DELETED_MESSAGE_COUNT="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \\
-  -c "SELECT count(*) FROM private.studiomesa_assistant_messages WHERE conversation_id = '$ASSISTANT_CONVERSATION_A'::uuid;")"
+ASSISTANT_DELETED_MESSAGE_COUNT="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 -c "SELECT count(*) FROM private.studiomesa_assistant_messages WHERE conversation_id = '$ASSISTANT_CONVERSATION_A'::uuid;")"
 if [ "$ASSISTANT_DELETED_MESSAGE_COUNT" != "0" ]; then
   echo "ERROR: deleting an assistant conversation did not remove its message history." >&2
   exit 1
