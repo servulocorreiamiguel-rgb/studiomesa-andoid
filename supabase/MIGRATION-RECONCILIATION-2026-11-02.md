@@ -411,3 +411,19 @@ A sequência local mais coerente para o fluxo de QR/fidelização e reservas é 
 Mesmo com CI verde em cada PR, as linhas #72/#74 e #76/#77 alteram ficheiros centrais comuns, como `MainActivity.kt` e `SupabaseApi.kt`. O conjunto integrado necessita de uma nova bateria de regressão depois de reconciliar essas branches.
 
 **Estado final desta revisão:** CI da branch #77 concluída com sucesso e APKs DEBUG disponíveis para teste. Nenhum PR foi integrado, nenhuma migração foi aplicada ao Supabase alojado e a preparação comercial continua bloqueada por backup/restauro, autenticação real, teste físico, política de privacidade e assinatura RELEASE.
+
+
+### Leitura dos relatórios de interface Android
+
+Os XMLs de resultados dos dois emuladores foram descarregados e inspeccionados, para além do estado verde no GitHub:
+
+| Emulador | Variantes | Casos por variante | Passaram | Ignorados por variante | Falhas/erros |
+|---|---:|---:|---:|---:|---:|
+| Android 8 / API 26 | 5 | 28 | 83 no total | 57 no total | 0 |
+| Android 16 | 5 | 28 | 83 no total | 57 no total | 0 |
+
+Os casos ignorados são, em geral, funcionalidades que não se aplicam à variante (por exemplo, ecrãs de gestão numa app Cliente ou funcionalidades Premium numa versão Essencial). Os testes executados cobrem arranque, navegação por plano, alguns fluxos locais de cliente/restaurante, assistente, gestor económico, validação de preços, armazenamento cifrado de sessão e callback OAuth/PKCE.
+
+**Limite importante do fluxo de reservas:** o teste Android do cliente abre «As minhas reservas» e confirma a indicação de iniciar sessão quando não existe uma conta autenticada. Não submete ainda uma reserva através da interface com sessão real. O script PostgreSQL de CI testa a criação pendente, repetição idempotente, rejeição de payload diferente, isolamento de histórico, atribuição pela equipa, conflito de horários, capacidade de mesa e cancelamento apenas pelo titular. O contrato do servidor está testado; o percurso Android autenticado ainda não está validado ponta a ponta.
+
+Antes de considerar reservas de cliente prontas para venda, acrescentar e executar um teste integrado que cubra: login/associação do cartão, preenchimento do formulário, envio uma única vez mesmo após retry de rede, estado pendente visível, leitura apenas das próprias reservas, cancelamento pelo titular e actualização do ecrã após a resposta do servidor. Repetir com duas contas e, depois, em dois dispositivos físicos. Não usar dados reais de clientes nos ensaios.
