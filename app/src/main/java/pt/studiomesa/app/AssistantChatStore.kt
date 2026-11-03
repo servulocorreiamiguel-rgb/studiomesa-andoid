@@ -58,7 +58,7 @@ class AssistantChatStore(context: Context) {
     @Synchronized
     fun listConversations(scope: String, query: String = ""): List<Conversation> {
         val root = load(scope)
-        val normalizedQuery = query.trim().lowercase()
+        val normalizedQuery = normalizeSearchText(query.trim())
         val conversations = root.optJSONArray("conversations") ?: JSONArray()
         val result = mutableListOf<Conversation>()
         for (index in 0 until conversations.length()) {
@@ -67,10 +67,10 @@ class AssistantChatStore(context: Context) {
             val title = item.optString("title", "Nova conversa")
             val messages = item.optJSONArray("messages") ?: JSONArray()
             val searchable = buildString {
-                append(title.lowercase())
+                append(normalizeSearchText(title))
                 for (messageIndex in 0 until messages.length()) {
                     append(' ')
-                    append(messages.optJSONObject(messageIndex)?.optString("content").orEmpty().lowercase())
+                    append(normalizeSearchText(messages.optJSONObject(messageIndex)?.optString("content").orEmpty()))
                 }
             }
             if (normalizedQuery.isNotEmpty() && !searchable.contains(normalizedQuery)) continue
@@ -191,7 +191,7 @@ class AssistantChatStore(context: Context) {
             normalizedQuery.isBlank() || listOf(
                 invoice.supplier, invoice.number, invoice.invoiceDate, invoice.notes,
                 invoice.attachmentName.orEmpty()
-            ).any { it.lowercase().contains(normalizedQuery) }
+            ).any { normalizeSearchText(it).contains(normalizedQuery) }
         }.sortedWith(compareByDescending<Invoice> { it.invoiceDate }.thenByDescending { it.createdAtMillis })
     }
 
@@ -370,6 +370,10 @@ class AssistantChatStore(context: Context) {
     @Synchronized
     fun isEconomicManagerEnabled(scope: String): Boolean =
         load(scope).optBoolean("economic_manager_enabled", false)
+
+    private fun normalizeSearchText(value: String): String =
+        java.text.Normalizer.normalize(value.lowercase(java.util.Locale.ROOT), java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
 
     private fun invoiceFromJson(item: JSONObject): Invoice? {
         val id = item.optString("id").takeIf { it.isNotBlank() } ?: return null
