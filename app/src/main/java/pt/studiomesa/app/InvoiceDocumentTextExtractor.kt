@@ -12,8 +12,6 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.TextRecognizer
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import org.xmlpull.v1.XmlPullParser
-import java.io.File
-import java.io.FileOutputStream
 import java.io.StringReader
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executor
@@ -72,13 +70,10 @@ object InvoiceDocumentTextExtractor {
     }
 
     private fun extractPdf(context: Context, uri: Uri): Result {
-        val temporaryPdf = copyToTemporaryFile(context, uri)
+        val descriptor = context.contentResolver.openFileDescriptor(uri, "r")
+            ?: throw IllegalStateException("Não foi possível abrir o PDF selecionado.")
         val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
         try {
-            val descriptor = ParcelFileDescriptor.open(
-                temporaryPdf,
-                ParcelFileDescriptor.MODE_READ_ONLY
-            )
             descriptor.use { pfd ->
                 PdfRenderer(pfd).use { renderer ->
                     require(renderer.pageCount > 0) { "O PDF não contém páginas." }
@@ -149,7 +144,6 @@ object InvoiceDocumentTextExtractor {
             }
         } finally {
             recognizer.close()
-            temporaryPdf.delete()
         }
     }
 
@@ -220,34 +214,6 @@ object InvoiceDocumentTextExtractor {
         }
         failure?.let { throw IllegalStateException("O reconhecimento de texto falhou.", it) }
         return result.orEmpty()
-    }
-
-    private fun copyToTemporaryFile(context: Context, uri: Uri): File {
-        val temporary = File.createTempFile("studiomesa-invoice-", ".pdf", context.cacheDir)
-        try {
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(temporary).use { output ->
-                    val buffer = ByteArray(8192)
-                    var total = 0
-                    while (true) {
-                        val count = input.read(buffer)
-                        if (count < 0) break
-                        total += count
-                        require(total <= MAX_DOCUMENT_BYTES) {
-                            "O PDF excede o limite de 12 MB."
-                        }
-                        output.write(buffer, 0, count)
-                    }
-                    output.flush()
-                    output.fd.sync()
-                }
-            } ?: throw IllegalStateException("Não foi possível abrir o PDF selecionado.")
-            require(temporary.length() > 0L) { "O PDF está vazio." }
-            return temporary
-        } catch (error: Exception) {
-            temporary.delete()
-            throw error
-        }
     }
 
     private fun readBounded(context: Context, uri: Uri, limit: Int): ByteArray {
