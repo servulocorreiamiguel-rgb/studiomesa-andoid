@@ -4680,7 +4680,7 @@ class MainActivity : Activity() {
     }
 
     private fun formatModelBytes(bytes: Long): String {
-        val megabytes = bytes.toDouble() / (1024.0 * 1024.0)
+        val megabytes = bytes.toDouble() / 1_000_000.0
         return String.format(Locale("pt", "PT"), "%.0f MB", megabytes)
     }
 
