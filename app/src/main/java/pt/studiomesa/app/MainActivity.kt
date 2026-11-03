@@ -4614,8 +4614,11 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun assistantOnlinePreferenceKey(scope: String): String =
-        "online_${scope.hashCode()}"
+    private fun assistantOnlinePreferenceKey(scope: String): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(scope.toByteArray(Charsets.UTF_8))
+        return "online_" + digest.joinToString("") { "%02x".format(it) }
+    }
 
     private fun isAssistantOnlineEnabled(scope: String = assistantChatScope()): Boolean =
         getSharedPreferences("studiomesa_assistant_settings_v1", MODE_PRIVATE)
@@ -4652,7 +4655,7 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("Ativar IA generativa")
             .setMessage(
-                "A StudioMesa vai enviar à Google Gemini a mensagem que escreveres, até 16 mensagens anteriores desta conversa e a Memória que guardaste. Esses dados passam por um servidor seguro da StudioMesa; a chave do modelo nunca fica no APK.\n\nNão são enviados automaticamente faturas, contactos de clientes, reservas, stock ou a base de dados completa. Não incluas palavras-passe nem dados pessoais desnecessários. A modalidade gratuita da API pode usar conteúdo para melhorar os produtos Google e tem limites de utilização. Podes desativar esta ligação a qualquer momento."
+                "A StudioMesa vai enviar à Google Gemini a mensagem que escreveres, até 16 mensagens anteriores desta conversa e a Memória que guardaste. Esses dados passam pelo servidor da StudioMesa; a chave do modelo nunca fica no APK.\n\nNão são enviados automaticamente faturas, contactos de clientes, reservas, stock ou a base de dados completa. Não incluas palavras-passe nem dados pessoais desnecessários. A modalidade gratuita da API tem limites de utilização e pode usar conteúdo para melhorar os produtos Google. A pesquisa na Internet está desligada por defeito; se for ativada na configuração do servidor, pode gerar custos por pesquisa. Podes desativar esta ligação a qualquer momento."
             )
             .setNegativeButton("Cancelar", null)
             .setPositiveButton("Concordo e ativar") { _, _ ->
@@ -4684,7 +4687,7 @@ class MainActivity : Activity() {
         val onlineEnabled = isAssistantOnlineEnabled(scope)
         statusCard.addView(label(
             if (onlineEnabled) {
-                "IA generativa ativada. As mensagens, até 16 mensagens anteriores e a Memória são enviadas à Google Gemini através do servidor StudioMesa. Não são enviados automaticamente documentos nem a base de dados do restaurante."
+                "Modo online selecionado. As mensagens, até 16 mensagens anteriores e a Memória são enviadas à Google Gemini através do servidor StudioMesa. A utilização efetiva depende de a chave do modelo estar configurada no backend. Não são enviados automaticamente documentos nem a base de dados do restaurante."
             } else {
                 "Modo local ativo. O histórico e a Memória ficam cifrados neste dispositivo. Podes ativar a IA generativa para conversar com um modelo Gemini; a ativação envia as mensagens e a Memória para processamento externo."
             },
