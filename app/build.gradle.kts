@@ -114,6 +114,8 @@ android {
 }
 
 dependencies {
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.16.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     testImplementation("junit:junit:4.13.2")
 
     // Device/emulator smoke tests for real Android Activity and UI behavior.
