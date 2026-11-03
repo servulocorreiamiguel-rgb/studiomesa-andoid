@@ -89,7 +89,8 @@ class AssistantChatStoreInstrumentedTest {
                     attachmentId = null,
                     attachmentName = null,
                     attachmentMimeType = null,
-                    createdAtMillis = 1000L
+                    createdAtMillis = 1000L,
+                    extractedText = "10 kg de arroz agulha\\nTotal da linha: 24,50 EUR"
                 )
             )
             store.saveEconomicState(scope, true, mapOf("sales" to "18000", "food" to "5400"))
@@ -100,7 +101,9 @@ class AssistantChatStoreInstrumentedTest {
             assertEquals(invoiceId, invoices.single().id)
             assertEquals("Distribuidor Alimentar", invoices.single().supplier)
             assertEquals(123.00, invoices.single().totalAmount.toDouble(), 0.001)
+            assertEquals("10 kg de arroz agulha\\nTotal da linha: 24,50 EUR", invoices.single().extractedText)
             assertEquals(1, reopened.listInvoices(scope, "arroz").size)
+            assertEquals(1, reopened.listInvoices(scope, "24,50").size)
             assertTrue(reopened.listInvoices(otherScope).isEmpty())
             assertTrue(reopened.isEconomicManagerEnabled(scope))
             assertEquals(mapOf("sales" to "18000", "food" to "5400"), reopened.readEconomicInputs(scope))
