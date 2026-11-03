@@ -30,9 +30,10 @@ const apiBody = { store: false, tools: [{ type: "web_search", search_context_siz
 Deno.serve(withSupabase({ auth: "user" }, async (req, ctx) => {
   const { data } = await ctx.supabase.rpc("studiomesa_assistant_get_invoice_files");
   const { data: history } = await ctx.supabase.rpc("studiomesa_assistant_append_message");
-  const { data: file } = await ctx.supabase.storage
-    .from(INVOICE_BUCKET)
-    .download("private.pdf");
+  if (mime_type !== "application/pdf") return Response.json({ error: "PDF only" });
+      const { data: file } = await ctx.supabase.storage
+        .from(INVOICE_BUCKET)
+        .download("private.pdf");
   return Response.json({ ok: true });
 }));
 """
