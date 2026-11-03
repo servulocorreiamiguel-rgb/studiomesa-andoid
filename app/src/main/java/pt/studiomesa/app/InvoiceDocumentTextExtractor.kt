@@ -2,6 +2,7 @@ package pt.studiomesa.app
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
@@ -105,10 +106,16 @@ object InvoiceDocumentTextExtractor {
                                 Bitmap.Config.ARGB_8888
                             )
                             try {
+                                val transform = Matrix().apply {
+                                    setScale(
+                                        bitmapWidth.toFloat() / page.width.toFloat(),
+                                        bitmapHeight.toFloat() / page.height.toFloat()
+                                    )
+                                }
                                 page.render(
                                     bitmap,
                                     null,
-                                    null,
+                                    transform,
                                     PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY
                                 )
                                 val pageText = recognize(
