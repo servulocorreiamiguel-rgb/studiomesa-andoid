@@ -7,6 +7,7 @@ import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.click
 import androidx.test.espresso.action.ViewActions.closeSoftKeyboard
 import androidx.test.espresso.action.ViewActions.replaceText
+import androidx.test.espresso.action.ViewActions.scrollTo
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withContentDescription
@@ -47,8 +48,8 @@ class AssistantChatUiInstrumentedTest {
                 onView(withText("Cancelar")).perform(click())
 
                 onView(withHint("Escreve uma mensagem…"))
-                    .perform(replaceText(question), closeSoftKeyboard())
-                onView(withText("Enviar mensagem  ↑")).perform(click())
+                    .perform(scrollTo(), replaceText(question), closeSoftKeyboard())
+                onView(withText("Enviar mensagem  ↑")).perform(scrollTo(), click())
 
                 onView(withText("TU")).check(matches(isDisplayed()))
                 onView(withText("STUDIOMESA")).check(matches(isDisplayed()))
