@@ -66,6 +66,80 @@ class AssistantChatStoreInstrumentedTest {
         }
     }
 
+
+    @Test
+    fun invoiceRegisterAndEconomicInputsPersistEncryptedAndStayAccountScoped() {
+        val store = AssistantChatStore(context)
+        val scope = "restaurant-test:${UUID.randomUUID()}"
+        val otherScope = "restaurant-test:${UUID.randomUUID()}"
+        val invoiceId = UUID.randomUUID().toString()
+        try {
+            store.saveInvoice(
+                scope,
+                AssistantChatStore.Invoice(
+                    id = invoiceId,
+                    supplier = "Distribuidor Alimentar",
+                    number = "FT 2026/104",
+                    invoiceDate = "2026-11-03",
+                    invoiceType = "invoice",
+                    netAmount = "100.00",
+                    taxAmount = "23.00",
+                    totalAmount = "123.00",
+                    notes = "10 kg de arroz",
+                    attachmentId = null,
+                    attachmentName = null,
+                    attachmentMimeType = null,
+                    createdAtMillis = 1000L
+                )
+            )
+            store.saveEconomicState(scope, true, mapOf("sales" to "18000", "food" to "5400"))
+
+            val reopened = AssistantChatStore(context)
+            val invoices = reopened.listInvoices(scope)
+            assertEquals(1, invoices.size)
+            assertEquals(invoiceId, invoices.single().id)
+            assertEquals("Distribuidor Alimentar", invoices.single().supplier)
+            assertEquals(123.00, invoices.single().totalAmount.toDouble(), 0.001)
+            assertEquals(1, reopened.listInvoices(scope, "arroz").size)
+            assertTrue(reopened.listInvoices(otherScope).isEmpty())
+            assertTrue(reopened.isEconomicManagerEnabled(scope))
+            assertEquals(mapOf("sales" to "18000", "food" to "5400"), reopened.readEconomicInputs(scope))
+            assertFalse(reopened.isEconomicManagerEnabled(otherScope))
+            assertTrue(reopened.readEconomicInputs(otherScope).isEmpty())
+
+            val duplicate = AssistantChatStore.Invoice(
+                id = UUID.randomUUID().toString(),
+                supplier = "distribuidor alimentar",
+                number = "FT 2026/104",
+                invoiceDate = "2026-11-03",
+                invoiceType = "invoice",
+                netAmount = "100.00",
+                taxAmount = "23.00",
+                totalAmount = "123.00",
+                notes = "",
+                attachmentId = null,
+                attachmentName = null,
+                attachmentMimeType = null,
+                createdAtMillis = 2000L
+            )
+            try {
+                reopened.saveInvoice(scope, duplicate)
+                throw AssertionError("Uma fatura duplicada devia ser rejeitada.")
+            } catch (_: IllegalArgumentException) {
+                // Expected: same supplier, number and date.
+            }
+
+            reopened.deleteInvoice(scope, invoiceId)
+            assertTrue(reopened.listInvoices(scope).isEmpty())
+            reopened.saveEconomicState(scope, false, emptyMap())
+            assertFalse(reopened.isEconomicManagerEnabled(scope))
+            assertTrue(reopened.readEconomicInputs(scope).isEmpty())
+        } finally {
+            runCatching { store.clearScope(scope) }
+            runCatching { store.clearScope(otherScope) }
+        }
+    }
+
     @Test
     fun assistantCannotCreateAnOrphanConversation() {
         val store = AssistantChatStore(context)
