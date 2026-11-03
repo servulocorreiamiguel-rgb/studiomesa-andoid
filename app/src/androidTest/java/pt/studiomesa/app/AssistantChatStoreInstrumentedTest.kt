@@ -89,9 +89,13 @@ class AssistantChatStoreInstrumentedTest {
                     attachmentId = null,
                     attachmentName = null,
                     attachmentMimeType = null,
-                    createdAtMillis = 1000L,
-                    extractedText = "10 kg de arroz agulha\\nTotal da linha: 24,50 EUR"
+                    createdAtMillis = 1000L
                 )
+            )
+            store.updateInvoiceExtractedText(
+                scope,
+                invoiceId,
+                "10 kg de arroz agulha\\nTotal da linha: 24,50 EUR"
             )
             store.saveEconomicState(scope, true, mapOf("sales" to "18000", "food" to "5400"))
 
