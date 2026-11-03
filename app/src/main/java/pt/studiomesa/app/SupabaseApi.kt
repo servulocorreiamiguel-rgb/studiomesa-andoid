@@ -6,6 +6,8 @@ import java.math.BigDecimal
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLSocketFactory
 
 /**
  * Minimal Supabase REST/Auth client. Only the public publishable key is embedded here.
@@ -14,6 +16,47 @@ import java.net.URLEncoder
 object SupabaseApi {
     private const val BASE_URL = "https://svwvkfsyevuyabelrtjk.supabase.co"
     private const val API_KEY = "sb_publishable_ioJIukpwd0_Fyajd41QL_Q_M6WKE0UH"
+
+    private data class InstrumentationTestEndpoint(
+        val baseUrl: String,
+        val sslSocketFactory: SSLSocketFactory
+    )
+
+    @Volatile
+    private var instrumentationTestEndpoint: InstrumentationTestEndpoint? = null
+
+    /**
+     * Allows Android instrumentation tests to point the real HTTP client at a local HTTPS
+     * mock server. The hook is debug-only and rejects non-loopback or non-HTTPS endpoints.
+     */
+    internal fun configureInstrumentationTestEndpoint(
+        baseUrl: String?,
+        sslSocketFactory: SSLSocketFactory? = null
+    ) {
+        check(BuildConfig.DEBUG) { "Instrumentation endpoints are only available in debug builds." }
+        if (baseUrl == null) {
+            instrumentationTestEndpoint = null
+            return
+        }
+
+        val uri = java.net.URI(baseUrl)
+        require(
+            uri.scheme.equals("https", ignoreCase = true) &&
+                uri.host in setOf("localhost", "127.0.0.1", "::1") &&
+                uri.rawUserInfo == null &&
+                uri.rawQuery == null &&
+                uri.rawFragment == null &&
+                (uri.path.isNullOrEmpty() || uri.path == "/")
+        ) {
+            "The instrumentation endpoint must be an HTTPS loopback URL."
+        }
+        instrumentationTestEndpoint = InstrumentationTestEndpoint(
+            baseUrl.removeSuffix("/"),
+            requireNotNull(sslSocketFactory) {
+                "A test-only TLS socket factory is required."
+            }
+        )
+    }
 
     data class Session(val accessToken: String, val userId: String, val email: String, val refreshToken: String)
 
@@ -24,7 +67,14 @@ object SupabaseApi {
         accessToken: String? = null,
         returnRepresentation: Boolean = false
     ): String {
-        val connection = (URL(BASE_URL + path).openConnection() as HttpURLConnection).apply {
+        val testEndpoint = if (BuildConfig.DEBUG) instrumentationTestEndpoint else null
+        val requestBaseUrl = testEndpoint?.baseUrl ?: BASE_URL
+        val connection = (URL(requestBaseUrl + path).openConnection() as HttpURLConnection).apply {
+            if (testEndpoint != null) {
+                val secureConnection = this as? HttpsURLConnection
+                    ?: throw IllegalStateException("The instrumentation endpoint must use HTTPS.")
+                secureConnection.sslSocketFactory = testEndpoint.sslSocketFactory
+            }
             requestMethod = method
             connectTimeout = 12000
             readTimeout = 12000
