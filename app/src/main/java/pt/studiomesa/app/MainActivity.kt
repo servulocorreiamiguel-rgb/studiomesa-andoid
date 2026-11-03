@@ -6657,6 +6657,604 @@ class MainActivity : Activity() {
         ))
     }
 
+    private fun renderAssistantMessages(container: LinearLayout) {
+        val start = maxOf(0, assistantMessages.length() - 40)
+        for (index in start until assistantMessages.length()) {
+            val message = assistantMessages.optJSONObject(index) ?: continue
+            val isUser = message.optString("role") == "user"
+            val card = makeCard(13, if (isUser) paleGreen else white)
+            card.addView(label(if (isUser) "TU" else "STUDIOMESA", 9f, true, if (isUser) forest else forestSoft))
+            addGap(card, 5)
+            card.addView(label(message.optString("content"), 13f, false, ink))
+            val citations = message.optJSONArray("citations") ?: JSONArray()
+            for (citationIndex in 0 until minOf(citations.length(), 10)) {
+                val citation = citations.optJSONObject(citationIndex) ?: continue
+                val url = citation.optString("url")
+                if (!url.startsWith("https://") && !url.startsWith("http://")) continue
+                val title = citation.optString("title").ifBlank { Uri.parse(url).host.orEmpty() }
+                addGap(card, 5)
+                card.addView(secondaryButton("Fonte: " + title.take(70)) {
+                    runCatching {
+                        startActivity(android.content.Intent(
+                            android.content.Intent.ACTION_VIEW,
+                            Uri.parse(url)
+                        ))
+                    }.onFailure {
+                        Toast.makeText(this, "Não foi possível abrir a fonte.", Toast.LENGTH_SHORT).show()
+                    }
+                }, LinearLayout.LayoutParams(-1, dp(40)))
+            }
+            container.addView(card, cardParams())
+        }
+    }
+
+    private fun clearAssistantWorkspace() {
+        assistantConversations = JSONArray()
+        assistantMessages = JSONArray()
+        assistantInvoices = JSONArray()
+        assistantCurrentConversationId = ""
+        assistantSelectedInvoiceIds.clear()
+        assistantWorkspaceLoaded = false
+        assistantWorkspaceScope = ""
+        assistantWorkspaceError = ""
+        assistantHistoryQuery = ""
+    }
+
+    private fun refreshAssistantWorkspace(force: Boolean = false) {
+        if (!hasRemoteRestaurant() ||
+            backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") return
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        val restaurantId = backendRestaurantId()
+        val scope = restaurantId + ":" + accountId
+        if (assistantWorkspaceScope.isNotBlank() && assistantWorkspaceScope != scope) {
+            clearAssistantWorkspace()
+        }
+        if (assistantWorkspaceLoading || (assistantWorkspaceLoaded && !force)) return
+
+        assistantWorkspaceLoading = true
+        var loadedConversations = JSONArray()
+        var loadedInvoices = JSONArray()
+        runBackend(
+            task = {
+                if (accountId.isBlank() || restaurantId.isBlank() ||
+                    backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId) {
+                    throw IllegalStateException("A conta ou o restaurante mudou. Atualiza o assistente.")
+                }
+                val token = backendToken()
+                loadedConversations = SupabaseApi.listAssistantConversations(token, assistantHistoryQuery)
+                loadedInvoices = SupabaseApi.listAssistantInvoices(token)
+                if (backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId) {
+                    throw IllegalStateException("A conta ou o restaurante mudou durante a atualização.")
+                }
+                "OK"
+            },
+            onError = { error ->
+                assistantWorkspaceLoading = false
+                assistantWorkspaceError = friendlyBackendError(error.message)
+                renderApp()
+            },
+            onSuccess = {
+                if (backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId) {
+                    clearAssistantWorkspace()
+                    assistantWorkspaceLoading = false
+                    return@runBackend
+                }
+                assistantConversations = loadedConversations
+                assistantInvoices = loadedInvoices
+                assistantWorkspaceScope = scope
+                assistantWorkspaceLoaded = true
+                assistantWorkspaceLoading = false
+                assistantWorkspaceError = ""
+                renderApp()
+            }
+        )
+    }
+
+    private fun refreshAssistantHistory() {
+        if (!hasRemoteRestaurant() || assistantWorkspaceLoading) return
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        val restaurantId = backendRestaurantId()
+        var rows = JSONArray()
+        assistantWorkspaceLoading = true
+        runBackend(
+            task = {
+                if (backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId) {
+                    throw IllegalStateException("A conta ou o restaurante mudou.")
+                }
+                rows = SupabaseApi.listAssistantConversations(backendToken(), assistantHistoryQuery)
+                "OK"
+            },
+            onError = { error ->
+                assistantWorkspaceLoading = false
+                assistantWorkspaceError = friendlyBackendError(error.message)
+                renderApp()
+            },
+            onSuccess = {
+                assistantWorkspaceLoading = false
+                if (backendPrefs.getString("user_id", "").orEmpty() == accountId &&
+                    backendRestaurantId() == restaurantId) {
+                    assistantConversations = rows
+                    assistantWorkspaceError = ""
+                }
+                renderApp()
+            }
+        )
+    }
+
+    private fun refreshAssistantInvoices() {
+        if (!hasRemoteRestaurant() || assistantWorkspaceLoading) return
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        val restaurantId = backendRestaurantId()
+        var rows = JSONArray()
+        assistantWorkspaceLoading = true
+        runBackend(
+            task = {
+                if (backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId) {
+                    throw IllegalStateException("A conta ou o restaurante mudou.")
+                }
+                rows = SupabaseApi.listAssistantInvoices(backendToken())
+                "OK"
+            },
+            onError = { error ->
+                assistantWorkspaceLoading = false
+                assistantWorkspaceError = friendlyBackendError(error.message)
+                renderApp()
+            },
+            onSuccess = {
+                assistantWorkspaceLoading = false
+                if (backendPrefs.getString("user_id", "").orEmpty() == accountId &&
+                    backendRestaurantId() == restaurantId) {
+                    assistantInvoices = rows
+                    assistantWorkspaceError = ""
+                }
+                renderApp()
+            }
+        )
+    }
+
+    private fun createAssistantConversation() {
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        val restaurantId = backendRestaurantId()
+        var createdId = ""
+        var refreshed = JSONArray()
+        runBackend(
+            task = {
+                if (accountId.isBlank() || restaurantId.isBlank() ||
+                    backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId) {
+                    throw IllegalStateException("A conta ou o restaurante mudou.")
+                }
+                val token = backendToken()
+                val row = SupabaseApi.createAssistantConversation(token)
+                createdId = row.optString("conversation_id")
+                if (createdId.isBlank()) throw IllegalStateException("O servidor não devolveu a conversa.")
+                refreshed = SupabaseApi.listAssistantConversations(token, assistantHistoryQuery)
+                "OK"
+            },
+            onError = { error ->
+                assistantWorkspaceError = friendlyBackendError(error.message)
+                renderApp()
+            },
+            onSuccess = {
+                if (backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId) return@runBackend
+                assistantCurrentConversationId = createdId
+                assistantMessages = JSONArray()
+                assistantConversations = refreshed
+                assistantDraft = ""
+                assistantSelectedInvoiceIds.clear()
+                assistantWorkspaceError = ""
+                renderApp()
+            }
+        )
+    }
+
+    private fun openAssistantConversation(conversationId: String) {
+        if (conversationId.isBlank() || assistantMessagesLoading) return
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        val restaurantId = backendRestaurantId()
+        var rows = JSONArray()
+        assistantMessagesLoading = true
+        runBackend(
+            task = {
+                if (backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId) {
+                    throw IllegalStateException("A conta ou o restaurante mudou.")
+                }
+                rows = SupabaseApi.listAssistantMessages(backendToken(), conversationId)
+                "OK"
+            },
+            onError = { error ->
+                assistantMessagesLoading = false
+                assistantWorkspaceError = friendlyBackendError(error.message)
+                renderApp()
+            },
+            onSuccess = {
+                assistantMessagesLoading = false
+                if (backendPrefs.getString("user_id", "").orEmpty() == accountId &&
+                    backendRestaurantId() == restaurantId) {
+                    assistantCurrentConversationId = conversationId
+                    assistantMessages = rows
+                    assistantSelectedInvoiceIds.clear()
+                    assistantWorkspaceError = ""
+                }
+                renderApp()
+            }
+        )
+    }
+
+    private fun sendAssistantChatMessage() {
+        val message = assistantDraft.trim()
+        if (message.isBlank()) {
+            Toast.makeText(this, "Escreve uma pergunta antes de enviar.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (assistantBusy) return
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        val restaurantId = backendRestaurantId()
+        val selectedInvoices = assistantSelectedInvoiceIds.toList()
+        val webSearch = assistantWebSearchEnabled
+        var targetConversationId = assistantCurrentConversationId
+        var latestMessages = JSONArray()
+        var latestConversations = JSONArray()
+
+        assistantBusy = true
+        runBackend(
+            task = {
+                if (accountId.isBlank() || restaurantId.isBlank() ||
+                    backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId ||
+                    backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") {
+                    throw IllegalStateException("A conta já não tem acesso ao assistente deste restaurante.")
+                }
+                val token = backendToken()
+                if (targetConversationId.isBlank()) {
+                    targetConversationId = SupabaseApi.createAssistantConversation(token).optString("conversation_id")
+                }
+                if (targetConversationId.isBlank()) throw IllegalStateException("Não foi possível criar a conversa.")
+                SupabaseApi.sendAssistantMessage(
+                    token, targetConversationId, message, webSearch, selectedInvoices
+                )
+                latestMessages = SupabaseApi.listAssistantMessages(token, targetConversationId)
+                latestConversations = SupabaseApi.listAssistantConversations(token, assistantHistoryQuery)
+                if (backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId) {
+                    throw IllegalStateException("A conta ou o restaurante mudou durante a resposta.")
+                }
+                "OK"
+            },
+            onError = { error ->
+                assistantBusy = false
+                assistantWorkspaceError = friendlyBackendError(error.message)
+                renderApp()
+            },
+            onSuccess = {
+                assistantBusy = false
+                if (backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId) {
+                    clearAssistantWorkspace()
+                    renderApp()
+                    return@runBackend
+                }
+                assistantCurrentConversationId = targetConversationId
+                assistantMessages = latestMessages
+                assistantConversations = latestConversations
+                assistantDraft = ""
+                assistantSelectedInvoiceIds.clear()
+                assistantWorkspaceError = ""
+                renderApp()
+            }
+        )
+    }
+
+    private fun confirmDeleteAssistantConversation() {
+        val conversationId = assistantCurrentConversationId
+        if (conversationId.isBlank()) return
+        AlertDialog.Builder(this)
+            .setTitle("Eliminar conversa?")
+            .setMessage("As mensagens desta conversa serão eliminadas do histórico deste restaurante. Esta ação não pode ser anulada.")
+            .setNegativeButton("Manter", null)
+            .setPositiveButton("Eliminar") { _, _ ->
+                val accountId = backendPrefs.getString("user_id", "").orEmpty()
+                val restaurantId = backendRestaurantId()
+                runBackend(
+                    task = {
+                        if (backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                            backendRestaurantId() != restaurantId) {
+                            throw IllegalStateException("A conta ou o restaurante mudou.")
+                        }
+                        SupabaseApi.deleteAssistantConversation(backendToken(), conversationId)
+                        "OK"
+                    },
+                    onSuccess = {
+                        assistantCurrentConversationId = ""
+                        assistantMessages = JSONArray()
+                        refreshAssistantWorkspace(force = true)
+                    }
+                )
+            }
+            .show()
+    }
+
+    private fun showAssistantInvoicePickerDialog() {
+        val available = mutableListOf<JSONObject>()
+        for (i in 0 until assistantInvoices.length()) {
+            assistantInvoices.optJSONObject(i)?.let { available.add(it) }
+        }
+        if (available.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle("Arquivo de faturas")
+                .setMessage("Ainda não existem PDFs guardados neste restaurante. Adiciona uma fatura para a poderes anexar a uma pergunta.")
+                .setNegativeButton("Fechar", null)
+                .setPositiveButton("Adicionar PDF") { _, _ -> chooseAssistantInvoicePdf() }
+                .show()
+            return
+        }
+        val labels = available.map { invoice ->
+            val name = invoice.optString("file_name")
+            val sizeKb = (invoice.optLong("file_size_bytes", 0L) / 1024L).coerceAtLeast(1L)
+            "$name · $sizeKb KB"
+        }.toTypedArray()
+        val selected = BooleanArray(available.size) { index ->
+            available[index].optString("invoice_id") in assistantSelectedInvoiceIds
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Selecionar faturas (máximo 3)")
+            .setMultiChoiceItems(labels, selected) { _, which, checked ->
+                val id = available.getOrNull(which)?.optString("invoice_id").orEmpty()
+                if (id.isNotBlank()) {
+                    if (checked && assistantSelectedInvoiceIds.size < 3) {
+                        assistantSelectedInvoiceIds.add(id)
+                    } else if (checked) {
+                        Toast.makeText(this, "Só podes anexar três faturas por pergunta.", Toast.LENGTH_SHORT).show()
+                    } else {
+                        assistantSelectedInvoiceIds.remove(id)
+                    }
+                }
+            }
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Confirmar") { _, _ -> renderApp() }
+            .show()
+    }
+
+    private fun chooseAssistantInvoicePdf() {
+        if (!hasRemoteRestaurant() ||
+            backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") {
+            Toast.makeText(this, "O arquivo de faturas é exclusivo do proprietário.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val intent = android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(android.content.Intent.CATEGORY_OPENABLE)
+            type = "application/pdf"
+            putExtra(android.content.Intent.EXTRA_MIME_TYPES, arrayOf("application/pdf"))
+        }
+        startActivityForResult(intent, requestAssistantInvoice)
+    }
+
+    private fun uploadAssistantInvoiceFromUri(uri: Uri) {
+        if (!hasRemoteRestaurant() ||
+            backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") return
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        val restaurantId = backendRestaurantId()
+        var latestInvoices = JSONArray()
+        runBackend(
+            task = {
+                if (accountId.isBlank() || restaurantId.isBlank() ||
+                    backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId) {
+                    throw IllegalStateException("A conta ou o restaurante mudou.")
+                }
+                val fileName = queryAssistantInvoiceFileName(uri)
+                    .substringAfterLast('/')
+                    .substringAfterLast('\\')
+                if (!fileName.endsWith(".pdf", ignoreCase = true)) {
+                    throw IllegalArgumentException("Seleciona um documento PDF.")
+                }
+                val bytes = readAssistantInvoicePdf(uri)
+                val invoiceId = java.util.UUID.randomUUID().toString()
+                val token = backendToken()
+                val upload = SupabaseApi.registerAssistantInvoice(
+                    token, invoiceId, fileName, bytes.size
+                )
+                SupabaseApi.uploadAssistantInvoicePdf(token, upload.storagePath, bytes)
+                SupabaseApi.completeAssistantInvoiceUpload(token, invoiceId)
+                if (backendPrefs.getString("user_id", "").orEmpty() != accountId ||
+                    backendRestaurantId() != restaurantId) {
+                    throw IllegalStateException("A conta ou o restaurante mudou durante o carregamento.")
+                }
+                latestInvoices = SupabaseApi.listAssistantInvoices(token)
+                "OK"
+            },
+            onSuccess = {
+                if (backendPrefs.getString("user_id", "").orEmpty() == accountId &&
+                    backendRestaurantId() == restaurantId) {
+                    assistantInvoices = latestInvoices
+                    assistantWorkspaceLoaded = true
+                    assistantWorkspaceScope = restaurantId + ":" + accountId
+                    assistantWorkspaceError = ""
+                    Toast.makeText(this, "Fatura guardada no arquivo privado do restaurante.", Toast.LENGTH_LONG).show()
+                }
+                renderApp()
+            }
+        )
+    }
+
+    private fun queryAssistantInvoiceFileName(uri: Uri): String {
+        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (column >= 0 && cursor.moveToFirst()) {
+                cursor.getString(column)?.takeIf { it.isNotBlank() }?.let { return it.take(180) }
+            }
+        }
+        return "fatura.pdf"
+    }
+
+    private fun readAssistantInvoicePdf(uri: Uri): ByteArray {
+        val output = ByteArrayOutputStream()
+        contentResolver.openInputStream(uri)?.use { input ->
+            val buffer = ByteArray(8192)
+            var total = 0
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                total += read
+                if (total > 10 * 1024 * 1024) {
+                    throw IllegalArgumentException("O PDF excede o limite de 10 MB.")
+                }
+                output.write(buffer, 0, read)
+            }
+        } ?: throw IllegalArgumentException("Não foi possível ler o PDF selecionado.")
+        val bytes = output.toByteArray()
+        if (bytes.size < 5 || String(bytes, 0, 5, Charsets.US_ASCII) != "%PDF-") {
+            throw IllegalArgumentException("O ficheiro selecionado não parece ser um PDF válido.")
+        }
+        return bytes
+    }
+
+    private fun renderAssistantLocalTools(container: LinearLayout) {
+        val snapshot = assistantSnapshot()
+        sectionHeading(container, "Gestor económico", "Ferramentas locais para análise e controlo dos valores registados.")
+        renderEconomicManager(container)
+        if (isPremium) {
+            addGap(container, 8)
+            renderRestaurantPriceAdvisor(container)
+        }
+
+        sectionHeading(container, "Análise local", "As sugestões abaixo usam os dados operacionais guardados pela aplicação.")
+        val questionField = multilineInputField("Ex.: Como posso melhorar o preço dos pratos?")
+        questionField.setText(assistantQuestion)
+        container.addView(questionField, multilineFieldParams())
+        val localActions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        localActions.addView(primaryButton("Analisar") {
+            assistantQuestion = questionField.text.toString().trim().take(400)
+            assistantAnswer = StudioMesaAdvisor.answerQuestion(assistantQuestion, assistantSnapshot())
+            renderApp()
+        }, LinearLayout.LayoutParams(0, dp(46), 1f).apply { setMargins(0, 0, dp(5), 0) })
+        localActions.addView(secondaryButton("Resumo diário") {
+            assistantAnswer = StudioMesaAdvisor.dailyBriefing(assistantSnapshot())
+            renderApp()
+        }, LinearLayout.LayoutParams(0, dp(46), 1f))
+        container.addView(localActions)
+        assistantAnswer?.let { answer ->
+            val answerCard = makeCard(14, copperPale)
+            answerCard.addView(label(answer.title, 16f, true, forestDeep))
+            addGap(answerCard, 5)
+            answerCard.addView(label(answer.response, 12f, false, ink))
+            assistantActionTarget(answer.actionPage)?.let { target ->
+                addGap(answerCard, 7)
+                answerCard.addView(secondaryButton("Abrir " + target) {
+                    activePage = target
+                    renderApp()
+                }, LinearLayout.LayoutParams(-1, dp(42)))
+            }
+            container.addView(answerCard, cardParams())
+        }
+
+        sectionHeading(container, "Sugestões para rever", "Prioridades estimadas; confirma os dados antes de decidir.")
+        StudioMesaAdvisor.recommendations(snapshot).forEach { recommendation ->
+            val (priorityText, textColor, backColor) = when (recommendation.priority) {
+                AssistantPriority.URGENT -> Triple("PRIORIDADE ALTA", red, paleRed)
+                AssistantPriority.ATTENTION -> Triple("A REVER", forestDeep, copperPale)
+                AssistantPriority.TIP -> Triple("SUGESTÃO", forestSoft, paleGreen)
+            }
+            val card = makeCard(14)
+            card.addView(label(priorityText, 9f, true, textColor).apply {
+                setPadding(dp(8), dp(5), dp(8), dp(5))
+                background = rounded(backColor, 10)
+            }, LinearLayout.LayoutParams(-2, -2))
+            addGap(card, 6)
+            card.addView(label(recommendation.title, 15f, true, forestDeep))
+            addGap(card, 4)
+            card.addView(label(recommendation.detail, 12f, false, muted))
+            assistantActionTarget(recommendation.actionPage)?.let { target ->
+                addGap(card, 8)
+                card.addView(secondaryButton("Abrir " + target) {
+                    activePage = target
+                    renderApp()
+                }, LinearLayout.LayoutParams(-1, dp(42)))
+            }
+            container.addView(card, cardParams())
+        }
+
+        sectionHeading(container, "Engenharia da carta", "Vendas concluídas, procura e contribuição estimada por artigo.")
+        val engineering = StudioMesaAdvisor.menuEngineering(snapshot)
+        if (!engineering.hasEnoughSales) {
+            container.addView(emptyCard(
+                "Ainda não há pelo menos " + engineering.requiredUnits + " unidades concluídas que correspondam aos artigos atuais (" + engineering.completedUnits + " encontradas)."
+            ), cardParams())
+        } else {
+            if (!engineering.hasMarginData) {
+                container.addView(emptyCard("Existem vendas, mas faltam custos válidos nos artigos vendidos para comparar a contribuição."), cardParams())
+            }
+            engineering.items.forEach { item ->
+                val title = when (item.classification) {
+                    MenuEngineeringClass.STAR -> "ESTRELA"
+                    MenuEngineeringClass.WORKHORSE -> "POPULAR · REVER MARGEM"
+                    MenuEngineeringClass.PUZZLE -> "MARGEM ALTA · REVER PROCURA"
+                    MenuEngineeringClass.DOG -> "REVER ARTIGO"
+                    MenuEngineeringClass.MISSING_COST -> "CUSTO EM FALTA"
+                }
+                val backColor = when (item.classification) {
+                    MenuEngineeringClass.STAR -> paleGreen
+                    MenuEngineeringClass.WORKHORSE, MenuEngineeringClass.PUZZLE -> copperPale
+                    MenuEngineeringClass.DOG, MenuEngineeringClass.MISSING_COST -> paleRed
+                }
+                val card = makeCard(13)
+                card.addView(label(title, 9f, true, forestDeep).apply {
+                    setPadding(dp(8), dp(5), dp(8), dp(5))
+                    background = rounded(backColor, 10)
+                }, LinearLayout.LayoutParams(-2, -2))
+                addGap(card, 7)
+                card.addView(label(item.itemName, 15f, true, forestDeep))
+                addGap(card, 4)
+                card.addView(label(
+                    item.unitsSold.toString() + " unidade(s) concluídas · " + item.popularitySharePercent +
+                        "% das unidades correspondentes · contribuição atual: " +
+                        (item.contributionPerUnit?.let { money(it) } ?: "custo em falta") + " por unidade.",
+                    11f, true, muted
+                ))
+                addGap(card, 4)
+                card.addView(label(item.recommendation, 12f, false, ink))
+                container.addView(card, cardParams())
+            }
+            container.addView(label(
+                "Triagem com preços e custos atuais; não é lucro contabilístico nem custo histórico e não inclui IVA, mão de obra ou encargos.",
+                10.5f, false, muted
+            ))
+        }
+
+        sectionHeading(container, "Ideias de conteúdo", "Rascunhos para revisão, com base nos artigos da carta.")
+        val drafts = StudioMesaAdvisor.marketingDrafts(snapshot)
+        if (drafts.isEmpty()) {
+            container.addView(emptyCard("Adiciona artigos com nome e preço válidos para criar rascunhos."), cardParams())
+        } else {
+            drafts.forEach { draft ->
+                val card = makeCard(13)
+                card.addView(label(draft.itemName, 15f, true, forestDeep))
+                addGap(card, 5)
+                card.addView(label(draft.caption, 12f, false, ink))
+                addGap(card, 7)
+                card.addView(secondaryButton("Copiar rascunho") {
+                    copyAssistantText(draft.caption)
+                }, LinearLayout.LayoutParams(-1, dp(42)))
+                container.addView(card, cardParams())
+            }
+        }
+        container.addView(label(
+            if (snapshot.isDemo) "Fonte: dados de demonstração locais."
+            else "Fonte: dados em cache. Confirma a última atualização antes de decidir.",
+            10.5f, false, muted
+        ))
+    }
+
     private fun clearEconomicManagerState() {
         economicManagerEnabled = false
         economicScopeKey = null
