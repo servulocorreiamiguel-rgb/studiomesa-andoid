@@ -25,6 +25,8 @@ O modo Android Gemini que existiu numa primeira tentativa foi removido do caminh
 
 - Backend CPU por defeito, contexto máximo configurado de 4096 tokens e orçamento de saída de 2048 tokens, de acordo com a recomendação do manifesto do modelo.
 - O pedido inclui até quatro mensagens anteriores, com conteúdo limitado, além de um resumo compacto do contexto do restaurante. Os limites foram reduzidos para deixar espaço ao orçamento de saída dentro do contexto disponível.
+- O modelo recebe duas ferramentas locais de leitura: `get_restaurant_data` (resumo, carta, pedidos, stock e reservas já carregados) e `calculate_menu_price_reference` (cálculo indicativo a partir de custo registado e percentagem escolhida). O runtime executa as chamadas localmente e devolve os resultados ao modelo.
+- As ferramentas não permitem gravar nem alterar preços, stock, pedidos, reservas, pagamentos ou permissões. A informação devolvida é limitada ao snapshot atual da conta; stock e reservas não são consultáveis quando não foram carregados/atualizados.
 - O motor é inicializado numa thread de trabalho, não na thread da interface. A resposta é apresentada por blocos.
 - A instância de inferência é libertada quando a Activity deixa de estar visível; o ficheiro do modelo permanece instalado.
 - A resposta determinística continua disponível como alternativa enquanto o modelo não for instalado.
