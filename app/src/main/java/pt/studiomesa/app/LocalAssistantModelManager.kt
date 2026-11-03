@@ -9,6 +9,7 @@ import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.SamplerConfig
+import com.google.ai.edge.litertlm.tool
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.File
@@ -153,6 +154,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
 
     fun generate(
         systemInstruction: String,
+        snapshot: StudioMesaAssistantSnapshot,
         history: List<Turn>,
         userMessage: String,
         onToken: (String) -> Unit,
@@ -202,10 +204,16 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                         }
                     }
 
+                val currentSnapshot = snapshot
                 val conversation = activeEngine.createConversation(
                     ConversationConfig(
                         systemInstruction = Contents.of(systemInstruction.take(MAX_SYSTEM_INSTRUCTION_CHARS)),
                         initialMessages = initialMessages,
+                        tools = listOf(
+                            tool(StudioMesaRestaurantDataTool(currentSnapshot)),
+                            tool(StudioMesaPriceReferenceTool(currentSnapshot))
+                        ),
+                        automaticToolCalling = true,
                         samplerConfig = SamplerConfig(
                             topK = 40,
                             topP = 0.9,
