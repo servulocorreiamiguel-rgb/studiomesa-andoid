@@ -271,7 +271,14 @@ class CustomerReservationFlowSmokeTest {
                         .put("table_number", JSONObject.NULL)
                     synchronized(reservationRows) { reservationRows.add(row) }
                     createReceived.countDown()
-                    jsonResponse(JSONArray().put(row).toString())
+                    // The create RPC returns only the reservation id and status.
+                    jsonResponse(
+                        JSONArray().put(
+                            JSONObject()
+                                .put("reservation_id", reservationId)
+                                .put("status", "Pendente")
+                        ).toString()
+                    )
                 }
 
                 "/rest/v1/rpc/cancel_my_restaurant_reservation" -> {
