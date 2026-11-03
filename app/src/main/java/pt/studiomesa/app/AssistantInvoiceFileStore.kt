@@ -6,7 +6,6 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import android.util.Base64
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
@@ -70,6 +69,7 @@ class AssistantInvoiceFileStore(context: Context) {
         }
 
         val id = UUID.randomUUID().toString()
+        val plainByteCount = plain.size.toLong()
         val encrypted = encrypt(plain)
         if (!directory.exists() && !directory.mkdirs()) {
             throw IllegalStateException("Não foi possível criar o arquivo privado de documentos.")
@@ -90,8 +90,9 @@ class AssistantInvoiceFileStore(context: Context) {
             throw error
         } finally {
             plain.fill(0)
+            encrypted.fill(0)
         }
-        return Attachment(id, metadata.first.take(180), mimeType, encrypted.size.toLong())
+        return Attachment(id, metadata.first.take(180), mimeType, plainByteCount)
     }
 
     @Synchronized
