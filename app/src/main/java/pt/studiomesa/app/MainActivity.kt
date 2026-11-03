@@ -17,6 +17,8 @@ import android.os.Handler
 import android.os.Looper
 import android.text.InputFilter
 import android.text.InputType
+import android.text.method.LinkMovementMethod
+import android.text.util.Linkify
 import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
@@ -4845,12 +4847,18 @@ class MainActivity : Activity() {
             if (isUser) copper else forestSoft
         ))
         addGap(bubble, 5)
-        bubble.addView(label(
+        val messageText = label(
             turn.content,
             13f,
             false,
             if (isUser) white else ink
-        ))
+        )
+        if (!isUser) {
+            messageText.autoLinkMask = Linkify.WEB_URLS
+            messageText.movementMethod = LinkMovementMethod.getInstance()
+            messageText.linksClickable = true
+        }
+        bubble.addView(messageText)
         addGap(bubble, 5)
         val time = SimpleDateFormat("HH:mm", Locale("pt", "PT")).format(Date(turn.createdAtMillis))
         bubble.addView(label(time, 9f, false, if (isUser) copperPale else muted).apply {
