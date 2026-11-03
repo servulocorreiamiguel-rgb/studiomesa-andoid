@@ -3,6 +3,8 @@ package pt.studiomesa.app
 import android.app.Activity
 import android.app.Dialog
 import android.content.ClipData
+import android.content.Intent
+import android.net.Uri
 import android.content.ClipboardManager
 import android.content.res.ColorStateList
 import android.app.AlertDialog
@@ -80,6 +82,11 @@ class MainActivity : Activity() {
     private var assistantQuestion = ""
     private var assistantAnswer: StudioMesaAssistantAnswer? = null
     private val assistantChatStore by lazy { AssistantChatStore(this) }
+    private val assistantInvoiceFileStore by lazy { AssistantInvoiceFileStore(this) }
+    private var pendingInvoiceAttachmentId: String? = null
+    private var pendingInvoiceExportId: String? = null
+    private val invoiceAttachmentRequestCode = 7101
+    private val invoiceExportRequestCode = 7102
     private var activeAssistantConversationId: String? = null
     private var assistantChatScopeKey: String? = null
     private var assistantComposerDraft = ""
@@ -173,10 +180,68 @@ class MainActivity : Activity() {
     }
 
     override fun onPause() {
+        persistEconomicManagerState()
         activityResumed = false
         stopKitchenAutoRefresh()
         stopInventoryAutoRefresh()
         super.onPause()
+    }
+
+    @Deprecated("Use the document-picker result API when migrating to Activity Result APIs.")
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (resultCode != RESULT_OK || data?.data == null) {
+            pendingInvoiceAttachmentId = null
+            pendingInvoiceExportId = null
+            return
+        }
+        val uri = data.data ?: return
+        when (requestCode) {
+            invoiceAttachmentRequestCode -> {
+                val invoiceId = pendingInvoiceAttachmentId
+                pendingInvoiceAttachmentId = null
+                if (invoiceId.isNullOrBlank()) return
+                val scope = assistantChatScope()
+                Thread {
+                    try {
+                        val attachment = assistantInvoiceFileStore.importFromUri(uri)
+                        assistantChatStore.updateInvoiceAttachment(
+                            scope, invoiceId, attachment.id, attachment.fileName, attachment.mimeType
+                        )
+                        runOnUiThread {
+                            Toast.makeText(this, "Documento guardado de forma cifrada.", Toast.LENGTH_SHORT).show()
+                            showAssistantInvoiceDetails(scope, invoiceId)
+                        }
+                    } catch (error: Exception) {
+                        runOnUiThread {
+                            Toast.makeText(this, error.message ?: "Não foi possível importar o documento.", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }.start()
+            }
+            invoiceExportRequestCode -> {
+                val invoiceId = pendingInvoiceExportId
+                pendingInvoiceExportId = null
+                if (invoiceId.isNullOrBlank()) return
+                val invoice = runCatching {
+                    assistantChatStore.listInvoices(assistantChatScope()).firstOrNull { it.id == invoiceId }
+                }.getOrNull() ?: return
+                val attachmentId = invoice.attachmentId ?: return
+                Thread {
+                    try {
+                        assistantInvoiceFileStore.exportToUri(attachmentId, uri)
+                        runOnUiThread {
+                            Toast.makeText(this, "Documento exportado.", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (error: Exception) {
+                        runOnUiThread {
+                            Toast.makeText(this, error.message ?: "Não foi possível exportar o documento.", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }.start()
+            }
+        }
     }
 
     override fun onNewIntent(intent: android.content.Intent) {
@@ -430,6 +495,7 @@ class MainActivity : Activity() {
             return
         }
         if (activePage !in availablePages()) activePage = "Início"
+        persistEconomicManagerState()
 
         appRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -4736,19 +4802,7 @@ class MainActivity : Activity() {
                 renderRestaurantPriceAdvisor(container)
             }
             addGap(container, 8)
-            val invoiceCard = makeCard(14, copperPale)
-            invoiceCard.addView(label("FATURAS DO RESTAURANTE", 9.5f, true, forestDeep))
-            addGap(invoiceCard, 6)
-            invoiceCard.addView(label(
-                "A ligação a faturas contabilísticas ainda não está configurada. O projeto não tem um arquivo de faturas de fornecedores nem ligação a um programa de faturação/contabilidade. O QR usado na fidelização não dá acesso ao documento contabilístico. Importa também distinguir os dados de vendas das compras: a Autoridade Tributária esclarece que o SAF-T (PT) do adquirente não inclui os documentos comerciais emitidos pelos fornecedores. Para analisar essas faturas será necessária uma integração com o programa de contabilidade/gestão de compras ou uma importação segura dos documentos.",
-                12f, false, ink
-            ))
-            addGap(invoiceCard, 7)
-            invoiceCard.addView(label(
-                "O agente financeiro só poderá analisar documentos depois de existir uma importação segura ou integração aprovada com o programa usado pelo restaurante.",
-                11f, true, forestDeep
-            ))
-            container.addView(invoiceCard, cardParams())
+            renderAssistantInvoices(container, scope)
         }
 
         addGap(container, 8)
@@ -4855,7 +4909,7 @@ class MainActivity : Activity() {
             "fatura de fornecedor", "despesa de fornecedor"
         ).any { normalized.contains(it) }
         if (asksAboutInvoices) {
-            return "Ainda não consigo consultar faturas contabilísticas nesta versão. O projeto não tem um arquivo de faturas de fornecedores nem uma ligação ao programa de faturação/contabilidade do restaurante. O QR existente está ligado à fidelização, não à leitura de documentos contabilísticos. A Autoridade Tributária esclarece que o SAF-T (PT) do adquirente não inclui os documentos comerciais a fornecedores; por isso, não basta assumir que um SAF-T de vendas contém as faturas de compras.\n\nQuando a integração estiver configurada, o agente poderá cruzar compras e custos com vendas e stock, sempre com acesso reservado ao proprietário."
+            return answerRegisteredInvoices(question, scope)
         }
 
         val previousUserQuestion = runCatching {
@@ -5125,6 +5179,24 @@ class MainActivity : Activity() {
         ))
     }
 
+    private fun economicPersistenceScope(): String {
+        return if (hasRemoteRestaurant()) {
+            "economic:restaurant:" + backendRestaurantId() + ":" + backendPrefs.getString("user_id", "").orEmpty()
+        } else {
+            "economic:demo:$flavor"
+        }
+    }
+
+    private fun persistEconomicManagerState() {
+        val scope = economicScopeKey ?: return
+        if (hasRemoteRestaurant() && backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") return
+        runCatching {
+            assistantChatStore.saveEconomicState(scope, economicManagerEnabled, economicInputs)
+        }.onFailure {
+            assistantChatError = "Não foi possível guardar os dados económicos cifrados."
+        }
+    }
+
     private fun clearEconomicManagerState() {
         economicManagerEnabled = false
         economicScopeKey = null
@@ -5140,10 +5212,19 @@ class MainActivity : Activity() {
     }
 
     private fun renderEconomicManager(container: LinearLayout) {
-        val scope = if (hasRemoteRestaurant()) {
-            "restaurant:" + backendRestaurantId() + ":" + backendPrefs.getString("user_id", "").orEmpty()
-        } else "demo"
-        if (economicScopeKey != null && economicScopeKey != scope) clearEconomicManagerState()
+        val scope = economicPersistenceScope()
+        if (economicScopeKey != scope) {
+            clearEconomicManagerState()
+            economicScopeKey = scope
+            runCatching {
+                economicInputs.putAll(assistantChatStore.readEconomicInputs(scope))
+                economicManagerEnabled = assistantChatStore.isEconomicManagerEnabled(scope)
+            }.onFailure {
+                economicManagerEnabled = false
+                economicInputs.clear()
+                assistantChatError = "Não foi possível abrir os dados económicos cifrados."
+            }
+        }
 
         if (hasRemoteRestaurant() && backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") {
             clearEconomicManagerState()
@@ -5157,10 +5238,11 @@ class MainActivity : Activity() {
         val toggle = makeCard(14)
         toggle.addView(label(if (economicManagerEnabled) "Gestor ativo nesta sessão" else "Gestor desativado", 15f, true, forestDeep))
         addGap(toggle, 5)
-        toggle.addView(label("Os valores ficam só em memória nesta sessão: não são guardados, sincronizados nem enviados para a Internet.", 11.5f, false, muted))
+        toggle.addView(label("Os valores ficam guardados de forma cifrada neste dispositivo e separados por restaurante. Ainda não são sincronizados entre telemóveis.", 11.5f, false, muted))
         addGap(toggle, 8)
         toggle.addView(secondaryButton(if (economicManagerEnabled) "Desativar e limpar valores" else "Ativar gestão económica") {
             if (economicManagerEnabled) {
+                assistantChatStore.saveEconomicState(scope, false, emptyMap())
                 clearEconomicManagerState()
             } else {
                 economicManagerEnabled = true
@@ -5169,6 +5251,7 @@ class MainActivity : Activity() {
                 economicReportText = ""
                 recipeReportText = ""
                 reorderReportText = ""
+                assistantChatStore.saveEconomicState(scope, true, emptyMap())
             }
             renderApp()
         }, LinearLayout.LayoutParams(-1, dp(44)))
