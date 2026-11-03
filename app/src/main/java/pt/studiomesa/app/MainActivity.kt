@@ -4905,7 +4905,10 @@ class MainActivity : Activity() {
 
         val asksAboutInvoices = listOf(
             "fatura", "faturas", "factura", "facturas", "saft", "documento contabilistico",
-            "fatura de fornecedor", "despesa de fornecedor"
+            "fatura de fornecedor", "despesa de fornecedor", "compras a fornecedor",
+            "compras a fornecedores", "total de compras", "quanto gastei em compras",
+            "quanto gastamos em compras", "quanto paguei aos fornecedores",
+            "gastos com fornecedores", "notas de credito"
         ).any { normalized.contains(it) }
         if (asksAboutInvoices) {
             return answerRegisteredInvoices(question, scope)
@@ -5250,9 +5253,19 @@ class MainActivity : Activity() {
             else -> null
         }
         val periodInvoices = if (monthPrefix == null) all else all.filter { it.invoiceDate.startsWith(monthPrefix) }
-        val words = normalized.split(Regex("[^a-z0-9]+")).filter { it.length >= 3 }
-        val supplierMatches = periodInvoices.filter { invoice ->
-            words.any { invoice.supplier.lowercase().contains(it) }
+        val stopWords = setOf(
+            "fatura", "faturas", "factura", "facturas", "documento", "contabilistico",
+            "quanto", "gastei", "gastamos", "compras", "fornecedor", "fornecedores",
+            "este", "neste", "mes", "passado", "total", "despesa", "despesas",
+            "mostra", "analisa", "consulta", "quero", "saber", "valor", "valores",
+            "paguei", "pagamos", "pagar", "gastos", "saft", "notas", "credito"
+        )
+        val terms = normalized.split(Regex("[^a-z0-9]+"))
+            .filter { it.length >= 3 && it !in stopWords }
+        val supplierMatches = if (terms.isEmpty()) emptyList() else periodInvoices.filter { invoice ->
+            terms.any {
+                invoice.supplier.lowercase().contains(it) || invoice.number.lowercase().contains(it)
+            }
         }
         val selected = if (supplierMatches.isNotEmpty()) supplierMatches else periodInvoices
         if (selected.isEmpty()) {
