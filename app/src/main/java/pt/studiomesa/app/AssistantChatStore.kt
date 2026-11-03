@@ -199,9 +199,18 @@ class AssistantChatStore(context: Context) {
     fun saveInvoice(scope: String, invoice: Invoice) {
         require(invoice.id.isNotBlank()) { "O identificador da fatura não é válido." }
         require(invoice.supplier.trim().length in 2..120) { "Indica o nome do fornecedor." }
-        require(invoice.number.length <= 80) { "O número do documento é demasiado longo." }
+        require(invoice.number.trim().isNotBlank() && invoice.number.length <= 80) {
+            "Indica o número do documento (até 80 caracteres)."
+        }
         require(invoice.invoiceDate.matches(Regex("^\\d{4}-\\d{2}-\\d{2}$"))) {
             "A data da fatura deve usar o formato AAAA-MM-DD."
+        }
+        val strictDateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ROOT).apply {
+            isLenient = false
+        }
+        val parsedDate = runCatching { strictDateFormat.parse(invoice.invoiceDate) }.getOrNull()
+        require(parsedDate != null && strictDateFormat.format(parsedDate) == invoice.invoiceDate) {
+            "A data da fatura não existe no calendário."
         }
         require(invoice.invoiceType in setOf("invoice", "credit_note")) { "Tipo de documento inválido." }
         require(invoice.notes.length <= 4000) { "As notas da fatura são demasiado longas." }
