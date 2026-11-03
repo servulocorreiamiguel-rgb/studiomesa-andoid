@@ -5362,7 +5362,7 @@ class MainActivity : Activity() {
             val numberText = normalizeInvoiceSearch(invoice.number)
             terms.any { supplierText.contains(it) || numberText.contains(it) }
         }
-        val requestedSupplier = Regex("""fornecedor(?:es)?\\s+(.+)$""")
+        val requestedSupplier = Regex("""fornecedor(?:es)?\s+(.+)$""")
             .find(normalized)?.groupValues?.get(1)?.trim()
         if (!requestedSupplier.isNullOrBlank() && supplierMatches.isEmpty()) {
             return "Não encontrei faturas ou notas de crédito registadas para o fornecedor «$requestedSupplier»" +
