@@ -413,19 +413,19 @@ class MainActivitySmokeTest {
     }
 
     @Test
-    fun restaurantAssistantShowsLocalAnalysisAndAnswersPricingQuestions() {
+    fun restaurantAssistantShowsChatHistoryAndAnswersPricingQuestions() {
         assumeFalse("Customer variant has its own customer navigation.", isCustomerVariant())
 
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
             onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
             onView(withText("Assistente StudioMesa")).check(matches(isDisplayed()))
-            onView(withText(containsString("SEM API PAGA"))).check(matches(isDisplayed()))
-            onView(withHint("Ex.: Como posso melhorar o preço dos pratos?"))
-                .perform(scrollTo(), replaceText("Como melhorar o preço?"))
-            onView(withText("Analisar pergunta")).perform(scrollTo(), click())
-            onView(withText("Análise de preços")).perform(scrollTo()).check(matches(isDisplayed()))
-            onView(withText(containsString("Não alterei nenhum preço.")))
+            onView(withText("Histórico")).check(matches(isDisplayed()))
+            onView(withText("Memória")).check(matches(isDisplayed()))
+            onView(withHint("Escreve uma mensagem…"))
+                .perform(scrollTo(), replaceText("Como melhorar o preço?"), closeSoftKeyboard())
+            onView(withText("Enviar mensagem  ↑")).perform(scrollTo(), click())
+            onView(withText(containsString("Análise de preços")))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
         }
@@ -437,10 +437,13 @@ class MainActivitySmokeTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
             onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            onView(withText("＋ Análises rápidas")).perform(scrollTo(), click())
             onView(withText("Engenharia da carta")).perform(scrollTo()).check(matches(isDisplayed()))
             onView(withText("Ideias de conteúdo")).perform(scrollTo()).check(matches(isDisplayed()))
-            onView(withText("Gerar resumo da operação")).perform(scrollTo(), click())
-            onView(withText("Resumo da operação")).perform(scrollTo()).check(matches(isDisplayed()))
+            onView(withHint("Escreve uma mensagem…"))
+                .perform(scrollTo(), replaceText("Faz um resumo da operação"), closeSoftKeyboard())
+            onView(withText("Enviar mensagem  ↑")).perform(scrollTo(), click())
+            onView(withText(containsString("Resumo da operação"))).perform(scrollTo()).check(matches(isDisplayed()))
             onView(withText(containsString("não é previsão de vendas"))).perform(scrollTo()).check(matches(isDisplayed()))
         }
     }
@@ -507,6 +510,7 @@ class MainActivitySmokeTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
             onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            onView(withText("＋ Ferramentas financeiras")).perform(scrollTo(), click())
 
             onView(withText("Gestor económico · opcional"))
                 .perform(scrollTo())
@@ -543,6 +547,7 @@ class MainActivitySmokeTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
             onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            onView(withText("＋ Ferramentas financeiras")).perform(scrollTo(), click())
             onView(withText("Ativar gestão económica")).perform(scrollTo(), click())
 
             onView(withHint("Farinha | 0,2 | 2,50 | 5\nMolho | 0,1 | 4,00 | 0"))
