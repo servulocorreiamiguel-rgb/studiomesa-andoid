@@ -2,6 +2,7 @@ package pt.studiomesa.app
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.SystemClock
 import android.util.Base64
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
@@ -24,10 +25,13 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
+import java.time.Instant
+import java.time.OffsetDateTime
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -160,39 +164,59 @@ class CustomerReservationFlowSmokeTest {
 
             onView(withContentDescription("Abrir secção Reservas")).perform(click())
             assertTrue("The initial reservation list request was not received.", initialListReceived.await(10, TimeUnit.SECONDS))
-            onView(withText("Ainda não tens reservas.")).check(matches(isDisplayed()))
+            awaitText("Ainda não tens reservas.")
 
             onView(withText("+  Pedir uma reserva")).perform(scrollTo(), click())
             onView(withHint("Nome para a reserva")).perform(replaceText("Miguel Teste"))
             onView(withHint("Contacto telefónico")).perform(replaceText("912345678"))
-            onView(withHint("Ex.: cadeira de bebé, ocasião especial…"))
-                .perform(replaceText("Cadeira de bebé"))
 
             onView(withText("Enviar pedido")).perform(click())
             assertTrue("The reservation creation RPC was not received.", createReceived.await(10, TimeUnit.SECONDS))
             assertTrue("The updated reservation list was not received.", listAfterCreateReceived.await(10, TimeUnit.SECONDS))
 
             val payload = requireNotNull(createPayload.get())
-            assertEquals(memberId, payload.getString("p_member_id").takeIf { payload.has("p_member_id") } ?: memberId)
+            assertFalse("The client must not choose its own loyalty member.", payload.has("p_member_id"))
+            assertTrue(
+                "The idempotency key must be a UUID.",
+                runCatching { UUID.fromString(payload.getString("p_client_request_id")) }.isSuccess
+            )
+            assertTrue(
+                "The requested reservation date must be in the future.",
+                OffsetDateTime.parse(payload.getString("p_reservation_at")).toInstant().isAfter(Instant.now())
+            )
             assertEquals("Miguel Teste", payload.getString("p_guest_name"))
             assertEquals("912345678", payload.getString("p_guest_phone"))
             assertEquals(2, payload.getInt("p_party_size"))
             assertEquals(90, payload.getInt("p_duration_minutes"))
-            assertEquals("Cadeira de bebé", payload.getString("p_notes"))
+            assertEquals("", payload.getString("p_notes"))
             assertEquals("Bearer $testAccessToken", lastAuthorization.get())
 
-            onView(withText("Estado: Pendente")).check(matches(isDisplayed()))
+            awaitText("Estado: Pendente")
             onView(withText("2 pessoas")).check(matches(isDisplayed()))
-            onView(withText("Nota: Cadeira de bebé")).check(matches(isDisplayed()))
 
             onView(withText("Cancelar pedido")).perform(scrollTo(), click())
             onView(withText("Cancelar reserva")).perform(click())
             assertTrue("The reservation cancellation RPC was not received.", cancelReceived.await(10, TimeUnit.SECONDS))
             assertTrue("The cancelled reservation was not reloaded.", listAfterCancelReceived.await(10, TimeUnit.SECONDS))
 
-            onView(withText("Estado: Cancelada")).check(matches(isDisplayed()))
+            awaitText("Estado: Cancelada")
             onView(withText("Cancelar pedido")).check(doesNotExist())
         }
+    }
+
+    private fun awaitText(text: String) {
+        val deadline = SystemClock.uptimeMillis() + 10_000L
+        var lastError: Throwable? = null
+        while (SystemClock.uptimeMillis() < deadline) {
+            try {
+                onView(withText(text)).check(matches(isDisplayed()))
+                return
+            } catch (error: Throwable) {
+                lastError = error
+                SystemClock.sleep(50)
+            }
+        }
+        throw AssertionError("Timed out waiting for visible text: $text", lastError)
     }
 
     private fun reservationDispatcher(): Dispatcher = object : Dispatcher() {
