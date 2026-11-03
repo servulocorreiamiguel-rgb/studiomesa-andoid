@@ -4601,6 +4601,22 @@ class MainActivity : Activity() {
         pageIntro(container, "Assistente StudioMesa", "Apoio à operação com os dados que já estão disponíveis.")
         addGap(container, 8)
 
+        assistantAnswer?.let { answer ->
+            val answerCard = makeCard(16, copperPale)
+            answerCard.addView(label(answer.title, 17f, true, forestDeep))
+            addGap(answerCard, 7)
+            answerCard.addView(label(answer.response, 12.5f, false, ink))
+            assistantActionTarget(answer.actionPage)?.let { target ->
+                addGap(answerCard, 10)
+                answerCard.addView(secondaryButton("Abrir " + target) {
+                    activePage = target
+                    renderApp()
+                }, LinearLayout.LayoutParams(-1, dp(44)))
+            }
+            container.addView(answerCard, cardParams())
+            addGap(container, 6)
+        }
+
         val privacyCard = makeCard(15, forest)
         privacyCard.addView(label("ASSISTENTE LOCAL · SEM API PAGA", 10f, true, copper))
         addGap(privacyCard, 5)
@@ -4635,22 +4651,6 @@ class MainActivity : Activity() {
             renderApp()
         }, LinearLayout.LayoutParams(-1, dp(46)))
         addGap(container, 12)
-
-        assistantAnswer?.let { answer ->
-            val answerCard = makeCard(16, copperPale)
-            answerCard.addView(label(answer.title, 17f, true, forestDeep))
-            addGap(answerCard, 7)
-            answerCard.addView(label(answer.response, 12.5f, false, ink))
-            assistantActionTarget(answer.actionPage)?.let { target ->
-                addGap(answerCard, 10)
-                answerCard.addView(secondaryButton("Abrir " + target) {
-                    activePage = target
-                    renderApp()
-                }, LinearLayout.LayoutParams(-1, dp(44)))
-            }
-            container.addView(answerCard, cardParams())
-            addGap(container, 6)
-        }
 
         sectionHeading(container, "Sugestões para rever", "Prioridades estimadas. Confirma os dados e decide antes de alterar qualquer coisa.")
         StudioMesaAdvisor.recommendations(snapshot).forEach { recommendation ->
