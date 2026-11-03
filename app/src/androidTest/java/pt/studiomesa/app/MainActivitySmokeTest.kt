@@ -36,7 +36,7 @@ class MainActivitySmokeTest {
 
     @Before
     fun resetDemoEconomicStateBetweenSmokeTests() {
-        assumeFalse("Customer variant has no restaurant economic manager.", isCustomerVariant())
+        if (isCustomerVariant()) return
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val store = AssistantChatStore(context)
         val scope = "economic:demo:${BuildConfig.FLAVOR.lowercase()}"
