@@ -6416,159 +6416,246 @@ class MainActivity : Activity() {
         value.stripTrailingZeros().toPlainString().replace('.', ',')
 
     private fun renderAssistant(container: LinearLayout) {
-        val snapshot = assistantSnapshot()
-        pageIntro(container, "Assistente StudioMesa", "Apoio à operação com os dados que já estão disponíveis.")
+        pageIntro(
+            container,
+            "Assistente StudioMesa",
+            "Conversa, pesquisa e apoio à gestão financeira do restaurante."
+        )
         addGap(container, 8)
 
-        val privacyCard = makeCard(15, forest)
-        privacyCard.addView(label("ASSISTENTE LOCAL · SEM API PAGA", 10f, true, copper))
-        addGap(privacyCard, 5)
-        privacyCard.addView(label(
-            "As análises são calculadas neste dispositivo. As perguntas não são enviadas nem guardadas como histórico. Esta versão usa regras e cálculos locais, não um modelo generativo; não altera registos por ti.",
-            12.5f, false, white
-        ))
-        container.addView(privacyCard, cardParams())
-
-        addGap(container, 9)
-        renderEconomicManager(container)
-
-        if (isPremium) {
-            addGap(container, 9)
-            renderRestaurantPriceAdvisor(container)
+        if (!hasRemoteRestaurant()) {
+            val demo = makeCard(16, forestDeep)
+            demo.addView(label("ASSISTENTE EM MODO DE DEMONSTRAÇÃO", 10f, true, copper))
+            addGap(demo, 7)
+            demo.addView(label(
+                "Liga uma conta de proprietário e configura o serviço de IA para ativar conversas, histórico, pesquisa na Internet e arquivo privado de faturas. As ferramentas locais continuam disponíveis abaixo.",
+                12.5f, false, white
+            ))
+            container.addView(demo, cardParams())
+            renderAssistantLocalTools(container)
+            return
         }
 
-        addGap(container, 5)
-        sectionHeading(container, "Pergunta ao assistente", "Experimenta perguntar sobre custos, preços, pedidos, stock, reservas ou um problema de sincronização.")
-        val questionField = multilineInputField("Ex.: Como posso melhorar o preço dos pratos?")
-        questionField.setText(assistantQuestion)
-        container.addView(questionField, multilineFieldParams())
-        container.addView(primaryButton("Analisar pergunta") {
-            assistantQuestion = questionField.text.toString().trim().take(400)
-            assistantAnswer = StudioMesaAdvisor.answerQuestion(assistantQuestion, snapshot)
-            renderApp()
-        }, LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(container, 5)
-        container.addView(secondaryButton("Gerar resumo da operação") {
-            // Keep the user's question intact; the briefing is a separate action.
-            assistantAnswer = StudioMesaAdvisor.dailyBriefing(assistantSnapshot())
-            renderApp()
-        }, LinearLayout.LayoutParams(-1, dp(46)))
-        addGap(container, 12)
-
-        assistantAnswer?.let { answer ->
-            val answerCard = makeCard(16, copperPale)
-            answerCard.addView(label(answer.title, 17f, true, forestDeep))
-            addGap(answerCard, 7)
-            answerCard.addView(label(answer.response, 12.5f, false, ink))
-            assistantActionTarget(answer.actionPage)?.let { target ->
-                addGap(answerCard, 10)
-                answerCard.addView(secondaryButton("Abrir " + target) {
-                    activePage = target
-                    renderApp()
-                }, LinearLayout.LayoutParams(-1, dp(44)))
-            }
-            container.addView(answerCard, cardParams())
-            addGap(container, 6)
-        }
-
-        sectionHeading(container, "Sugestões para rever", "Prioridades estimadas. Confirma os dados e decide antes de alterar qualquer coisa.")
-        StudioMesaAdvisor.recommendations(snapshot).forEach { recommendation ->
-            val (priorityText, textColor, backColor) = when (recommendation.priority) {
-                AssistantPriority.URGENT -> Triple("PRIORIDADE ALTA", red, paleRed)
-                AssistantPriority.ATTENTION -> Triple("A REVER", forestDeep, copperPale)
-                AssistantPriority.TIP -> Triple("SUGESTÃO", forestSoft, paleGreen)
-            }
-            val card = makeCard(15)
-            card.addView(label(priorityText, 9f, true, textColor).apply {
-                setPadding(dp(8), dp(5), dp(8), dp(5))
-                background = rounded(backColor, 10)
-            }, LinearLayout.LayoutParams(-2, -2))
-            addGap(card, 8)
-            card.addView(label(recommendation.title, 16f, true, forestDeep))
-            addGap(card, 5)
-            card.addView(label(recommendation.detail, 12.5f, false, muted))
-            assistantActionTarget(recommendation.actionPage)?.let { target ->
-                addGap(card, 10)
-                card.addView(secondaryButton("Abrir " + target) {
-                    activePage = target
-                    renderApp()
-                }, LinearLayout.LayoutParams(-1, dp(44)))
-            }
-            container.addView(card, cardParams())
-        }
-        sectionHeading(container, "Engenharia da carta", "Combina unidades de pedidos concluídos com a contribuição estimada por artigo.")
-        val engineering = StudioMesaAdvisor.menuEngineering(snapshot)
-        if (!engineering.hasEnoughSales) {
+        if (backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") {
             container.addView(emptyCard(
-                "Ainda não há pelo menos ${engineering.requiredUnits} unidades concluídas que correspondam aos artigos atuais (${engineering.completedUnits} encontradas). A análise não inventa popularidade."
+                "O Assistente e o Gestor Financeiro estão reservados ao proprietário do restaurante. Esta conta não recebe nem consulta conversas ou documentos financeiros."
+            ), cardParams())
+            return
+        }
+
+        val scope = backendRestaurantId() + ":" + backendPrefs.getString("user_id", "").orEmpty()
+        if (assistantWorkspaceScope.isNotBlank() && assistantWorkspaceScope != scope) {
+            clearAssistantWorkspace()
+        }
+        if (!assistantWorkspaceLoaded && !assistantWorkspaceLoading) {
+            refreshAssistantWorkspace()
+        }
+
+        val intro = makeCard(15, forestDeep)
+        val introRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        introRow.addView(statusDot(Color.rgb(120, 194, 153)),
+            LinearLayout.LayoutParams(dp(8), dp(8)).apply { setMargins(0, 0, dp(8), 0) })
+        introRow.addView(label("STUDIOMESA INTELLIGENCE", 9.5f, true, copperPale))
+        intro.addView(introRow)
+        addGap(intro, 6)
+        intro.addView(label("O teu consultor de negócio.", 21f, true, white))
+        addGap(intro, 4)
+        intro.addView(label(
+            "Pergunta sobre margens, compras, desperdício, clientes, tendências e estratégia. A pesquisa na Internet e a leitura de faturas são opcionais.",
+            12f, false, Color.rgb(229, 235, 228)
+        ))
+        container.addView(intro, cardParams())
+
+        if (assistantWorkspaceLoading) {
+            container.addView(emptyCard("A carregar o histórico e o arquivo privado do restaurante…"), cardParams())
+            return
+        }
+        if (!assistantWorkspaceLoaded) {
+            container.addView(emptyCard(
+                assistantWorkspaceError.ifBlank {
+                    "Não foi possível carregar o espaço do assistente. Verifica a ligação e tenta atualizar."
+                }
+            ), cardParams())
+            container.addView(secondaryButton("Tentar novamente") {
+                refreshAssistantWorkspace(force = true)
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+            return
+        }
+
+        sectionHeading(container, "Histórico de conversas", "As conversas ficam guardadas na conta deste restaurante.")
+        val historySearch = inputField("Pesquisar conversas e mensagens", InputType.TYPE_CLASS_TEXT).apply {
+            setText(assistantHistoryQuery)
+            setSelection(text.length)
+        }
+        val historyRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        historyRow.addView(historySearch, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
+            setMargins(0, 0, dp(6), 0)
+        })
+        historyRow.addView(secondaryButton("Pesquisar") {
+            assistantHistoryQuery = historySearch.text.toString().trim().take(100)
+            refreshAssistantHistory()
+        }, LinearLayout.LayoutParams(dp(104), dp(44)))
+        container.addView(historyRow)
+        addGap(container, 7)
+        container.addView(primaryButton("+ Nova conversa") {
+            createAssistantConversation()
+        }, LinearLayout.LayoutParams(-1, dp(46)))
+        addGap(container, 7)
+
+        if (assistantConversations.length() == 0) {
+            container.addView(emptyCard(
+                if (assistantHistoryQuery.isBlank())
+                    "Ainda não existem conversas. Começa uma nova conversa para guardar perguntas, respostas e fontes."
+                else
+                    "Não encontrei conversas ou mensagens com esse termo."
             ), cardParams())
         } else {
-            if (!engineering.hasMarginData) {
-                container.addView(emptyCard("Existem vendas, mas faltam custos válidos nos artigos vendidos para comparar a contribuição. Confirma os custos na Carta."), cardParams())
-            }
-            engineering.items.forEach { item ->
-                val title = when (item.classification) {
-                    MenuEngineeringClass.STAR -> "ESTRELA"
-                    MenuEngineeringClass.WORKHORSE -> "POPULAR · REVER MARGEM"
-                    MenuEngineeringClass.PUZZLE -> "MARGEM ALTA · REVER PROCURA"
-                    MenuEngineeringClass.DOG -> "REVER ARTIGO"
-                    MenuEngineeringClass.MISSING_COST -> "CUSTO EM FALTA"
+            val visibleCount = minOf(assistantConversations.length(), 12)
+            for (index in 0 until visibleCount) {
+                val conversation = assistantConversations.optJSONObject(index) ?: continue
+                val id = conversation.optString("conversation_id")
+                val title = conversation.optString("title", "Conversa")
+                val preview = conversation.optString("last_message_preview")
+                val selected = id == assistantCurrentConversationId
+                val item = makeCard(12, if (selected) copperPale else white)
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
                 }
-                val backColor = when (item.classification) {
-                    MenuEngineeringClass.STAR -> paleGreen
-                    MenuEngineeringClass.WORKHORSE, MenuEngineeringClass.PUZZLE -> copperPale
-                    MenuEngineeringClass.DOG, MenuEngineeringClass.MISSING_COST -> paleRed
+                val text = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                text.addView(label(title, 14f, true, forestDeep))
+                if (preview.isNotBlank()) {
+                    addGap(text, 3)
+                    text.addView(label(preview, 11f, false, muted).apply {
+                        maxLines = 2
+                        ellipsize = android.text.TextUtils.TruncateAt.END
+                    })
                 }
-                val card = makeCard(14)
-                card.addView(label(title, 9f, true, forestDeep).apply {
-                    setPadding(dp(8), dp(5), dp(8), dp(5))
-                    background = rounded(backColor, 10)
-                }, LinearLayout.LayoutParams(-2, -2))
-                addGap(card, 7)
-                card.addView(label(item.itemName, 16f, true, forestDeep))
-                addGap(card, 4)
-                card.addView(label(
-                    "${item.unitsSold} unidade(s) concluídas · ${item.popularitySharePercent}% das unidades correspondentes · contribuição atual: ${item.contributionPerUnit?.let { money(it) } ?: "custo em falta"} por unidade.",
-                    11.5f, true, muted
-                ))
-                addGap(card, 5)
-                card.addView(label(item.recommendation, 12.5f, false, ink))
-                container.addView(card, cardParams())
+                row.addView(text, LinearLayout.LayoutParams(0, -2, 1f))
+                row.addView(label(if (selected) "●" else "›", 17f, true, if (selected) forest else copper))
+                item.addView(row)
+                item.isClickable = true
+                item.isFocusable = true
+                item.contentDescription = "Abrir conversa " + title
+                item.setOnClickListener {
+                    if (id.isNotBlank() && id != assistantCurrentConversationId) openAssistantConversation(id)
+                }
+                container.addView(item, cardParams())
             }
-            container.addView(label(
-                "Triagem com pedidos concluídos e preço/custo atuais; não é lucro contabilístico nem custo histórico e não inclui IVA, mão de obra, desperdício ou encargos.",
-                10.5f, false, muted
-            ))
         }
 
-        sectionHeading(container, "Ideias de conteúdo", "Rascunhos para revisão; só usam nomes, descrições e preços registados na carta.")
-        val drafts = StudioMesaAdvisor.marketingDrafts(snapshot)
-        if (drafts.isEmpty()) {
-            container.addView(emptyCard("Adiciona artigos com nome e preço válidos para criar rascunhos."), cardParams())
+        addGap(container, 5)
+        sectionHeading(container, "Conversa", "As respostas e as fontes ficam guardadas no histórico.")
+        if (assistantCurrentConversationId.isBlank()) {
+            container.addView(emptyCard("Escolhe uma conversa do histórico ou carrega em «Nova conversa»."), cardParams())
         } else {
-            drafts.forEach { draft ->
-                val card = makeCard(14)
-                card.addView(label(draft.itemName, 16f, true, forestDeep))
-                addGap(card, 6)
-                card.addView(label(draft.caption, 13f, false, ink))
-                addGap(card, 5)
-                card.addView(label(draft.basis, 10.5f, false, muted))
-                addGap(card, 8)
-                card.addView(secondaryButton("Copiar rascunho") {
-                    copyAssistantText(draft.caption)
-                }, LinearLayout.LayoutParams(-1, dp(44)))
-                container.addView(card, cardParams())
+            val current = (0 until assistantConversations.length())
+                .mapNotNull { assistantConversations.optJSONObject(it) }
+                .firstOrNull { it.optString("conversation_id") == assistantCurrentConversationId }
+            val conversationHeader = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
             }
+            conversationHeader.addView(label(
+                current?.optString("title").orEmpty().ifBlank { "Nova conversa" },
+                15f, true, forestDeep
+            ), LinearLayout.LayoutParams(0, -2, 1f))
+            conversationHeader.addView(secondaryButton("Eliminar") {
+                confirmDeleteAssistantConversation()
+            }, LinearLayout.LayoutParams(dp(92), dp(40)))
+            container.addView(conversationHeader)
+            addGap(container, 7)
+
+            if (assistantMessagesLoading) {
+                container.addView(emptyCard("A carregar as mensagens…"), cardParams())
+            } else if (assistantMessages.length() == 0) {
+                container.addView(emptyCard("Escreve a primeira pergunta. O histórico será guardado nesta conta."), cardParams())
+            } else {
+                renderAssistantMessages(container)
+            }
+
+            addGap(container, 8)
+            val composer = makeCard(13)
+            composer.addView(label("A TUA PERGUNTA", 9.5f, true, forestSoft))
+            addGap(composer, 4)
+            val messageField = multilineInputField(
+                "Ex.: Analisa os custos e sugere três formas de aumentar a margem."
+            ).apply {
+                minLines = 3
+                maxLines = 6
+                setText(assistantDraft)
+            }
+            composer.addView(messageField, multilineFieldParams())
+
+            val optionsRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            optionsRow.addView(secondaryButton(
+                if (assistantWebSearchEnabled) "Pesquisa web: ligada" else "Pesquisa web: desligada"
+            ) {
+                assistantWebSearchEnabled = !assistantWebSearchEnabled
+                renderApp()
+            }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(0, 0, dp(5), 0) })
+            optionsRow.addView(secondaryButton(
+                "Faturas (" + assistantSelectedInvoiceIds.size + ")"
+            ) {
+                showAssistantInvoicePickerDialog()
+            }, LinearLayout.LayoutParams(0, dp(42), 1f))
+            composer.addView(optionsRow)
+            addGap(composer, 5)
+
+            val invoiceActions = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            invoiceActions.addView(secondaryButton("Adicionar fatura PDF") {
+                chooseAssistantInvoicePdf()
+            }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(0, 0, dp(5), 0) })
+            invoiceActions.addView(secondaryButton("Atualizar faturas") {
+                refreshAssistantInvoices()
+            }, LinearLayout.LayoutParams(0, dp(42), 1f))
+            composer.addView(invoiceActions)
+            if (assistantSelectedInvoiceIds.isNotEmpty()) {
+                addGap(composer, 5)
+                composer.addView(label(
+                    assistantSelectedInvoiceIds.size.toString() +
+                        " fatura(s) selecionada(s). Só serão enviadas para análise quando enviares esta pergunta.",
+                    10.5f, false, muted
+                ))
+            }
+            addGap(composer, 7)
+            composer.addView(primaryButton(if (assistantBusy) "A enviar…" else "Enviar mensagem") {
+                assistantDraft = messageField.text.toString().trim()
+                sendAssistantChatMessage()
+            }, LinearLayout.LayoutParams(-1, dp(48)))
+            container.addView(composer, cardParams())
         }
 
-        addGap(container, 4)
+        addGap(container, 5)
+        container.addView(secondaryButton(
+            if (assistantShowLocalTools) "Ocultar gestor económico e análises locais"
+            else "Abrir gestor económico e ferramentas locais"
+        ) {
+            assistantShowLocalTools = !assistantShowLocalTools
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(46)))
+        if (assistantShowLocalTools) {
+            addGap(container, 8)
+            renderAssistantLocalTools(container)
+        }
+
         container.addView(label(
-            if (snapshot.isDemo) "Fonte atual: dados de demonstração locais. Liga um restaurante na secção Conta para analisar dados partilhados."
-            else "Fonte atual: dados guardados em cache pela aplicação. Confirma a última atualização antes de decidir; esta análise não verifica a conectividade em tempo real.",
-            11f, false, muted
+            "Privacidade: o chat e os PDFs pertencem a este restaurante. A pesquisa na Internet é opcional. A análise de faturas é automática e deve ser conferida antes de decisões contabilísticas ou fiscais.",
+            10.5f, false, muted
         ))
     }
-
 
     private fun clearEconomicManagerState() {
         economicManagerEnabled = false
