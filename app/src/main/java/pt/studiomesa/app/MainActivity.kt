@@ -4938,6 +4938,359 @@ class MainActivity : Activity() {
         return "${answer.title}\n\n${answer.response}$contextNote"
     }
 
+
+    private fun canManageInvoices(): Boolean =
+        !hasRemoteRestaurant() || backendPrefs.getString("restaurant_role", "").orEmpty() == "owner"
+
+    private fun renderAssistantInvoices(container: LinearLayout, scope: String) {
+        sectionHeading(
+            container,
+            "Faturas e despesas",
+            "Arquivo privado do restaurante. Os valores são confirmados pelo proprietário; o anexo original fica cifrado no dispositivo."
+        )
+        if (!canManageInvoices()) {
+            container.addView(emptyCard("Só o proprietário pode consultar ou importar documentos financeiros."), cardParams())
+            return
+        }
+        val invoices = runCatching { assistantChatStore.listInvoices(scope) }.getOrElse {
+            container.addView(emptyCard("Não foi possível abrir o arquivo cifrado de faturas."), cardParams())
+            return
+        }
+        val netTotal = invoices.fold(BigDecimal.ZERO) { sum, invoice ->
+            val amount = runCatching { BigDecimal(invoice.totalAmount) }.getOrDefault(BigDecimal.ZERO)
+            if (invoice.invoiceType == "credit_note") sum.subtract(amount) else sum.add(amount)
+        }
+        val card = makeCard(14, copperPale)
+        card.addView(label("DOCUMENTOS REGISTADOS", 9.5f, true, forestDeep))
+        addGap(card, 5)
+        card.addView(label("\${invoices.size} documentos · compras líquidas registadas: \${money(netTotal)}", 14f, true, forestDeep))
+        addGap(card, 5)
+        card.addView(label("Inclui apenas documentos introduzidos e conferidos. Não é uma integração automática com a contabilidade.", 11f, false, muted))
+        container.addView(card, cardParams())
+        addGap(container, 7)
+        container.addView(primaryButton("＋ Registar fatura ou nota de crédito") {
+            showAssistantInvoiceForm(scope)
+        }, LinearLayout.LayoutParams(-1, dp(46)))
+        addGap(container, 5)
+        container.addView(secondaryButton("Ver histórico de faturas (\${invoices.size})") {
+            showAssistantInvoiceList(scope)
+        }, LinearLayout.LayoutParams(-1, dp(44)))
+        addGap(container, 7)
+        container.addView(label(
+            "Importação: PDF, XML, TXT, JPEG, PNG e WebP até 12 MB. Os documentos são cifrados no armazenamento privado desta instalação. A leitura automática/OCR e a sincronização cloud ainda não estão ativas.",
+            10.5f, false, muted
+        ))
+    }
+
+    private fun parseInvoiceAmount(raw: String, fieldName: String): String {
+        var clean = raw.trim().replace(" ", "")
+        if (clean.contains(',')) clean = clean.replace(".", "").replace(',', '.')
+        val value = runCatching { BigDecimal(clean) }.getOrNull()
+            ?: throw IllegalArgumentException("O valor de $fieldName não é válido.")
+        require(value.signum() >= 0 && value <= BigDecimal("999999999.99") && value.scale().coerceAtMost(2) == value.scale()) {
+            "O valor de $fieldName deve ser não negativo e ter até duas casas decimais."
+        }
+        return value.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString()
+    }
+
+    private fun showAssistantInvoiceForm(scope: String) {
+        if (!canManageInvoices()) {
+            Toast.makeText(this, "Apenas o proprietário pode registar faturas.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(4))
+        }
+        fun addField(title: String, hint: String, type: Int = InputType.TYPE_CLASS_TEXT): EditText {
+            form.addView(label(title, 11f, true, forestDeep))
+            val input = inputField(hint, type)
+            form.addView(input, LinearLayout.LayoutParams(-1, dp(46)).apply {
+                setMargins(0, dp(3), 0, dp(7))
+            })
+            return input
+        }
+        val supplier = addField("Fornecedor", "Ex.: Distribuidor alimentar")
+        val number = addField("Número do documento", "Ex.: FT A/2026/104")
+        val date = addField("Data (DD/MM/AAAA)", SimpleDateFormat("dd/MM/yyyy", Locale("pt", "PT")).format(Date()))
+        val type = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                listOf("Fatura", "Nota de crédito")
+            )
+        }
+        form.addView(label("Tipo de documento", 11f, true, forestDeep))
+        form.addView(type, LinearLayout.LayoutParams(-1, dp(46)))
+        val net = addField("Base tributável (€)", "Ex.: 100,00", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+        val vat = addField("IVA (€)", "Ex.: 23,00", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+        val total = addField("Total (€)", "Ex.: 123,00", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+        form.addView(label("Notas / linhas transcritas (opcional)", 11f, true, forestDeep))
+        val notes = multilineInputField("Ex.: 10 kg de arroz; 4 caixas de óleo…").apply {
+            minLines = 3
+            maxLines = 6
+            filters = filters + InputFilter.LengthFilter(4000)
+        }
+        form.addView(notes, LinearLayout.LayoutParams(-1, dp(110)))
+        val scroll = ScrollView(this).apply { addView(form) }
+        AlertDialog.Builder(this)
+            .setTitle("Novo documento financeiro")
+            .setView(scroll)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Guardar") { _, _ ->
+                try {
+                    val parsedDate = SimpleDateFormat("dd/MM/yyyy", Locale("pt", "PT")).apply {
+                        isLenient = false
+                    }.parse(date.text.toString().trim())
+                        ?: throw IllegalArgumentException("A data não é válida.")
+                    val isoDate = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(parsedDate)
+                    val netValue = parseInvoiceAmount(net.text.toString(), "base tributável")
+                    val vatValue = parseInvoiceAmount(vat.text.toString(), "IVA")
+                    val totalValue = parseInvoiceAmount(total.text.toString(), "total")
+                    val calculatedTotal = BigDecimal(netValue).add(BigDecimal(vatValue))
+                    require(calculatedTotal.subtract(BigDecimal(totalValue)).abs() <= BigDecimal("0.02")) {
+                        "O total deve corresponder à base tributável mais IVA (diferença máxima de 0,02 €)."
+                    }
+                    val invoice = AssistantChatStore.Invoice(
+                        id = java.util.UUID.randomUUID().toString(),
+                        supplier = supplier.text.toString().trim(),
+                        number = number.text.toString().trim(),
+                        invoiceDate = isoDate,
+                        invoiceType = if (type.selectedItemPosition == 1) "credit_note" else "invoice",
+                        netAmount = netValue,
+                        taxAmount = vatValue,
+                        totalAmount = totalValue,
+                        notes = notes.text.toString().trim(),
+                        attachmentId = null,
+                        attachmentName = null,
+                        attachmentMimeType = null,
+                        createdAtMillis = System.currentTimeMillis()
+                    )
+                    assistantChatStore.saveInvoice(scope, invoice)
+                    Toast.makeText(this, "Documento guardado no arquivo cifrado.", Toast.LENGTH_SHORT).show()
+                    showAssistantInvoiceDetails(scope, invoice.id)
+                } catch (error: Exception) {
+                    AlertDialog.Builder(this)
+                        .setTitle("Não foi possível guardar")
+                        .setMessage(error.message ?: "Confirma os valores e a data.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            }
+            .show()
+    }
+
+    private fun showAssistantInvoiceList(scope: String) {
+        if (!canManageInvoices()) return
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(8), dp(14), dp(4))
+        }
+        val search = inputField("Pesquisar fornecedor, número ou notas…", InputType.TYPE_CLASS_TEXT)
+        panel.addView(search, fieldParams())
+        val results = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val scroll = ScrollView(this).apply { addView(results) }
+        panel.addView(scroll, LinearLayout.LayoutParams(-1, dp(400)))
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Histórico de faturas")
+            .setView(panel)
+            .setNegativeButton("Fechar", null)
+            .create()
+        fun refresh(query: String) {
+            results.removeAllViews()
+            val invoices = runCatching { assistantChatStore.listInvoices(scope, query) }.getOrElse {
+                results.addView(emptyCard("Não foi possível abrir o arquivo de faturas."))
+                return
+            }
+            if (invoices.isEmpty()) {
+                results.addView(emptyCard(if (query.isBlank()) "Ainda não há documentos registados." else "Não encontrei documentos com esse texto."))
+                return
+            }
+            invoices.forEach { invoice ->
+                val card = makeCard(12)
+                card.addView(label("\${invoice.supplier} · \${invoice.number.ifBlank { "Sem número" }}", 14f, true, forestDeep))
+                addGap(card, 3)
+                val typeLabel = if (invoice.invoiceType == "credit_note") "Nota de crédito" else "Fatura"
+                card.addView(label("$typeLabel · \${invoice.invoiceDate} · \${money(BigDecimal(invoice.totalAmount))}", 11f, false, muted))
+                if (invoice.attachmentId != null) {
+                    card.addView(label("Documento original anexado", 10f, true, forestSoft))
+                }
+                card.setOnClickListener {
+                    dialog.dismiss()
+                    showAssistantInvoiceDetails(scope, invoice.id)
+                }
+                card.setOnLongClickListener {
+                    AlertDialog.Builder(this)
+                        .setTitle("Eliminar documento?")
+                        .setMessage("A fatura e o anexo cifrado serão eliminados deste dispositivo.")
+                        .setNegativeButton("Cancelar", null)
+                        .setPositiveButton("Eliminar") { _, _ ->
+                            runCatching {
+                                val attachmentId = assistantChatStore.deleteInvoice(scope, invoice.id)
+                                attachmentId?.let { assistantInvoiceFileStore.delete(it) }
+                            }.onFailure {
+                                Toast.makeText(this, "Não foi possível eliminar o documento.", Toast.LENGTH_SHORT).show()
+                            }
+                            refresh(search.text.toString())
+                        }
+                        .show()
+                    true
+                }
+                results.addView(card, cardParams())
+            }
+        }
+        search.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                refresh(s?.toString().orEmpty())
+            }
+            override fun afterTextChanged(s: android.text.Editable?) = Unit
+        })
+        refresh("")
+        dialog.show()
+    }
+
+    private fun showAssistantInvoiceDetails(scope: String, invoiceId: String) {
+        val invoice = runCatching {
+            assistantChatStore.listInvoices(scope).firstOrNull { it.id == invoiceId }
+        }.getOrNull() ?: return
+        if (!canManageInvoices()) return
+        val typeLabel = if (invoice.invoiceType == "credit_note") "Nota de crédito" else "Fatura"
+        val message = buildString {
+            append(typeLabel).append("\n")
+            append("Fornecedor: ").append(invoice.supplier).append("\n")
+            append("Documento: ").append(invoice.number.ifBlank { "Não indicado" }).append("\n")
+            append("Data: ").append(invoice.invoiceDate).append("\n")
+            append("Base tributável: ").append(money(BigDecimal(invoice.netAmount))).append("\n")
+            append("IVA: ").append(money(BigDecimal(invoice.taxAmount))).append("\n")
+            append("Total: ").append(money(BigDecimal(invoice.totalAmount))).append("\n\n")
+            append("Notas / linhas: ").append(invoice.notes.ifBlank { "Sem notas transcritas." })
+            append("\n\n")
+            append(if (invoice.attachmentId == null) "Sem documento original anexado." else "Anexo: \${invoice.attachmentName}")
+        }
+        val builder = AlertDialog.Builder(this)
+            .setTitle("Documento financeiro")
+            .setMessage(message)
+            .setNegativeButton("Fechar", null)
+        if (invoice.attachmentId == null) {
+            builder.setNeutralButton("Anexar ficheiro") { _, _ -> requestInvoiceAttachment(invoice.id) }
+        } else {
+            builder.setNeutralButton("Exportar original") { _, _ -> requestInvoiceExport(invoice.id) }
+            builder.setPositiveButton("Remover anexo") { _, _ ->
+                try {
+                    assistantInvoiceFileStore.delete(invoice.attachmentId)
+                    assistantChatStore.clearInvoiceAttachment(scope, invoice.id)
+                    Toast.makeText(this, "Anexo removido.", Toast.LENGTH_SHORT).show()
+                } catch (error: Exception) {
+                    Toast.makeText(this, error.message ?: "Não foi possível remover o anexo.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        builder.show()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun requestInvoiceAttachment(invoiceId: String) {
+        if (!canManageInvoices()) return
+        pendingInvoiceAttachmentId = invoiceId
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(
+                Intent.EXTRA_MIME_TYPES,
+                arrayOf("application/pdf", "application/xml", "text/xml", "text/plain", "image/jpeg", "image/png", "image/webp")
+            )
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivityForResult(intent, invoiceAttachmentRequestCode)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun requestInvoiceExport(invoiceId: String) {
+        if (!canManageInvoices()) return
+        val invoice = runCatching {
+            assistantChatStore.listInvoices(assistantChatScope()).firstOrNull { it.id == invoiceId }
+        }.getOrNull() ?: return
+        val attachmentId = invoice.attachmentId ?: return
+        if (!assistantInvoiceFileStore.exists(attachmentId)) {
+            Toast.makeText(this, "O anexo já não existe neste dispositivo.", Toast.LENGTH_LONG).show()
+            return
+        }
+        pendingInvoiceExportId = invoiceId
+        val mimeType = invoice.attachmentMimeType ?: "application/octet-stream"
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = mimeType
+            val safeName = (invoice.attachmentName ?: "documento")
+                .replace(Regex("[^A-Za-z0-9._-]"), "_").take(150).ifBlank { "documento" }
+            putExtra(Intent.EXTRA_TITLE, safeName)
+        }
+        startActivityForResult(intent, invoiceExportRequestCode)
+    }
+
+    private fun answerRegisteredInvoices(question: String, scope: String): String {
+        if (!canManageInvoices()) {
+            return "O arquivo financeiro está reservado ao proprietário do restaurante. Não consultei nem expus documentos nesta conta."
+        }
+        val all = runCatching { assistantChatStore.listInvoices(scope) }.getOrElse {
+            return "Não consegui abrir o arquivo cifrado de faturas. Os documentos não foram apagados."
+        }
+        if (all.isEmpty()) {
+            return "Ainda não existem faturas registadas no arquivo deste dispositivo. Abre «Ferramentas financeiras» e seleciona «Registar fatura ou nota de crédito». Só analisarei valores depois de serem introduzidos e conferidos."
+        }
+        val normalized = java.text.Normalizer.normalize(
+            question.lowercase(Locale.ROOT), java.text.Normalizer.Form.NFD
+        ).replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
+        val monthPrefix = when {
+            normalized.contains("este mes") || normalized.contains("neste mes") ->
+                SimpleDateFormat("yyyy-MM", Locale.ROOT).format(Date())
+            normalized.contains("mes passado") -> {
+                val calendar = Calendar.getInstance().apply { add(Calendar.MONTH, -1) }
+                SimpleDateFormat("yyyy-MM", Locale.ROOT).format(calendar.time)
+            }
+            else -> null
+        }
+        val periodInvoices = if (monthPrefix == null) all else all.filter { it.invoiceDate.startsWith(monthPrefix) }
+        val words = normalized.split(Regex("[^a-z0-9]+")).filter { it.length >= 3 }
+        val supplierMatches = periodInvoices.filter { invoice ->
+            words.any { invoice.supplier.lowercase().contains(it) }
+        }
+        val selected = if (supplierMatches.isNotEmpty()) supplierMatches else periodInvoices
+        if (selected.isEmpty()) {
+            return "Não encontrei faturas registadas para o período pedido. O arquivo tem \${all.size} documentos no total; não vou estimar valores para um período sem registos."
+        }
+        val invoices = selected.filter { it.invoiceType == "invoice" }
+        val credits = selected.filter { it.invoiceType == "credit_note" }
+        val invoiceTotal = invoices.fold(BigDecimal.ZERO) { sum, item -> sum.add(BigDecimal(item.totalAmount)) }
+        val creditTotal = credits.fold(BigDecimal.ZERO) { sum, item -> sum.add(BigDecimal(item.totalAmount)) }
+        val netPurchases = invoiceTotal.subtract(creditTotal)
+        val vat = selected.fold(BigDecimal.ZERO) { sum, item ->
+            val amount = BigDecimal(item.taxAmount)
+            if (item.invoiceType == "credit_note") sum.subtract(amount) else sum.add(amount)
+        }
+        val suppliers = selected.groupBy { it.supplier }.mapValues { (_, rows) ->
+            rows.fold(BigDecimal.ZERO) { sum, item ->
+                val amount = BigDecimal(item.totalAmount)
+                if (item.invoiceType == "credit_note") sum.subtract(amount) else sum.add(amount)
+            }
+        }.entries.sortedByDescending { it.value }
+        return buildString {
+            append("Análise do arquivo de documentos deste dispositivo")
+            if (monthPrefix != null) append(" · ").append(monthPrefix)
+            if (supplierMatches.isNotEmpty()) append(" · fornecedor: ").append(supplierMatches.first().supplier)
+            append("\n\n")
+            append("Documentos analisados: ").append(selected.size).append("\n")
+            append("Faturas: ").append(invoices.size).append(" · ").append(money(invoiceTotal)).append("\n")
+            append("Notas de crédito: ").append(credits.size).append(" · ").append(money(creditTotal)).append("\n")
+            append("Compras líquidas registadas: ").append(money(netPurchases)).append("\n")
+            append("IVA líquido registado: ").append(money(vat)).append("\n\n")
+            append("Por fornecedor:\n")
+            suppliers.take(10).forEach { append("• ").append(it.key).append(": ").append(money(it.value)).append("\n") }
+            append("\nEstes totais usam os valores introduzidos manualmente nas faturas guardadas. Não confirmam a situação fiscal, não incluem documentos ausentes e não substituem a contabilidade.")
+        }
+    }
+
+
     private fun showAssistantHistoryDialog() {
         val scope = assistantChatScope()
         val panel = LinearLayout(this).apply {
