@@ -18,6 +18,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 import java.util.concurrent.Executors
+import java.util.concurrent.CancellationException
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.runBlocking
 
@@ -111,6 +112,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                         BufferedOutputStream(FileOutputStream(temporaryFile), BUFFER_SIZE).use { output ->
                             val buffer = ByteArray(BUFFER_SIZE)
                             while (true) {
+                                if (closed) throw CancellationException("Transferência cancelada ao fechar a aplicação.")
                                 val count = input.read(buffer)
                                 if (count < 0) break
                                 output.write(buffer, 0, count)
