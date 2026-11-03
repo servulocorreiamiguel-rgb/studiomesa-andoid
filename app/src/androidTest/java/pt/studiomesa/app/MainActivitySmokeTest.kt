@@ -448,9 +448,10 @@ class MainActivitySmokeTest {
             onView(withText("＋ Análises rápidas")).perform(scrollTo(), click())
             onView(withText("Engenharia da carta")).perform(scrollTo()).check(matches(isDisplayed()))
             onView(withText("Ideias de conteúdo")).perform(scrollTo()).check(matches(isDisplayed()))
-            onView(withText("Gerar resumo da operação")).perform(scrollTo(), click())
-            onView(withText("Resumo da operação")).perform(scrollTo()).check(matches(isDisplayed()))
-            onView(withText(containsString("não é previsão de vendas"))).perform(scrollTo()).check(matches(isDisplayed()))
+            onView(withText("Copiar rascunho")).perform(scrollTo()).check(matches(isDisplayed()))
+            onView(withText(containsString("Fonte: dados de demonstração locais.")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
         }
     }
 
