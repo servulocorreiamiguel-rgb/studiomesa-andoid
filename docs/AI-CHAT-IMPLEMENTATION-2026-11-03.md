@@ -10,10 +10,10 @@
 
 ## Limites importantes
 
-- A persistência implementada nesta fase é **local ao dispositivo**. Não sincroniza entre telemóveis. A sincronização cloud exige novas tabelas, políticas RLS e uma reconciliação aprovada do histórico de migrações do projeto Supabase.
+- A persistência do histórico, memória, indicadores económicos e registo de faturas é **local ao dispositivo**, cifrada e separada por conta/restaurante. O botão «Histórico» permanece visível no chat; permite pesquisar, reabrir e eliminar conversas. Não sincroniza entre telemóveis. A sincronização cloud exige novas tabelas, políticas RLS e uma reconciliação aprovada do histórico de migrações do projeto Supabase.
 - O aspeto de chat não significa que exista já um modelo ChatGPT, Gemini ou Grok ligado. As respostas continuam a usar o motor local determinístico existente. Pesquisa na Internet, respostas generativas e chamadas a ferramentas ainda não estão ativas.
-- O agente financeiro mantém os cálculos locais e manuais existentes, agora acessíveis através de Ferramentas financeiras.
-- O projeto Supabase alojado não tem arquivo de faturas contabilísticas nem integração com software de faturação. O QR de fatura usado no fluxo de fidelização não é um arquivo de documentos. A análise de faturas fica pendente de escolher o programa do restaurante ou um formato de importação seguro, definir permissões exclusivas do proprietário e testar a extração dos dados.
+- O gestor económico mantém os cálculos locais, mas os campos e relatórios passam a persistir cifrados no dispositivo, separados por conta/restaurante. A informação não é sincronizada entre dispositivos nem enviada para um serviço externo.
+- O assistente tem um arquivo local de faturas e notas de crédito. O proprietário pode registar fornecedor, número, data, base tributável, IVA, total e notas/linhas transcritas; pesquisar o histórico; abrir detalhes; importar um anexo PDF, XML, TXT, JPEG, PNG ou WebP até 12 MB; exportar o original ou eliminá-lo. Os anexos ficam cifrados com AES-GCM numa pasta privada da aplicação e a chave permanece no Android Keystore. O agente calcula totais registados, notas de crédito, IVA líquido e totais por fornecedor. Os valores têm de ser conferidos e introduzidos pelo utilizador. Não existe OCR/leitura automática de PDFs, sincronização cloud nem integração com software de faturação.
 
 ## Segurança
 
