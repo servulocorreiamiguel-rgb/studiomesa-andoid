@@ -207,9 +207,9 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                         systemInstruction = Contents.of(systemInstruction.take(MAX_SYSTEM_INSTRUCTION_CHARS)),
                         initialMessages = initialMessages,
                         samplerConfig = SamplerConfig(
-                            topK = 30,
+                            topK = 40,
                             topP = 0.9,
-                            temperature = 0.55
+                            temperature = 0.3
                         ),
                         maxOutputToken = MAX_OUTPUT_TOKENS,
                         prefillPrefaceOnInit = false
