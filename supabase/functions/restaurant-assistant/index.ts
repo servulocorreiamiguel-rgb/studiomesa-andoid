@@ -50,19 +50,19 @@ Deno.serve(
     }
 
     const normalizeSensitiveText = (value: string) =>
-      value.normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase();
+      value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
     const sensitiveContentPattern =
-      /\\b(?:faturas?|facturas?|invoices?|iva|nif|iban|fornecedor(?:es)?|compras?|despesas?|gastos?|salarios?|ordenados?|lucros?|margens?|tesouraria|passwords?|tokens?|contactos?|telefones?|emails?|moradas?|enderecos?|dados pessoais|cartoes?)\\b/i;
-    const containsEmail = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/i;
-    const containsPhone = /\\+?\\d[\\d ().-]{7,}/;
+      /\b(?:faturas?|facturas?|invoices?|iva|nif|iban|fornecedor(?:es)?|compras?|despesas?|gastos?|salarios?|ordenados?|lucros?|margens?|tesouraria|passwords?|tokens?|contactos?|telefones?|emails?|moradas?|enderecos?|dados pessoais|cartoes?)\b/i;
+    const containsEmail = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+    const containsPhone = /\+?\d[\d ().-]{7,}/;
     const combinedText = messages.map((message) =>
       typeof message?.text === "string" ? message.text : ""
-    ).join("\\n");
+    ).join("\n");
     const normalizedText = normalizeSensitiveText(combinedText);
     if (
       combinedText.length > 12_000 ||
-      /\\d|€|\\bEUR\\b/i.test(combinedText) ||
+      /\d|€|\bEUR\b/i.test(combinedText) ||
       sensitiveContentPattern.test(normalizedText) ||
       containsEmail.test(combinedText) ||
       containsPhone.test(combinedText)
