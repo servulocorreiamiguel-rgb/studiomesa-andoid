@@ -4072,7 +4072,8 @@ class MainActivity : Activity() {
     private fun cancelCustomerReservation(reservationId: String) {
         val accountId = backendPrefs.getString("user_id", "").orEmpty()
         val memberId = backendMemberId()
-        if (accountId.isBlank() || memberId.isBlank() || backendToken().isBlank()) return
+        val sessionToken = backendToken()
+        if (accountId.isBlank() || memberId.isBlank() || sessionToken.isBlank()) return
         runBackend({
             if (!LoyaltySessionScope.matches(
                     accountId,
@@ -4082,7 +4083,17 @@ class MainActivity : Activity() {
                 )) {
                 throw IllegalStateException("A conta ou o cartão mudou. Atualiza novamente.")
             }
-            SupabaseApi.cancelMyCustomerReservation(backendToken(), reservationId)
+            SupabaseApi.cancelMyCustomerReservation(sessionToken, reservationId)
+            if (!LoyaltySessionScope.matches(
+                    accountId,
+                    backendPrefs.getString("user_id", "").orEmpty(),
+                    memberId,
+                    backendMemberId()
+                )) {
+                throw IllegalStateException(
+                    "O cancelamento foi concluído na sessão que o iniciou, mas a conta atual mudou. Atualiza as reservas da conta atual."
+                )
+            }
             customerReservationsLoaded = false
             "OK"
         }) {
