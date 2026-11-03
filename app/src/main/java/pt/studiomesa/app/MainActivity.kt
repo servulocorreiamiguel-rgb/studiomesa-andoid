@@ -7,6 +7,9 @@ import android.app.TimePickerDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.res.ColorStateList
+import android.net.Uri
+import android.provider.OpenableColumns
+import java.io.ByteArrayOutputStream
 import android.app.AlertDialog
 import android.graphics.Color
 import android.graphics.Bitmap
@@ -88,6 +91,22 @@ class MainActivity : Activity() {
     }
     private var assistantQuestion = ""
     private var assistantAnswer: StudioMesaAssistantAnswer? = null
+    private var assistantConversations = JSONArray()
+    private var assistantMessages = JSONArray()
+    private var assistantInvoices = JSONArray()
+    private var assistantCurrentConversationId = ""
+    private var assistantHistoryQuery = ""
+    private var assistantDraft = ""
+    private var assistantWebSearchEnabled = false
+    private val assistantSelectedInvoiceIds = linkedSetOf<String>()
+    private var assistantShowLocalTools = false
+    private var assistantWorkspaceScope = ""
+    private var assistantWorkspaceLoaded = false
+    private var assistantWorkspaceLoading = false
+    private var assistantWorkspaceError = ""
+    private var assistantMessagesLoading = false
+    private var assistantBusy = false
+    private val requestAssistantInvoice = 4201
     private var selectedAnalysisPeriod = SalesAnalysisPeriod.ALL_TIME
 
     // Owner-controlled economic tools: session-only until persistent authorization is designed.
@@ -202,12 +221,16 @@ class MainActivity : Activity() {
         handleAuthCallback(intent)
     }
 
-    @Deprecated("The embedded QR scanner currently uses Activity result callbacks.")
+    @Deprecated("The embedded QR scanner and PDF picker currently use Activity result callbacks.")
     override fun onActivityResult(
         requestCode: Int,
         resultCode: Int,
         data: android.content.Intent?
     ) {
+        if (requestCode == requestAssistantInvoice) {
+            if (resultCode == RESULT_OK) data?.data?.let { uploadAssistantInvoiceFromUri(it) }
+            return
+        }
         val scan = IntentIntegrator.parseActivityResult(requestCode, resultCode, data)
         if (scan != null) {
             val contents = scan.contents
