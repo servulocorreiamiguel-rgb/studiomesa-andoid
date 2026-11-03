@@ -230,6 +230,26 @@ object SupabaseApi {
         call("POST", "/auth/v1/logout?scope=local", accessToken = accessToken)
     }
 
+    /** Sends only owner-authorized, privacy-filtered text to the restaurant-assistant Edge Function. */
+    fun generateRestaurantAssistantReply(
+        accessToken: String,
+        restaurantId: String,
+        messages: JSONArray
+    ): String {
+        require(accessToken.isNotBlank()) { "Inicia sessão para usar a IA generativa." }
+        require(restaurantId.matches(Regex("^[0-9a-fA-F-]{36}$"))) { "O restaurante não é válido." }
+        require(messages.length() in 1..10) { "O contexto da conversa não é válido." }
+        val response = jsonCall(
+            "POST",
+            "/functions/v1/restaurant-assistant",
+            JSONObject().put("restaurant_id", restaurantId).put("messages", messages),
+            accessToken
+        )
+        val reply = response.optString("reply").trim()
+        if (reply.isBlank()) throw IllegalStateException("O servidor não devolveu uma resposta generativa.")
+        return reply.take(6000)
+    }
+
     /**
      * Requests deletion of the currently authenticated user's account.
      * The Edge Function verifies the caller and uses server-only Supabase admin
