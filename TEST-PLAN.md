@@ -389,3 +389,17 @@ Estes casos são executados na ronda final. A app do restaurante pode atribuir o
 | ID | Categoria | Ação / dados | Resultado esperado |
 |---|---|---|---|
 | CRES-21 | Histórico do cliente | Consultar várias reservas pendentes, confirmadas, canceladas e concluídas; alternar entre Todas, Ativas e Histórico | Os contadores e filtros mostram apenas o grupo selecionado; a mudança de conta repõe o filtro e não mantém dados da conta anterior |
+
+
+## Simulação económica de cenários
+
+A simulação compara os valores atuais com alterações percentuais introduzidas explicitamente pelo proprietário. Não é uma previsão automática. O cálculo do ponto de equilíbrio considera o custo alimentar e os outros custos variáveis proporcionais às vendas; pessoal e custos fixos mantêm-se constantes.
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| ECO-SIM-01 | Cenário normal | Base: vendas 10 000 €, custo alimentar 3 000 €, pessoal 2 500 €, custos fixos 2 000 € e outros variáveis 500 €. Aplicar vendas -10%, custo alimentar +5%, pessoal 0% e outros variáveis 0%. | Resultado-base 2 000 €; resultado do cenário 850 €; alteração das vendas -1 000 €; alteração do resultado -1 150 €; ponto de equilíbrio estimado 7 570,09 €. |
+| ECO-SIM-02 | Precisão | Repetir ECO-SIM-01 e comparar valores monetários até aos cêntimos. | Os resultados são arredondados a duas casas decimais; não usar uma expectativa baseada em arredondamento intermédio diferente. |
+| ECO-SIM-03 | Limite | Introduzir alteração das vendas de -100%. | A simulação é rejeitada porque reduziria as vendas a zero; não apresenta um resultado ou ponto de equilíbrio enganador. |
+| ECO-SIM-04 | Variações | Introduzir percentagens com vírgula decimal, negativas e positivas dentro dos limites. | A vírgula é aceite como separador decimal; valores fora de -100% a 300%, com mais de duas casas, texto ou campo vazio são rejeitados. |
+| ECO-SIM-05 | Isolamento | Executar uma simulação depois de preencher tesouraria, desperdício e histórico semanal na análise-base. | A simulação usa apenas as rubricas económicas definidas; não altera nem persiste a tesouraria, o desperdício, o histórico, vendas, preços ou custos reais. |
+| ECO-SIM-06 | Repetição | Executar o mesmo cenário várias vezes sem alterar os valores-base. | Os resultados são determinísticos e iguais; nenhuma operação é enviada ao servidor nem modifica os dados do restaurante. |
