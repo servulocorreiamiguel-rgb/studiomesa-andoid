@@ -4933,7 +4933,7 @@ class MainActivity : Activity() {
         ).any { normalized.contains(it) }
         if (asksForBriefing) {
             val briefing = StudioMesaAdvisor.dailyBriefing(assistantSnapshot())
-            return "${briefing.title}\\n\\n${briefing.response}"
+            return "${briefing.title}\n\n${briefing.response}"
         }
 
         val asksAboutInvoices = listOf(
