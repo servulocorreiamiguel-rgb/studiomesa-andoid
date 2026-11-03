@@ -4720,6 +4720,7 @@ class MainActivity : Activity() {
         localAssistantModelManager.downloadModel(
             onProgress = { downloaded, total ->
                 runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
                     assistantModelProgressBytes = downloaded
                     val percent = if (total > 0L) ((downloaded * 100) / total).toInt() else 0
                     if (percent != lastShownPercent) {
@@ -4730,6 +4731,7 @@ class MainActivity : Activity() {
             },
             onComplete = { result ->
                 runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
                     assistantModelDownloading = false
                     result.fold(
                         onSuccess = {
