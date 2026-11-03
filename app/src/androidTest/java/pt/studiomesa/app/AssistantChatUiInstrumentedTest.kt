@@ -110,6 +110,9 @@ class AssistantChatUiInstrumentedTest {
                 store.listInvoices(scope).filter { it.number == number }.forEach { invoice ->
                     store.deleteInvoice(scope, invoice.id)?.let { AssistantInvoiceFileStore(context).delete(it) }
                 }
+                store.listConversations(scope, marker).forEach { conversation ->
+                    store.deleteConversation(scope, conversation.id)
+                }
             }
         }
     }
