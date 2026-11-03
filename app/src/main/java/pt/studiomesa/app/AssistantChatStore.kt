@@ -36,6 +36,22 @@ class AssistantChatStore(context: Context) {
         val createdAtMillis: Long
     )
 
+    data class Invoice(
+        val id: String,
+        val supplier: String,
+        val number: String,
+        val invoiceDate: String,
+        val invoiceType: String,
+        val netAmount: String,
+        val taxAmount: String,
+        val totalAmount: String,
+        val notes: String,
+        val attachmentId: String?,
+        val attachmentName: String?,
+        val attachmentMimeType: String?,
+        val createdAtMillis: Long
+    )
+
     private val preferences = context.applicationContext
         .getSharedPreferences("studiomesa_assistant_history_v1", Context.MODE_PRIVATE)
 
@@ -165,6 +181,198 @@ class AssistantChatStore(context: Context) {
     }
 
     @Synchronized
+    fun listInvoices(scope: String, query: String = ""): List<Invoice> {
+        val invoices = load(scope).optJSONArray("invoices") ?: JSONArray()
+        val normalizedQuery = query.trim().lowercase()
+        return (0 until invoices.length()).mapNotNull { index ->
+            val item = invoices.optJSONObject(index) ?: return@mapNotNull null
+            invoiceFromJson(item)
+        }.filter { invoice ->
+            normalizedQuery.isBlank() || listOf(
+                invoice.supplier, invoice.number, invoice.invoiceDate, invoice.notes,
+                invoice.attachmentName.orEmpty()
+            ).any { it.lowercase().contains(normalizedQuery) }
+        }.sortedWith(compareByDescending<Invoice> { it.invoiceDate }.thenByDescending { it.createdAtMillis })
+    }
+
+    @Synchronized
+    fun saveInvoice(scope: String, invoice: Invoice) {
+        require(invoice.id.isNotBlank()) { "O identificador da fatura não é válido." }
+        require(invoice.supplier.trim().length in 2..120) { "Indica o nome do fornecedor." }
+        require(invoice.number.length <= 80) { "O número do documento é demasiado longo." }
+        require(invoice.invoiceDate.matches(Regex("^\\d{4}-\\d{2}-\\d{2}$"))) {
+            "A data da fatura deve usar o formato AAAA-MM-DD."
+        }
+        require(invoice.invoiceType in setOf("invoice", "credit_note")) { "Tipo de documento inválido." }
+        require(invoice.notes.length <= 4000) { "As notas da fatura são demasiado longas." }
+        fun validateAmount(value: String, label: String) {
+            val amount = runCatching { java.math.BigDecimal(value) }.getOrNull()
+                ?: throw IllegalArgumentException("O valor de $label não é válido.")
+            require(amount.signum() >= 0 && amount <= java.math.BigDecimal("999999999.99") &&
+                amount.scale().coerceAtLeast(0) <= 2) { "O valor de $label tem de ser não negativo e ter até duas casas decimais." }
+        }
+        validateAmount(invoice.netAmount, "base tributável")
+        validateAmount(invoice.taxAmount, "IVA")
+        validateAmount(invoice.totalAmount, "total")
+        require(java.math.BigDecimal(invoice.totalAmount).signum() > 0) {
+            "O total da fatura tem de ser superior a zero."
+        }
+
+        val root = load(scope)
+        val invoices = root.optJSONArray("invoices") ?: JSONArray().also { root.put("invoices", it) }
+        val normalizedSupplier = invoice.supplier.trim().lowercase()
+        val normalizedNumber = invoice.number.trim().uppercase()
+        val duplicate = (0 until invoices.length()).mapNotNull { invoices.optJSONObject(it) }
+            .firstOrNull { item ->
+                item.optString("id") != invoice.id &&
+                    item.optString("supplier").trim().lowercase() == normalizedSupplier &&
+                    item.optString("number").trim().uppercase() == normalizedNumber &&
+                    item.optString("invoice_date") == invoice.invoiceDate &&
+                    normalizedNumber.isNotBlank()
+            }
+        require(duplicate == null) {
+            "Já existe um documento deste fornecedor com o mesmo número e data. Confirma se não é uma duplicação."
+        }
+
+        val json = JSONObject()
+            .put("id", invoice.id)
+            .put("supplier", invoice.supplier.trim())
+            .put("number", invoice.number.trim())
+            .put("invoice_date", invoice.invoiceDate)
+            .put("invoice_type", invoice.invoiceType)
+            .put("net_amount", java.math.BigDecimal(invoice.netAmount).setScale(2, java.math.RoundingMode.HALF_UP).toPlainString())
+            .put("tax_amount", java.math.BigDecimal(invoice.taxAmount).setScale(2, java.math.RoundingMode.HALF_UP).toPlainString())
+            .put("total_amount", java.math.BigDecimal(invoice.totalAmount).setScale(2, java.math.RoundingMode.HALF_UP).toPlainString())
+            .put("notes", invoice.notes.trim())
+            .put("attachment_id", invoice.attachmentId ?: JSONObject.NULL)
+            .put("attachment_name", invoice.attachmentName ?: JSONObject.NULL)
+            .put("attachment_mime_type", invoice.attachmentMimeType ?: JSONObject.NULL)
+            .put("created_at", invoice.createdAtMillis)
+        var replaced = false
+        for (index in 0 until invoices.length()) {
+            val existing = invoices.optJSONObject(index) ?: continue
+            if (existing.optString("id") == invoice.id) {
+                invoices.put(index, json)
+                replaced = true
+                break
+            }
+        }
+        if (!replaced) invoices.put(json)
+        root.put("invoices", invoices)
+        while (invoices.length() > MAX_INVOICES) invoices.remove(0)
+        save(scope, root)
+    }
+
+    @Synchronized
+    fun updateInvoiceAttachment(
+        scope: String,
+        invoiceId: String,
+        attachmentId: String,
+        attachmentName: String,
+        attachmentMimeType: String
+    ) {
+        require(attachmentId.matches(Regex("^[A-Za-z0-9-]{16,80}$"))) { "O identificador do anexo não é válido." }
+        require(attachmentName.isNotBlank() && attachmentName.length <= 180) { "O nome do anexo não é válido." }
+        require(attachmentMimeType.length <= 100) { "O tipo do anexo não é válido." }
+        val root = load(scope)
+        val invoices = root.optJSONArray("invoices") ?: JSONArray()
+        var found = false
+        for (index in 0 until invoices.length()) {
+            val item = invoices.optJSONObject(index) ?: continue
+            if (item.optString("id") == invoiceId) {
+                item.put("attachment_id", attachmentId)
+                item.put("attachment_name", attachmentName)
+                item.put("attachment_mime_type", attachmentMimeType)
+                found = true
+                break
+            }
+        }
+        require(found) { "A fatura já não existe no histórico." }
+        root.put("invoices", invoices)
+        save(scope, root)
+    }
+
+    @Synchronized
+    fun deleteInvoice(scope: String, invoiceId: String): String? {
+        val root = load(scope)
+        val invoices = root.optJSONArray("invoices") ?: JSONArray()
+        var attachmentId: String? = null
+        for (index in invoices.length() - 1 downTo 0) {
+            val item = invoices.optJSONObject(index) ?: continue
+            if (item.optString("id") == invoiceId) {
+                attachmentId = item.optString("attachment_id").takeIf { it.isNotBlank() && it != "null" }
+                invoices.remove(index)
+            }
+        }
+        root.put("invoices", invoices)
+        save(scope, root)
+        return attachmentId
+    }
+
+    @Synchronized
+    fun readEconomicInputs(scope: String): Map<String, String> {
+        val stored = load(scope).optJSONObject("economic_inputs") ?: return emptyMap()
+        val result = linkedMapOf<String, String>()
+        val keys = stored.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            val value = stored.optString(key)
+            if (key.matches(Regex("^[A-Za-z][A-Za-z0-9_]{0,40}$")) && value.length <= 4000) {
+                result[key] = value
+            }
+        }
+        return result
+    }
+
+    @Synchronized
+    fun saveEconomicState(scope: String, enabled: Boolean, values: Map<String, String>) {
+        val stored = JSONObject()
+        values.entries.take(80).forEach { (key, value) ->
+            if (key.matches(Regex("^[A-Za-z][A-Za-z0-9_]{0,40}$"))) {
+                stored.put(key, value.take(4000))
+            }
+        }
+        val root = load(scope)
+        root.put("economic_manager_enabled", enabled)
+        root.put("economic_inputs", stored)
+        save(scope, root)
+    }
+
+    @Synchronized
+    fun isEconomicManagerEnabled(scope: String): Boolean =
+        load(scope).optBoolean("economic_manager_enabled", false)
+
+    private fun invoiceFromJson(item: JSONObject): Invoice? {
+        val id = item.optString("id").takeIf { it.isNotBlank() } ?: return null
+        val supplier = item.optString("supplier").trim().takeIf { it.length in 2..120 } ?: return null
+        val number = item.optString("number")
+        val date = item.optString("invoice_date")
+        val type = item.optString("invoice_type", "invoice")
+        val net = item.optString("net_amount")
+        val tax = item.optString("tax_amount")
+        val total = item.optString("total_amount")
+        if (!date.matches(Regex("^\\d{4}-\\d{2}-\\d{2}$")) ||
+            type !in setOf("invoice", "credit_note") ||
+            runCatching { java.math.BigDecimal(net); java.math.BigDecimal(tax); java.math.BigDecimal(total) }.isFailure
+        ) return null
+        return Invoice(
+            id = id,
+            supplier = supplier,
+            number = number,
+            invoiceDate = date,
+            invoiceType = type,
+            netAmount = net,
+            taxAmount = tax,
+            totalAmount = total,
+            notes = item.optString("notes").take(4000),
+            attachmentId = item.optString("attachment_id").takeIf { it.isNotBlank() && it != "null" },
+            attachmentName = item.optString("attachment_name").takeIf { it.isNotBlank() && it != "null" },
+            attachmentMimeType = item.optString("attachment_mime_type").takeIf { it.isNotBlank() && it != "null" },
+            createdAtMillis = item.optLong("created_at", 0L)
+        )
+    }
+
+    @Synchronized
     fun clearScope(scope: String) {
         if (!preferences.edit().remove(storageKey(scope)).commit()) {
             throw IllegalStateException("Não foi possível eliminar o histórico local.")
@@ -275,6 +483,7 @@ class AssistantChatStore(context: Context) {
         const val KEY_ALIAS = "pt.studiomesa.assistant.history.v1"
         const val FORMAT_VERSION = 1
         const val MAX_CONVERSATIONS = 50
+        const val MAX_INVOICES = 500
         const val MAX_TURNS = 100
         const val MAX_MESSAGE_CHARS = 6000
         const val MAX_MEMORY_CHARS = 2500
