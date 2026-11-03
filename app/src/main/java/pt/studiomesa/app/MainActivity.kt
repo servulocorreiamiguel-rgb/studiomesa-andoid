@@ -3,6 +3,7 @@ package pt.studiomesa.app
 import android.app.Activity
 import android.app.Dialog
 import android.content.ClipData
+import android.content.Intent
 import android.content.ClipboardManager
 import android.content.res.ColorStateList
 import android.app.AlertDialog
@@ -4670,6 +4671,8 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(-1, dp(44)))
         } else {
             card.addView(label("Modelo LFM2.5 1.2B · quantização INT4 · execução CPU local", 10.5f, true, forest))
+            addGap(card, 6)
+            card.addView(secondaryButton("Ver modelo e licenças") { showLocalAssistantLicencesDialog() }, LinearLayout.LayoutParams(-1, dp(40)))
         }
 
         assistantModelError?.let {
@@ -4677,6 +4680,29 @@ class MainActivity : Activity() {
             card.addView(label(it, 11f, true, red))
         }
         container.addView(card, cardParams())
+        if (!modelInstalled) {
+            container.addView(secondaryButton("Ver origem e licença do modelo") {
+                showLocalAssistantLicencesDialog()
+            }, LinearLayout.LayoutParams(-1, dp(40)))
+            addGap(container, 6)
+        }
+    }
+
+    private fun showLocalAssistantLicencesDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Modelo e licenças")
+            .setMessage(
+                "Modelo: LFM2.5-1.2B-Instruct, quantizado INT4 e convertido para LiteRT-LM pela comunidade litert-community.\n\nO modelo é disponibilizado sob a LFM Open License v1.0, com condições de utilização comercial e atribuição. Confirma os termos completos antes de comercializar a StudioMesa.\n\nO runtime LiteRT-LM é distribuído sob Apache 2.0.\n\nO modelo não foi criado pela StudioMesa nem pela Google."
+            )
+            .setNegativeButton("Fechar", null)
+            .setPositiveButton("Abrir licença") { _, _ ->
+                runCatching {
+                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://huggingface.co/litert-community/LFM2.5-1.2B-Instruct/blob/main/LICENSE")))
+                }.onFailure {
+                    Toast.makeText(this, "Não foi possível abrir a licença.", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .show()
     }
 
     private fun formatModelBytes(bytes: Long): String {
