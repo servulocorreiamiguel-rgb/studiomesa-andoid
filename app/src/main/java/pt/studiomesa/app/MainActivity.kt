@@ -5037,7 +5037,7 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(-1, dp(44)))
         addGap(container, 7)
         container.addView(label(
-            "Importação: PDF, XML, TXT, JPEG, PNG e WebP até 12 MB. Os documentos são cifrados no armazenamento privado desta instalação. A leitura automática/OCR e a sincronização cloud ainda não estão ativas.",
+            "Importação: PDF, XML, TXT, JPEG, PNG e WebP até 12 MB. OCR local tenta ler imagens e as primeiras 10 páginas de PDF; TXT/XML são lidos diretamente. O texto fica cifrado, tem de ser confirmado e não sincroniza na cloud.",
             10.5f, false, muted
         ))
     }
@@ -5289,7 +5289,7 @@ class MainActivity : Activity() {
             return "\"" + safe.replace("\"", "\"\"") + "\""
         }
         val rows = mutableListOf(
-            listOf("Tipo", "Fornecedor", "Número", "Data", "Base tributável (EUR)", "IVA (EUR)", "Total (EUR)", "Notas transcritas", "Anexo original")
+            listOf("Tipo", "Fornecedor", "Número", "Data", "Base tributável (EUR)", "IVA (EUR)", "Total (EUR)", "Notas transcritas", "Anexo original", "Texto OCR (não validado)")
                 .joinToString(";") { cell(it, false) }
         )
         invoices.forEach { invoice ->
@@ -5302,8 +5302,9 @@ class MainActivity : Activity() {
                 invoice.taxAmount,
                 invoice.totalAmount,
                 invoice.notes,
-                invoice.attachmentName.orEmpty()
-            ).mapIndexed { index, value -> cell(value, protectFormula = index in setOf(1, 2, 7, 8)) }
+                invoice.attachmentName.orEmpty(),
+                invoice.extractedText
+            ).mapIndexed { index, value -> cell(value, protectFormula = index in setOf(1, 2, 7, 8, 9)) }
                 .joinToString(";")
         }
         return rows.joinToString("\r\n") + "\r\n"
