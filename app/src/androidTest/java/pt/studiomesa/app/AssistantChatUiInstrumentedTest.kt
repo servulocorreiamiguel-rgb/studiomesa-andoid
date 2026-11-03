@@ -14,7 +14,6 @@ import androidx.test.espresso.matcher.ViewMatchers.withContentDescription
 import androidx.test.espresso.matcher.ViewMatchers.withHint
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import org.hamcrest.Matchers.containsString
 import org.junit.Assume.assumeFalse
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -57,7 +56,7 @@ class AssistantChatUiInstrumentedTest {
                 onView(withText("Histórico")).perform(click())
                 onView(withHint("Pesquisar conversas…"))
                     .perform(replaceText(uniqueMarker))
-                onView(withText(containsString(uniqueMarker))).check(matches(isDisplayed()))
+                onView(withText(question)).check(matches(isDisplayed()))
             }
         } finally {
             val store = AssistantChatStore(context)
