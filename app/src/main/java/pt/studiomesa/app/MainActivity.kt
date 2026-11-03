@@ -4643,7 +4643,7 @@ class MainActivity : Activity() {
         addGap(card, 5)
         val status = when {
             assistantModelDownloading || localAssistantModelManager.isDownloading() ->
-                "A transferir o modelo: \${((assistantModelProgressBytes * 100) / localAssistantModelManager.modelSizeBytes()).coerceIn(0, 100)}%."
+                "A transferir o modelo: ${((assistantModelProgressBytes * 100) / localAssistantModelManager.modelSizeBytes()).coerceIn(0, 100)}%."
             modelInstalled ->
                 "IA generativa instalada. As mensagens e os dados selecionados são processados no próprio telemóvel, sem API e sem cobrança por mensagem."
             else ->
@@ -4654,7 +4654,7 @@ class MainActivity : Activity() {
 
         if (assistantModelDownloading || localAssistantModelManager.isDownloading()) {
             card.addView(label(
-                "Transferido: \${formatModelBytes(assistantModelProgressBytes)} de aproximadamente 736 MB",
+                "Transferido: ${formatModelBytes(assistantModelProgressBytes)} de aproximadamente 736 MB",
                 10.5f, true, forest
             ))
         } else if (!modelInstalled) {
@@ -4737,27 +4737,27 @@ class MainActivity : Activity() {
             appendLine()
             appendLine("CONTEXTO ATUAL DO STUDIO MESA")
             appendLine("Restaurante: $restaurantName")
-            appendLine("Modo: \${if (snapshot.isDemo) "demonstração; os dados não representam um restaurante real" else "conta de restaurante autenticada"}")
-            appendLine("Artigos da carta carregados: \${snapshot.menuItems.size}")
+            appendLine("Modo: ${if (snapshot.isDemo) "demonstração; os dados não representam um restaurante real" else "conta de restaurante autenticada"}")
+            appendLine("Artigos da carta carregados: ${snapshot.menuItems.size}")
             snapshot.menuItems.take(40).forEach { item ->
                 val margin = if (item.sellingPrice > java.math.BigDecimal.ZERO) {
                     item.sellingPrice.subtract(item.unitCost)
                 } else java.math.BigDecimal.ZERO
                 appendLine(
-                    "- \${item.name}: venda \${item.sellingPrice.toPlainString()} EUR; custo registado \${item.unitCost.toPlainString()} EUR; diferença bruta indicativa \${margin.toPlainString()} EUR; categoria \${item.category}."
+                    "- ${item.name}: venda ${item.sellingPrice.toPlainString()} EUR; custo registado ${item.unitCost.toPlainString()} EUR; diferença bruta indicativa ${margin.toPlainString()} EUR; categoria ${item.category}."
                 )
             }
-            appendLine("Pedidos ativos: \${snapshot.activeOrderCount}; em preparação: \${snapshot.preparationOrderCount}.")
-            appendLine("Stock disponível no contexto: \${if (snapshot.stockLoaded) "sim" else "não carregado ou não atualizado"}.")
+            appendLine("Pedidos ativos: ${snapshot.activeOrderCount}; em preparação: ${snapshot.preparationOrderCount}.")
+            appendLine("Stock disponível no contexto: ${if (snapshot.stockLoaded) "sim" else "não carregado ou não atualizado"}.")
             if (snapshot.stockLoaded) {
                 snapshot.stockItems.take(50).forEach { item ->
                     appendLine(
-                        "- Stock \${item.name}: \${item.quantity.toPlainString()} \${item.unit}; mínimo \${item.minimumQuantity.toPlainString()}; custo unitário \${item.unitCostPerUnit?.toPlainString() ?: "desconhecido"} EUR."
+                        "- Stock ${item.name}: ${item.quantity.toPlainString()} ${item.unit}; mínimo ${item.minimumQuantity.toPlainString()}; custo unitário ${item.unitCostPerUnit?.toPlainString() ?: "desconhecido"} EUR."
                     )
                 }
             }
-            appendLine("Reservas disponíveis no contexto: \${if (snapshot.reservationsLoaded) "sim" else "não carregadas"}.")
-            if (snapshot.reservationsLoaded) appendLine("Reservas pendentes: \${snapshot.pendingReservations}.")
+            appendLine("Reservas disponíveis no contexto: ${if (snapshot.reservationsLoaded) "sim" else "não carregadas"}.")
+            if (snapshot.reservationsLoaded) appendLine("Reservas pendentes: ${snapshot.pendingReservations}.")
             appendLine("As faturas de fornecedores ainda não estão integradas nem armazenadas nesta aplicação.")
             if (memory.isNotBlank()) {
                 appendLine()
