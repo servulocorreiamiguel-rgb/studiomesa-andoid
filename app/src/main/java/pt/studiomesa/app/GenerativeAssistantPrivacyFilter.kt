@@ -9,7 +9,7 @@ import java.util.Locale
  */
 internal object GenerativeAssistantPrivacyFilter {
     private val blocked = Regex(
-        """\b(?:faturas?|facturas?|invoices?|iva|nif|iban|fornecedores?|compras?|despesas?|gastos?|salarios?|ordenados?|lucros?|margens?|tesouraria|numeros? fiscais?|palavras? passe|passwords?|tokens?|contactos?|telefones?|emails?|moradas?|enderecos?|dados pessoais|cartoes?)\b""",
+        """\b(?:faturas?|facturas?|invoices?|iva|nif|iban|fornecedor(?:es)?|compras?|despesas?|gastos?|salarios?|ordenados?|lucros?|margens?|tesouraria|numeros? fiscais?|palavras? passe|passwords?|tokens?|contactos?|telefones?|emails?|moradas?|enderecos?|dados pessoais|cartoes?)\b""",
         RegexOption.IGNORE_CASE
     )
     private val digitsOrAmounts = Regex("""\d|€|\bEUR\b""", RegexOption.IGNORE_CASE)

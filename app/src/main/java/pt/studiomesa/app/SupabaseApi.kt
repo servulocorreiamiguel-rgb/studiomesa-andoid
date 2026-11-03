@@ -22,12 +22,13 @@ object SupabaseApi {
         path: String,
         body: JSONObject? = null,
         accessToken: String? = null,
-        returnRepresentation: Boolean = false
+        returnRepresentation: Boolean = false,
+        readTimeoutMillis: Int = 12000
     ): String {
         val connection = (URL(BASE_URL + path).openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = 12000
-            readTimeout = 12000
+            readTimeout = readTimeoutMillis
             // Supabase REST/Auth endpoints should return API responses, not redirects.
             // Fail closed instead of following a redirect with session headers.
             instanceFollowRedirects = false
@@ -91,8 +92,14 @@ object SupabaseApi {
         if (rows.length() == 0) throw IllegalStateException(emptyMessage)
     }
 
-    private fun jsonCall(method: String, path: String, body: JSONObject? = null, token: String? = null): JSONObject {
-        val response = call(method, path, body, token)
+    private fun jsonCall(
+        method: String,
+        path: String,
+        body: JSONObject? = null,
+        token: String? = null,
+        readTimeoutMillis: Int = 12000
+    ): JSONObject {
+        val response = call(method, path, body, token, readTimeoutMillis = readTimeoutMillis)
         return if (response.isBlank()) JSONObject() else JSONObject(response)
     }
 
@@ -243,7 +250,8 @@ object SupabaseApi {
             "POST",
             "/functions/v1/restaurant-assistant",
             JSONObject().put("restaurant_id", restaurantId).put("messages", messages),
-            accessToken
+            token = accessToken,
+            readTimeoutMillis = 40_000
         )
         val reply = response.optString("reply").trim()
         if (reply.isBlank()) throw IllegalStateException("O servidor não devolveu uma resposta generativa.")

@@ -21,6 +21,7 @@ class GenerativeAssistantPrivacyFilterTest {
             "O meu NIF é 123456789.",
             "Tenho 1200 euros de despesas.",
             "Fornecedor X",
+            "Fornecedor: Distribuidor Exemplo",
             "O email é teste@example.com",
             "Liga para +351 912 345 678"
         ).forEach { assertFalse(it, GenerativeAssistantPrivacyFilter.isSafeToSend(listOf(it))) }

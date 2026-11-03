@@ -41,7 +41,7 @@ object InvoiceExtractionSuggestionParser {
             """(?i)^\s*(?:fornecedor|emitente|supplier|seller|nome do fornecedor)\s*[:\-]\s*(.+?)\s*$"""
         ), 92)
         val number = findText(lines, Regex(
-            """(?i)^\s*(?:n[.º°o]?\s*(?:(?:da|de)\s*)?(?:fatura|factura|nota de crédito|nota de credito|documento)|(?:n[uú]mero|numero)\s*(?:da\s*)?(?:fatura|factura|documento)|invoice\s*no|document\s*no|invoiceno|documentno)\s*[:#\-]?\s*(\S.*)$"""
+            """(?i)^\s*(?:n(?:[.]º?|[º°]|o)?\s*(?:(?:da|de)\s*)?(?:fatura|factura|nota de crédito|nota de credito|documento)|(?:n[uú]mero|numero)\s*(?:da\s*)?(?:fatura|factura|documento)|invoice\s*no|document\s*no|invoiceno|documentno)\s*[:#\-]?\s*(\S.*)$"""
         ), 90)
         val date = findDate(lines)
         val type = lines.firstOrNull { line ->
