@@ -17,6 +17,7 @@ import org.hamcrest.Matchers.containsString
 import org.hamcrest.Matchers.not
 import org.junit.Assume.assumeFalse
 import org.junit.Assume.assumeTrue
+import org.junit.Before
 import org.junit.Test
 
 /**
@@ -32,6 +33,16 @@ class MainActivitySmokeTest {
         val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
         return packageName.contains(".profissional.") || packageName.contains(".premium.")
     }
+
+    @Before
+    fun resetDemoEconomicStateBetweenSmokeTests() {
+        assumeFalse("Customer variant has no restaurant economic manager.", isCustomerVariant())
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val store = AssistantChatStore(context)
+        val scope = "economic:demo:${BuildConfig.FLAVOR.lowercase()}"
+        store.saveEconomicState(scope, false, emptyMap())
+    }
+
 
     @Test
     fun premiumPriceAdviserIsReadOnlyForDemoData() {
@@ -574,6 +585,7 @@ class MainActivitySmokeTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
             onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            onView(withText("＋ Ferramentas financeiras")).perform(scrollTo(), click())
             onView(withText("Ativar gestão económica")).perform(scrollTo(), click())
 
             onView(withHint("Ex.: 18000")).perform(scrollTo(), replaceText("1000000"))
