@@ -199,6 +199,20 @@ class CustomerReservationFlowSmokeTest {
             assertEquals(90, payload.getInt("p_duration_minutes"))
             assertEquals("", payload.getString("p_notes"))
             assertEquals("Bearer $testAccessToken", lastAuthorization.get())
+            assertFalse(
+                "Reservation names must not be persisted in ordinary preferences.",
+                preferences.all.values.any { it.toString().contains("Miguel Teste") }
+            )
+            assertFalse(
+                "Reservation phone numbers must not be persisted in ordinary preferences.",
+                preferences.all.values.any { it.toString().contains("912345678") }
+            )
+            assertFalse(
+                "Pending idempotency preferences must not store raw customer details.",
+                pendingPreferences.all.values.any {
+                    it.toString().contains("Miguel Teste") || it.toString().contains("912345678")
+                }
+            )
 
             awaitText("Estado: Pendente")
             onView(withText("2 pessoas")).check(matches(isDisplayed()))
