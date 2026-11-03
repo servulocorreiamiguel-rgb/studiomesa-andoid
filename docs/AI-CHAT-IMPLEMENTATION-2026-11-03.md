@@ -1,59 +1,68 @@
-# StudioMesa chat, memória e agente financeiro — estado da integração generativa (03/11/2026)
+# StudioMesa AI local — chat, memória e modelo generativo offline (03/11/2026)
 
-## Integração generativa acrescentada
+## Arquitetura atual
 
-- O Android tem agora um modo online opcional, ativado por consentimento explícito e guardado por conta/restaurante.
-- Com o modo online ativo, a aplicação envia a mensagem atual, até 16 turnos anteriores e a Memória local ao endpoint autenticado `studiomesa-assistant`.
-- O Android chama o endpoint através de `SupabaseApi.askStudioMesaAssistant`; o token Supabase do utilizador é enviado no cabeçalho Authorization. A chave do fornecedor nunca é embutida no APK.
-- O endpoint Edge Function exige JWT válido, volta a confirmar o utilizador no Supabase Auth e valida a associação à tabela `restaurant_staff` através do REST com RLS antes de chamar o modelo.
-- O endpoint usa o alias `gemini-flash-latest` por defeito, com raciocínio médio nas perguntas normais e nível alto nas tarefas que parecem exigir análise longa. O modelo pode ser substituído através do segredo `GEMINI_MODEL`.
-- A chave `GEMINI_API_KEY` tem de existir nos secrets das Edge Functions do Supabase. Sem ela, o endpoint devolve erro 503 e o Android mostra a mensagem de configuração em falta. Não guardar a chave no GitHub, no código Android ou em mensagens.
-- A pesquisa web via `google_search` está desligada por defeito. Só fica ativa quando o responsável configura `GEMINI_ENABLE_SEARCH=true`; o Google cobra por pesquisa no Gemini 3, pelo que essa opção requer decisão explícita sobre custos. Quando ativa, o endpoint devolve as fontes obtidas pelo modelo.
-- O pedido é stateless no fornecedor: a aplicação envia o histórico necessário em cada pedido e o endpoint devolve `persistence: none`. O histórico do produto continua cifrado localmente com AES-GCM e Android Keystore.
-- O modo local determinístico continua disponível quando o modo online está desligado.
+O assistente combina duas camadas:
 
-## O que esta integração ainda não faz
+1. **Modelo generativo local:** LFM2.5 1.2B Instruct, quantização INT4, executado no Android através de LiteRT-LM 0.16.1. A inferência decorre no próprio dispositivo; a mensagem, o histórico e os dados selecionados não são enviados para uma API de IA.
+2. **Ferramentas determinísticas:** cálculos e validações existentes da StudioMesa continuam disponíveis para preços/custos, stock e operação. O modelo generativo não substitui as fórmulas nem transforma estimativas em valores contabilísticos oficiais.
 
-- O histórico/memória ainda não sincroniza entre dispositivos; permanece cifrado no telemóvel.
-- A IA ainda não recebe automaticamente dados da carta, pedidos, stock, reservas ou faturas. Só recebe a pergunta, os turnos recentes e a Memória selecionada/guardada.
-- Não existe arquivo de faturas contabilísticas nem extração de IVA/valores fiscais; a integração de documentos permanece pendente.
-- Não há ferramentas de ação ligadas ao modelo. A IA não pode gravar preços, criar pedidos, alterar stock, reservas ou permissões.
-- A configuração da chave Gemini e o teste de ponta a ponta do endpoint com uma conta de proprietário e funcionário ainda são requisitos antes de declarar o modo online operacional.
-- A integração não é equivalente ao ChatGPT Plus nem inclui o uso da API OpenAI. O modelo Gemini é um fornecedor externo distinto.
+A integração online com Gemini foi retirada do caminho Android. A Edge Function que foi publicada anteriormente no Supabase não é chamada por esta versão do Android e não é necessária ao modo local.
 
----
+## Modelo e transferência
 
-# StudioMesa chat, memória e agente financeiro — 03/11/2026
+- Modelo: `litert-community/LFM2.5-1.2B-Instruct`.
+- Ficheiro: `LFM2.5-1.2B-Instruct_int4.litertlm`.
+- Tamanho esperado: **736 015 744 bytes** (cerca de 736 MB decimais).
+- SHA-256 esperado: `a28b5c59ac204e2e51c1f98d2d6db6982f0e12da59a268fe498edcb33237e906`.
+- Origem: [Hugging Face — LiteRT Community](https://huggingface.co/litert-community/LFM2.5-1.2B-Instruct).
+- Runtime Android: [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM), versão `0.16.1`.
+- Transferência inicial por HTTPS para a pasta privada da aplicação. O ficheiro temporário só é instalado após validação do tamanho e SHA-256.
+- Depois da instalação, a inferência não precisa de Internet e não tem custo por mensagem. A primeira transferência consome aproximadamente 736 MB de dados; recomenda-se Wi-Fi.
+- O modelo não é empacotado no APK, para evitar um instalador de tamanho excessivo.
 
-## O que esta alteração faz
+## Execução e limites
 
-- A página Assistente passa a abrir numa interface de conversa com mensagens alinhadas, caixa de escrita, envio, botão de nova conversa e pesquisa do histórico.
-- Cada conversa tem título, data, mensagens e pesquisa no respetivo conteúdo. É possível abrir uma conversa antiga e eliminá-la.
-- A memória é editável e pode ser consultada no chat. A aplicação inclui essa nota em respostas locais relevantes.
-- O histórico e a memória são cifrados com AES-GCM; a chave é mantida no Android Keystore. O armazenamento é privado da aplicação e separado por utilizador e restaurante.
-- O histórico tem limites para controlar o armazenamento: até 50 conversas, 100 mensagens por conversa e 2 500 caracteres de memória.
+- O modelo usa backend CPU por defeito, com contexto máximo configurado de 4096 tokens e até 512 tokens de saída.
+- Para controlar o consumo de memória, o pedido inclui até seis mensagens anteriores, com conteúdo limitado, além de um resumo compacto do contexto do restaurante.
+- O motor é inicializado numa thread de trabalho, não na thread da interface. A resposta é apresentada por blocos.
+- A instância de inferência é libertada quando a Activity deixa de estar visível; o ficheiro do modelo permanece instalado.
+- A aplicação mantém a resposta determinística como alternativa enquanto o modelo não for instalado.
+- A quantidade de memória usada e a velocidade dependem do dispositivo, da versão Android e da carga do sistema. A compilação não prova que o modelo funcione com desempenho aceitável no OPPO A5m. É obrigatório testar instalação, inicialização, resposta, temperatura, memória e consumo de bateria no aparelho físico antes de o anunciar como compatível.
+- Um modelo de 1,2 mil milhões de parâmetros não é equivalente ao ChatGPT Plus. Tem menor capacidade de raciocínio, conhecimento e contexto; também não tem pesquisa web integrada nem conhecimento atualizado por si só.
 
-## Limites importantes
+## Contexto do restaurante
 
-- A persistência implementada nesta fase é **local ao dispositivo**. Não sincroniza entre telemóveis. A sincronização cloud exige novas tabelas, políticas RLS e uma reconciliação aprovada do histórico de migrações do projeto Supabase.
-- O aspeto de chat começou por usar apenas o motor local determinístico. A integração generativa foi acrescentada posteriormente e está descrita na secção de estado acima; depende da configuração da chave do fornecedor e de testes ponta a ponta.
-- O agente financeiro mantém os cálculos locais e manuais existentes, agora acessíveis através de Ferramentas financeiras.
-- O projeto Supabase alojado não tem arquivo de faturas contabilísticas nem integração com software de faturação. O QR de fatura usado no fluxo de fidelização não é um arquivo de documentos. A análise de faturas fica pendente de escolher o programa do restaurante ou um formato de importação seguro, definir permissões exclusivas do proprietário e testar a extração dos dados.
+O prompt local pode incluir apenas os dados que a aplicação já tem carregados e os que o utilizador guardou na Memória: nome do restaurante, artigos da carta e respetivos valores registados, totais de pedidos carregados e, quando a cache está válida, stock e número de reservas pendentes.
 
-## Segurança
+Não inclui automaticamente contactos de clientes, notas privadas de reservas, documentos, faturas ou dados de outros restaurantes. A leitura de faturas e a sincronização de memória entre dispositivos continuam por implementar.
 
-- A memória e o histórico são separados pelo ID da conta e do restaurante.
-- A chave AES-GCM não é armazenada nas preferências da aplicação; é criada e mantida pelo Android Keystore.
-- A aplicação não envia mensagens nem documentos para um fornecedor de IA nesta fase.
-- Não foram feitas alterações à base de dados alojada nem às suas migrações. A reconciliação documentada em `supabase/MIGRATION-RECONCILIATION-2026-11-02.md` continua a bloquear alterações de esquema/deploy até revisão.
+O modelo pode sugerir, calcular e explicar. Não pode gravar preços, alterar stock, pedidos, reservas, permissões ou pagamentos. Qualquer alteração futura tem de ser executada por um fluxo próprio da aplicação, com autorização e confirmação explícita do utilizador.
 
-## Testes
+## Privacidade
 
-Foi acrescentado um teste instrumentado Android para:
-- Persistência de conversas e memória entre instâncias da store.
-- Separação entre âmbitos de conta.
-- Pesquisa de conversas.
-- Eliminação de conversa sem apagar a memória.
-- Rejeição de respostas sem uma conversa iniciada pelo utilizador.
+- Mensagens e respostas são guardadas pelo `AssistantChatStore`, cifradas com AES-GCM e chave mantida no Android Keystore.
+- O âmbito local do histórico é separado por conta/restaurante.
+- A inferência do modelo não faz chamadas de rede. A única comunicação desta funcionalidade é a transferência inicial do ficheiro público do modelo.
+- A Memória continua local ao dispositivo; não sincroniza entre dispositivos.
+- O modelo não recebe dados bancários nem faturas automaticamente. A leitura de faturas só deve ser acrescentada depois de criar importação explícita, armazenamento seguro, permissões exclusivas do proprietário e revisão de privacidade.
 
-A compilação, testes instrumentados e CI têm de passar antes de considerar esta alteração pronta para integrar ou distribuir.
+## Licenças e atribuição
+
+- O runtime LiteRT-LM é distribuído sob a licença Apache 2.0: [LICENSE do LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM/blob/v0.16.1/LICENSE).
+- O modelo LFM2.5 usa a LFM Open License v1.0. Esta licença define condições de utilização comercial e de atribuição, incluindo um limiar de receita anual de 10 milhões de dólares para a concessão gratuita indicada pelo licenciante. Antes de uma distribuição comercial, ler e cumprir o texto integral e confirmar se a situação da empresa continua dentro das condições: [LFM Open License](https://www.liquid.ai/lfm-open-license) e [modelo LFM2.5 no Hugging Face](https://huggingface.co/litert-community/LFM2.5-1.2B-Instruct).
+- A aplicação descarrega o modelo do repositório público em vez de o incluir no APK. A distribuição comercial deve manter estes avisos, disponibilizar as licenças aplicáveis e confirmar as obrigações de atribuição.
+
+## Validação pendente
+
+Antes de declarar esta implementação pronta:
+
+1. Compilar todas as variantes Android com as novas dependências Kotlin/LiteRT-LM.
+2. Executar testes unitários, Android Lint, testes instrumentados do histórico e smoke tests em Android 8 e Android 16.
+3. Testar transferência interrompida, retomada por nova tentativa, falta de espaço, ficheiro corrompido e hash inválido.
+4. Testar inicialização do motor, perguntas sucessivas, mensagens longas, encerramento e libertação de memória.
+5. Testar no OPPO A5m real: tempo até primeira resposta, tokens por segundo, RAM, temperatura, bateria e estabilidade numa conversa longa.
+6. Testar que modo local não faz pedidos HTTP durante a inferência e que os dados de um restaurante não entram no contexto de outro.
+7. Validar legalmente o uso e a atribuição do modelo antes de comercializar a app.
+
+**Estado:** código de integração local criado na branch de desenvolvimento; compilação final e validação física ainda não estão confirmadas. Não distribuir como funcionalidade pronta até esses testes passarem.
