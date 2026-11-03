@@ -284,6 +284,200 @@ test -n "$RESTAURANT_A"
 test -n "$RESTAURANT_B"
 test "$RESTAURANT_A" != "$RESTAURANT_B"
 
+# Owner-only StudioMesa assistant conversations and financial invoice archive.
+ASSISTANT_CONVERSATION_A="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT conversation_id FROM public.studiomesa_assistant_create_conversation('CI financial review');
+COMMIT;
+SQL
+)"
+test -n "$ASSISTANT_CONVERSATION_A"
+
+ASSISTANT_USER_MESSAGE_ID="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.studiomesa_assistant_append_message(
+  '$ASSISTANT_CONVERSATION_A'::uuid, 'user',
+  'Como posso reduzir o custo dos ingredientes sem baixar a qualidade?', '[]'::jsonb
+);
+COMMIT;
+SQL
+)"
+test -n "$ASSISTANT_USER_MESSAGE_ID"
+
+ASSISTANT_RESPONSE_ID="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.studiomesa_assistant_append_message(
+  '$ASSISTANT_CONVERSATION_A'::uuid, 'assistant',
+  'Compara o custo por dose e valida os preços dos fornecedores.',
+  '[{"title":"Fonte de teste","url":"https://example.com/fornecedor"}]'::jsonb
+);
+COMMIT;
+SQL
+)"
+test -n "$ASSISTANT_RESPONSE_ID"
+
+ASSISTANT_HISTORY_SEARCH="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text FROM public.studiomesa_assistant_list_conversations('ingredientes')
+WHERE conversation_id = '$ASSISTANT_CONVERSATION_A'::uuid;
+COMMIT;
+SQL
+)"
+if [ "$ASSISTANT_HISTORY_SEARCH" != "1" ]; then
+  echo "ERROR: the owner could not search their own assistant conversation history." >&2
+  exit 1
+fi
+
+ASSISTANT_MESSAGE_COUNT="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text FROM public.studiomesa_assistant_list_messages('$ASSISTANT_CONVERSATION_A'::uuid);
+COMMIT;
+SQL
+)"
+if [ "$ASSISTANT_MESSAGE_COUNT" != "2" ]; then
+  echo "ERROR: the owner could not read the two messages in their own conversation." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.studiomesa_assistant_list_messages('$ASSISTANT_CONVERSATION_A'::uuid);
+COMMIT;
+SQL
+then
+  echo "ERROR: restaurant B unexpectedly read restaurant A's assistant conversation." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.studiomesa_assistant_list_conversations(NULL);
+COMMIT;
+SQL
+then
+  echo "ERROR: a customer account unexpectedly accessed the restaurant-owner assistant." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM private.studiomesa_assistant_messages;
+COMMIT;
+SQL
+then
+  echo "ERROR: an authenticated owner unexpectedly read private assistant tables directly." >&2
+  exit 1
+fi
+
+ASSISTANT_INVOICE_ID="77777777-7777-4777-8777-777777777777"
+ASSISTANT_INVOICE_PATH="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT storage_path FROM public.studiomesa_assistant_register_invoice(
+  '$ASSISTANT_INVOICE_ID'::uuid, 'CI supplier invoice.pdf', 2048
+);
+COMMIT;
+SQL
+)"
+if [ "$ASSISTANT_INVOICE_PATH" != "$RESTAURANT_A/$USER_A/$ASSISTANT_INVOICE_ID.pdf" ]; then
+  echo "ERROR: the invoice upload path was not generated within the owner's restaurant/account scope." >&2
+  exit 1
+fi
+
+INVOICE_UPLOAD_COMPLETED="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.studiomesa_assistant_complete_invoice_upload('$ASSISTANT_INVOICE_ID'::uuid);
+COMMIT;
+SQL
+)"
+if [ "$INVOICE_UPLOAD_COMPLETED" != "t" ]; then
+  echo "ERROR: the owner could not mark the successfully uploaded PDF as ready." >&2
+  exit 1
+fi
+
+ASSISTANT_INVOICE_COUNT_A="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text FROM public.studiomesa_assistant_list_invoices();
+COMMIT;
+SQL
+)"
+ASSISTANT_INVOICE_COUNT_B="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text FROM public.studiomesa_assistant_list_invoices();
+COMMIT;
+SQL
+)"
+if [ "$ASSISTANT_INVOICE_COUNT_A" != "1" ] || [ "$ASSISTANT_INVOICE_COUNT_B" != "0" ]; then
+  echo "ERROR: invoice history was not scoped to the owning restaurant." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.studiomesa_assistant_get_invoice_files(ARRAY['$ASSISTANT_INVOICE_ID'::uuid]);
+COMMIT;
+SQL
+then
+  echo "ERROR: restaurant B unexpectedly accessed restaurant A's uploaded invoice." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.studiomesa_assistant_register_invoice(
+  '88888888-8888-4888-8888-888888888888'::uuid, '../foreign.pdf', 1024
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: an invalid invoice file name unexpectedly passed validation." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.studiomesa_assistant_delete_conversation('$ASSISTANT_CONVERSATION_A'::uuid);
+COMMIT;
+SQL
+
+ASSISTANT_DELETED_MESSAGE_COUNT="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \\
+  -c "SELECT count(*) FROM private.studiomesa_assistant_messages WHERE conversation_id = '$ASSISTANT_CONVERSATION_A'::uuid;")"
+if [ "$ASSISTANT_DELETED_MESSAGE_COUNT" != "0" ]; then
+  echo "ERROR: deleting an assistant conversation did not remove its message history." >&2
+  exit 1
+fi
+
+echo "PASS: assistant conversation history/search, message isolation, customer/staff denial, and invoice archive are owner-scoped."
+
 # Exercise the legacy loyalty RPC wrappers created by the conditional migration.
 # The QR issue and legacy reward-queue fixtures return no rows. The award endpoint
 # now has its real permission-aware implementation, so an unknown token must fail.
