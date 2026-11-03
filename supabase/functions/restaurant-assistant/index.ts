@@ -1,10 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+import { withSupabase } from "npm:@supabase/server@1.9.2";
 
 const SYSTEM_INSTRUCTION = [
   "És o assistente de gestão do StudioMesa. Responde sempre em português europeu, com clareza e rigor.",
@@ -18,70 +12,61 @@ const SYSTEM_INSTRUCTION = [
 
 const rateBuckets = new Map<string, number[]>();
 
-const jsonResponse = (status: number, body: Record<string, unknown>) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+Deno.serve(
+  withSupabase({ auth: "user" }, async (req, ctx) => {
+    if (req.method !== "POST") {
+      return Response.json({ error: "method_not_allowed" }, { status: 405 });
+    }
 
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (req.method !== "POST") return jsonResponse(405, { error: "method_not_allowed" });
+    const userId = ctx.userClaims?.sub;
+    if (!userId || typeof userId !== "string") {
+      return Response.json({ error: "invalid_session" }, { status: 401 });
+    }
 
-  try {
-    const authHeader = req.headers.get("Authorization") ?? "";
-    const bearer = authHeader.match(/^Bearer\s+(.+)$/i)?.[1] ?? "";
-    if (!bearer) return jsonResponse(401, { error: "authentication_required" });
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
     const geminiKey = Deno.env.get("GEMINI_API_KEY") ?? "";
-    if (!supabaseUrl || !anonKey) return jsonResponse(503, { error: "supabase_environment_not_configured" });
-    if (!geminiKey) return jsonResponse(503, { error: "gemini_api_key_not_configured" });
-
-    const supabase = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: "Bearer " + bearer } },
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const { data: userResult, error: authError } = await supabase.auth.getUser(bearer);
-    if (authError || !userResult.user) return jsonResponse(401, { error: "invalid_session" });
+    if (!geminiKey) {
+      return Response.json({ error: "gemini_api_key_not_configured" }, { status: 503 });
+    }
 
     const payload = await req.json().catch(() => null);
-    if (!payload || typeof payload !== "object") return jsonResponse(400, { error: "invalid_request" });
+    if (!payload || typeof payload !== "object") {
+      return Response.json({ error: "invalid_request" }, { status: 400 });
+    }
     const restaurantId = typeof payload.restaurant_id === "string" ? payload.restaurant_id : "";
     const messages = Array.isArray(payload.messages) ? payload.messages : [];
     if (!/^[0-9a-fA-F-]{36}$/.test(restaurantId) || messages.length < 1 || messages.length > 10) {
-      return jsonResponse(400, { error: "invalid_request_shape" });
+      return Response.json({ error: "invalid_request_shape" }, { status: 400 });
     }
 
-    const { data: membership, error: membershipError } = await supabase
+    const { data: membership, error: membershipError } = await ctx.supabase
       .from("restaurant_staff")
       .select("role")
       .eq("restaurant_id", restaurantId)
-      .eq("user_id", userResult.user.id)
+      .eq("user_id", userId)
       .maybeSingle();
 
     if (membershipError || membership?.role !== "owner") {
-      return jsonResponse(403, { error: "restaurant_owner_required" });
+      return Response.json({ error: "restaurant_owner_required" }, { status: 403 });
     }
 
     const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
     for (const message of messages) {
       const role = message?.role === "assistant" ? "model" : message?.role === "user" ? "user" : "";
       const text = typeof message?.text === "string" ? message.text.trim() : "";
-      if (!role || !text || text.length > 1600) return jsonResponse(400, { error: "invalid_message" });
+      if (!role || !text || text.length > 1600) {
+        return Response.json({ error: "invalid_message" }, { status: 400 });
+      }
       contents.push({ role, parts: [{ text }] });
     }
     if (contents[contents.length - 1]?.role !== "user") {
-      return jsonResponse(400, { error: "last_message_must_be_user" });
+      return Response.json({ error: "last_message_must_be_user" }, { status: 400 });
     }
 
     // Best-effort per-isolate limit. Provider/account quotas remain authoritative.
-    const userId = userResult.user.id;
     const now = Date.now();
     const recent = rateBuckets.get(userId) ?? [];
     const active = recent.filter((timestamp) => now - timestamp < 60_000);
-    if (active.length >= 10) return jsonResponse(429, { error: "rate_limited" });
+    if (active.length >= 10) return Response.json({ error: "rate_limited" }, { status: 429 });
     active.push(now);
     rateBuckets.set(userId, active);
 
@@ -103,9 +88,9 @@ Deno.serve(async (req: Request) => {
     });
     if (!geminiResponse.ok) {
       // Do not log request bodies or model responses containing user text.
-      return jsonResponse(geminiResponse.status === 429 ? 429 : 502, {
+      return Response.json({
         error: geminiResponse.status === 429 ? "gemini_rate_limited" : "gemini_provider_error",
-      });
+      }, { status: geminiResponse.status === 429 ? 429 : 502 });
     }
 
     const result = await geminiResponse.json();
@@ -113,9 +98,7 @@ Deno.serve(async (req: Request) => {
       .map((part: { text?: string }) => typeof part.text === "string" ? part.text : "")
       .join("")
       .trim();
-    if (!reply) return jsonResponse(502, { error: "empty_model_response" });
-    return jsonResponse(200, { reply: reply.slice(0, 6000), model });
-  } catch {
-    return jsonResponse(500, { error: "assistant_server_error" });
-  }
-});
+    if (!reply) return Response.json({ error: "empty_model_response" }, { status: 502 });
+    return Response.json({ reply: reply.slice(0, 6000), model });
+  }),
+);
