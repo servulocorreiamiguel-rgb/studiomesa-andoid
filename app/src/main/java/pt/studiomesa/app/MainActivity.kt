@@ -4901,6 +4901,7 @@ class MainActivity : Activity() {
                         }
                         val response = SupabaseApi.askStudioMesaAssistant(
                             backendToken(),
+                            backendRestaurantId(),
                             question,
                             history,
                             assistantChatStore.readMemory(scope)
