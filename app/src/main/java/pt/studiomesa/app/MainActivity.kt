@@ -84,6 +84,7 @@ class MainActivity : Activity() {
     private var assistantChatScopeKey: String? = null
     private var assistantComposerDraft = ""
     private var assistantChatError: String? = null
+    private var assistantSending = false
     private var assistantFinancialToolsExpanded = false
     private var assistantAnalysisExpanded = false
     private var selectedAnalysisPeriod = SalesAnalysisPeriod.ALL_TIME
@@ -4613,6 +4614,54 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun assistantOnlinePreferenceKey(scope: String): String =
+        "online_${scope.hashCode()}"
+
+    private fun isAssistantOnlineEnabled(scope: String = assistantChatScope()): Boolean =
+        getSharedPreferences("studiomesa_assistant_settings_v1", MODE_PRIVATE)
+            .getBoolean(assistantOnlinePreferenceKey(scope), false)
+
+    private fun setAssistantOnlineEnabled(enabled: Boolean, scope: String = assistantChatScope()) {
+        getSharedPreferences("studiomesa_assistant_settings_v1", MODE_PRIVATE)
+            .edit()
+            .putBoolean(assistantOnlinePreferenceKey(scope), enabled)
+            .apply()
+    }
+
+    private fun configureAssistantOnlineMode(scope: String) {
+        if (isAssistantOnlineEnabled(scope)) {
+            AlertDialog.Builder(this)
+                .setTitle("Desativar IA generativa?")
+                .setMessage("As próximas mensagens deixam de ser enviadas ao modelo externo. O histórico cifrado que já está guardado neste dispositivo não é apagado.")
+                .setNegativeButton("Manter ativa", null)
+                .setPositiveButton("Desativar") { _, _ ->
+                    setAssistantOnlineEnabled(false, scope)
+                    renderApp()
+                }
+                .show()
+            return
+        }
+        if (backendToken().isBlank() || backendRestaurantId().isBlank()) {
+            AlertDialog.Builder(this)
+                .setTitle("Conta do restaurante necessária")
+                .setMessage("Para usar a IA generativa, inicia sessão e configura primeiro o restaurante na secção Conta. A versão local continua disponível.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Ativar IA generativa")
+            .setMessage(
+                "A StudioMesa vai enviar à Google Gemini a mensagem que escreveres, até 16 mensagens anteriores desta conversa e a Memória que guardaste. Esses dados passam por um servidor seguro da StudioMesa; a chave do modelo nunca fica no APK.\n\nNão são enviados automaticamente faturas, contactos de clientes, reservas, stock ou a base de dados completa. Não incluas palavras-passe nem dados pessoais desnecessários. A modalidade gratuita da API pode usar conteúdo para melhorar os produtos Google e tem limites de utilização. Podes desativar esta ligação a qualquer momento."
+            )
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Concordo e ativar") { _, _ ->
+                setAssistantOnlineEnabled(true, scope)
+                renderApp()
+            }
+            .show()
+    }
+
     private fun renderAssistant(container: LinearLayout) {
         val scope = assistantChatScope()
         if (assistantChatScopeKey != scope) {
@@ -4632,11 +4681,22 @@ class MainActivity : Activity() {
         val statusCard = makeCard(13, forest)
         statusCard.addView(label("ASSISTENTE STUDIO MESA", 9.5f, true, copper))
         addGap(statusCard, 5)
+        val onlineEnabled = isAssistantOnlineEnabled(scope)
         statusCard.addView(label(
-            "O histórico e a memória ficam cifrados neste dispositivo e separados por conta. As respostas ainda usam o motor local do StudioMesa; a ligação a um modelo generativo e à pesquisa na Internet não está ativa.",
+            if (onlineEnabled) {
+                "IA generativa ativada. As mensagens, até 16 mensagens anteriores e a Memória são enviadas à Google Gemini através do servidor StudioMesa. Não são enviados automaticamente documentos nem a base de dados do restaurante."
+            } else {
+                "Modo local ativo. O histórico e a Memória ficam cifrados neste dispositivo. Podes ativar a IA generativa para conversar com um modelo Gemini; a ativação envia as mensagens e a Memória para processamento externo."
+            },
             11.5f, false, white
         ))
         container.addView(statusCard, cardParams())
+        container.addView(secondaryButton(
+            if (onlineEnabled) "IA generativa ativa · gerir ligação" else "Ativar IA generativa"
+        ) {
+            configureAssistantOnlineMode(scope)
+        }, LinearLayout.LayoutParams(-1, dp(44)))
+        addGap(container, 8)
 
         val toolbar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -4799,7 +4859,8 @@ class MainActivity : Activity() {
     }
 
     private fun sendAssistantMessage(rawMessage: String) {
-        val question = rawMessage.trim().take(1000)
+        if (assistantSending) return
+        val question = rawMessage.trim().take(8000)
         if (question.isBlank()) {
             Toast.makeText(this, "Escreve uma mensagem primeiro.", Toast.LENGTH_SHORT).show()
             return
@@ -4814,11 +4875,62 @@ class MainActivity : Activity() {
                 question
             )
             activeAssistantConversationId = conversationId
+            assistantComposerDraft = ""
+            assistantChatError = null
+
+            if (isAssistantOnlineEnabled(scope)) {
+                if (backendToken().isBlank() || backendRestaurantId().isBlank()) {
+                    assistantChatError = "A sessão do restaurante terminou. Inicia sessão novamente para usar a IA generativa."
+                    renderApp()
+                    return
+                }
+                assistantSending = true
+                renderApp()
+                runBackend(
+                    task = {
+                        val previousTurns = assistantChatStore.readTurns(scope, conversationId)
+                            .dropLast(1)
+                            .takeLast(16)
+                        val history = JSONArray()
+                        previousTurns.forEach { turn ->
+                            history.put(
+                                JSONObject()
+                                    .put("role", turn.role)
+                                    .put("content", turn.content)
+                            )
+                        }
+                        val response = SupabaseApi.askStudioMesaAssistant(
+                            backendToken(),
+                            question,
+                            history,
+                            assistantChatStore.readMemory(scope)
+                        )
+                        response.optString("answer").trim().ifBlank {
+                            throw IllegalStateException("A IA não devolveu uma resposta utilizável.")
+                        }
+                    },
+                    onError = { error ->
+                        assistantSending = false
+                        assistantChatError = friendlyBackendError(error.message)
+                        renderApp()
+                    }
+                ) { reply ->
+                    assistantSending = false
+                    try {
+                        assistantChatStore.appendTurn(scope, conversationId, "assistant", reply)
+                        assistantChatError = null
+                    } catch (error: Exception) {
+                        assistantChatError = error.message ?: "A resposta chegou, mas não foi possível guardá-la no histórico."
+                    }
+                    renderApp()
+                }
+                return
+            }
+
             val reply = answerAssistantChatMessage(question, scope, conversationId)
             assistantChatStore.appendTurn(scope, conversationId, "assistant", reply)
-            assistantChatError = null
-            assistantComposerDraft = ""
         } catch (error: Exception) {
+            assistantSending = false
             assistantChatError = error.message ?: "Não foi possível guardar ou responder à mensagem."
         }
         renderApp()
