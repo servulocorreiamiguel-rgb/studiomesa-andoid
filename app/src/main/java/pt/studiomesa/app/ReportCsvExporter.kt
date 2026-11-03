@@ -33,7 +33,7 @@ internal object ReportCsvExporter {
     )
 
     fun toCsv(records: List<OrderReportRecord>): String = buildString {
-        append('\\uFEFF')
+        append('\uFEFF')
         appendLine(headers.joinToString(";") { textCell(it) })
         records.forEach { record ->
             require(record.tableNumber > 0) { "O número da mesa tem de ser positivo." }
@@ -60,13 +60,13 @@ internal object ReportCsvExporter {
 
     private fun textCell(raw: String): String {
         val clean = raw
-            .replace("\\u0000", "")
-            .replace("\\r\\n", " ")
-            .replace('\\r', ' ')
-            .replace('\\n', ' ')
-            .replace('\\t', ' ')
+            .replace("\u0000", "")
+            .replace("\r\n", " ")
+            .replace('\r', ' ')
+            .replace('\n', ' ')
+            .replace('\t', ' ')
         val firstMeaningful = clean.trimStart().firstOrNull()
         val safe = if (firstMeaningful != null && firstMeaningful in setOf('=', '+', '-', '@')) "'$clean" else clean
-        return "\\"" + safe.replace("\\"", "\\"\\"") + "\\""
+        return "\"" + safe.replace("\"", "\"\"") + "\""
     }
 }
