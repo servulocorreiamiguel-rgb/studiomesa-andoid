@@ -125,20 +125,21 @@ class MainActivity : Activity() {
     private val isPremium = flavor.contains("premium")
     private val hasCalculator = flavor.contains("profissional") || isPremium
 
-    private val forest = Color.rgb(57, 78, 67)
-    private val forestDeep = Color.rgb(43, 59, 50)
-    private val forestSoft = Color.rgb(77, 101, 87)
-    private val copper = Color.rgb(211, 177, 139)
-    private val copperPale = Color.rgb(245, 237, 224)
-    private val paper = Color.rgb(248, 248, 244)
+    // StudioMesa visual system: deep petrol, warm brass and soft stone surfaces.
+    private val forest = Color.rgb(43, 74, 72)
+    private val forestDeep = Color.rgb(24, 43, 45)
+    private val forestSoft = Color.rgb(82, 119, 113)
+    private val copper = Color.rgb(205, 169, 113)
+    private val copperPale = Color.rgb(246, 239, 226)
+    private val paper = Color.rgb(245, 246, 243)
     private val white = Color.WHITE
-    private val ink = Color.rgb(47, 57, 51)
-    private val muted = Color.rgb(106, 116, 108)
-    private val line = Color.rgb(230, 229, 220)
-    private val paleGreen = Color.rgb(235, 242, 236)
-    private val paleRed = Color.rgb(249, 237, 233)
+    private val ink = Color.rgb(35, 51, 51)
+    private val muted = Color.rgb(105, 120, 117)
+    private val line = Color.rgb(225, 231, 227)
+    private val paleGreen = Color.rgb(232, 241, 237)
+    private val paleRed = Color.rgb(250, 237, 234)
     private val red = Color.rgb(157, 65, 56)
-    private val green = Color.rgb(55, 105, 72)
+    private val green = Color.rgb(46, 116, 91)
 
     private val planTitle: String
         get() = when {
@@ -539,8 +540,16 @@ class MainActivity : Activity() {
         val separator = View(this).apply { setBackgroundColor(Color.argb(65, 255, 255, 255)) }
         header.addView(separator, LinearLayout.LayoutParams(-1, dp(1)))
         addGap(header, 12)
-        header.addView(label(if (hasRemoteRestaurant()) "Restaurante configurado · dados do servidor" else "Demonstração · Dados de exemplo", 10.5f, true, copperPale))
-        header.addView(label("Uma experiência de gestão pensada para o ritmo da sala.", 13f, false, Color.rgb(229, 235, 228)))
+        val headerStatus = label(
+            if (hasRemoteRestaurant()) "CONTA CONFIGURADA" else "MODO DE DEMONSTRAÇÃO",
+            9.5f, true, forestDeep
+        ).apply {
+            setPadding(dp(9), dp(6), dp(9), dp(6))
+            background = rounded(copper, 10)
+        }
+        header.addView(headerStatus, LinearLayout.LayoutParams(-2, -2))
+        addGap(header, 6)
+        header.addView(label("Gestão de sala, sem complicações.", 13f, false, Color.rgb(229, 235, 228)))
 
         val headerParams = LinearLayout.LayoutParams(-1, -2).apply {
             setMargins(dp(12), dp(10), dp(12), dp(5))
@@ -565,9 +574,9 @@ class MainActivity : Activity() {
         val nav = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(6), dp(4), dp(6), dp(4))
-            setBackgroundColor(white)
-            elevation = dp(6).toFloat()
+            setPadding(dp(6), dp(5), dp(6), dp(5))
+            background = cardSurface(white, 19)
+            elevation = dp(7).toFloat()
         }
         StaffPermissionSet.bottomNavigationPages(availablePages()).forEach { page ->
             val selected = activePage == page
@@ -598,7 +607,9 @@ class MainActivity : Activity() {
                 setMargins(dp(3), 0, dp(3), 0)
             })
         }
-        appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(60)))
+        appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(66)).apply {
+            setMargins(dp(12), dp(3), dp(12), dp(8))
+        })
         setContentView(appRoot)
         if (activePage == "Pontos" && hasRemoteRestaurant() &&
             (!LoyaltyCacheScope.belongsTo(
@@ -633,19 +644,17 @@ class MainActivity : Activity() {
     }
 
     private fun renderHome(container: LinearLayout) {
-        container.addView(label("Painel de operação", 10f, true, forestSoft))
-        addGap(container, 5)
-        container.addView(label("A sala, num relance.", 27f, true, forestDeep))
+        container.addView(label("STUDIOMESA  /  PAINEL DE GESTÃO", 10f, true, forestSoft).apply {
+            letterSpacing = 0.12f
+        })
+        addGap(container, 7)
+        container.addView(label("A sala, sob controlo.", 29f, true, forestDeep))
         addGap(container, 5)
         container.addView(label(
-            if (hasRemoteRestaurant()) {
-                "Dados do restaurante sincronizados com o servidor. As áreas disponíveis dependem das permissões atribuídas à tua conta."
-            } else {
-                "Demonstração StudioMesa. Os dados, a carta e os pedidos são exemplos; configura o restaurante e introduz dados aprovados antes de qualquer utilização real."
-            },
-            14f, false, muted
+            "O essencial da operação, organizado num só lugar.",
+            13.5f, false, muted
         ))
-        addGap(container, 18)
+        addGap(container, 15)
 
         val tableTotal: Int
         val occupied = if (hasRemoteRestaurant()) {
@@ -664,19 +673,49 @@ class MainActivity : Activity() {
             }
         } else store.getOrders().count { it.status != "Concluído" && it.status != "Cancelado" }
         val accessiblePages = availablePages().toSet()
-        val stats = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+
+        val statusCard = makeCard(14, forestDeep).apply {
+            background = rounded(forestDeep, 20)
+        }
+        val statusRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        statusRow.addView(statusDot(if (hasRemoteRestaurant()) Color.rgb(116, 190, 151) else copper),
+            LinearLayout.LayoutParams(dp(8), dp(8)).apply { setMargins(0, 0, dp(9), 0) })
+        statusRow.addView(label(
+            if (hasRemoteRestaurant()) "CONTA DO RESTAURANTE CONFIGURADA" else "AMBIENTE DE DEMONSTRAÇÃO",
+            9.5f, true, copperPale
+        ))
+        statusCard.addView(statusRow)
+        addGap(statusCard, 6)
+        statusCard.addView(label(
+            if (hasRemoteRestaurant())
+                "As áreas disponíveis respeitam as permissões atribuídas à tua conta."
+            else
+                "Explora a aplicação com dados de exemplo. Liga uma conta para ativar a gestão partilhada.",
+            12f, false, Color.rgb(226, 235, 231)
+        ))
+        container.addView(statusCard, cardParams())
+
+        addGap(container, 7)
+        sectionHeading(container, "Resumo da operação", "Indicadores disponíveis nesta aplicação.")
+        val stats = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.TOP
+        }
         if ("Mesas" in accessiblePages) {
-            stats.addView(statCard("MESAS OCUPADAS", "$occupied / $tableTotal", if (occupied > 0) copper else forestSoft),
+            stats.addView(statCard("MESAS OCUPADAS", occupied.toString() + " / " + tableTotal, forestSoft),
                 LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(0, 0, dp(6), 0) })
         }
         if ("Pedidos" in accessiblePages) {
-            stats.addView(statCard("PEDIDOS ATIVOS", activeOrders.toString(), if (activeOrders > 0) copper else forestSoft),
+            stats.addView(statCard("PEDIDOS ATIVOS", activeOrders.toString(), copper),
                 LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(if (stats.childCount > 0) dp(6) else 0, 0, 0, 0) })
         }
         if (stats.childCount > 0) container.addView(stats)
 
-        addGap(container, 21)
-        sectionHeading(container, "Acesso rápido", "Escolhe uma área para continuar.")
+        addGap(container, 17)
+        sectionHeading(container, "Acesso rápido", "Entra diretamente nas áreas que mais utilizas.")
         if ("Mesas" in accessiblePages) {
             actionCard(container, "01", "Mesas", "Consulta as " + tableTotal + " mesas do restaurante.", "ABRIR MESAS") {
                 activePage = "Mesas"; renderApp()
@@ -688,49 +727,51 @@ class MainActivity : Activity() {
             }
         }
         if ("Carta" in accessiblePages) {
-            actionCard(container, "03", "Carta e custos", "Artigos de exemplo, preços e custos.", "ABRIR CARTA") {
+            actionCard(container, "03", "Carta e custos", "Artigos, preços e custos do menu.", "ABRIR CARTA") {
                 activePage = "Carta"; renderApp()
             }
         }
         if ("Pontos" in accessiblePages) {
-            actionCard(container, "04", "Pontos de fidelização", "Gere cartões, recompensas e pedidos de troca de pontos.", "GERIR FIDELIZAÇÃO") {
+            actionCard(container, "04", "Fidelização", "Cartões, recompensas e pedidos de troca.", "GERIR FIDELIZAÇÃO") {
                 activePage = "Pontos"; renderApp()
             }
         }
         if ("Reservas" in accessiblePages) {
-            actionCard(container, "05", "Reservas", "Regista reservas, capacidade e disponibilidade de mesas.", "GERIR RESERVAS") {
+            actionCard(container, "05", "Reservas", "Pedidos, capacidade e atribuição de mesas.", "GERIR RESERVAS") {
                 activePage = "Reservas"; renderApp()
             }
         }
         if ("Preço Justo" in accessiblePages) {
-            actionCard(container, "06", "Preço Justo", "Calcula um preço indicativo a partir do custo.", "ABRIR CALCULADORA") {
+            actionCard(container, "06", "Preço Justo", "Calcula preços indicativos a partir dos custos.", "ABRIR CALCULADORA") {
                 activePage = "Preço Justo"; renderApp()
             }
         }
         if ("Stock" in accessiblePages) {
-            actionCard(container, "07", "Stock e inventário", "Controla quantidades, níveis mínimos e movimentos.", "GERIR STOCK") {
+            actionCard(container, "07", "Stock e inventário", "Quantidades, mínimos e movimentos.", "GERIR STOCK") {
                 activePage = "Stock"; renderApp()
             }
         }
         if ("Análise" in accessiblePages) {
-            actionCard(container, "08", "Análise operacional", "Resumo dos pedidos, artigos e custos registados.", "VER ANÁLISE") {
+            actionCard(container, "08", "Análise operacional", "Resumo dos pedidos, artigos e custos.", "VER ANÁLISE") {
                 activePage = "Análise"; renderApp()
             }
         }
         if ("Assistente" in accessiblePages) {
-            actionCard(container, "IA", "Assistente StudioMesa", "Sugestões de operação e preços com os dados disponíveis.", "ABRIR ASSISTENTE") {
+            actionCard(container, "IA", "Assistente StudioMesa", "Sugestões de operação e preços.", "ABRIR ASSISTENTE") {
                 activePage = "Assistente"; renderApp()
             }
         }
 
-        addGap(container, 6)
+        addGap(container, 5)
         val note = makeCard(14, copperPale)
-        note.addView(label(if (hasRemoteRestaurant()) "OPERAÇÃO PARTILHADA" else "DEMONSTRAÇÃO", 10f, true, forest))
-        addGap(note, 4)
+        note.addView(label("NOTA SOBRE OS DADOS", 9.5f, true, forest))
+        addGap(note, 5)
         note.addView(label(
-            if (hasRemoteRestaurant()) "Mesas, carta, pedidos e estados ficam guardados no servidor e podem ser consultados pela equipa autenticada. Ainda não existe integração com caixa registadora, pagamentos ou impressora de cozinha."
-            else "O modo de demonstração guarda mesas, carta e pedidos apenas neste telemóvel. Liga uma conta e configura o restaurante para usar os dados partilhados no servidor.",
-            12.5f, false, ink
+            if (hasRemoteRestaurant())
+                "Mesas, carta e pedidos são partilhados com a equipa autenticada. Ainda não existe integração com caixa registadora, pagamentos ou impressora de cozinha."
+            else
+                "O modo de demonstração guarda os registos neste telemóvel. Não representa dados reais de um restaurante.",
+            12f, false, ink
         ))
         container.addView(note, cardParams())
     }
@@ -3557,27 +3598,54 @@ class MainActivity : Activity() {
 
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(15), dp(18), dp(15))
+            setPadding(dp(18), dp(17), dp(18), dp(17))
             background = GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
                 intArrayOf(forestDeep, forest, forestSoft)
-            ).apply { cornerRadius = dp(22).toFloat() }
+            ).apply { cornerRadius = dp(24).toFloat() }
         }
-        header.addView(label(displayCustomerRestaurantName(), 23f, true, white).apply {
+        val brandRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        brandRow.addView(TextView(this).apply {
+            text = "SM"
+            textSize = 15f
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            gravity = Gravity.CENTER
+            setTextColor(forestDeep)
+            background = rounded(copper, 14)
+        }, LinearLayout.LayoutParams(dp(42), dp(42)))
+        val brandText = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(11), 0, 0, 0)
+        }
+        brandText.addView(label(displayCustomerRestaurantName(), 20f, true, white).apply {
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
         })
-        addGap(header, 4)
-        header.addView(label("Cartão digital de cliente · " + planTitle, 10.5f, true, copperPale))
-        addGap(header, 9)
-        header.addView(label("A tua experiência, num só lugar.", 16f, true, white))
+        brandText.addView(label("STUDIOMESA  /  CLIENTE", 9f, true, copperPale).apply {
+            letterSpacing = 0.09f
+        })
+        brandRow.addView(brandText, LinearLayout.LayoutParams(0, -2, 1f))
+        brandRow.addView(label(planTitle, 9f, true, forestDeep).apply {
+            setPadding(dp(9), dp(7), dp(9), dp(7))
+            background = rounded(copper, 10)
+        })
+        header.addView(brandRow)
+        addGap(header, 15)
+        header.addView(View(this).apply { setBackgroundColor(Color.argb(70, 255, 255, 255)) },
+            LinearLayout.LayoutParams(-1, dp(1)))
+        addGap(header, 11)
+        header.addView(label("A tua experiência, num só lugar.", 17f, true, white))
+        addGap(header, 3)
         header.addView(label(
-            if (backendMemberId().isBlank()) "Consulta a carta e acompanha os teus pontos."
-            else "O teu cartão de fidelização.",
-            12f, false, copperPale
+            if (backendMemberId().isBlank()) "Cartão digital de cliente · associa-te ao restaurante para acompanhar os pontos."
+            else "Cartão de fidelização e serviços do restaurante.",
+            12f, false, Color.rgb(229, 235, 228)
         ))
         appRoot.addView(header, LinearLayout.LayoutParams(-1, -2).apply {
-            setMargins(dp(12), dp(8), dp(12), dp(4))
+            setMargins(dp(12), dp(8), dp(12), dp(5))
         })
 
         val scroll = ScrollView(this).apply {
@@ -3587,7 +3655,7 @@ class MainActivity : Activity() {
         }
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(14), dp(16), dp(18))
+            setPadding(dp(16), dp(15), dp(16), dp(20))
         }
         when (activeCustomerPage) {
             "Cartão" -> renderCustomerLoyaltyPage(content)
@@ -3602,17 +3670,17 @@ class MainActivity : Activity() {
         val nav = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(6), dp(4), dp(6), dp(4))
-            setBackgroundColor(white)
-            elevation = dp(6).toFloat()
+            setPadding(dp(5), dp(5), dp(5), dp(5))
+            background = cardSurface(white, 19)
+            elevation = dp(7).toFloat()
         }
         listOf("Cartão", "Prémios", "Reservas", "Carta", "Conta").forEach { page ->
             val selected = activeCustomerPage == page
             val item = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setPadding(dp(3), dp(3), dp(3), dp(3))
-                background = rippleBackground(if (selected) paleGreen else white, 12)
+                setPadding(dp(3), dp(4), dp(3), dp(4))
+                background = rounded(if (selected) copperPale else white, 12)
                 contentDescription = "Abrir secção " + page
                 isClickable = true
                 isFocusable = true
@@ -3644,10 +3712,12 @@ class MainActivity : Activity() {
                 maxLines = 1
             })
             nav.addView(item, LinearLayout.LayoutParams(0, dp(52), 1f).apply {
-                setMargins(dp(3), 0, dp(3), 0)
+                setMargins(dp(2), 0, dp(2), 0)
             })
         }
-        appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(60)))
+        appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(66)).apply {
+            setMargins(dp(12), dp(3), dp(12), dp(8))
+        })
         setContentView(appRoot)
         if (activeCustomerPage == "Reservas" &&
             backendToken().isNotBlank() &&
@@ -7324,45 +7394,98 @@ class MainActivity : Activity() {
     }
 
     private fun pageIntro(container: LinearLayout, title: String, subtitle: String) {
-        container.addView(label("Gestão de restaurante", 10.5f, true, forestSoft))
-        addGap(container, 5)
-        container.addView(label(title, 27f, true, forestDeep))
-        addGap(container, 5)
-        container.addView(label(subtitle, 14f, false, muted))
+        container.addView(label("STUDIOMESA  /  GESTÃO", 9.5f, true, forestSoft).apply {
+            letterSpacing = 0.1f
+        })
+        addGap(container, 6)
+        container.addView(label(title, 28f, true, forestDeep))
+        addGap(container, 4)
+        container.addView(label(subtitle, 13f, false, muted))
+        addGap(container, 7)
+        container.addView(View(this).apply { setBackgroundColor(copper) },
+            LinearLayout.LayoutParams(dp(34), dp(3)))
     }
 
     private fun sectionHeading(container: LinearLayout, title: String, subtitle: String) {
         container.addView(label(title, 18f, true, forestDeep))
         addGap(container, 3)
-        container.addView(label(subtitle, 12.5f, false, muted))
-        addGap(container, 10)
+        container.addView(label(subtitle, 12f, false, muted))
+        addGap(container, 9)
     }
 
-    private fun actionCard(parent: LinearLayout, number: String, title: String, subtitle: String, actionText: String, action: () -> Unit) {
-        val card = makeCard(14)
+    private fun actionCard(
+        parent: LinearLayout,
+        number: String,
+        title: String,
+        subtitle: String,
+        actionText: String,
+        action: () -> Unit
+    ) {
+        val glyph = when {
+            title.contains("Mesa", ignoreCase = true) -> "▦"
+            title.contains("Pedido", ignoreCase = true) -> "≡"
+            title.contains("Carta", ignoreCase = true) -> "▤"
+            title.contains("Fidelização", ignoreCase = true) -> "◎"
+            title.contains("Reserv", ignoreCase = true) -> "◷"
+            title.contains("Preço", ignoreCase = true) -> "€"
+            title.contains("Stock", ignoreCase = true) -> "▣"
+            title.contains("Análise", ignoreCase = true) -> "↗"
+            else -> "✦"
+        }
+        val card = makeCard(13)
+        card.background = outlinedRippleBackground(white, 19, line)
+        card.isClickable = true
+        card.isFocusable = true
+        card.contentDescription = title + ". " + subtitle + ". " + actionText
+        card.setOnClickListener { action() }
+
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        row.addView(label(number, 11f, true, forestSoft), LinearLayout.LayoutParams(dp(28), -2))
-        val text = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        text.addView(label(title, 16f, true, ink))
+        row.addView(TextView(this).apply {
+            text = glyph
+            textSize = 22f
+            gravity = Gravity.CENTER
+            setTextColor(forest)
+            background = rounded(if (number == "IA") copperPale else paleGreen, 14)
+        }, LinearLayout.LayoutParams(dp(48), dp(48)).apply {
+            setMargins(0, 0, dp(12), 0)
+        })
+
+        val text = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        text.addView(label(title, 15f, true, ink))
         addGap(text, 3)
-        text.addView(label(subtitle, 12.5f, false, muted))
+        text.addView(label(subtitle, 11.5f, false, muted))
+        addGap(text, 6)
+        text.addView(label(actionText, 9f, true, forestSoft).apply {
+            letterSpacing = 0.06f
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { action() }
+        })
         row.addView(text, LinearLayout.LayoutParams(0, -2, 1f))
+        row.addView(label("›", 27f, false, copper).apply {
+            gravity = Gravity.CENTER
+            isClickable = true
+            setOnClickListener { action() }
+        }, LinearLayout.LayoutParams(dp(24), dp(48)))
         card.addView(row)
-        addGap(card, 12)
-        card.addView(secondaryButton(actionText, action), LinearLayout.LayoutParams(-1, dp(48)))
         parent.addView(card, cardParams())
     }
 
     private fun statCard(title: String, value: String, accent: Int): LinearLayout {
-        val card = makeCard(14)
-        card.addView(label(title, 9.5f, true, muted))
-        addGap(card, 7)
-        card.addView(label(value, 24f, true, forestDeep))
-        addGap(card, 7)
-        card.addView(View(this).apply { setBackgroundColor(accent) }, LinearLayout.LayoutParams(dp(26), dp(3)))
+        val card = makeCard(15)
+        card.addView(View(this).apply { setBackgroundColor(accent) },
+            LinearLayout.LayoutParams(dp(28), dp(3)))
+        addGap(card, 10)
+        card.addView(label(title, 9f, true, muted).apply {
+            letterSpacing = 0.04f
+        })
+        addGap(card, 6)
+        card.addView(label(value, 27f, true, forestDeep))
         return card
     }
 
@@ -7401,9 +7524,33 @@ class MainActivity : Activity() {
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(padding), dp(padding), dp(padding), dp(padding))
-            background = rounded(color, 19)
-            elevation = dp(1).toFloat()
+            background = cardSurface(color, 20)
+            elevation = dp(2).toFloat()
         }
+
+    private fun cardSurface(color: Int, radius: Int): GradientDrawable =
+        rounded(color, radius).apply {
+            setStroke(dp(1), line)
+        }
+
+    private fun outlinedRippleBackground(
+        color: Int,
+        radius: Int,
+        strokeColor: Int
+    ): Drawable {
+        val base = rounded(color, radius).apply {
+            setStroke(dp(1), strokeColor)
+        }
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            RippleDrawable(
+                ColorStateList.valueOf(Color.argb(30, 43, 74, 72)),
+                base,
+                rounded(Color.WHITE, radius)
+            )
+        } else {
+            base
+        }
+    }
 
     private fun cardParams(): LinearLayout.LayoutParams =
         LinearLayout.LayoutParams(-1, -2).apply { setMargins(0, 0, 0, dp(11)) }
@@ -7447,10 +7594,11 @@ class MainActivity : Activity() {
             textSize = 13f
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
             isAllCaps = false
-            setTextColor(forestDeep)
-            background = rippleBackground(copper, 15)
-            elevation = dp(1).toFloat()
-            setPadding(dp(12), dp(3), dp(12), dp(3))
+            setTextColor(white)
+            background = rippleBackground(forestDeep, 15)
+            elevation = dp(2).toFloat()
+            setPadding(dp(14), dp(4), dp(14), dp(4))
+            minHeight = dp(48)
             setOnClickListener { action() }
         }
 
@@ -7461,9 +7609,10 @@ class MainActivity : Activity() {
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
             isAllCaps = false
             setTextColor(forest)
-            background = rippleBackground(paleGreen, 14)
+            background = outlinedRippleBackground(white, 14, line)
             elevation = 0f
-            setPadding(dp(8), dp(2), dp(8), dp(2))
+            setPadding(dp(10), dp(3), dp(10), dp(3))
+            minHeight = dp(44)
             setOnClickListener { action() }
         }
 
@@ -7472,7 +7621,7 @@ class MainActivity : Activity() {
             text = value
             textSize = size
             setTextColor(color)
-            if (bold) typeface = Typeface.create(if (size >= 23f) "serif" else "sans-serif", Typeface.BOLD)
+            if (bold) typeface = Typeface.create("sans-serif", Typeface.BOLD)
             setLineSpacing(dp(2).toFloat(), 1.0f)
         }
 
