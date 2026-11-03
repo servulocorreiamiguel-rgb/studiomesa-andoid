@@ -79,6 +79,13 @@ class MainActivity : Activity() {
     }
     private var assistantQuestion = ""
     private var assistantAnswer: StudioMesaAssistantAnswer? = null
+    private val assistantChatStore by lazy { AssistantChatStore(this) }
+    private var activeAssistantConversationId: String? = null
+    private var assistantChatScopeKey: String? = null
+    private var assistantComposerDraft = ""
+    private var assistantChatError: String? = null
+    private var assistantFinancialToolsExpanded = false
+    private var assistantAnalysisExpanded = false
     private var selectedAnalysisPeriod = SalesAnalysisPeriod.ALL_TIME
 
     // Owner-controlled economic tools: session-only until persistent authorization is designed.
@@ -4596,97 +4603,476 @@ class MainActivity : Activity() {
     private fun formatAdvicePercent(value: java.math.BigDecimal): String =
         value.stripTrailingZeros().toPlainString().replace('.', ',')
 
+    private fun assistantChatScope(): String {
+        val userId = backendPrefs.getString("user_id", "").orEmpty().trim()
+        val restaurantId = backendRestaurantId().trim()
+        return if (userId.isNotBlank()) {
+            "account:$userId:restaurant:${restaurantId.ifBlank { "none" }}"
+        } else {
+            "demo:${BuildConfig.FLAVOR}"
+        }
+    }
+
     private fun renderAssistant(container: LinearLayout) {
-        val snapshot = assistantSnapshot()
-        pageIntro(container, "Assistente StudioMesa", "Apoio à operação com os dados que já estão disponíveis.")
-        addGap(container, 8)
-
-        val privacyCard = makeCard(15, forest)
-        privacyCard.addView(label("ASSISTENTE LOCAL · SEM API PAGA", 10f, true, copper))
-        addGap(privacyCard, 5)
-        privacyCard.addView(label(
-            "As análises são calculadas neste dispositivo. As perguntas não são enviadas nem guardadas como histórico. Esta versão usa regras e cálculos locais, não um modelo generativo; não altera registos por ti.",
-            12.5f, false, white
-        ))
-        container.addView(privacyCard, cardParams())
-
-        addGap(container, 9)
-        renderEconomicManager(container)
-
-        if (isPremium) {
-            addGap(container, 9)
-            renderRestaurantPriceAdvisor(container)
+        val scope = assistantChatScope()
+        if (assistantChatScopeKey != scope) {
+            assistantChatScopeKey = scope
+            activeAssistantConversationId = null
+            assistantComposerDraft = ""
+            assistantChatError = null
         }
 
-        addGap(container, 5)
-        sectionHeading(container, "Pergunta ao assistente", "Experimenta perguntar sobre custos, preços, pedidos, stock, reservas ou um problema de sincronização.")
-        val questionField = multilineInputField("Ex.: Como posso melhorar o preço dos pratos?")
-        questionField.setText(assistantQuestion)
-        container.addView(questionField, multilineFieldParams())
-        container.addView(primaryButton("Analisar pergunta") {
-            assistantQuestion = questionField.text.toString().trim().take(400)
-            assistantAnswer = StudioMesaAdvisor.answerQuestion(assistantQuestion, snapshot)
-            renderApp()
-        }, LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(container, 5)
-        container.addView(secondaryButton("Gerar resumo da operação") {
-            // Keep the user's question intact; the briefing is a separate action.
-            assistantAnswer = StudioMesaAdvisor.dailyBriefing(assistantSnapshot())
-            renderApp()
-        }, LinearLayout.LayoutParams(-1, dp(46)))
-        addGap(container, 12)
+        pageIntro(
+            container,
+            "Assistente StudioMesa",
+            "Um espaço de conversa para analisar a operação e apoiar a gestão do restaurante."
+        )
+        addGap(container, 8)
 
-        assistantAnswer?.let { answer ->
-            val answerCard = makeCard(16, copperPale)
-            answerCard.addView(label(answer.title, 17f, true, forestDeep))
-            addGap(answerCard, 7)
-            answerCard.addView(label(answer.response, 12.5f, false, ink))
-            assistantActionTarget(answer.actionPage)?.let { target ->
-                addGap(answerCard, 10)
-                answerCard.addView(secondaryButton("Abrir " + target) {
-                    activePage = target
-                    renderApp()
-                }, LinearLayout.LayoutParams(-1, dp(44)))
-            }
-            container.addView(answerCard, cardParams())
+        val statusCard = makeCard(13, forest)
+        statusCard.addView(label("ASSISTENTE STUDIO MESA", 9.5f, true, copper))
+        addGap(statusCard, 5)
+        statusCard.addView(label(
+            "O histórico e a memória ficam cifrados neste dispositivo e separados por conta. As respostas ainda usam o motor local do StudioMesa; a ligação a um modelo generativo e à pesquisa na Internet não está ativa.",
+            11.5f, false, white
+        ))
+        container.addView(statusCard, cardParams())
+
+        val toolbar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        toolbar.addView(secondaryButton("＋ Nova conversa") {
+            activeAssistantConversationId = null
+            assistantComposerDraft = ""
+            assistantChatError = null
+            renderApp()
+        }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { setMargins(0, 0, dp(4), 0) })
+        toolbar.addView(secondaryButton("Histórico") {
+            showAssistantHistoryDialog()
+        }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { setMargins(dp(4), 0, dp(4), 0) })
+        toolbar.addView(secondaryButton("Memória") {
+            showAssistantMemoryDialog()
+        }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { setMargins(dp(4), 0, 0, 0) })
+        container.addView(toolbar, LinearLayout.LayoutParams(-1, -2))
+        addGap(container, 10)
+
+        val activeThread = runCatching {
+            assistantChatStore.listConversations(scope)
+                .firstOrNull { it.id == activeAssistantConversationId }
+        }.getOrNull()
+        if (activeThread != null) {
+            container.addView(label(activeThread.title, 15f, true, forestDeep))
             addGap(container, 6)
         }
 
-        sectionHeading(container, "Sugestões para rever", "Prioridades estimadas. Confirma os dados e decide antes de alterar qualquer coisa.")
+        val turns = try {
+            activeAssistantConversationId?.let { assistantChatStore.readTurns(scope, it) }.orEmpty()
+        } catch (error: Exception) {
+            assistantChatError = error.message ?: "Não foi possível abrir o histórico."
+            emptyList()
+        }
+
+        if (turns.isEmpty()) {
+            val welcome = makeCard(17)
+            welcome.addView(label("Olá. Em que posso ajudar com o restaurante?", 18f, true, forestDeep))
+            addGap(welcome, 7)
+            welcome.addView(label(
+                "Podes perguntar sobre custos, preços, pedidos, stock, reservas e desempenho da carta. Também podes guardar notas na Memória para as próximas conversas.",
+                12.5f, false, muted
+            ))
+            container.addView(welcome, cardParams())
+
+            val suggestions = listOf(
+                "Como posso melhorar a margem dos pratos?",
+                "Que pontos devo rever no negócio?",
+                "Faz um resumo da operação"
+            )
+            suggestions.forEach { suggestion ->
+                container.addView(secondaryButton(suggestion) {
+                    sendAssistantMessage(suggestion)
+                }, LinearLayout.LayoutParams(-1, dp(42)).apply {
+                    setMargins(0, 0, 0, dp(6))
+                })
+            }
+        } else {
+            turns.forEach { turn -> renderAssistantBubble(container, turn) }
+        }
+
+        assistantChatError?.let { error ->
+            val errorCard = makeCard(11, paleRed)
+            errorCard.addView(label(error, 11.5f, true, red))
+            container.addView(errorCard, cardParams())
+        }
+
+        addGap(container, 5)
+        sectionHeading(container, "Mensagem", "As conversas ficam guardadas no histórico deste dispositivo.")
+        val composer = multilineInputField("Escreve uma mensagem…").apply {
+            minLines = 3
+            maxLines = 5
+            setText(assistantComposerDraft)
+        }
+        container.addView(composer, LinearLayout.LayoutParams(-1, dp(96)).apply {
+            setMargins(0, dp(4), 0, dp(7))
+        })
+        container.addView(primaryButton("Enviar mensagem  ↑") {
+            assistantComposerDraft = composer.text.toString()
+            sendAssistantMessage(assistantComposerDraft)
+        }, LinearLayout.LayoutParams(-1, dp(48)))
+        addGap(container, 12)
+
+        container.addView(secondaryButton(
+            if (assistantFinancialToolsExpanded) "− Ocultar ferramentas financeiras" else "＋ Ferramentas financeiras"
+        ) {
+            assistantFinancialToolsExpanded = !assistantFinancialToolsExpanded
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(46)))
+
+        if (assistantFinancialToolsExpanded) {
+            addGap(container, 8)
+            renderEconomicManager(container)
+            if (isPremium) {
+                addGap(container, 8)
+                renderRestaurantPriceAdvisor(container)
+            }
+            addGap(container, 8)
+            val invoiceCard = makeCard(14, copperPale)
+            invoiceCard.addView(label("FATURAS DO RESTAURANTE", 9.5f, true, forestDeep))
+            addGap(invoiceCard, 6)
+            invoiceCard.addView(label(
+                "A ligação a faturas contabilísticas ainda não está configurada. O projeto não tem um arquivo de faturas de fornecedores nem ligação a um programa de faturação. O QR de fatura existente serve o fluxo de fidelização e não dá acesso ao documento contabilístico.",
+                12f, false, ink
+            ))
+            addGap(invoiceCard, 7)
+            invoiceCard.addView(label(
+                "O agente financeiro só poderá analisar documentos depois de existir uma importação segura ou integração aprovada com o programa usado pelo restaurante.",
+                11f, true, forestDeep
+            ))
+            container.addView(invoiceCard, cardParams())
+        }
+
+        addGap(container, 8)
+        container.addView(secondaryButton(
+            if (assistantAnalysisExpanded) "− Ocultar análises rápidas" else "＋ Análises rápidas"
+        ) {
+            assistantAnalysisExpanded = !assistantAnalysisExpanded
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(46)))
+        if (assistantAnalysisExpanded) {
+            addGap(container, 8)
+            renderAssistantInsights(container, assistantSnapshot())
+        }
+    }
+
+    private fun renderAssistantBubble(
+        parent: LinearLayout,
+        turn: AssistantChatStore.Turn
+    ) {
+        val isUser = turn.role == "user"
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = if (isUser) Gravity.END else Gravity.START
+            setPadding(0, dp(2), 0, dp(7))
+        }
+        val bubble = makeCard(13, if (isUser) forest else white)
+        bubble.addView(label(
+            if (isUser) "TU" else "STUDIOMESA",
+            9f,
+            true,
+            if (isUser) copper else forestSoft
+        ))
+        addGap(bubble, 5)
+        bubble.addView(label(
+            turn.content,
+            13f,
+            false,
+            if (isUser) white else ink
+        ))
+        addGap(bubble, 5)
+        val time = SimpleDateFormat("HH:mm", Locale("pt", "PT")).format(Date(turn.createdAtMillis))
+        bubble.addView(label(time, 9f, false, if (isUser) copperPale else muted).apply {
+            gravity = Gravity.END
+        })
+        val width = (resources.displayMetrics.widthPixels * 0.84f).toInt()
+        row.addView(bubble, LinearLayout.LayoutParams(width, -2))
+        parent.addView(row, LinearLayout.LayoutParams(-1, -2))
+    }
+
+    private fun sendAssistantMessage(rawMessage: String) {
+        val question = rawMessage.trim().take(1000)
+        if (question.isBlank()) {
+            Toast.makeText(this, "Escreve uma mensagem primeiro.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val scope = assistantChatScope()
+        try {
+            val conversationId = assistantChatStore.appendTurn(
+                scope,
+                activeAssistantConversationId,
+                "user",
+                question
+            )
+            activeAssistantConversationId = conversationId
+            val reply = answerAssistantChatMessage(question, scope, conversationId)
+            assistantChatStore.appendTurn(scope, conversationId, "assistant", reply)
+            assistantChatError = null
+            assistantComposerDraft = ""
+        } catch (error: Exception) {
+            assistantChatError = error.message ?: "Não foi possível guardar ou responder à mensagem."
+        }
+        renderApp()
+    }
+
+    private fun answerAssistantChatMessage(
+        question: String,
+        scope: String,
+        conversationId: String
+    ): String {
+        val normalized = java.text.Normalizer.normalize(
+            question.lowercase(Locale.ROOT),
+            java.text.Normalizer.Form.NFD
+        ).replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
+            .replace(Regex("[^a-z0-9 ]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+        val memory = assistantChatStore.readMemory(scope)
+        val asksAboutMemory = listOf(
+            "o que sabes", "o que te lembras", "do que te lembras",
+            "o que guardaste", "qual e a minha memoria", "mostra a memoria"
+        ).any { normalized.contains(it) } || normalized == "memoria"
+        if (asksAboutMemory) {
+            return if (memory.isBlank()) {
+                "Ainda não guardaste notas na Memória do assistente. Usa o botão «Memória» para registar informação útil sobre o restaurante."
+            } else {
+                "Estas são as notas guardadas na Memória deste dispositivo:\n\n$memory"
+            }
+        }
+
+        val asksAboutInvoices = listOf(
+            "fatura", "faturas", "factura", "facturas", "saft", "documento contabilistico",
+            "fatura de fornecedor", "despesa de fornecedor"
+        ).any { normalized.contains(it) }
+        if (asksAboutInvoices) {
+            return "Ainda não consigo consultar faturas contabilísticas nesta versão. O projeto não tem um arquivo de faturas de fornecedores nem uma ligação ao programa de faturação do restaurante. O QR existente está ligado à fidelização, não à leitura de documentos contabilísticos.\n\nQuando a integração estiver configurada, o agente poderá cruzar compras e custos com vendas e stock, sempre com acesso reservado ao proprietário."
+        }
+
+        val previousUserQuestion = runCatching {
+            assistantChatStore.readTurns(scope, conversationId)
+                .dropLast(1)
+                .lastOrNull { it.role == "user" }?.content
+        }.getOrNull()
+        val isShortFollowUp = normalized.length <= 35 && listOf(
+            "e como", "e porque", "porquê", "explica melhor", "mais detalhes",
+            "e depois", "e isso", "como assim"
+        ).any { normalized.startsWith(it) }
+        val questionForLocalEngine = if (isShortFollowUp && !previousUserQuestion.isNullOrBlank()) {
+            "$previousUserQuestion. Seguimento: $question"
+        } else {
+            question
+        }
+
+        val answer = StudioMesaAdvisor.answerQuestion(questionForLocalEngine, assistantSnapshot())
+        val contextNote = if (memory.isNotBlank() && listOf(
+            "restaurante", "negocio", "empresa", "equipa", "objetivo", "preferencia"
+        ).any { normalized.contains(it) }) {
+            "\n\nNota da Memória: $memory"
+        } else {
+            ""
+        }
+        return "${answer.title}\n\n${answer.response}$contextNote"
+    }
+
+    private fun showAssistantHistoryDialog() {
+        val scope = assistantChatScope()
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(4))
+        }
+        val search = inputField(
+            "Pesquisar conversas…",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        )
+        panel.addView(search, fieldParams())
+        val results = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val scroll = ScrollView(this).apply {
+            isFillViewport = false
+            addView(results)
+        }
+        panel.addView(scroll, LinearLayout.LayoutParams(-1, dp(380)))
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Histórico de conversas")
+            .setView(panel)
+            .setNegativeButton("Fechar", null)
+            .create()
+
+        fun refreshResults(query: String) {
+            results.removeAllViews()
+            val conversations = runCatching {
+                assistantChatStore.listConversations(scope, query)
+            }.getOrElse {
+                results.addView(emptyCard("Não foi possível abrir o histórico cifrado. Os dados não foram apagados."))
+                return
+            }
+            if (conversations.isEmpty()) {
+                results.addView(emptyCard(
+                    if (query.isBlank()) "Ainda não existem conversas guardadas."
+                    else "Não encontrei conversas com esse texto."
+                ))
+                return
+            }
+            conversations.forEach { conversation ->
+                val card = makeCard(12)
+                card.addView(label(conversation.title, 14f, true, forestDeep))
+                addGap(card, 4)
+                val date = SimpleDateFormat("dd/MM/yyyy · HH:mm", Locale("pt", "PT"))
+                    .format(Date(conversation.updatedAtMillis))
+                card.addView(label(
+                    "$date · ${conversation.messageCount} mensagens",
+                    10.5f, false, muted
+                ))
+                card.setOnClickListener {
+                    activeAssistantConversationId = conversation.id
+                    assistantChatError = null
+                    dialog.dismiss()
+                    renderApp()
+                }
+                card.setOnLongClickListener {
+                    AlertDialog.Builder(this)
+                        .setTitle("Eliminar conversa?")
+                        .setMessage("Esta conversa será removida do histórico deste dispositivo.")
+                        .setNegativeButton("Cancelar", null)
+                        .setPositiveButton("Eliminar") { _, _ ->
+                            runCatching {
+                                assistantChatStore.deleteConversation(scope, conversation.id)
+                            }.onFailure {
+                                Toast.makeText(this, "Não foi possível eliminar a conversa.", Toast.LENGTH_SHORT).show()
+                            }
+                            if (activeAssistantConversationId == conversation.id) {
+                                activeAssistantConversationId = null
+                            }
+                            refreshResults(search.text.toString())
+                        }
+                        .show()
+                    true
+                }
+                results.addView(card, cardParams())
+            }
+        }
+
+        search.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                refreshResults(s?.toString().orEmpty())
+            }
+            override fun afterTextChanged(s: android.text.Editable?) = Unit
+        })
+        refreshResults("")
+        dialog.show()
+    }
+
+    private fun showAssistantMemoryDialog() {
+        val scope = assistantChatScope()
+        val memory = runCatching { assistantChatStore.readMemory(scope) }.getOrDefault("")
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(4))
+        }
+        form.addView(label(
+            "Guarda informação estável que o assistente deve consultar nas próximas conversas. Evita palavras-passe, dados bancários e informação pessoal desnecessária.",
+            12f, false, muted
+        ))
+        addGap(form, 7)
+        val memoryField = multilineInputField("Ex.: tipo de restaurante, objetivos, regras da casa e preferências…").apply {
+            minLines = 6
+            maxLines = 9
+            filters = filters + InputFilter.LengthFilter(2500)
+            setText(memory)
+        }
+        form.addView(memoryField, LinearLayout.LayoutParams(-1, dp(160)))
+
+        AlertDialog.Builder(this)
+            .setTitle("Memória do assistente")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setNeutralButton("Apagar memória", null)
+            .setPositiveButton("Guardar") { _, _ ->
+                runCatching {
+                    assistantChatStore.saveMemory(scope, memoryField.text.toString())
+                }.onSuccess {
+                    Toast.makeText(this, "Memória guardada neste dispositivo.", Toast.LENGTH_SHORT).show()
+                }.onFailure {
+                    Toast.makeText(this, "Não foi possível guardar a memória.", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .create()
+            .apply {
+                setOnShowListener {
+                    getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                        AlertDialog.Builder(this@MainActivity)
+                            .setTitle("Apagar memória?")
+                            .setMessage("As notas guardadas serão eliminadas deste dispositivo.")
+                            .setNegativeButton("Cancelar", null)
+                            .setPositiveButton("Apagar") { _, _ ->
+                                runCatching { assistantChatStore.saveMemory(scope, "") }
+                                memoryField.setText("")
+                                dismiss()
+                                Toast.makeText(this@MainActivity, "Memória apagada.", Toast.LENGTH_SHORT).show()
+                            }
+                            .show()
+                    }
+                }
+                show()
+            }
+    }
+
+    private fun renderAssistantInsights(
+        container: LinearLayout,
+        snapshot: StudioMesaAssistantSnapshot
+    ) {
+        sectionHeading(
+            container,
+            "Sugestões para rever",
+            "Prioridades estimadas. Confirma os dados antes de tomar decisões."
+        )
         StudioMesaAdvisor.recommendations(snapshot).forEach { recommendation ->
             val (priorityText, textColor, backColor) = when (recommendation.priority) {
                 AssistantPriority.URGENT -> Triple("PRIORIDADE ALTA", red, paleRed)
                 AssistantPriority.ATTENTION -> Triple("A REVER", forestDeep, copperPale)
                 AssistantPriority.TIP -> Triple("SUGESTÃO", forestSoft, paleGreen)
             }
-            val card = makeCard(15)
+            val card = makeCard(14)
             card.addView(label(priorityText, 9f, true, textColor).apply {
                 setPadding(dp(8), dp(5), dp(8), dp(5))
                 background = rounded(backColor, 10)
             }, LinearLayout.LayoutParams(-2, -2))
-            addGap(card, 8)
-            card.addView(label(recommendation.title, 16f, true, forestDeep))
-            addGap(card, 5)
-            card.addView(label(recommendation.detail, 12.5f, false, muted))
+            addGap(card, 7)
+            card.addView(label(recommendation.title, 15f, true, forestDeep))
+            addGap(card, 4)
+            card.addView(label(recommendation.detail, 12f, false, muted))
             assistantActionTarget(recommendation.actionPage)?.let { target ->
-                addGap(card, 10)
-                card.addView(secondaryButton("Abrir " + target) {
+                addGap(card, 8)
+                card.addView(secondaryButton("Abrir $target") {
                     activePage = target
                     renderApp()
-                }, LinearLayout.LayoutParams(-1, dp(44)))
+                }, LinearLayout.LayoutParams(-1, dp(42)))
             }
             container.addView(card, cardParams())
         }
-        sectionHeading(container, "Engenharia da carta", "Combina unidades de pedidos concluídos com a contribuição estimada por artigo.")
+
+        sectionHeading(
+            container,
+            "Engenharia da carta",
+            "Combina vendas concluídas com a contribuição estimada por artigo."
+        )
         val engineering = StudioMesaAdvisor.menuEngineering(snapshot)
         if (!engineering.hasEnoughSales) {
             container.addView(emptyCard(
-                "Ainda não há pelo menos ${engineering.requiredUnits} unidades concluídas que correspondam aos artigos atuais (${engineering.completedUnits} encontradas). A análise não inventa popularidade."
+                "São necessárias pelo menos ${engineering.requiredUnits} unidades concluídas correspondentes aos artigos atuais. Foram encontradas ${engineering.completedUnits}."
             ), cardParams())
         } else {
-            if (!engineering.hasMarginData) {
-                container.addView(emptyCard("Existem vendas, mas faltam custos válidos nos artigos vendidos para comparar a contribuição. Confirma os custos na Carta."), cardParams())
-            }
             engineering.items.forEach { item ->
                 val title = when (item.classification) {
                     MenuEngineeringClass.STAR -> "ESTRELA"
@@ -4695,61 +5081,49 @@ class MainActivity : Activity() {
                     MenuEngineeringClass.DOG -> "REVER ARTIGO"
                     MenuEngineeringClass.MISSING_COST -> "CUSTO EM FALTA"
                 }
-                val backColor = when (item.classification) {
-                    MenuEngineeringClass.STAR -> paleGreen
-                    MenuEngineeringClass.WORKHORSE, MenuEngineeringClass.PUZZLE -> copperPale
-                    MenuEngineeringClass.DOG, MenuEngineeringClass.MISSING_COST -> paleRed
-                }
-                val card = makeCard(14)
-                card.addView(label(title, 9f, true, forestDeep).apply {
-                    setPadding(dp(8), dp(5), dp(8), dp(5))
-                    background = rounded(backColor, 10)
-                }, LinearLayout.LayoutParams(-2, -2))
-                addGap(card, 7)
-                card.addView(label(item.itemName, 16f, true, forestDeep))
+                val card = makeCard(13)
+                card.addView(label(title, 9f, true, forestDeep))
+                addGap(card, 6)
+                card.addView(label(item.itemName, 15f, true, forestDeep))
                 addGap(card, 4)
                 card.addView(label(
-                    "${item.unitsSold} unidade(s) concluídas · ${item.popularitySharePercent}% das unidades correspondentes · contribuição atual: ${item.contributionPerUnit?.let { money(it) } ?: "custo em falta"} por unidade.",
-                    11.5f, true, muted
+                    "${item.unitsSold} unidade(s) concluídas · contribuição atual: ${item.contributionPerUnit?.let { money(it) } ?: "custo em falta"} por unidade.",
+                    11f, true, muted
                 ))
                 addGap(card, 5)
-                card.addView(label(item.recommendation, 12.5f, false, ink))
+                card.addView(label(item.recommendation, 12f, false, ink))
                 container.addView(card, cardParams())
             }
-            container.addView(label(
-                "Triagem com pedidos concluídos e preço/custo atuais; não é lucro contabilístico nem custo histórico e não inclui IVA, mão de obra, desperdício ou encargos.",
-                10.5f, false, muted
-            ))
         }
 
-        sectionHeading(container, "Ideias de conteúdo", "Rascunhos para revisão; só usam nomes, descrições e preços registados na carta.")
+        sectionHeading(
+            container,
+            "Ideias de conteúdo",
+            "Rascunhos baseados apenas nos nomes, descrições e preços da carta."
+        )
         val drafts = StudioMesaAdvisor.marketingDrafts(snapshot)
         if (drafts.isEmpty()) {
             container.addView(emptyCard("Adiciona artigos com nome e preço válidos para criar rascunhos."), cardParams())
         } else {
             drafts.forEach { draft ->
-                val card = makeCard(14)
-                card.addView(label(draft.itemName, 16f, true, forestDeep))
-                addGap(card, 6)
-                card.addView(label(draft.caption, 13f, false, ink))
+                val card = makeCard(13)
+                card.addView(label(draft.itemName, 15f, true, forestDeep))
                 addGap(card, 5)
-                card.addView(label(draft.basis, 10.5f, false, muted))
-                addGap(card, 8)
+                card.addView(label(draft.caption, 12f, false, ink))
+                addGap(card, 7)
                 card.addView(secondaryButton("Copiar rascunho") {
                     copyAssistantText(draft.caption)
-                }, LinearLayout.LayoutParams(-1, dp(44)))
+                }, LinearLayout.LayoutParams(-1, dp(42)))
                 container.addView(card, cardParams())
             }
         }
 
-        addGap(container, 4)
         container.addView(label(
-            if (snapshot.isDemo) "Fonte atual: dados de demonstração locais. Liga um restaurante na secção Conta para analisar dados partilhados."
-            else "Fonte atual: dados guardados em cache pela aplicação. Confirma a última atualização antes de decidir; esta análise não verifica a conectividade em tempo real.",
-            11f, false, muted
+            if (snapshot.isDemo) "Fonte: dados de demonstração locais."
+            else "Fonte: última cache carregada pela aplicação. Confirma a atualização dos dados antes de decidir.",
+            10.5f, false, muted
         ))
     }
-
 
     private fun clearEconomicManagerState() {
         economicManagerEnabled = false
