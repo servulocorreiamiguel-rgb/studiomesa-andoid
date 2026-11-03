@@ -1110,11 +1110,15 @@ object SupabaseApi {
      */
     fun askStudioMesaAssistant(
         token: String,
+        restaurantId: String,
         message: String,
         history: JSONArray,
         memory: String
     ): JSONObject {
         require(token.isNotBlank()) { "Inicia sessão para usar a IA generativa." }
+        require(runCatching { java.util.UUID.fromString(restaurantId).toString() == restaurantId }.getOrDefault(false)) {
+            "O restaurante não está identificado."
+        }
         require(message.isNotBlank() && message.length <= 8000) { "A mensagem não é válida." }
         val safeHistory = JSONArray()
         for (index in (history.length() - 16).coerceAtLeast(0) until history.length()) {
@@ -1126,6 +1130,7 @@ object SupabaseApi {
             }
         }
         val body = JSONObject()
+            .put("restaurant_id", restaurantId)
             .put("message", message.trim())
             .put("history", safeHistory)
             .put("selected_context", memory.trim().take(2500))
