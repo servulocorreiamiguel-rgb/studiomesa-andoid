@@ -7,3 +7,9 @@ verify_jwt = true
 [functions.account-deletion-web]
 enabled = true
 verify_jwt = false
+
+[functions.studiomesa-assistant]
+enabled = true
+# The function validates Supabase user JWTs through withSupabase({ auth: "user" })
+# because modern publishable API keys are not JWTs.
+verify_jwt = false
