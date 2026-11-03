@@ -55,7 +55,7 @@ object SupabaseApi {
                 // proxy response body to the user, and always cap the displayed message.
                 val message = try {
                     val error = JSONObject(text)
-                    sequenceOf("msg", "message", "error_description")
+                    sequenceOf("msg", "message", "error_description", "error")
                         .map { key -> error.optString(key, "") }
                         .firstOrNull { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
                 } catch (_: Exception) {
