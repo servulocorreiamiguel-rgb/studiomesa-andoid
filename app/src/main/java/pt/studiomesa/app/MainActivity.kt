@@ -84,8 +84,10 @@ class MainActivity : Activity() {
     private val assistantInvoiceFileStore by lazy { AssistantInvoiceFileStore(this) }
     private var pendingInvoiceAttachmentId: String? = null
     private var pendingInvoiceExportId: String? = null
+    private var pendingInvoiceCsvScope: String? = null
     private val invoiceAttachmentRequestCode = 7101
     private val invoiceExportRequestCode = 7102
+    private val invoiceCsvExportRequestCode = 7103
     private var activeAssistantConversationId: String? = null
     private var assistantChatScopeKey: String? = null
     private var assistantComposerDraft = ""
@@ -236,6 +238,28 @@ class MainActivity : Activity() {
                     } catch (error: Exception) {
                         runOnUiThread {
                             Toast.makeText(this, error.message ?: "Não foi possível exportar o documento.", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }.start()
+            }
+            invoiceCsvExportRequestCode -> {
+                val scope = pendingInvoiceCsvScope
+                pendingInvoiceCsvScope = null
+                if (scope.isNullOrBlank() || !canManageInvoices()) return
+                Thread {
+                    try {
+                        val csv = buildInvoiceCsv(scope)
+                        appRoot.context.contentResolver.openOutputStream(uri, "wt")?.use { output ->
+                            output.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()))
+                            output.write(csv.toByteArray(Charsets.UTF_8))
+                            output.flush()
+                        } ?: throw IllegalStateException("Não foi possível escrever no ficheiro CSV.")
+                        runOnUiThread {
+                            Toast.makeText(this, "Histórico financeiro exportado em CSV.", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (error: Exception) {
+                        runOnUiThread {
+                            Toast.makeText(this, error.message ?: "Não foi possível exportar o histórico.", Toast.LENGTH_LONG).show()
                         }
                     }
                 }.start()
@@ -4977,6 +5001,10 @@ class MainActivity : Activity() {
         container.addView(secondaryButton("Ver histórico de faturas (${invoices.size})") {
             showAssistantInvoiceList(scope)
         }, LinearLayout.LayoutParams(-1, dp(44)))
+        addGap(container, 5)
+        container.addView(secondaryButton("Exportar histórico financeiro (CSV)") {
+            requestInvoiceCsvExport(scope)
+        }, LinearLayout.LayoutParams(-1, dp(44)))
         addGap(container, 7)
         container.addView(label(
             "Importação: PDF, XML, TXT, JPEG, PNG e WebP até 12 MB. Os documentos são cifrados no armazenamento privado desta instalação. A leitura automática/OCR e a sincronização cloud ainda não estão ativas.",
@@ -5189,6 +5217,56 @@ class MainActivity : Activity() {
             }
         }
         builder.show()
+    }
+
+
+    @Suppress("DEPRECATION")
+    private fun requestInvoiceCsvExport(scope: String) {
+        if (!canManageInvoices()) return
+        val invoices = runCatching { assistantChatStore.listInvoices(scope) }.getOrDefault(emptyList())
+        if (invoices.isEmpty()) {
+            Toast.makeText(this, "Não existem documentos para exportar.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        pendingInvoiceCsvScope = scope
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "text/csv"
+            putExtra(
+                Intent.EXTRA_TITLE,
+                "studiomesa-faturas-" + SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date()) + ".csv"
+            )
+        }
+        startActivityForResult(intent, invoiceCsvExportRequestCode)
+    }
+
+    private fun buildInvoiceCsv(scope: String): String {
+        val invoices = assistantChatStore.listInvoices(scope)
+        fun cell(value: String, protectFormula: Boolean = true): String {
+            val safe = if (protectFormula && value.trimStart().firstOrNull() in setOf('=', '+', '-', '@')) {
+                "'$value"
+            } else value
+            return "\"" + safe.replace("\"", "\"\"") + "\""
+        }
+        val rows = mutableListOf(
+            listOf("Tipo", "Fornecedor", "Número", "Data", "Base tributável (EUR)", "IVA (EUR)", "Total (EUR)", "Notas transcritas", "Anexo original")
+                .joinToString(";") { cell(it, false) }
+        )
+        invoices.forEach { invoice ->
+            rows += listOf(
+                if (invoice.invoiceType == "credit_note") "Nota de crédito" else "Fatura",
+                invoice.supplier,
+                invoice.number,
+                invoice.invoiceDate,
+                invoice.netAmount,
+                invoice.taxAmount,
+                invoice.totalAmount,
+                invoice.notes,
+                invoice.attachmentName.orEmpty()
+            ).mapIndexed { index, value -> cell(value, protectFormula = index in setOf(1, 2, 7, 8)) }
+                .joinToString(";")
+        }
+        return rows.joinToString("\r\n") + "\r\n"
     }
 
     @Suppress("DEPRECATION")
