@@ -379,6 +379,7 @@ DECLARE
     v_user_id uuid := (SELECT auth.uid());
     v_restaurant_id uuid;
     v_path text;
+    v_storage_object_exists boolean;
 BEGIN
     IF v_user_id IS NULL OR p_invoice_id IS NULL THEN
         RAISE EXCEPTION 'É necessário identificar a fatura e iniciar sessão.';
@@ -395,13 +396,19 @@ BEGIN
         RAISE EXCEPTION 'A fatura não pertence a esta conta.';
     END IF;
 
-    IF to_regclass('storage.objects') IS NOT NULL AND NOT EXISTS (
-        SELECT 1
-          FROM storage.objects AS o
-         WHERE o.bucket_id = 'restaurant-financial-invoices'
-           AND o.name = v_path
-    ) THEN
-        RAISE EXCEPTION 'O ficheiro PDF ainda não chegou ao arquivo privado.';
+    IF to_regclass('storage.objects') IS NOT NULL THEN
+        EXECUTE
+            'SELECT EXISTS (
+                SELECT 1
+                  FROM storage.objects AS o
+                 WHERE o.bucket_id = $1
+                   AND o.name = $2
+            )'
+        INTO v_storage_object_exists
+        USING 'restaurant-financial-invoices', v_path;
+        IF NOT v_storage_object_exists THEN
+            RAISE EXCEPTION 'O ficheiro PDF ainda não chegou ao arquivo privado.';
+        END IF;
     END IF;
 
     UPDATE private.studiomesa_financial_invoices AS i
@@ -568,52 +575,85 @@ GRANT EXECUTE ON FUNCTION private.studiomesa_assistant_business_context_internal
 CREATE OR REPLACE FUNCTION public.studiomesa_assistant_list_conversations(p_query text DEFAULT NULL)
 RETURNS TABLE (conversation_id uuid, title text, created_at timestamptz, updated_at timestamptz, last_message_preview text)
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path TO ''
-AS $function$ SELECT * FROM private.studiomesa_assistant_list_conversations_internal(p_query); $function$;
+AS $function$
+    SELECT * FROM private.studiomesa_assistant_list_conversations_internal(p_query);
+$function$;
 
 CREATE OR REPLACE FUNCTION public.studiomesa_assistant_create_conversation(p_title text DEFAULT NULL)
 RETURNS TABLE (conversation_id uuid, title text, created_at timestamptz)
 LANGUAGE sql SECURITY INVOKER SET search_path TO ''
-AS $function$ SELECT * FROM private.studiomesa_assistant_create_conversation_internal(p_title); $function$;
+AS $function$
+    SELECT * FROM private.studiomesa_assistant_create_conversation_internal(p_title);
+$function$;
 
 CREATE OR REPLACE FUNCTION public.studiomesa_assistant_list_messages(p_conversation_id uuid)
 RETURNS TABLE (message_id uuid, role text, content text, citations jsonb, created_at timestamptz)
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path TO ''
-AS $function$ SELECT * FROM private.studiomesa_assistant_list_messages_internal(p_conversation_id); $function$;
+AS $function$
+    SELECT * FROM private.studiomesa_assistant_list_messages_internal(p_conversation_id);
+$function$;
 
-CREATE OR REPLACE FUNCTION public.studiomesa_assistant_append_message(p_conversation_id uuid, p_role text, p_content text, p_citations jsonb DEFAULT '[]'::jsonb)
+CREATE OR REPLACE FUNCTION public.studiomesa_assistant_append_message(
+    p_conversation_id uuid,
+    p_role text,
+    p_content text,
+    p_citations jsonb DEFAULT '[]'::jsonb
+)
 RETURNS uuid
 LANGUAGE sql SECURITY INVOKER SET search_path TO ''
-AS $function$ SELECT private.studiomesa_assistant_append_message_internal(p_conversation_id, p_role, p_content, p_citations); $function$;
+AS $function$
+    SELECT private.studiomesa_assistant_append_message_internal(
+        p_conversation_id, p_role, p_content, p_citations
+    );
+$function$;
 
 CREATE OR REPLACE FUNCTION public.studiomesa_assistant_delete_conversation(p_conversation_id uuid)
 RETURNS void
 LANGUAGE sql SECURITY INVOKER SET search_path TO ''
-AS $function$ SELECT private.studiomesa_assistant_delete_conversation_internal(p_conversation_id); $function$;
+AS $function$
+    SELECT private.studiomesa_assistant_delete_conversation_internal(p_conversation_id);
+$function$;
 
-CREATE OR REPLACE FUNCTION public.studiomesa_assistant_register_invoice(p_invoice_id uuid, p_file_name text, p_file_size_bytes integer)
+CREATE OR REPLACE FUNCTION public.studiomesa_assistant_register_invoice(
+    p_invoice_id uuid,
+    p_file_name text,
+    p_file_size_bytes integer
+)
 RETURNS TABLE (invoice_id uuid, storage_path text)
 LANGUAGE sql SECURITY INVOKER SET search_path TO ''
-AS $function$ SELECT * FROM private.studiomesa_assistant_register_invoice_internal(p_invoice_id, p_file_name, p_file_size_bytes); $function$;
+AS $function$
+    SELECT * FROM private.studiomesa_assistant_register_invoice_internal(
+        p_invoice_id, p_file_name, p_file_size_bytes
+    );
+$function$;
 
 CREATE OR REPLACE FUNCTION public.studiomesa_assistant_complete_invoice_upload(p_invoice_id uuid)
 RETURNS boolean
 LANGUAGE sql SECURITY INVOKER SET search_path TO ''
-AS $function$ SELECT private.studiomesa_assistant_complete_invoice_upload_internal(p_invoice_id); $function$;
+AS $function$
+    SELECT private.studiomesa_assistant_complete_invoice_upload_internal(p_invoice_id);
+$function$;
 
 CREATE OR REPLACE FUNCTION public.studiomesa_assistant_list_invoices()
 RETURNS TABLE (invoice_id uuid, file_name text, file_size_bytes integer, uploaded_at timestamptz)
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path TO ''
-AS $function$ SELECT * FROM private.studiomesa_assistant_list_invoices_internal(); $function$;
+AS $function$
+    SELECT * FROM private.studiomesa_assistant_list_invoices_internal();
+$function$;
 
 CREATE OR REPLACE FUNCTION public.studiomesa_assistant_get_invoice_files(p_invoice_ids uuid[])
 RETURNS TABLE (invoice_id uuid, storage_path text, file_name text, mime_type text, file_size_bytes integer)
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path TO ''
-AS $function$ SELECT * FROM private.studiomesa_assistant_get_invoice_files_internal(p_invoice_ids); $function$;
+AS $function$
+    SELECT * FROM private.studiomesa_assistant_get_invoice_files_internal(p_invoice_ids);
+$function$;
 
 CREATE OR REPLACE FUNCTION public.studiomesa_assistant_get_business_context()
 RETURNS jsonb
 LANGUAGE sql STABLE SECURITY INVOKER SET search_path TO ''
-AS $function$ SELECT private.studiomesa_assistant_business_context_internal(); $function$;
+AS $function$
+    SELECT private.studiomesa_assistant_business_context_internal();
+$function$;
 
 REVOKE ALL ON FUNCTION public.studiomesa_assistant_list_conversations(text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.studiomesa_assistant_create_conversation(text) FROM PUBLIC, anon, authenticated;
