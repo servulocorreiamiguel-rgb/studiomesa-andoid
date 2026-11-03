@@ -33,6 +33,16 @@ class MainActivitySmokeTest {
         return packageName.contains(".profissional.") || packageName.contains(".premium.")
     }
 
+    private fun openAssistantPage() {
+        onView(withContentDescription("Abrir menu de navegação")).perform(click())
+        onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+    }
+
+    private fun openAssistantFinancialTools() {
+        openAssistantPage()
+        onView(withText("＋ Ferramentas financeiras")).perform(scrollTo(), click())
+    }
+
     @Test
     fun premiumPriceAdviserIsReadOnlyForDemoData() {
         val packageName = InstrumentationRegistry.getInstrumentation().targetContext.packageName
@@ -413,21 +423,20 @@ class MainActivitySmokeTest {
     }
 
     @Test
-    fun restaurantAssistantShowsLocalAnalysisAndAnswersPricingQuestions() {
+    fun restaurantAssistantOpensLocalChatAndReturnsPricingGuidance() {
         assumeFalse("Customer variant has its own customer navigation.", isCustomerVariant())
 
         ActivityScenario.launch(MainActivity::class.java).use {
-            onView(withContentDescription("Abrir menu de navegação")).perform(click())
-            onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            openAssistantPage()
             onView(withText("Assistente StudioMesa")).check(matches(isDisplayed()))
-            onView(withText(containsString("SEM API PAGA"))).check(matches(isDisplayed()))
-            onView(withHint("Ex.: Como posso melhorar o preço dos pratos?"))
-                .perform(scrollTo(), replaceText("Como melhorar o preço?"))
-            onView(withText("Analisar pergunta")).perform(scrollTo(), click())
-            onView(withText("Análise de preços")).perform(scrollTo()).check(matches(isDisplayed()))
-            onView(withText(containsString("Não alterei nenhum preço.")))
+            onView(withText(containsString("modelo generativo executado no próprio telemóvel")))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
+            onView(withHint("Escreve uma mensagem…"))
+                .perform(scrollTo(), replaceText("Como posso melhorar a margem dos pratos?"))
+            onView(withText("Enviar mensagem  ↑")).perform(scrollTo(), click())
+            onView(withText("TU")).perform(scrollTo()).check(matches(isDisplayed()))
+            onView(withText("STUDIOMESA")).perform(scrollTo()).check(matches(isDisplayed()))
         }
     }
 
@@ -435,8 +444,8 @@ class MainActivitySmokeTest {
     fun restaurantAssistantOffersBriefingMenuEngineeringAndMarketingDrafts() {
         assumeFalse("Customer variant has its own customer navigation.", isCustomerVariant())
         ActivityScenario.launch(MainActivity::class.java).use {
-            onView(withContentDescription("Abrir menu de navegação")).perform(click())
-            onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            openAssistantPage()
+            onView(withText("＋ Análises rápidas")).perform(scrollTo(), click())
             onView(withText("Engenharia da carta")).perform(scrollTo()).check(matches(isDisplayed()))
             onView(withText("Ideias de conteúdo")).perform(scrollTo()).check(matches(isDisplayed()))
             onView(withText("Gerar resumo da operação")).perform(scrollTo(), click())
@@ -505,8 +514,7 @@ class MainActivitySmokeTest {
         assumeFalse("Customer variant has its own customer navigation.", isCustomerVariant())
 
         ActivityScenario.launch(MainActivity::class.java).use {
-            onView(withContentDescription("Abrir menu de navegação")).perform(click())
-            onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            openAssistantFinancialTools()
 
             onView(withText("Gestor económico · opcional"))
                 .perform(scrollTo())
@@ -541,8 +549,7 @@ class MainActivitySmokeTest {
         assumeFalse("Customer variant has its own navigation.", isCustomerVariant())
 
         ActivityScenario.launch(MainActivity::class.java).use {
-            onView(withContentDescription("Abrir menu de navegação")).perform(click())
-            onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            openAssistantFinancialTools()
             onView(withText("Ativar gestão económica")).perform(scrollTo(), click())
 
             onView(withHint("Farinha | 0,2 | 2,50 | 5\nMolho | 0,1 | 4,00 | 0"))
@@ -567,8 +574,7 @@ class MainActivitySmokeTest {
         assumeFalse("Customer variant has its own navigation.", isCustomerVariant())
 
         ActivityScenario.launch(MainActivity::class.java).use {
-            onView(withContentDescription("Abrir menu de navegação")).perform(click())
-            onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            openAssistantFinancialTools()
             onView(withText("Ativar gestão económica")).perform(scrollTo(), click())
 
             onView(withHint("Ex.: 18000")).perform(scrollTo(), replaceText("1000000"))
@@ -593,8 +599,7 @@ class MainActivitySmokeTest {
         assumeFalse("Customer variant has its own navigation.", isCustomerVariant())
 
         ActivityScenario.launch(MainActivity::class.java).use {
-            onView(withContentDescription("Abrir menu de navegação")).perform(click())
-            onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            openAssistantFinancialTools()
             onView(withText("Ativar gestão económica")).perform(scrollTo(), click())
 
             onView(withHint("Frango | 20 | 23 | 6,50\nQueijo | 5 | 4 | 8,00"))
