@@ -5236,7 +5236,7 @@ class MainActivity : Activity() {
             setPadding(dp(18), dp(8), dp(18), dp(6))
         }
         content.addView(label(
-            "O OCR identificou estes valores candidatos. Confirma-os visualmente com o documento original; o reconhecimento não é uma validação fiscal.",
+            "O OCR identificou estes valores candidatos por correspondência de texto (pontuação heurística, não probabilidade). Confirma-os visualmente com o documento original; o reconhecimento não é uma validação fiscal.",
             12f, false, muted
         ))
         addGap(content, 9)
@@ -5244,7 +5244,7 @@ class MainActivity : Activity() {
         fun addCandidate(labelText: String, candidate: InvoiceExtractionSuggestionParser.Candidate?): EditText? {
             if (candidate == null) return null
             content.addView(label(
-                "$labelText · confiança estimada ${candidate.confidence}%",
+                "$labelText · correspondência textual ${candidate.confidence}/100",
                 11f, true, forestDeep
             ))
             content.addView(label("Fonte: ${candidate.evidence}", 9.5f, false, muted))
