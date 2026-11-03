@@ -51,10 +51,11 @@ class CustomerReservationFlowSmokeTest {
     private var server: MockWebServer? = null
     private lateinit var context: Context
     private lateinit var preferences: SharedPreferences
+    private lateinit var pendingPreferences: SharedPreferences
     private lateinit var secureSession: SecureSessionStore
 
     private var previousPreferences: Map<String, Any?> = emptyMap()
-    private var previousPreferenceKeys: Set<String> = emptySet()
+    private var previousPendingPreferences: Map<String, Any?> = emptyMap()
     private var previousAccessToken = ""
     private var previousRefreshToken = ""
     private var previousPendingVerifier = ""
@@ -76,16 +77,18 @@ class CustomerReservationFlowSmokeTest {
         assumeTrue("This flow runs only in the customer application.", context.packageName.endsWith(".cliente"))
 
         preferences = context.getSharedPreferences("studiomesa_backend", Context.MODE_PRIVATE)
+        pendingPreferences = context.getSharedPreferences("studiomesa_pending_requests", Context.MODE_PRIVATE)
         secureSession = SecureSessionStore(context)
 
+        previousPendingPreferences = pendingPreferences.all
         previousAccessToken = secureSession.accessToken()
         previousRefreshToken = secureSession.refreshToken()
         previousPendingVerifier = secureSession.pendingCodeVerifier()
         previousPendingFlow = secureSession.pendingCodeFlowType()
 
         val keys = setOf("user_id", "member_id", "member_restaurant_name", "local_demo_data_isolated_v1")
-        previousPreferenceKeys = keys.filter { preferences.contains(it) }.toSet()
         previousPreferences = preferences.all.filterKeys { it in keys }
+        pendingPreferences.edit().clear().commit()
 
         // Start the Activity logged out. The fake account is installed after onCreate so that
         // startup recovery does not make unrelated membership or menu requests.
@@ -127,6 +130,12 @@ class CustomerReservationFlowSmokeTest {
         runCatching { server?.shutdown() }
         if (::preferences.isInitialized && ::secureSession.isInitialized) {
             secureSession.clear()
+            val pendingEditor = pendingPreferences.edit().clear()
+            previousPendingPreferences.forEach { (key, value) ->
+                if (value is String) pendingEditor.putString(key, value)
+            }
+            pendingEditor.commit()
+
             val editor = preferences.edit()
             setOf("user_id", "member_id", "member_restaurant_name", "local_demo_data_isolated_v1")
                 .forEach { editor.remove(it) }
