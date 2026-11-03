@@ -39,7 +39,7 @@ class AssistantChatUiInstrumentedTest {
                 onView(withContentDescription("Abrir menu de navegação")).perform(click())
                 onView(withContentDescription("Abrir secção Assistente")).perform(click())
 
-                onView(withText("Histórico")).check(matches(isDisplayed())).perform(click())
+                onView(withText("Histórico")).perform(scrollTo()).check(matches(isDisplayed())).perform(click())
                 onView(withText("Histórico de conversas")).check(matches(isDisplayed()))
                 onView(withText("Fechar")).perform(click())
 
