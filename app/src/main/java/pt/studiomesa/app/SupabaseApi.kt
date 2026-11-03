@@ -1104,52 +1104,5 @@ object SupabaseApi {
     }
 
 
-    /**
-     * Calls the authenticated StudioMesa generative assistant through a Supabase Edge Function.
-     * The provider key is server-side only; this Android client sends the user's JWT.
-     */
-    fun askStudioMesaAssistant(
-        token: String,
-        restaurantId: String,
-        message: String,
-        history: JSONArray,
-        memory: String
-    ): JSONObject {
-        require(token.isNotBlank()) { "Inicia sessão para usar a IA generativa." }
-        require(runCatching { java.util.UUID.fromString(restaurantId).toString() == restaurantId }.getOrDefault(false)) {
-            "O restaurante não está identificado."
-        }
-        require(message.isNotBlank() && message.length <= 8000) { "A mensagem não é válida." }
-        val safeHistory = JSONArray()
-        for (index in (history.length() - 16).coerceAtLeast(0) until history.length()) {
-            val turn = history.optJSONObject(index) ?: continue
-            val role = turn.optString("role")
-            val text = turn.optString("content").trim().take(4000)
-            if (role in setOf("user", "assistant") && text.isNotBlank()) {
-                safeHistory.put(JSONObject().put("role", role).put("content", text))
-            }
-        }
-        val body = JSONObject()
-            .put("restaurant_id", restaurantId)
-            .put("message", message.trim())
-            .put("history", safeHistory)
-            .put("selected_context", memory.trim().take(2500))
-        val response = call(
-            "POST",
-            "/functions/v1/studiomesa-assistant",
-            body,
-            token,
-            readTimeoutMillis = 60000
-        )
-        val result = if (response.isBlank()) JSONObject() else JSONObject(response)
-        val answer = result.optString("answer").trim()
-        if (answer.isBlank()) {
-            val providerError = result.optString("error").trim()
-            throw IllegalStateException(
-                providerError.ifBlank { "A IA não devolveu uma resposta válida. Tenta novamente." }
-            )
-        }
-        return result
-    }
 
 }
