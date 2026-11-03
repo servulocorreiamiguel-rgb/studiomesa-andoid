@@ -210,8 +210,23 @@ class MainActivity : Activity() {
                         assistantChatStore.updateInvoiceAttachment(
                             scope, invoiceId, attachment.id, attachment.fileName, attachment.mimeType
                         )
+                        val extraction = runCatching {
+                            InvoiceDocumentTextExtractor.extract(applicationContext, uri, attachment.mimeType)
+                        }
+                        val recognized = extraction.getOrNull()
+                        if (recognized != null && recognized.text.isNotBlank()) {
+                            assistantChatStore.updateInvoiceExtractedText(scope, invoiceId, recognized.text)
+                        }
                         runOnUiThread {
-                            Toast.makeText(this, "Documento guardado de forma cifrada.", Toast.LENGTH_SHORT).show()
+                            val notice = when {
+                                recognized == null ->
+                                    "Documento guardado e cifrado. Não foi possível reconhecer texto automaticamente; confirma os dados visualmente."
+                                recognized.truncated ->
+                                    "Documento guardado. Texto reconhecido localmente em ${recognized.pagesProcessed} página(s), com limite de leitura atingido. Confirma os dados."
+                                else ->
+                                    "Documento guardado. Texto reconhecido localmente em ${recognized.pagesProcessed} página(s). Confirma fornecedor, datas e valores antes de usar."
+                            }
+                            Toast.makeText(this, notice, Toast.LENGTH_LONG).show()
                             showAssistantInvoiceDetails(scope, invoiceId)
                         }
                     } catch (error: Exception) {
@@ -5208,7 +5223,12 @@ class MainActivity : Activity() {
             append("Base tributável: ").append(money(BigDecimal(invoice.netAmount))).append("\n")
             append("IVA: ").append(money(BigDecimal(invoice.taxAmount))).append("\n")
             append("Total: ").append(money(BigDecimal(invoice.totalAmount))).append("\n\n")
-            append("Notas / linhas: ").append(invoice.notes.ifBlank { "Sem notas transcritas." })
+            append("Notas / linhas introduzidas: ").append(invoice.notes.ifBlank { "Sem notas transcritas." })
+            if (invoice.extractedText.isNotBlank()) {
+                append("\n\nTexto reconhecido localmente (OCR/XML; confirma manualmente):\n")
+                append(invoice.extractedText.take(5000))
+                if (invoice.extractedText.length > 5000) append("\n[Texto cortado nesta vista; a versão completa fica guardada no arquivo.]")
+            }
             append("\n\n")
             append(if (invoice.attachmentId == null) "Sem documento original anexado." else "Anexo: ${invoice.attachmentName}")
         }
