@@ -3,6 +3,7 @@ package pt.studiomesa.app
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.click
+import androidx.test.espresso.action.ViewActions.closeSoftKeyboard
 import androidx.test.espresso.action.ViewActions.replaceText
 import androidx.test.espresso.action.ViewActions.scrollTo
 import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
@@ -612,6 +613,7 @@ class MainActivitySmokeTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
             onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            onView(withText("＋ Ferramentas financeiras")).perform(scrollTo(), click())
             onView(withText("Ativar gestão económica")).perform(scrollTo(), click())
 
             onView(withHint("Frango | 20 | 23 | 6,50\nQueijo | 5 | 4 | 8,00"))
