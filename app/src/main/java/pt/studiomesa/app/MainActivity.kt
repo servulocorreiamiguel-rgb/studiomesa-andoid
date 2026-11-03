@@ -5262,10 +5262,13 @@ class MainActivity : Activity() {
         )
         val terms = normalized.split(Regex("[^a-z0-9]+"))
             .filter { it.length >= 3 && it !in stopWords }
+        fun normalizeInvoiceSearch(value: String): String =
+            java.text.Normalizer.normalize(value.lowercase(Locale.ROOT), java.text.Normalizer.Form.NFD)
+                .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
         val supplierMatches = if (terms.isEmpty()) emptyList() else periodInvoices.filter { invoice ->
-            terms.any {
-                invoice.supplier.lowercase().contains(it) || invoice.number.lowercase().contains(it)
-            }
+            val supplierText = normalizeInvoiceSearch(invoice.supplier)
+            val numberText = normalizeInvoiceSearch(invoice.number)
+            terms.any { supplierText.contains(it) || numberText.contains(it) }
         }
         val selected = if (supplierMatches.isNotEmpty()) supplierMatches else periodInvoices
         if (selected.isEmpty()) {
