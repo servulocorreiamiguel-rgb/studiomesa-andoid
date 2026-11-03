@@ -293,6 +293,26 @@ class AssistantChatStore(context: Context) {
     }
 
     @Synchronized
+    fun clearInvoiceAttachment(scope: String, invoiceId: String) {
+        val root = load(scope)
+        val invoices = root.optJSONArray("invoices") ?: JSONArray()
+        var found = false
+        for (index in 0 until invoices.length()) {
+            val item = invoices.optJSONObject(index) ?: continue
+            if (item.optString("id") == invoiceId) {
+                item.put("attachment_id", JSONObject.NULL)
+                item.put("attachment_name", JSONObject.NULL)
+                item.put("attachment_mime_type", JSONObject.NULL)
+                found = true
+                break
+            }
+        }
+        require(found) { "A fatura já não existe no histórico." }
+        root.put("invoices", invoices)
+        save(scope, root)
+    }
+
+    @Synchronized
     fun deleteInvoice(scope: String, invoiceId: String): String? {
         val root = load(scope)
         val invoices = root.optJSONArray("invoices") ?: JSONArray()
