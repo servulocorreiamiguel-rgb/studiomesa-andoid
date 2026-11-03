@@ -4,7 +4,6 @@ import android.app.Activity
 import android.app.Dialog
 import android.content.ClipData
 import android.content.Intent
-import android.net.Uri
 import android.content.ClipboardManager
 import android.content.res.ColorStateList
 import android.app.AlertDialog
@@ -4963,7 +4962,7 @@ class MainActivity : Activity() {
         val card = makeCard(14, copperPale)
         card.addView(label("DOCUMENTOS REGISTADOS", 9.5f, true, forestDeep))
         addGap(card, 5)
-        card.addView(label("\${invoices.size} documentos · compras líquidas registadas: \${money(netTotal)}", 14f, true, forestDeep))
+        card.addView(label("${invoices.size} documentos · compras líquidas registadas: ${money(netTotal)}", 14f, true, forestDeep))
         addGap(card, 5)
         card.addView(label("Inclui apenas documentos introduzidos e conferidos. Não é uma integração automática com a contabilidade.", 11f, false, muted))
         container.addView(card, cardParams())
@@ -4972,7 +4971,7 @@ class MainActivity : Activity() {
             showAssistantInvoiceForm(scope)
         }, LinearLayout.LayoutParams(-1, dp(46)))
         addGap(container, 5)
-        container.addView(secondaryButton("Ver histórico de faturas (\${invoices.size})") {
+        container.addView(secondaryButton("Ver histórico de faturas (${invoices.size})") {
             showAssistantInvoiceList(scope)
         }, LinearLayout.LayoutParams(-1, dp(44)))
         addGap(container, 7)
@@ -5108,10 +5107,10 @@ class MainActivity : Activity() {
             }
             invoices.forEach { invoice ->
                 val card = makeCard(12)
-                card.addView(label("\${invoice.supplier} · \${invoice.number.ifBlank { "Sem número" }}", 14f, true, forestDeep))
+                card.addView(label("${invoice.supplier} · ${invoice.number.ifBlank { "Sem número" }}", 14f, true, forestDeep))
                 addGap(card, 3)
                 val typeLabel = if (invoice.invoiceType == "credit_note") "Nota de crédito" else "Fatura"
-                card.addView(label("$typeLabel · \${invoice.invoiceDate} · \${money(BigDecimal(invoice.totalAmount))}", 11f, false, muted))
+                card.addView(label("$typeLabel · ${invoice.invoiceDate} · ${money(BigDecimal(invoice.totalAmount))}", 11f, false, muted))
                 if (invoice.attachmentId != null) {
                     card.addView(label("Documento original anexado", 10f, true, forestSoft))
                 }
@@ -5166,7 +5165,7 @@ class MainActivity : Activity() {
             append("Total: ").append(money(BigDecimal(invoice.totalAmount))).append("\n\n")
             append("Notas / linhas: ").append(invoice.notes.ifBlank { "Sem notas transcritas." })
             append("\n\n")
-            append(if (invoice.attachmentId == null) "Sem documento original anexado." else "Anexo: \${invoice.attachmentName}")
+            append(if (invoice.attachmentId == null) "Sem documento original anexado." else "Anexo: ${invoice.attachmentName}")
         }
         val builder = AlertDialog.Builder(this)
             .setTitle("Documento financeiro")
@@ -5257,7 +5256,7 @@ class MainActivity : Activity() {
         }
         val selected = if (supplierMatches.isNotEmpty()) supplierMatches else periodInvoices
         if (selected.isEmpty()) {
-            return "Não encontrei faturas registadas para o período pedido. O arquivo tem \${all.size} documentos no total; não vou estimar valores para um período sem registos."
+            return "Não encontrei faturas registadas para o período pedido. O arquivo tem ${all.size} documentos no total; não vou estimar valores para um período sem registos."
         }
         val invoices = selected.filter { it.invoiceType == "invoice" }
         val credits = selected.filter { it.invoiceType == "credit_note" }
