@@ -17,6 +17,9 @@ import org.hamcrest.Matchers.containsString
 import org.hamcrest.Matchers.not
 import org.junit.Assume.assumeFalse
 import org.junit.Assume.assumeTrue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -24,6 +27,38 @@ import org.junit.Test
  * Keep these independent of production credentials: all actions use fresh local demo data.
  */
 class MainActivitySmokeTest {
+    @Test
+    fun encryptedEconomicStorePersistsOnlyWithinTheSameOwnerScope() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val store = SecureEconomicStore(context)
+        val ownerScope = "restaurant:ci-${java.util.UUID.randomUUID()}:owner-a"
+        val otherOwnerScope = "restaurant:ci-${java.util.UUID.randomUUID()}:owner-b"
+        val values = mapOf(
+            "sales" to "12000,50",
+            "food" to "3600",
+            "scenarioSalesChange" to "-5",
+            "supplierQuotes" to "Tomate | Fornecedor A | kg | 10 | 16,00",
+            "not-an-approved-key" to "must-not-be-stored"
+        )
+
+        try {
+            store.save(ownerScope, values)
+
+            assertTrue(store.hasSaved(ownerScope))
+            assertFalse(store.hasSaved(otherOwnerScope))
+            assertEquals(
+                values.filterKeys { it in setOf("sales", "food", "scenarioSalesChange", "supplierQuotes") },
+                store.load(ownerScope)
+            )
+            assertTrue(store.load(otherOwnerScope).isEmpty())
+            assertTrue(store.delete(ownerScope))
+            assertFalse(store.hasSaved(ownerScope))
+        } finally {
+            store.delete(ownerScope)
+            store.delete(otherOwnerScope)
+        }
+    }
+
     private fun isCustomerVariant(): Boolean =
         InstrumentationRegistry.getInstrumentation()
             .targetContext.packageName.endsWith(".cliente")
@@ -421,9 +456,9 @@ class MainActivitySmokeTest {
             onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
             onView(withText("Assistente StudioMesa")).check(matches(isDisplayed()))
             onView(withText(containsString("SEM API PAGA"))).check(matches(isDisplayed()))
-            onView(withHint("Ex.: Como posso melhorar o preço dos pratos?"))
+            onView(withHint("Escreve a tua pergunta…"))
                 .perform(scrollTo(), replaceText("Como melhorar o preço?"))
-            onView(withText("Analisar pergunta")).perform(scrollTo(), click())
+            onView(withContentDescription("Enviar pergunta ao assistente")).perform(scrollTo(), click())
             onView(withText("Análise de preços")).perform(scrollTo()).check(matches(isDisplayed()))
             onView(withText(containsString("Não alterei nenhum preço.")))
                 .perform(scrollTo())
@@ -458,6 +493,36 @@ class MainActivitySmokeTest {
         ActivityScenario.launch<MainActivity>(callback).use {
             onView(withText("Ligação de autenticação inválida"))
                 .check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
+    fun customerNavigationDrawerIsAvailableOnCustomerVariants() {
+        assumeTrue("Restaurant variant uses the management navigation.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withContentDescription("Abrir menu de navegação")).perform(click())
+            onView(withText("A MINHA EXPERIÊNCIA")).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Carta")).perform(click())
+            onView(withText("Descobre o menu.")).check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
+    fun customerReservationEntryMatchesTheSelectedPlan() {
+        assumeTrue("This navigation is only available in customer variants.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withContentDescription("Abrir menu de navegação")).perform(click())
+            if (isCalculatorAvailable()) {
+                onView(withContentDescription("Abrir secção Reservas")).check(matches(isDisplayed()))
+                onView(withContentDescription("Abrir secção Reservas")).perform(click())
+                onView(withText("As minhas reservas.")).check(matches(isDisplayed()))
+                onView(withText(containsString("Inicia sessão para pedir uma reserva")))
+                    .check(matches(isDisplayed()))
+            } else {
+                onView(withContentDescription("Abrir secção Reservas")).check(doesNotExist())
+            }
         }
     }
 
@@ -501,13 +566,14 @@ class MainActivitySmokeTest {
 
 
     @Test
-    fun restaurantEconomicManagerIsOptionalAndCalculatesMonthlyIndicators() {
+    fun restaurantEconomicManagerIsOptionalAndCalculatesMonthlyIndicatorsOnDedicatedPage() {
         assumeFalse("Customer variant has its own customer navigation.", isCustomerVariant())
 
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
-            onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            onView(withContentDescription("Abrir secção Gestão económica")).perform(scrollTo(), click())
 
+            onView(withText("Gestão económica")).check(matches(isDisplayed()))
             onView(withText("Gestor económico · opcional"))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
@@ -531,6 +597,28 @@ class MainActivitySmokeTest {
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
             onView(withText(containsString("Ponto de equilíbrio mensal estimado")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+
+            onView(withHint("Ex.: -10 para uma quebra de 10%"))
+                .perform(scrollTo(), replaceText("-10"))
+            onView(withHint("Ex.: 5 para um aumento de 5%"))
+                .perform(scrollTo(), replaceText("5"))
+            onView(withHint("Ex.: 2 para um aumento de 2%"))
+                .perform(scrollTo(), replaceText("0"))
+            onView(withHint("Ex.: -3 para uma redução de 3%"))
+                .perform(scrollTo(), replaceText("0"))
+            onView(withText("Simular impacto no resultado"))
+                .perform(scrollTo(), click())
+            onView(withText(containsString("Resultado no cenário")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+
+            onView(withHint("Ex.: 26")).perform(scrollTo(), replaceText("26"))
+            onView(withHint("Ex.: 22,50")).perform(scrollTo(), replaceText("20"))
+            onView(withText("Calcular meta diária"))
+                .perform(scrollTo(), click())
+            onView(withText(containsString("Clientes estimados por dia")))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
         }

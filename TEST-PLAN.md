@@ -61,13 +61,14 @@ Os casos ACCT-01 a ACCT-06 são **pendentes de teste ponta a ponta com contas de
 | ACCT-05 | Proprietário / confirmação | Remover os restantes membros da conta de teste, confirmar duas vezes e eliminar proprietário | Conta, restaurante e dados operacionais associados são eliminados; não sobra fila de eliminação pendente |
 | ACCT-06 | Erro / expiração | Forçar falha antes de o Auth Admin apagar o utilizador ou deixar a fila ultrapassar 15 minutos | A fila é cancelada ou expira e não elimina o restaurante por si só |
 | ACCT-07 | Eliminação web / email | Pedir ligação na página externa, abrir a ligação no mesmo navegador, escolher eliminação de conta e confirmar | O utilizador autenticado consegue enviar um pedido; email inválido/sem conta não revela se a conta existe; a conta é eliminada apenas após confirmação e verificação do servidor |
-| ACCT-08 | Redirecionamento web | Tentar magic link antes e depois de permitir o URL da página em Supabase Auth Redirect URLs | Antes da configuração, a ligação falha de forma segura; depois de autorizado, regressa à página externa e estabelece uma sessão válida |
+| ACCT-08 | Redirecionamento web | Testar o link de autenticação/recuperação antes e depois de permitir o URL exacto da página em Supabase Auth Redirect URLs | Antes da configuração, a ligação falha de forma segura; depois de autorizado, regressa à mesma página/navegador e estabelece sessão PKCE válida |
+| ACCT-11 | Entrega de emails externos | Com SMTP próprio configurado, pedir confirmação de registo e recuperação para dois emails externos de teste, verificar caixa de entrada/spam, remetente, SPF/DKIM e abertura do link no OPPO | O serviço entrega os dois emails, o link regressa a `studiomesa://auth-callback`, o código PKCE é trocado uma vez e a sessão é guardada em Android Keystore. O SMTP predefinido Supabase não conta: só envia para membros da equipa da organização |
 | ACCT-09 | Concorrência / proprietário | Entre a confirmação inicial e a eliminação autenticada, associar um segundo membro ao restaurante de teste | O gatilho volta a verificar os membros e reverte a eliminação do Auth; não elimina o restaurante nem a nova equipa |
-| ACCT-10 | Segurança / enumeração de emails | Com duas contas descartáveis — uma existente e outra inexistente — comparar a resposta HTTP e o tempo do endpoint Auth chamado por `signInWithOtp` com `shouldCreateUser=false` | A página apresenta a mesma mensagem genérica em sucesso/erro, mas o teste deve também verificar a API diretamente. Não considerar a proteção suficiente se status/corpo/tempo revelarem a existência; este comportamento foi reportado na [issue pública Supabase Auth #1547](https://github.com/supabase/auth/issues/1547). Bloqueio aberto até validar mitigação suportada. |
+| ACCT-10 | Segurança / enumeração de emails | Com duas contas descartáveis — uma existente e outra inexistente — testar a função que está efectivamente publicada e a versão candidata em ambiente controlado; comparar status, corpo e tempo da resposta Auth e confirmar que a mensagem visível é igual | A versão publicada observada no projecto ainda usa `signInWithOtp` com `shouldCreateUser=false`; a branch candidata usa `resetPasswordForEmail` com PKCE, mas não se presume que isso elimine enumeração. A issue [Supabase Auth #1547](https://github.com/supabase/auth/issues/1547) descreve o risco do fluxo OTP. Não aprovar até testar o comportamento real após publicar a versão revista. |
 
 ## Execução automatizada disponível
 
-O workflow `.github/workflows/android.yml` compila as cinco variantes debug, executa os testes unitários das cinco variantes de distribuição, Android Lint, a configuração de release com uma chave descartável de CI, a reprodução de migrações/testes de autorização PostgreSQL e testes instrumentados de interface em Android 8 (API 26) e Android 16 (API 36). A suite inclui testes de `PriceCalculator`, `RestaurantEconomicManager`, `AuthCallbackParser` e `StockDecimalValidator`, além de regressões de interface para a calculadora, formulário de login do cliente, gestor económico e callback PKCE. Estes testes não validam credenciais reais, OAuth/SMTP alojado, recuperação de conta por email, rede intermitente real, restauração de backups ou todos os fluxos de negócio ponta a ponta. Confirmar a execução CI do commit exato candidato à distribuição antes de considerar a versão validada.
+O workflow `.github/workflows/android.yml` compila as cinco variantes debug, executa os testes unitários das cinco variantes de distribuição, Android Lint, a configuração de release com uma chave descartável de CI, a reprodução de migrações/testes de autorização PostgreSQL e testes instrumentados de interface em Android 8 (API 26) e Android 16 (API 36). A CI #863, no commit `c5c8ee67205aff34ca45ea6e945f3118e901cc36`, passou em todos os quatro trabalhos: 46 migrações reproduzidas, testes PostgreSQL/autorização, compilação/testes/Lint e smoke tests nos cinco perfis em ambos os emuladores. Cada emulador reportou 135 casos agregados, 78 executados, 57 ignorados por não se aplicarem à variante e zero falhas. Estes testes não validam credenciais reais, OAuth/SMTP alojado, recuperação de conta por email, rede intermitente real, restauração de backups ou todos os fluxos de negócio ponta a ponta.
 
 Comando de compilação usado pelo workflow:
 
@@ -82,7 +83,7 @@ gradle --no-daemon assembleEssencialRestauranteDebug assembleProfissionalRestaur
 | Revisão das restrições SQL de quantidade/fase/nota | Inspecionada na estrutura da base de dados; não equivale a teste funcional |
 | Testes manuais em Android | Não executados nesta sessão |
 | Testes unitários de lógica | Existem testes para calculadora de preços, gestor económico, parser PKCE e precisão de stock, executados nas cinco variantes. As alterações recentes de precisão económica no PR #58 ainda aguardam CI completo. |
-| Testes instrumentados/funcionais em Android | O workflow executa smoke tests de interface nos emuladores Android 8 e Android 16 para as cinco variantes; inclui formulário de login, calculadora, gestor económico e callback de autenticação. A execução integrada do commit atual tem de terminar com sucesso antes de distribuir. Não valida credenciais reais, OAuth/SMTP por email, rede real ou operações completas ponta a ponta. |
+| Testes instrumentados/funcionais em Android | A CI #863 passou nos cinco perfis em Android 8 e Android 16: 78 testes executados por emulador, 57 ignorados por não se aplicarem à variante e zero falhas. Inclui formulário de login, calculadora, gestor económico e callback de autenticação. Não valida credenciais reais, OAuth/SMTP por email, rede real ou operações completas ponta a ponta; repetir com dois dispositivos físicos antes da venda. |
 | Compilação CI, testes unitários do parser e Android Lint | Verificar sempre a execução GitHub Actions do commit candidato a distribuição; uma execução aprovada não substitui testes de negócio em Android. |
 | Testes de rede e concorrência | Não executados |
 | Teste de isolamento e papéis | Teste transacional live: duas contas viram apenas os dados do próprio restaurante nas cinco tabelas centrais; as RPCs de criação de stock/reserva para o restaurante alheio foram recusadas. Uma conta `staff` foi recusada ao consultar equipa, renovar códigos e remover membro. Dados temporários revertidos e ausência de resíduos confirmada. O E2E com Android/sessões reais e restantes RPCs continua pendente. |
@@ -207,7 +208,7 @@ A aplicação consulta apenas os pedidos ativos a cada 15 segundos quando a sec�
 | WST-08 | Histórico | Consultar o registo de desperdício | Só aparecem movimentos negativos com o prefixo de desperdício, por ordem mais recente; a consulta indica o limite de 100 registos |
 | WST-09 | Inválido | Observação com mais de 350 caracteres | Rejeitada antes do envio |
 
-O registo guarda quantidade e motivo no histórico de movimentos de stock existente. Não calcula o custo financeiro da perda enquanto não existir um custo de aquisição unitário fiável por artigo.
+O registo guarda quantidade e motivo no histórico de movimentos. Quando existe custo de aquisição conhecido, os novos movimentos preservam uma fotografia desse custo e permitem estimar o valor das perdas. Movimentos antigos sem custo continuam desconhecidos.
 
 ## Atualização automática do inventário
 
@@ -221,6 +222,25 @@ O registo guarda quantidade e motivo no histórico de movimentos de stock existe
 | STK-06 | Isolamento | Trocar de sessão/restaurante enquanto uma leitura está pendente | A resposta antiga não substitui o inventário da nova conta/restaurante |
 
 A atualização periódica é polling, não uma subscrição Supabase Realtime, e só funciona com a página Stock visível e a aplicação em primeiro plano.
+
+## Receitas e consumo automático de stock
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| RCP-01 | Configuração | Associar um artigo da carta a um ingrediente, quantidade por dose e desperdício | A linha fica guardada no restaurante correto; a receita permanece desligada |
+| RCP-02 | Permissões | Funcionário tenta ativar ou desativar consumo automático | O servidor rejeita; só o proprietário pode aprovar |
+| RCP-03 | Reaprovação | Editar ou remover uma linha depois de a receita estar ativa | A receita fica automaticamente desligada até nova aprovação do proprietário |
+| RCP-04 | Cálculo | Pedido de duas doses com 0,300 kg por dose e 5% de desperdício | Desconto de 0,632 kg, arredondado conservadoramente a três casas decimais |
+| RCP-05 | Transação | Preparar pedido com stock suficiente em todos os ingredientes | Estado e todos os movimentos são gravados na mesma transação |
+| RCP-06 | Falta de stock | Um ingrediente não tem quantidade suficiente | A alteração de estado falha; não fica nenhum movimento nem desconto parcial |
+| RCP-07 | Idempotência | Reabrir e voltar a preparar o mesmo pedido | Não desconta os ingredientes novamente |
+| RCP-08 | Cancelamento | Cancelar um pedido ainda não preparado | Não consome stock |
+| RCP-09 | Compatibilidade | Preparar um pedido antigo sem menu_item_id | Mantém o fluxo antigo e não tenta deduzir ingredientes |
+| RCP-10 | Isolamento | Conta de outro restaurante tenta consultar, editar ou ativar receita | RLS/RPC impedem a leitura e a operação |
+| RCP-11 | Unidades | Configurar ingredientes com unidades incompatíveis | A aplicação explica que não há conversão automática; a equipa tem de manter unidades compatíveis |
+
+O servidor é a autoridade final para quantidades e stock. Os ensaios de CI usam uma base PostgreSQL descartável; a validação em dois dispositivos físicos continua pendente.
+
 ## Custo unitário de compra e valorização do desperdício
 
 | ID | Categoria | Ação / dados | Resultado esperado / estado |
@@ -236,6 +256,136 @@ A atualização periódica é polling, não uma subscrição Supabase Realtime, 
 | UCV-09 | Isolamento | Tentar consultar ou alterar custo de artigo de outro restaurante | Operação recusada pelas verificações de autorização e RLS |
 | UCV-10 | Arredondamento | Multiplicar 0,500 por 0,0500 € | A estimativa da perda é 0,03 € com arredondamento HALF_UP |
 
-A migration `20261030120000_inventory_unit_cost_and_waste_snapshots.sql` tem de estar aplicada no Supabase antes de testar a nova versão Android. Estes casos exigem CI aprovada e testes ponta a ponta com contas descartáveis; a CI, por si só, não valida a configuração do projeto Supabase de produção.\n## Assistente económico ligado ao inventário\n\n| ID | Categoria | Ação / dados | Resultado esperado / estado |\n|---|---|---|---|\n| ASI-01 | Fonte de dados | Abrir o Assistente com o inventário Premium carregado | A IA recebe unidade, quantidade, limite mínimo e custo unitário atual de cada artigo |\n| ASI-02 | Stock específico | Arroz: 2 kg disponíveis, mínimo 5 kg e custo 3,5000 €/kg | Responde 2 kg, custo unitário, valor estimado de 7,00 € e custo indicativo de 10,50 € para voltar ao mínimo |\n| ASI-03 | Valor global | Somar artigos com custo conhecido e excluir artigo sem custo | Apresenta apenas a soma conhecida e indica quantos artigos ficaram excluídos |\n| ASI-04 | Dados em falta | Todos os artigos sem custo unitário | Não inventa o valor do stock; indica que é necessário preencher custos |\n| ASI-05 | Cache não confirmada | Perguntar pelo valor do stock antes de carregar/atualizar inventário | Não mostra valores guardados numa cache não confirmada |\n| ASI-06 | Reposição | Artigo abaixo do limite mínimo, com custo unitário conhecido | Calcula apenas a quantidade e o custo para atingir o limite mínimo configurado; não cria encomenda |\n| ASI-07 | Limite de recomendação | Artigo acima do limite mínimo | Não sugere reposição nem gasto desnecessário |\n| ASI-08 | Sem custo | Artigo abaixo do limite mas sem custo de compra | Mostra o alerta de stock baixo sem inventar custo de reposição |
+A migration `20261030120000_inventory_unit_cost_and_waste_snapshots.sql` tem de estar aplicada no Supabase antes de testar a nova versão Android. Estes casos exigem CI aprovada e testes ponta a ponta com contas descartáveis; a CI, por si só, não valida a configuração do projeto Supabase de produção.
+## Assistente económico ligado ao inventário
+
+| ID | Categoria | Ação / dados | Resultado esperado / estado |
+|---|---|---|---|
+| ASI-01 | Fonte de dados | Abrir o Assistente com o inventário Premium carregado | A IA recebe unidade, quantidade, limite mínimo e custo unitário atual de cada artigo |
+| ASI-02 | Stock específico | Arroz: 2 kg disponíveis, mínimo 5 kg e custo 3,5000 €/kg | Responde 2 kg, custo unitário, valor estimado de 7,00 € e custo indicativo de 10,50 € para voltar ao mínimo |
+| ASI-03 | Valor global | Somar artigos com custo conhecido e excluir artigo sem custo | Apresenta apenas a soma conhecida e indica quantos artigos ficaram excluídos |
+| ASI-04 | Dados em falta | Todos os artigos sem custo unitário | Não inventa o valor do stock; indica que é necessário preencher custos |
+| ASI-05 | Cache não confirmada | Perguntar pelo valor do stock antes de carregar/atualizar inventário | Não mostra valores guardados numa cache não confirmada |
+| ASI-06 | Reposição | Artigo abaixo do limite mínimo, com custo unitário conhecido | Calcula apenas a quantidade e o custo para atingir o limite mínimo configurado; não cria encomenda |
+| ASI-07 | Limite de recomendação | Artigo acima do limite mínimo | Não sugere reposição nem gasto desnecessário |
+| ASI-08 | Sem custo | Artigo abaixo do limite mas sem custo de compra | Mostra o alerta de stock baixo sem inventar custo de reposição |
 | ASI-09 | Frescura | Inventário atualizado há menos de cinco minutos e leitura bem-sucedida | A IA pode utilizar quantidades e custos confirmados |
-| ASI-10 | Cache antiga/falha | Última leitura há mais de cinco minutos, sem leitura nesta sessão ou falha da atualização | A IA não apresenta valores de stock e pede atualização na secção Stock |\n\nOs valores de stock são estimativas ao custo de compra atual e não incluem portes, embalagens, descontos, IVA recuperável, perdas futuras ou condições de fornecedor. Não são uma avaliação FIFO/custo médio nem uma ordem de compra.\n
+| ASI-10 | Cache antiga/falha | Última leitura há mais de cinco minutos, sem leitura nesta sessão ou falha da atualização | A IA não apresenta valores de stock e pede atualização na secção Stock |
+
+Os valores de stock são estimativas ao custo de compra atual e não incluem portes, embalagens, descontos, IVA recuperável, perdas futuras ou condições de fornecedor. Não são uma avaliação FIFO/custo médio nem uma ordem de compra.
+
+
+## Identidade estável e fotografia histórica dos pedidos
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| ORD-01 | Ligação à carta | Criar pedido de artigo ativo no mesmo restaurante | Guarda o UUID do artigo, nome, preço por unidade e custo conhecido no momento |
+| ORD-02 | Imutabilidade | Editar nome, preço e custo do artigo depois de criar o pedido | Pedido antigo mantém os valores fotografados |
+| ORD-03 | Compatibilidade | Consultar pedido anterior à migração, sem `menu_item_id` | Pedido mantém-se visível e os campos novos permanecem desconhecidos |
+| ORD-04 | Arquivo/remoção | Arquivar artigo e, em teste de base de dados, remover definitivamente o artigo ligado a um pedido | Arquivar impede nova seleção; remover o registo não apaga o pedido nem os valores históricos e deixa o UUID a NULL |
+| ORD-05 | Isolamento | Tentar associar a um pedido A um artigo pertencente ao restaurante B | Chave estrangeira composta rejeita a escrita |
+| ORD-06 | Validação | Enviar custo interno negativo | Restrição da base de dados rejeita o pedido |
+| ORD-07 | Custo desconhecido | Artigo sem custo interno positivo confirmado | O pedido guarda custo NULL e não inventa custo zero |
+| ORD-08 | Repetição | Repetir a mesma criação após perda de resposta, mantendo o UUID de tentativa; alterar depois a fotografia com a mesma chave | Repetição idêntica é reconhecida; payload diferente não é aceite como a mesma tentativa |
+| ORD-09 | Fonte autoritativa | Enviar deliberadamente nome, preço e custo falsificados no pedido com UUID de artigo válido | Trigger invoker substitui os três campos pelos valores actuais da carta consultada no servidor |
+| ORD-10 | Arquivado | Enviar novo pedido para um artigo inativo/arquivado | Trigger recusa o pedido; pedidos antigos permanecem válidos |
+| ORD-11 | Imutabilidade | Tentar actualizar nome, preço ou custo de um pedido existente via REST | Trigger recusa a alteração; a eliminação do artigo da carta pode apenas desligar o UUID, sem mudar as fotografias |
+
+As migrações `20261030130000_order_menu_item_and_cost_snapshots.sql` e `20261030140000_server_owned_order_menu_snapshots.sql` tem de ser aplicada antes de disponibilizar esta versão Android. Esta fase ainda **não desconta ingredientes**. A ligação de fichas técnicas e o consumo automático só podem avançar depois de revisão das unidades, receitas, transações e testes de concorrência descritos em `RECIPE-INVENTORY-LINK-DESIGN-2026-10-30.md`.
+
+## Revisão final de experiência, painel e gestão económica
+
+Estes casos ficam reservados à ronda final, depois de o design e as funcionalidades estarem fechados. Não são considerados executados por terem sido documentados.
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| UX-01 | Painel | Abrir Início em modo demonstração | Mostra indicadores locais, identifica claramente dados de demonstração e não apresenta uma sincronização inexistente |
+| UX-02 | Sincronização | Atualizar mesas, carta e pedidos com conta de teste | Mostra a hora da última sincronização concluída; não afirma atualização em tempo real |
+| UX-03 | Isolamento | Mudar de conta para um restaurante diferente no mesmo dispositivo | Remove a cache operacional do restaurante anterior antes de apresentar dados do novo |
+| UX-04 | Navegação | Abrir e fechar o menu lateral em todas as variantes de restaurante e cliente | Secções visíveis e selecionadas correspondem ao perfil; nenhuma opção fica cortada num ecrã de telemóvel |
+| CUS-01 | Pesquisa da carta | Pesquisar por nome, categoria e descrição | Apresenta apenas os artigos correspondentes e conserva os preços publicados |
+| CUS-02 | Pesquisa sem acentos | Pesquisar pao para encontrar pão; repetir com maiúsculas/minúsculas | Correspondência sem distinção de acentos ou capitalização |
+| CUS-03 | Alergénios | Pesquisar um alergénio declarado e consultar o texto de segurança | Mostra artigos correspondentes; continua a instruir o cliente a confirmar com a equipa |
+| CUS-04 | Sem resultados | Pesquisar texto inexistente e depois limpar | Mostra estado vazio claro; Limpar repõe a carta completa |
+| CUS-05 | Fidelização | Copiar o código de cliente a partir do cartão | Copia exatamente o código apresentado, sem alterar pontos ou associação |
+| ECON-11 | Simulador | Base: vendas 10 000 €, alimentação 3 000 €, pessoal 2 500 €, fixos 2 000 €, variáveis 500 €; simular vendas -10%, alimentação +5%, pessoal 0%, variáveis 0% | Resultado base e cenário são apresentados, com diferença de resultado claramente identificada; nenhum registo é alterado |
+| ECON-12 | Simulador / limites | Introduzir variações abaixo de -100%, acima de 300%, texto ou mais de duas casas decimais | Rejeição controlada com indicação do campo; sem resultados parciais ou alterações |
+| ECON-13 | Simulador / zero | Reduzir vendas exatamente 100% | Rejeitado porque não há vendas positivas para calcular rácios e ponto de equilíbrio |
+| ECON-14 | Meta diária | Introduzir ponto de equilíbrio válido, 26 dias e ticket médio líquido de 20 € | Apresenta vendas diárias necessárias e arredonda clientes por dia para cima |
+| ECON-15 | Meta diária / limites | Introduzir 0, 32 ou 2,5 dias; ticket médio zero/negativo | Rejeita os valores e explica os limites |
+| ECON-16 | Permissões | Abrir Gestão económica com funcionário autenticado | A secção não é apresentada no menu e o acesso direto é recusado pela interface; o servidor continua a ser a autoridade para operações financeiras |
+| ECON-17 | Cópia cifrada | Proprietário guarda valores, fecha/reabre a aplicação e carrega a cópia no mesmo dispositivo/conta/restaurante | Recupera apenas os campos permitidos; relatórios são recalculados, não são tratados como dados guardados |
+| ECON-18 | Isolamento da cópia | Tentar carregar a cópia com outro utilizador ou outro restaurante | Não devolve os valores de outra conta/restaurante |
+| ECON-19 | Integridade | Alterar bytes do ficheiro cifrado ou usar uma cópia truncada | A autenticação AES-GCM falha de forma controlada; não apresenta valores corrompidos |
+| ECON-20 | Eliminação | Apagar a cópia cifrada no ecrã de confirmação | O ficheiro da conta/restaurante é removido; os dados do servidor não são alterados |
+| ECON-21 | Privacidade | Inspecionar armazenamento e configuração de backup Android | O identificador de conta não aparece no nome do ficheiro, os valores não estão em texto simples e o ficheiro está em noBackupFilesDir |
+| ECON-22 | Demonstração | Ativar o gestor em modo de demonstração | A cópia persistente não é oferecida; os valores continuam apenas na sessão |
+| UX-05 | Separação funcional | Abrir Assistente e Gestão económica através do menu e do painel | Conversa, recomendações e engenharia da carta ficam separadas dos formulários e ferramentas financeiras |
+| UX-06 | Regressão de planos | Abrir as cinco variantes e confirmar a navegação conforme o plano e tipo de aplicação | Cliente só vê Cartão, Carta e Conta; versões de restaurante mostram as suas secções permitidas |
+
+A aprovação final exige CI completa nas cinco variantes, testes instrumentados nos emuladores Android 8 e 16, e validação manual em dispositivos reais. Os fluxos financeiros e a cópia cifrada devem usar contas e valores fictícios.
+
+## Pedidos de reserva na aplicação de cliente
+
+Estes casos ficam reservados à ronda final. O cliente só pode criar pedidos através do cartão de fidelização associado à própria conta; o restaurante continua a decidir a confirmação e a atribuição de mesa.
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| CRES-01 | Associação | Cliente autenticado sem cartão associado abre Reservas | Não é permitido criar pedido; é encaminhado para a associação ao restaurante |
+| CRES-02 | Criação | Cliente associado pede reserva futura para 2 pessoas | É criada uma reserva Pendente, ligada ao membro autenticado, sem mesa atribuída e com duração padrão de 90 minutos |
+| CRES-03 | Permissões | Cliente altera manualmente o UUID do cartão para o cartão de outra pessoa | RPC recusa a criação; nenhum pedido é criado |
+| CRES-04 | Isolamento | Cliente A consulta o UUID da reserva de Cliente B através da REST API | RLS não devolve os dados de B |
+| CRES-05 | Isolamento | Cliente A tenta cancelar uma reserva pertencente a Cliente B | RPC recusa; a reserva de B mantém o estado original |
+| CRES-06 | Idempotência | Repetir a mesma criação depois de perder a resposta HTTP, incluindo depois de a equipa atribuir mesa ou alterar o nome do cartão | Devolve o ID original; existe apenas uma reserva e a atribuição/estado já atualizados mantêm-se |
+| CRES-07 | Idempotência / payload diferente | Reutilizar a chave de criação com data, pessoas, contacto ou notas diferentes | RPC rejeita a tentativa; a reserva original não é alterada |
+| CRES-08 | Dados inválidos | Pessoas fora de 1–60, data passada, data superior a um ano, contacto acima de 40 ou notas acima de 1000 caracteres | App e servidor rejeitam sem criar reservas |
+| CRES-09 | Cancelamento | Titular cancela o próprio pedido Pendente ou Confirmado com data futura | Estado passa a Cancelada; a lista do cliente e a agenda do restaurante refletem o estado |
+| CRES-10 | Cancelamento / repetição | Repetir o cancelamento após perda da resposta | A operação é reconhecida como já concluída; não apresenta um falso erro |
+| CRES-11 | Estado | Cliente tenta cancelar uma reserva Concluída, Não compareceu ou com data passada | RPC recusa; o estado não muda |
+| CRES-12 | Visibilidade do restaurante | Proprietário abre a agenda de reservas após pedido de cliente | Vê o pedido como Pendente, identifica que veio da aplicação de cliente e pode confirmar ou cancelar |
+| CRES-13 | Privacidade | Terminar sessão e iniciar sessão com outra conta no mesmo dispositivo | A lista em memória é limpa e não mostra pedidos da conta anterior |
+| CRES-14 | Rede | Perder a resposta após criar ou cancelar, recuperar ligação e atualizar a lista | Não duplica a criação; o estado final confirmado no servidor é apresentado |
+| CRES-15 | Migração | Reproduzir as 47 migrações desde uma base vazia | A coluna de membro, índice, política RLS, duas RPCs de cliente e RPC de atribuição de mesa existem; as funções não concedem execução a anon/PUBLIC |
+| CRES-16 | Compatibilidade | Consultar reservas antigas sem loyalty_member_id | Continuam visíveis ao pessoal; não são mostradas à conta de cliente por associação presumida |
+
+A migração `20261031130000_customer_reservation_requests.sql` não deve ser aplicada ao Supabase alojado sem backup cifrado, ensaio de restauro, plano de reversão e rollout controlado. A CI usa uma base de dados descartável; a validação live e em dispositivos reais continua pendente.
+
+## Atribuição de mesas a pedidos de reserva
+
+Estes casos são executados na ronda final. A app do restaurante pode atribuir ou alterar a mesa de uma reserva futura pendente ou confirmada; o servidor é a autoridade final para capacidade e conflitos.
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| RTA-01 | Normal | Proprietário atribui uma mesa existente com lugares suficientes a uma reserva futura | O número da mesa fica associado à reserva e aparece atualizado na agenda |
+| RTA-02 | Idempotência | Repetir a atribuição da mesma mesa à mesma reserva | Termina sem erro e sem duplicar reservas |
+| RTA-03 | Capacidade | Reserva de 3 pessoas numa mesa com 2 lugares | Servidor rejeita; a mesa da reserva não é alterada |
+| RTA-04 | Conflito | Duas reservas pendentes/confirmadas sobrepostas tentam usar a mesma mesa | A segunda atribuição é rejeitada no servidor |
+| RTA-05 | Concorrência | Duas equipas tentam atribuir a mesma mesa em horários sobrepostos | O bloqueio da linha da mesa serializa as operações; no máximo uma atribuição incompatível é aceite |
+| RTA-06 | Permissões | Cliente ou utilizador de outro restaurante tenta atribuir uma mesa | RPC recusa antes de bloquear ou alterar a reserva |
+| RTA-07 | Estado | Tentar atribuir mesa a reserva cancelada, concluída, não compareceu ou passada | Operação recusada |
+| RTA-08 | Reatribuição | Alterar a mesa de uma reserva ativa para outra mesa livre e adequada | A nova mesa é atribuída se capacidade e horário forem válidos |
+| RTA-09 | Privacidade | Ler ou bloquear uma reserva de outro restaurante sem pertencer à equipa | Não é devolvida nem bloqueada por uma operação não autorizada |
+
+## Filtros e resumo da agenda de reservas
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| RFL-01 | Resumo | Abrir a agenda com reservas pendentes, confirmadas e terminadas | Os três indicadores mostram as contagens correspondentes aos dados recebidos |
+| RFL-02 | Pendentes | Selecionar o filtro Pendentes | Só aparecem reservas com estado Pendente |
+| RFL-03 | Confirmadas | Selecionar o filtro Confirmadas | Só aparecem reservas Confirmadas |
+| RFL-04 | Hoje | Selecionar o filtro Hoje perto da mudança de dia e nas datas de mudança de horário de verão | Mostra as reservas do dia local correto sem perder ou duplicar reservas na fronteira do dia |
+| RFL-05 | Sem resultados | Escolher um filtro sem reservas correspondentes | Mostra uma mensagem específica e mantém disponível a escolha de outro filtro |
+| RFL-06 | Atualização | Atualizar a agenda depois de confirmar, cancelar ou atribuir mesa | Os indicadores e a lista correspondem à resposta mais recente do servidor |
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| CRES-17 | Data/hora / interface | Abrir o formulário de reserva na app de cliente | Usa seletores nativos de calendário e relógio; não exige escrita manual de data |
+| CRES-18 | Data/hora / limites | Tentar escolher dia passado ou mais de um ano no futuro; escolher hoje com uma hora já passada | O calendário limita os dias disponíveis e a validação final impede uma hora passada |
+| CRES-19 | Fuso horário | Selecionar data/hora local e consultar a reserva no cliente e na agenda do restaurante | A mesma hora é apresentada no fuso local dos dispositivos, sem deslocamento indevido no formato ISO |
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| CRES-20 | Plano / navegação | Abrir a aplicação de cliente nos pacotes Essencial, Profissional e Premium | Essencial não apresenta Reservas; Profissional e Premium apresentam a área de pedidos de reserva, em linha com a disponibilidade da gestão no restaurante |
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| CRES-21 | Histórico do cliente | Consultar várias reservas pendentes, confirmadas, canceladas e concluídas; alternar entre Todas, Ativas e Histórico | Os contadores e filtros mostram apenas o grupo selecionado; a mudança de conta repõe o filtro e não mantém dados da conta anterior |

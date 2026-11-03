@@ -96,6 +96,28 @@ object SupabaseApi {
         return if (response.isBlank()) JSONObject() else JSONObject(response)
     }
 
+    private fun pagedArray(token: String, basePath: String, maxRows: Int): JSONArray {
+        require(maxRows in 1..10000) { "O limite da consulta não é válido." }
+        val combined = JSONArray()
+        var offset = 0
+        val pageSize = 500
+        while (offset <= maxRows) {
+            val requested = minOf(pageSize, maxRows + 1 - offset)
+            val page = JSONArray(call(
+                "GET",
+                "$basePath&limit=$requested&offset=$offset",
+                null,
+                token
+            ))
+            for (index in 0 until page.length()) {
+                combined.put(page.getJSONObject(index))
+            }
+            if (page.length() < requested) break
+            offset += page.length()
+        }
+        return combined
+    }
+
     fun signIn(email: String, password: String): Session {
         val result = jsonCall("POST", "/auth/v1/token?grant_type=password",
             JSONObject().put("email", email.trim()).put("password", password))
@@ -348,6 +370,15 @@ object SupabaseApi {
         ))
     }
 
+    fun listMenuItemsForEconomicAnalysis(token: String, restaurantId: String): JSONArray {
+        val encoded = URLEncoder.encode(restaurantId, "UTF-8")
+        return pagedArray(
+            token,
+            "/rest/v1/menu_items?select=id,name,price,cost,is_active&restaurant_id=eq.$encoded&is_active=eq.true&order=name.asc,id.asc",
+            maxRows = 500
+        )
+    }
+
     /**
      * Uses the client-generated row ID as the retry key. If a POST committed but its
      * response was lost, a retry can verify the same row instead of creating a duplicate.
@@ -565,7 +596,7 @@ object SupabaseApi {
         val loadedRows = OrderHistoryPagination.collect { offset, limit ->
             val page = JSONArray(call(
                 "GET",
-                "/rest/v1/restaurant_orders?select=id,table_number,item_name,amount,quantity,service_course,notes,status,created_at&restaurant_id=eq.$encoded&order=created_at.desc,id.desc&limit=$limit&offset=$offset",
+                "/rest/v1/restaurant_orders?select=id,menu_item_id,unit_cost_snapshot,table_number,item_name,amount,quantity,service_course,notes,status,created_at&restaurant_id=eq.$encoded&order=created_at.desc,id.desc&limit=$limit&offset=$offset",
                 null,
                 token
             ))
@@ -598,14 +629,31 @@ object SupabaseApi {
         quantity: Int,
         serviceCourse: String,
         notes: String,
-        requestId: String
+        requestId: String,
+        menuItemId: String? = null,
+        unitCostSnapshot: BigDecimal? = null
     ) {
         require(runCatching { java.util.UUID.fromString(requestId).toString() == requestId }.getOrDefault(false)) {
             "O identificador da tentativa de pedido não é válido."
         }
+        if (!menuItemId.isNullOrBlank()) {
+            require(runCatching { java.util.UUID.fromString(menuItemId).toString() == menuItemId }.getOrDefault(false)) {
+                "O artigo selecionado não tem um identificador válido."
+            }
+        }
+        if (unitCostSnapshot != null) {
+            require(unitCostSnapshot >= BigDecimal.ZERO && unitCostSnapshot.scale() <= 2 &&
+                unitCostSnapshot <= BigDecimal("99999999.99")) {
+                "O custo registado no pedido não é válido."
+            }
+        }
+        require(amount.isFinite() && amount >= 0.0 && amount <= 99999999.99)
+        require(quantity in 1..99)
+
         val body = JSONObject()
             .put("id", requestId)
             .put("restaurant_id", restaurantId)
+            .put("menu_item_id", menuItemId ?: JSONObject.NULL)
             .put("table_number", tableNumber)
             .put("item_name", itemName)
             .put("amount", amount)
@@ -613,6 +661,8 @@ object SupabaseApi {
             .put("service_course", serviceCourse)
             .put("notes", notes.trim())
             .put("status", "Aberto")
+        if (!menuItemId.isNullOrBlank()) body.put("menu_item_id", menuItemId)
+        if (unitCostSnapshot != null) body.put("unit_cost_snapshot", unitCostSnapshot)
 
         try {
             mutateRows(
@@ -624,29 +674,42 @@ object SupabaseApi {
             )
         } catch (writeError: Exception) {
             // The request may have committed while its HTTP response was lost.
-            // Reuse the client-generated primary key and verify the saved row before
-            // reporting success, rather than inserting a duplicate on retry.
+            // Reuse the client-generated primary key and verify every snapshot field.
             val existingMatches = runCatching {
                 val encodedId = URLEncoder.encode(requestId, "UTF-8")
                 val rows = JSONArray(call(
                     "GET",
-                    "/rest/v1/restaurant_orders?select=id,restaurant_id,table_number,item_name,amount,quantity,service_course,notes,created_by&id=eq.$encodedId",
+                    "/rest/v1/restaurant_orders?select=id,restaurant_id,table_number,item_name,amount,quantity,service_course,notes,created_by,menu_item_id,unit_cost_snapshot&id=eq.$encodedId",
                     null,
                     token
                 ))
                 val row = rows.optJSONObject(0)
                 val userId = getUser(token).optString("id")
+                val savedCostIsNull = row?.isNull("unit_cost_snapshot") == true
+                val savedCost = if (savedCostIsNull) null else {
+                    row?.optString("unit_cost_snapshot")?.toBigDecimalOrNull()
+                }
+                val snapshotMatches = row != null && OrderCreateRetryMatcher.matches(
+                    requestedMenuItemId = menuItemId,
+                    savedMenuItemId = row.optString("menu_item_id").takeIf { it.isNotBlank() },
+                    requestedItemName = itemName,
+                    savedItemName = row.optString("item_name"),
+                    requestedAmount = amount,
+                    savedAmount = row.optDouble("amount", Double.NaN),
+                    requestedUnitCost = unitCostSnapshot,
+                    savedUnitCost = savedCost,
+                    savedUnitCostIsNull = savedCostIsNull
+                )
                 row != null &&
                     userId.isNotBlank() &&
                     row.optString("id") == requestId &&
                     row.optString("restaurant_id") == restaurantId &&
                     row.optString("created_by") == userId &&
                     row.optInt("table_number") == tableNumber &&
-                    row.optString("item_name") == itemName &&
-                    kotlin.math.abs(row.optDouble("amount", Double.NaN) - amount) < 0.000001 &&
                     row.optInt("quantity") == quantity &&
                     row.optString("service_course") == serviceCourse &&
-                    row.optString("notes") == notes.trim()
+                    row.optString("notes") == notes.trim() &&
+                    snapshotMatches
             }.getOrDefault(false)
             if (!existingMatches) throw writeError
         }
@@ -810,12 +873,105 @@ object SupabaseApi {
     }
     fun listInventoryItems(token: String, restaurantId: String): JSONArray {
         val encoded = URLEncoder.encode(restaurantId, "UTF-8")
-        return JSONArray(call(
+        return pagedArray(
+            token,
+            "/rest/v1/restaurant_inventory_items?select=id,name,unit,quantity,low_stock_threshold,unit_cost_per_unit,updated_at&restaurant_id=eq.$encoded&order=name.asc,id.asc",
+            maxRows = 2000
+        )
+    }
+
+    fun getRestaurantRecipe(
+        token: String,
+        restaurantId: String,
+        menuItemId: String
+    ): JSONObject? {
+        val encodedRestaurant = URLEncoder.encode(restaurantId, "UTF-8")
+        val encodedMenuItem = URLEncoder.encode(menuItemId, "UTF-8")
+        val rows = JSONArray(call(
             "GET",
-            "/rest/v1/restaurant_inventory_items?select=id,name,unit,quantity,low_stock_threshold,unit_cost_per_unit,updated_at&restaurant_id=eq.$encoded&order=name.asc",
+            "/rest/v1/restaurant_recipes?select=id,menu_item_id,is_active,requires_review,updated_at&restaurant_id=eq.$encodedRestaurant&menu_item_id=eq.$encodedMenuItem&limit=1",
             null,
             token
         ))
+        return rows.optJSONObject(0)
+    }
+
+    fun listRestaurantRecipes(token: String, restaurantId: String): JSONArray {
+        val encoded = URLEncoder.encode(restaurantId, "UTF-8")
+        return pagedArray(
+            token,
+            "/rest/v1/restaurant_recipes?select=id,menu_item_id,is_active,requires_review&restaurant_id=eq.$encoded&order=menu_item_id.asc,id.asc",
+            maxRows = 500
+        )
+    }
+
+    fun listRestaurantRecipeIngredients(token: String, restaurantId: String): JSONArray {
+        val encoded = URLEncoder.encode(restaurantId, "UTF-8")
+        return pagedArray(
+            token,
+            "/rest/v1/restaurant_recipe_ingredients?select=recipe_id,inventory_item_id,quantity_per_portion,waste_percent,inventory_unit_snapshot&restaurant_id=eq.$encoded&order=recipe_id.asc,inventory_item_id.asc",
+            maxRows = 3000
+        )
+    }
+
+    fun saveRecipeIngredient(
+        token: String,
+        restaurantId: String,
+        menuItemId: String,
+        inventoryItemId: String,
+        quantityPerPortion: BigDecimal,
+        wastePercent: BigDecimal
+    ): String {
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/save_restaurant_recipe_ingredient",
+            JSONObject()
+                .put("p_restaurant_id", restaurantId)
+                .put("p_menu_item_id", menuItemId)
+                .put("p_inventory_item_id", inventoryItemId)
+                .put("p_quantity_per_portion", quantityPerPortion)
+                .put("p_waste_percent", wastePercent),
+            token
+        )
+        val recipeId = response.trim().trim('"')
+        require(runCatching { java.util.UUID.fromString(recipeId).toString() == recipeId }.getOrDefault(false)) {
+            "O servidor não confirmou a gravação da receita."
+        }
+        return recipeId
+    }
+
+    fun removeRecipeIngredient(token: String, recipeId: String, inventoryItemId: String) {
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/remove_restaurant_recipe_ingredient",
+            JSONObject()
+                .put("p_recipe_id", recipeId)
+                .put("p_inventory_item_id", inventoryItemId),
+            token
+        )
+        if (!response.trim().trim('"').equals("true", ignoreCase = true)) {
+            throw IllegalStateException("O servidor não confirmou a remoção do ingrediente.")
+        }
+    }
+
+    fun setRecipeActive(
+        token: String,
+        restaurantId: String,
+        menuItemId: String,
+        enabled: Boolean
+    ) {
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/set_restaurant_recipe_active",
+            JSONObject()
+                .put("p_restaurant_id", restaurantId)
+                .put("p_menu_item_id", menuItemId)
+                .put("p_is_active", enabled),
+            token
+        )
+        if (!response.trim().trim('"').equals(enabled.toString(), ignoreCase = true)) {
+            throw IllegalStateException("O servidor não confirmou o estado da receita.")
+        }
     }
 
     fun saveInventoryItem(
@@ -1002,7 +1158,7 @@ object SupabaseApi {
         val encoded = URLEncoder.encode(itemId, "UTF-8")
         return JSONArray(call(
             "GET",
-            "/rest/v1/restaurant_inventory_movements?select=delta,quantity_after,note,created_at&item_id=eq.$encoded&order=created_at.desc&limit=30",
+            "/rest/v1/restaurant_inventory_movements?select=delta,quantity_after,note,created_at,unit_at_movement,unit_cost_at_movement&item_id=eq.$encoded&order=created_at.desc&limit=30",
             null,
             token
         ))
@@ -1018,7 +1174,7 @@ object SupabaseApi {
         val encodedWastePrefix = URLEncoder.encode(InventoryWasteNotes.PREFIX + "%", "UTF-8")
         return JSONArray(call(
             "GET",
-            "/rest/v1/restaurant_inventory_movements?select=item_id,delta,note,created_at,unit_cost_at_movement&restaurant_id=eq.$encodedRestaurant&delta=lt.0&note=like.$encodedWastePrefix&order=created_at.desc&limit=$limit",
+            "/rest/v1/restaurant_inventory_movements?select=item_id,delta,note,created_at,unit_at_movement,unit_cost_at_movement&restaurant_id=eq.$encodedRestaurant&delta=lt.0&note=like.$encodedWastePrefix&order=created_at.desc&limit=$limit",
             null,
             token
         ))
@@ -1026,12 +1182,104 @@ object SupabaseApi {
 
     fun listReservations(token: String, restaurantId: String): JSONArray {
         val encoded = URLEncoder.encode(restaurantId, "UTF-8")
-        return JSONArray(call(
-            "GET",
-            "/rest/v1/restaurant_reservations?select=id,guest_name,guest_phone,party_size,reservation_at,duration_minutes,table_number,status,notes,created_at&restaurant_id=eq.$encoded&order=reservation_at.asc&limit=200",
-            null,
+        val loadedRows = OrderHistoryPagination.collect(recordLabel = "reservas") { offset, limit ->
+            val page = JSONArray(call(
+                "GET",
+                "/rest/v1/restaurant_reservations?select=id,guest_name,guest_phone,party_size,reservation_at,duration_minutes,table_number,status,notes,created_at,loyalty_member_id&restaurant_id=eq.$encoded&order=reservation_at.asc,id.asc&limit=$limit&offset=$offset",
+                null,
+                token
+            ))
+            (0 until page.length()).map { index ->
+                page.optJSONObject(index)
+                    ?: throw IllegalStateException("O servidor devolveu uma reserva com formato inválido.")
+            }
+        }
+        return JSONArray().also { result -> loadedRows.forEach { result.put(it) } }
+    }
+
+    fun listCustomerReservations(token: String, memberId: String): JSONArray {
+        require(runCatching { java.util.UUID.fromString(memberId).toString() == memberId }.getOrDefault(false)) {
+            "O cartão de cliente não é válido."
+        }
+        val encoded = URLEncoder.encode(memberId, "UTF-8")
+        val loadedRows = OrderHistoryPagination.collect(recordLabel = "reservas") { offset, limit ->
+            val page = JSONArray(call(
+                "GET",
+                "/rest/v1/restaurant_reservations?select=id,guest_name,guest_phone,party_size,reservation_at,duration_minutes,table_number,status,notes,created_at,loyalty_member_id&loyalty_member_id=eq.$encoded&order=reservation_at.asc,id.asc&limit=$limit&offset=$offset",
+                null,
+                token
+            ))
+            (0 until page.length()).map { index ->
+                page.optJSONObject(index)
+                    ?: throw IllegalStateException("O servidor devolveu uma reserva com formato inválido.")
+            }
+        }
+        return JSONArray().also { result -> loadedRows.forEach { result.put(it) } }
+    }
+
+    fun createCustomerReservationRequest(
+        token: String,
+        requestId: String,
+        memberId: String,
+        partySize: Int,
+        reservationAt: String,
+        guestPhone: String,
+        notes: String
+    ): String {
+        require(runCatching { java.util.UUID.fromString(requestId).toString() == requestId }.getOrDefault(false)) {
+            "O identificador da tentativa de reserva não é válido."
+        }
+        require(runCatching { java.util.UUID.fromString(memberId).toString() == memberId }.getOrDefault(false)) {
+            "O cartão de cliente não é válido."
+        }
+        require(partySize in 1..60) { "O número de pessoas deve estar entre 1 e 60." }
+        require(guestPhone.length <= 40 && notes.length <= 1000) {
+            "O contacto ou as notas excedem o limite permitido."
+        }
+        val body = JSONObject()
+            .put("p_client_request_id", requestId)
+            .put("p_member_id", memberId)
+            .put("p_party_size", partySize)
+            .put("p_reservation_at", reservationAt)
+            .put("p_guest_phone", guestPhone.trim())
+            .put("p_notes", notes.trim())
+        val reservationId = call(
+            "POST",
+            "/rest/v1/rpc/create_customer_reservation_request",
+            body,
             token
-        ))
+        ).trim().trim('"')
+        require(runCatching { java.util.UUID.fromString(reservationId).toString() == reservationId }.getOrDefault(false)) {
+            "O servidor não confirmou o pedido de reserva. Atualiza a lista antes de voltar a tentar."
+        }
+        return reservationId
+    }
+
+    fun cancelMyCustomerReservation(token: String, reservationId: String) {
+        require(runCatching { java.util.UUID.fromString(reservationId).toString() == reservationId }.getOrDefault(false)) {
+            "O pedido de reserva não é válido."
+        }
+        call(
+            "POST",
+            "/rest/v1/rpc/cancel_my_customer_reservation",
+            JSONObject().put("p_reservation_id", reservationId),
+            token
+        )
+    }
+
+    fun assignReservationTable(token: String, reservationId: String, tableNumber: Int) {
+        require(runCatching { java.util.UUID.fromString(reservationId).toString() == reservationId }.getOrDefault(false)) {
+            "A reserva não é válida."
+        }
+        require(tableNumber in 1..100) { "O número da mesa deve estar entre 1 e 100." }
+        call(
+            "POST",
+            "/rest/v1/rpc/assign_restaurant_reservation_table",
+            JSONObject()
+                .put("p_reservation_id", reservationId)
+                .put("p_table_number", tableNumber),
+            token
+        )
     }
 
     fun createReservation(
