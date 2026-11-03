@@ -5402,7 +5402,8 @@ class MainActivity : Activity() {
         val asksForInvoiceContents = listOf(
             "que produtos", "quais produtos", "que artigos", "quais artigos",
             "o que consta", "o que contem", "conteudo da fatura", "conteudo das faturas",
-            "linhas da fatura", "itens da fatura", "lista os produtos", "descrimina os artigos"
+            "linhas da fatura", "itens da fatura", "lista os produtos", "descrimina os artigos",
+            "que mercadoria", "que materiais"
         ).any { normalized.contains(it) } || normalized.contains("itens comprados")
         if (asksForInvoiceContents) {
             val documents = selected.mapNotNull { invoice ->
@@ -5411,29 +5412,6 @@ class MainActivity : Activity() {
                     val label = if (invoice.invoiceType == "credit_note") "Nota de crédito" else "Fatura"
                     "$label · ${invoice.supplier} · ${invoice.number} · ${invoice.invoiceDate}\n" +
                         "Texto transcrito/reconhecido (não validado):\n" + content.take(3500)
-                }
-            }
-            return if (documents.isEmpty()) {
-                "Encontrei ${selected.size} documento(s), mas não têm texto OCR nem linhas transcritas. Abre os detalhes da fatura e anexa um PDF, XML ou imagem legível. O texto reconhecido tem sempre de ser conferido por uma pessoa."
-            } else {
-                "Conteúdo disponível dos documentos selecionados — texto OCR/transcrito, sujeito a erros e confirmação:\n\n" +
-                    documents.take(5).joinToString("\n\n---\n\n") +
-                    "\n\nNão trate este texto como validação fiscal nem como valores contabilísticos confirmados."
-            }
-        }
-        val asksForInvoiceContents = listOf(
-            "que produtos", "quais produtos", "que artigos", "quais artigos",
-            "o que consta", "o que contem", "conteudo da fatura", "conteudo das faturas",
-            "linhas da fatura", "itens da fatura", "lista os produtos", "descrimina os artigos",
-            "que mercadoria", "que materiais"
-        ).any { normalized.contains(it) } || normalized.contains("itens comprados")
-        if (asksForInvoiceContents) {
-            val documents = selected.mapNotNull { invoice ->
-                val documentText = invoice.extractedText.ifBlank { invoice.notes }.trim()
-                if (documentText.isBlank()) null else {
-                    val label = if (invoice.invoiceType == "credit_note") "Nota de crédito" else "Fatura"
-                    "$label · ${invoice.supplier} · ${invoice.number} · ${invoice.invoiceDate}\n" +
-                        "Texto transcrito/reconhecido (não validado):\n" + documentText.take(3500)
                 }
             }
             return if (documents.isEmpty()) {
