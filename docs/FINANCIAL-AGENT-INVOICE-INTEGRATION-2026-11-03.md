@@ -2,7 +2,7 @@
 
 ## Estado atual
 
-O StudioMesa ainda não armazena faturas contabilísticas de fornecedores nem está ligado a um programa de faturação ou contabilidade. O QR usado no percurso de fidelização não é acesso ao documento fiscal nem um arquivo de despesas. Não se deve mostrar ao utilizador que o agente já consulta documentos que não foram importados.
+O StudioMesa tem agora um arquivo local cifrado de faturas e notas de crédito. O proprietário regista e confirma fornecedor, número, data, base tributável, IVA, total e linhas/notas; também pode anexar um documento original e pesquisar o histórico. O agente consulta os valores registados e apresenta totais, notas de crédito, IVA e valores por fornecedor. O QR usado na fidelização continua a não ser acesso ao documento fiscal nem um arquivo de despesas. A aplicação ainda não está ligada a um programa de faturação ou contabilidade e não extrai automaticamente campos de PDFs.
 
 ## O que os formatos portugueses permitem
 
@@ -21,14 +21,14 @@ A Autoridade Tributária e Aduaneira descreve o SAF-T (PT) como um ficheiro XML 
 7. Limitar visualização e importação ao proprietário ou a uma permissão financeira explícita. Registar auditoria de quem importou, consultou, exportou ou apagou documentos; não transmitir documentos para um fornecedor de IA sem consentimento e minimização de dados.
 8. Não tratar a análise do agente como contabilidade certificada, validação fiscal ou substituto do contabilista.
 
-## Bloqueios antes de implementar
+## O que já está implementado localmente\n\n- Registo manual validado de faturas e notas de crédito, com controlo de duplicados por fornecedor, número e data.\n- Arquivo e pesquisa acessíveis na secção «Ferramentas financeiras».\n- Anexo original cifrado com AES-GCM e chave do Android Keystore; PDF, XML, TXT, JPEG, PNG e WebP até 12 MB; exportação e eliminação do anexo.\n- Resumo no chat de faturas, notas de crédito, compras líquidas registadas, IVA líquido e totais por fornecedor.\n- Valores e notas são introduzidos/conferidos pelo proprietário. A aplicação não afirma ter lido automaticamente o conteúdo do documento.\n\n## Bloqueios antes de uma integração automática
 
 - Escolher o programa de faturação e o programa de contabilidade/gestão de fornecedores do primeiro restaurante.
 - Confirmar formatos e API oficialmente documentados por esses fornecedores.
 - Reconciliar as migrações do Supabase, conforme supabase/MIGRATION-RECONCILIATION-2026-11-02.md, antes de criar tabelas ou buckets no projeto alojado.
 - Definir armazenamento cifrado, retenção, backups, RLS por restaurante e acesso exclusivo do proprietário.
-- Criar amostras anonimizadas para testes de extração, duplicados, notas de crédito, IVA, documentos ilegíveis e datas/valores inconsistentes.
+- Criar amostras anonimizadas para futuros testes de extração/OCR, duplicados, notas de crédito, IVA, documentos ilegíveis e datas/valores inconsistentes.
 
-## Regra do produto
+## Limites da versão atual\n\nO arquivo de faturas e a memória financeira são locais à instalação e ficam separados por utilizador/restaurante; não há sincronização entre telemóveis nem backup cloud. O anexo original é cifrado, mas os campos numéricos são transcritos e validados manualmente. O ficheiro PDF/XML não é ainda interpretado automaticamente. A base Supabase de produção não foi alterada, porque a reconciliação documentada do histórico de migrações ainda bloqueia novas migrações e buckets.\n\n## Regra do produto
 
 O agente financeiro deve distinguir sempre entre dados de vendas, movimentos contabilísticos, faturas de fornecedores importadas, estimativas e informação em falta. Nunca deve inventar documentos nem apresentar um custo calculado a partir de stock como se fosse o total oficial de compras.
