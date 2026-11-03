@@ -54,7 +54,7 @@ class AssistantChatUiInstrumentedTest {
                 onView(withText("TU")).check(matches(isDisplayed()))
                 onView(withText("STUDIOMESA")).check(matches(isDisplayed()))
 
-                onView(withText("Histórico")).perform(click())
+                onView(withText("Histórico")).perform(scrollTo(), click())
                 onView(withHint("Pesquisar conversas…"))
                     .perform(replaceText(uniqueMarker))
                 onView(withText(containsString(uniqueMarker))).check(matches(isDisplayed()))
