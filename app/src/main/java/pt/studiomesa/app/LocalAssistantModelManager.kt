@@ -286,7 +286,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         const val MAX_HISTORY_MESSAGES = 4
         const val MAX_HISTORY_MESSAGE_CHARS = 300
         const val MAX_SYSTEM_INSTRUCTION_CHARS = 2500
-        const val MAX_USER_MESSAGE_CHARS = 1000
+        const val MAX_USER_MESSAGE_CHARS = 1600
         const val MINIMUM_FREE_SPACE_BYTES = 128L * 1024L * 1024L
         const val BUFFER_SIZE = 1024 * 1024
     }
