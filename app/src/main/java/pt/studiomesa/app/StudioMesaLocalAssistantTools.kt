@@ -14,8 +14,10 @@ import org.json.JSONObject
  * They deliberately have no write operations and never receive customer PII.
  */
 internal class StudioMesaRestaurantDataTool(
-    @Volatile private var snapshot: StudioMesaAssistantSnapshot
+    snapshot: StudioMesaAssistantSnapshot
 ) : OpenApiTool {
+
+    @Volatile private var snapshot = snapshot
 
     fun updateSnapshot(snapshot: StudioMesaAssistantSnapshot) {
         this.snapshot = snapshot
@@ -215,8 +217,10 @@ internal class StudioMesaRestaurantDataTool(
 
 /** Read-only arithmetic based on costs already registered in the current menu snapshot. */
 internal class StudioMesaPriceReferenceTool(
-    @Volatile private var snapshot: StudioMesaAssistantSnapshot
+    snapshot: StudioMesaAssistantSnapshot
 ) : OpenApiTool {
+
+    @Volatile private var snapshot = snapshot
 
     fun updateSnapshot(snapshot: StudioMesaAssistantSnapshot) {
         this.snapshot = snapshot
