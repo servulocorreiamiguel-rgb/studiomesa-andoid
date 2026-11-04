@@ -34,7 +34,6 @@ Deno.serve(
     }
     const restaurantId = typeof payload.restaurant_id === "string" ? payload.restaurant_id : "";
     const messages = Array.isArray(payload.messages) ? payload.messages : [];
-    const useGoogleSearch = payload.use_google_search === true;
     if (!/^[0-9a-fA-F-]{36}$/.test(restaurantId) || messages.length < 1 || messages.length > 10) {
       return Response.json({ error: "invalid_request_shape" }, { status: 400 });
     }
@@ -95,24 +94,18 @@ Deno.serve(
     const model = Deno.env.get("GEMINI_MODEL") || "gemini-3.8-flash";
     const endpoint = "https://generativelanguage.googleapis.com/v1beta/models/" +
       encodeURIComponent(model) + ":generateContent";
-    const geminiRequest: Record<string, unknown> = {
-      system_instruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
-      contents,
-      generationConfig: { temperature: 0.45, maxOutputTokens: 1400 },
-    };
-    // Search is opt-in per request; no search tool is attached by default.
-    if (useGoogleSearch) {
-      geminiRequest.tools = [{ google_search: {} }];
-    }
-
     const geminiResponse = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-goog-api-key": geminiKey,
       },
-      body: JSON.stringify(geminiRequest),
-      signal: AbortSignal.timeout(useGoogleSearch ? 45_000 : 30_000),
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
+        contents,
+        generationConfig: { temperature: 0.45, maxOutputTokens: 1400 },
+      }),
+      signal: AbortSignal.timeout(30_000),
     });
     if (!geminiResponse.ok) {
       // Do not log request bodies or model responses containing user text.
@@ -122,33 +115,11 @@ Deno.serve(
     }
 
     const result = await geminiResponse.json();
-    const candidate = result?.candidates?.[0];
-    let reply = (candidate?.content?.parts ?? [])
+    const reply = (result?.candidates?.[0]?.content?.parts ?? [])
       .map((part: { text?: string }) => typeof part.text === "string" ? part.text : "")
       .join("")
       .trim();
     if (!reply) return Response.json({ error: "empty_model_response" }, { status: 502 });
-
-    // Preserve grounded source URLs so the app can show evidence.
-    const chunks = candidate?.groundingMetadata?.groundingChunks ?? [];
-    const seenSources = new Set<string>();
-    const sources: Array<{ title: string; uri: string }> = [];
-    for (const chunk of chunks) {
-      const uri = typeof chunk?.web?.uri === "string" ? chunk.web.uri : "";
-      const title = typeof chunk?.web?.title === "string" ? chunk.web.title : "Fonte consultada";
-      if (!uri.startsWith("https://") || seenSources.has(uri)) continue;
-      seenSources.add(uri);
-      sources.push({ title: title.slice(0, 120), uri });
-      if (sources.length >= 5) break;
-    }
-    if (useGoogleSearch && sources.length > 0) {
-      reply += "\n\nFontes consultadas:\n" +
-        sources.map((source) => "- " + source.title + ": " + source.uri).join("\n");
-    }
-    return Response.json({
-      reply: reply.slice(0, 6000),
-      model,
-      search_used: sources.length > 0,
-    });
+    return Response.json({ reply: reply.slice(0, 6000), model });
   }),
 );
