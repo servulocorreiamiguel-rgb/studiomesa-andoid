@@ -27,4 +27,40 @@ class LocalAssistantModelArtifactTest {
         assertTrue(LocalAssistantModelManager.MAX_HISTORY_MESSAGES in 1..16)
         assertTrue(LocalAssistantModelManager.MAX_HISTORY_MESSAGE_CHARS <= 1000)
     }
+    @Test
+    fun runtimeSessionIsReusedOnlyWithinTheSameUserConversation() {
+        assertEquals(
+            false,
+            AssistantModelConversationPolicy.requiresNewSession(
+                activeConversationId = "thread-a",
+                requestedConversationId = "thread-a",
+                sessionAvailable = true
+            )
+        )
+        assertEquals(
+            true,
+            AssistantModelConversationPolicy.requiresNewSession(
+                activeConversationId = "thread-a",
+                requestedConversationId = "thread-b",
+                sessionAvailable = true
+            )
+        )
+        assertEquals(
+            true,
+            AssistantModelConversationPolicy.requiresNewSession(
+                activeConversationId = "thread-a",
+                requestedConversationId = "thread-a",
+                sessionAvailable = false
+            )
+        )
+        assertEquals(
+            true,
+            AssistantModelConversationPolicy.requiresNewSession(
+                activeConversationId = null,
+                requestedConversationId = "thread-a",
+                sessionAvailable = false
+            )
+        )
+    }
+
 }
