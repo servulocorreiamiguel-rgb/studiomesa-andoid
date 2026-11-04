@@ -194,8 +194,6 @@ class MainActivity : Activity() {
         super.onPause()
     }
 
-    @Deprecated("Use the document-picker result API when migrating to Activity Result APIs.")
-    @Suppress("DEPRECATION")
     @Deprecated("Uses Android's document picker result contract for compatibility with Activity.")
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
