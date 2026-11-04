@@ -4785,7 +4785,7 @@ class MainActivity : Activity() {
         addGap(statusCard, 5)
         statusCard.addView(label(
             if (assistantGeminiEnabled()) {
-                "Gemini generativo ativo para conversa geral. Perguntas com faturas, dados fiscais, valores financeiros, dados pessoais ou números continuam no motor local; nunca são enviados anexos, OCR ou Memória."
+                "Autorizaste o envio de conversa geral ao Gemini. A resposta generativa só estará disponível quando o serviço estiver configurado no servidor. Perguntas com faturas, dados fiscais, valores financeiros, dados pessoais ou números continuam no motor local; nunca são enviados anexos, OCR ou Memória."
             } else {
                 "O histórico e a memória ficam cifrados neste dispositivo. O motor local trata das faturas e cálculos; o proprietário pode ativar uma ligação generativa depois de configurar o projeto Google Cloud."
             },
@@ -4812,7 +4812,7 @@ class MainActivity : Activity() {
         container.addView(toolbar, LinearLayout.LayoutParams(-1, -2))
         addGap(container, 5)
         container.addView(secondaryButton(
-            if (assistantGeminiEnabled()) "Gemini generativo ativo · gerir consentimento"
+            if (assistantGeminiEnabled()) "Gemini autorizado · gerir consentimento"
             else "Ativar conversa generativa"
         ) {
             showGenerativeAiConsentDialog()
@@ -4977,7 +4977,7 @@ class MainActivity : Activity() {
         }
         if (assistantGeminiEnabled()) {
             AlertDialog.Builder(this)
-                .setTitle("Gemini generativo")
+                .setTitle("Gemini autorizado")
                 .setMessage("Desativar o envio de conversas gerais para o Gemini? O assistente continuará a responder com as ferramentas locais.")
                 .setNegativeButton("Manter ativo", null)
                 .setPositiveButton("Desativar") { _, _ ->
