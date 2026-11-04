@@ -103,3 +103,12 @@ Consulta das páginas oficiais da Google Play em 4/11/2026:
 - **Eliminação de conta:** como o StudioMesa permite criar contas, é necessário manter uma via clara de eliminação dentro da aplicação e uma via web pública, eliminando os dados associados conforme as regras de retenção legitimamente aplicáveis. O endpoint web existe, mas falta testar o percurso completo com contas descartáveis e validar o resultado no backend. Fonte: https://support.google.com/googleplay/android-developer/answer/13327111
 
 A Google Play não é o único canal possível para uma instalação Android, mas APK debug não deve ser usado como pacote comercial. Mesmo para distribuição direta, assinatura comercial, contrato, política de privacidade, suporte, backups e testes operacionais continuam necessários.
+
+
+### Risco específico — descoberta de emails no pedido web de eliminação
+
+A Edge Function `account-deletion-web` está ativa com acesso GET público e a página só apresenta as opções de eliminação depois de obter uma sessão PKCE. O formulário usa `signInWithOtp` com `shouldCreateUser: false` e apresenta uma mensagem genérica mesmo quando a chamada falha.
+
+**A mensagem genérica da página não prova que a API Auth subjacente não permita distinguir emails existentes de inexistentes por respostas ou tempos de resposta.** Esta questão já tinha sido identificada no projeto através da issue pública Supabase Auth #1547. Antes da publicação, testar o endpoint diretamente com contas descartáveis existentes/inexistentes, aplicar mitigação adequada e confirmar que não existe enumeração através da API subjacente. Não considerar a proteção concluída apenas porque a página apresenta texto igual.
+
+A função `delete-account` alojada está ativa, exige JWT e prepara um pedido de eliminação de curta duração antes de chamar o Auth Admin. O percurso completo (email → sessão → confirmação → apagamento → tratamento dos dados associados) continua por testar com contas descartáveis. Não usar contas reais nem dados de clientes para esses ensaios.
