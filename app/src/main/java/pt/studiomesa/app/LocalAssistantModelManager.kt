@@ -34,11 +34,14 @@ internal object AssistantModelConversationPolicy {
     fun requiresNewSession(
         activeConversationId: String?,
         requestedConversationId: String,
+        activeSystemInstruction: String?,
+        requestedSystemInstruction: String,
         sessionAvailable: Boolean
     ): Boolean =
         requestedConversationId.isBlank() ||
             !sessionAvailable ||
-            activeConversationId != requestedConversationId
+            activeConversationId != requestedConversationId ||
+            activeSystemInstruction != requestedSystemInstruction
 }
 
 internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
@@ -57,6 +60,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
     private var engine: Engine? = null
     private var conversation: Conversation? = null
     private var activeConversationId: String? = null
+    private var activeSystemInstruction: String? = null
     private var restaurantDataTool: StudioMesaRestaurantDataTool? = null
     private var priceReferenceTool: StudioMesaPriceReferenceTool? = null
     @Volatile private var downloading = false
@@ -198,6 +202,8 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                 if (AssistantModelConversationPolicy.requiresNewSession(
                         activeConversationId = activeConversationId,
                         requestedConversationId = conversationId,
+                        activeSystemInstruction = activeSystemInstruction,
+                        requestedSystemInstruction = systemInstruction.take(MAX_SYSTEM_INSTRUCTION_CHARS),
                         sessionAvailable = sessionAvailable
                     )) {
                     closeActiveSession()
@@ -254,6 +260,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     engine = createdEngine
                     conversation = createdConversation
                     activeConversationId = conversationId
+                    activeSystemInstruction = systemInstruction.take(MAX_SYSTEM_INSTRUCTION_CHARS)
                     restaurantDataTool = dataTool
                     priceReferenceTool = priceTool
                 }
@@ -300,6 +307,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         conversation = null
         engine = null
         activeConversationId = null
+        activeSystemInstruction = null
         restaurantDataTool = null
         priceReferenceTool = null
 
