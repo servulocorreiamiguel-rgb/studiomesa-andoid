@@ -51,8 +51,8 @@ class AssistantChatUiInstrumentedTest {
                     .perform(scrollTo(), replaceText(question), closeSoftKeyboard())
                 onView(withText("Enviar mensagem  ↑")).perform(scrollTo(), click())
 
-                onView(withText("TU")).check(matches(isDisplayed()))
-                onView(withText("STUDIOMESA")).check(matches(isDisplayed()))
+                onView(withText("TU")).perform(scrollTo()).check(matches(isDisplayed()))
+                onView(withText("STUDIOMESA")).perform(scrollTo()).check(matches(isDisplayed()))
 
                 onView(withText("Histórico")).perform(scrollTo(), click())
                 onView(withHint("Pesquisar conversas…"))
