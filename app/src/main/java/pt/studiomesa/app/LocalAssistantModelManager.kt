@@ -36,12 +36,15 @@ internal object AssistantModelConversationPolicy {
         requestedConversationId: String,
         activeSystemInstruction: String?,
         requestedSystemInstruction: String,
+        activeUserTurns: Int,
+        maxUserTurnsPerSession: Int,
         sessionAvailable: Boolean
     ): Boolean =
         requestedConversationId.isBlank() ||
             !sessionAvailable ||
             activeConversationId != requestedConversationId ||
-            activeSystemInstruction != requestedSystemInstruction
+            activeSystemInstruction != requestedSystemInstruction ||
+            activeUserTurns >= maxUserTurnsPerSession
 }
 
 internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
@@ -61,6 +64,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
     private var conversation: Conversation? = null
     private var activeConversationId: String? = null
     private var activeSystemInstruction: String? = null
+    private var activeUserTurns = 0
     private var restaurantDataTool: StudioMesaRestaurantDataTool? = null
     private var priceReferenceTool: StudioMesaPriceReferenceTool? = null
     @Volatile private var downloading = false
@@ -204,6 +208,8 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                         requestedConversationId = conversationId,
                         activeSystemInstruction = activeSystemInstruction,
                         requestedSystemInstruction = systemInstruction.take(MAX_SYSTEM_INSTRUCTION_CHARS),
+                        activeUserTurns = activeUserTurns,
+                        maxUserTurnsPerSession = MAX_SESSION_USER_TURNS,
                         sessionAvailable = sessionAvailable
                     )) {
                     closeActiveSession()
@@ -261,6 +267,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     conversation = createdConversation
                     activeConversationId = conversationId
                     activeSystemInstruction = systemInstruction.take(MAX_SYSTEM_INSTRUCTION_CHARS)
+                    activeUserTurns = 0
                     restaurantDataTool = dataTool
                     priceReferenceTool = priceTool
                 }
@@ -288,9 +295,11 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                         }
                     }
                 }
-                answer.toString().trim().ifBlank {
+                val reply = answer.toString().trim().ifBlank {
                     throw IllegalStateException("O modelo local não devolveu uma resposta.")
                 }
+                activeUserTurns += 1
+                reply
             }
             if (result.isFailure) {
                 // A persisted conversation can be reconstructed from encrypted history
@@ -308,6 +317,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         engine = null
         activeConversationId = null
         activeSystemInstruction = null
+        activeUserTurns = 0
         restaurantDataTool = null
         priceReferenceTool = null
 
@@ -360,8 +370,9 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
             "https://huggingface.co/litert-community/LFM2.5-1.2B-Instruct/resolve/main/LFM2.5-1.2B-Instruct_int4.litertlm"
         const val MODEL_DIRECTORY = "studiomesa_ai_models"
         const val MAX_CONTEXT_TOKENS = 4096
-        const val MAX_OUTPUT_TOKENS = 2048
+        const val MAX_OUTPUT_TOKENS = 1024
         const val MAX_HISTORY_MESSAGES = 4
+        const val MAX_SESSION_USER_TURNS = 2
         const val MAX_HISTORY_MESSAGE_CHARS = 300
         const val MAX_SYSTEM_INSTRUCTION_CHARS = 2500
         const val MAX_USER_MESSAGE_CHARS = 1600
