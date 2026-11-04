@@ -314,7 +314,7 @@ jobs:
             psql --no-psqlrc --set ON_ERROR_STOP=1 --file "${migration}"
             count=$((count + 1))
           done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
-          test "${count}" -eq 42
+          test "${count}" -eq 50
           echo "Successfully replayed ${count} versioned migration files."
 
       - name: Assert core schema, RLS and RPCs exist
@@ -327,6 +327,9 @@ jobs:
               OR to_regclass('public.restaurant_reservations') IS NULL
               OR to_regclass('public.restaurant_inventory_items') IS NULL
               OR to_regclass('public.loyalty_members') IS NULL
+              OR to_regclass('public.loyalty_rewards') IS NULL
+              OR to_regclass('public.loyalty_reward_redemptions') IS NULL
+              OR to_regclass('private.loyalty_qr_tokens') IS NULL
               OR to_regclass('private.restaurant_join_codes') IS NULL THEN
               RAISE EXCEPTION 'Core StudioMesa tables are missing after clean migration replay.';
             END IF;
@@ -334,8 +337,72 @@ jobs:
             IF to_regprocedure('public.create_restaurant(text,text)') IS NULL
               OR to_regprocedure('public.create_restaurant_reservation_idempotent(uuid,uuid,text,text,integer,timestamp with time zone,integer,integer,text)') IS NULL
               OR to_regprocedure('public.adjust_inventory_stock_idempotent(uuid,uuid,numeric,text)') IS NULL
-              OR to_regprocedure('public.adjust_loyalty_points_idempotent(uuid,uuid,integer,text)') IS NULL THEN
+              OR to_regprocedure('public.adjust_loyalty_points_idempotent(uuid,uuid,integer,text)') IS NULL
+              OR to_regprocedure('public.create_customer_reservation_request(uuid,text,text,integer,timestamp with time zone,integer,text)') IS NULL
+              OR to_regprocedure('public.get_my_restaurant_reservations()') IS NULL
+              OR to_regprocedure('public.cancel_my_restaurant_reservation(uuid)') IS NULL
+              OR to_regprocedure('public.assign_restaurant_reservation_table(uuid,integer)') IS NULL
+              OR to_regprocedure('private.has_restaurant_permission(uuid,text)') IS NULL
+              OR to_regprocedure('public.get_restaurant_staff_permissions(uuid)') IS NULL
+              OR to_regprocedure('public.set_restaurant_staff_permissions(uuid,text[])') IS NULL
+              OR to_regprocedure('public.get_my_restaurant_permissions()') IS NULL THEN
               RAISE EXCEPTION 'A required RPC is missing after clean migration replay.';
+            END IF;
+
+            IF to_regprocedure('public.save_loyalty_reward(uuid,uuid,text,text,integer,integer,boolean)') IS NULL
+              OR to_regprocedure('public.get_restaurant_loyalty_rewards(uuid)') IS NULL
+              OR to_regprocedure('public.get_customer_loyalty_rewards(uuid)') IS NULL
+              OR to_regprocedure('public.create_loyalty_qr_token()') IS NULL
+              OR to_regprocedure('public.award_loyalty_points_from_qr(uuid,integer,uuid,text)') IS NULL
+              OR to_regprocedure('public.redeem_loyalty_reward(uuid,uuid)') IS NULL
+              OR to_regprocedure('public.get_restaurant_reward_redemptions(uuid)') IS NULL
+              OR to_regprocedure('public.fulfill_loyalty_reward_redemption(uuid)') IS NULL
+              OR to_regprocedure('public.get_my_loyalty_reward_redemptions()') IS NULL THEN
+              RAISE EXCEPTION 'A loyalty shop or QR RPC is missing after clean migration replay.';
+            END IF;
+
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+              WHERE n.nspname='public' AND c.relname='loyalty_rewards' AND c.relrowsecurity
+            ) OR NOT EXISTS (
+              SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+              WHERE n.nspname='public' AND c.relname='loyalty_reward_redemptions' AND c.relrowsecurity
+            ) OR NOT EXISTS (
+              SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+              WHERE n.nspname='private' AND c.relname='loyalty_qr_tokens' AND c.relrowsecurity
+            ) THEN
+              RAISE EXCEPTION 'Loyalty shop/QR tables must all have RLS enabled.';
+            END IF;
+
+            IF has_table_privilege('anon','public.loyalty_rewards','SELECT')
+              OR has_table_privilege('authenticated','public.loyalty_rewards','SELECT')
+              OR has_table_privilege('anon','public.loyalty_reward_redemptions','SELECT')
+              OR has_table_privilege('authenticated','public.loyalty_reward_redemptions','SELECT')
+              OR has_table_privilege('anon','private.loyalty_qr_tokens','SELECT')
+              OR has_table_privilege('authenticated','private.loyalty_qr_tokens','SELECT') THEN
+              RAISE EXCEPTION 'Loyalty tables unexpectedly allow direct API-role reads.';
+            END IF;
+
+            IF has_function_privilege('anon','public.save_loyalty_reward(uuid,uuid,text,text,integer,integer,boolean)','EXECUTE')
+              OR has_function_privilege('anon','public.create_loyalty_qr_token()','EXECUTE')
+              OR has_function_privilege('anon','public.award_loyalty_points_from_qr(uuid,integer,uuid,text)','EXECUTE')
+              OR NOT has_function_privilege('authenticated','public.save_loyalty_reward(uuid,uuid,text,text,integer,integer,boolean)','EXECUTE')
+              OR NOT has_function_privilege('authenticated','public.create_loyalty_qr_token()','EXECUTE')
+              OR NOT has_function_privilege('authenticated','public.award_loyalty_points_from_qr(uuid,integer,uuid,text)','EXECUTE')
+              OR has_function_privilege('anon','public.get_my_loyalty_reward_redemptions()','EXECUTE')
+              OR NOT has_function_privilege('authenticated','public.get_my_loyalty_reward_redemptions()','EXECUTE')
+              OR has_function_privilege('anon','public.create_customer_reservation_request(uuid,text,text,integer,timestamp with time zone,integer,text)','EXECUTE')
+              OR has_function_privilege('anon','public.get_my_restaurant_reservations()','EXECUTE')
+              OR has_function_privilege('anon','public.cancel_my_restaurant_reservation(uuid)','EXECUTE')
+              OR has_function_privilege('anon','public.assign_restaurant_reservation_table(uuid,integer)','EXECUTE')
+              OR NOT has_function_privilege('authenticated','public.create_customer_reservation_request(uuid,text,text,integer,timestamp with time zone,integer,text)','EXECUTE')
+              OR NOT has_function_privilege('authenticated','public.get_my_restaurant_reservations()','EXECUTE')
+              OR NOT has_function_privilege('authenticated','public.cancel_my_restaurant_reservation(uuid)','EXECUTE')
+              OR NOT has_function_privilege('authenticated','public.assign_restaurant_reservation_table(uuid,integer)','EXECUTE')
+              OR has_function_privilege('anon','public.update_restaurant_reservation_status(uuid,text)','EXECUTE')
+              OR NOT has_function_privilege('authenticated','public.update_restaurant_reservation_status(uuid,text)','EXECUTE')
+              OR has_function_privilege('authenticated','public.adjust_loyalty_points_idempotent(uuid,uuid,integer,text)','EXECUTE') THEN
+              RAISE EXCEPTION 'Loyalty QR permissions are not restricted to authenticated RPCs.';
             END IF;
 
             IF to_regprocedure('public.save_inventory_item_with_cost(uuid,uuid,text,text,numeric,numeric,text,numeric)') IS NULL

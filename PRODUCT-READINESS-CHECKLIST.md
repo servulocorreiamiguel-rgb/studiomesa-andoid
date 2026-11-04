@@ -6,7 +6,7 @@
 - [x] Consulta do projeto Supabase ligado: estado ativo, PostgreSQL 17.6 e RLS ativa nas 15 tabelas públicas/privadas listadas. Um ensaio transacional com duas contas confirmou isolamento em restaurantes, equipa, carta, mesas e pedidos; duas RPCs também recusaram operações sobre o restaurante alheio. Faltam os restantes fluxos E2E, sessões reais e concorrência.
 - [x] Revisão das funções `SECURITY DEFINER` existentes no banco: `search_path` vazio em todas as funções inspecionadas e execução anónima não permitida. Os avisos para o papel `authenticated` são, em grande parte, RPCs de aplicação intencionais; não os remover sem testes de autorização.
 - [x] As tabelas privadas `private.restaurant_join_codes`, `private.account_deletion_queue`, `private.restaurant_price_adviser_settings` e `private.restaurant_price_adviser_audit` têm RLS ativa, sem políticas de acesso direto; os privilégios diretos de cliente estão revogados. O Security Advisor assinala isso como informativo; o acesso direto deve continuar bloqueado.
-- [x] **Alinhamento das versões de migração verificado em 29/10/2026:** o Supabase alojado e o repositório têm agora as mesmas 41 versões aplicadas, incluindo `20261029133656_revoke_postgres_default_public_privileges.sql` e `20261029203424_restaurant_price_adviser_owner_approval.sql`. A migração de permissões predefinidas foi aplicada ao projeto ativo e a consulta confirmou que novos objetos em `public` não recebem privilégios API por omissão. A CI reproduziu as 41 migrações numa base descartável e testou permissões por criação e eliminação de objetos temporários. Isto prova alinhamento da versão de migração e reprodutibilidade da sequência atual, mas não é uma comparação integral de todas as definições do esquema entre o servidor alojado e a base descartável.
+- [x] **Alinhamento das versões de migração verificado em 02/11/2026:** o Supabase alojado e a branch `feature/loyalty-shop-qr-security` apresentam as mesmas 49 versões aplicadas, incluindo a loja de pontos, o QR de utilização única, o histórico de resgates e os pedidos de reserva do cliente. O workflow de replay limpo foi atualizado para 49 ficheiros; a última execução após estas alterações ainda está pendente, pelo que a reprodutibilidade da versão final ainda não está confirmada. Isto prova alinhamento do histórico de versões observado, não uma comparação integral de todas as definições do esquema alojado.
 - [x] **Consultor de preços com aprovação do proprietário:** a migração `20261029203424_restaurant_price_adviser_owner_approval.sql` está aplicada no Supabase alojado e alinhada com o repositório (41 migrações). A opção fica desligada por defeito; as quatro RPCs usam `search_path = ''`, negam execução a `anon`/`PUBLIC`, autorizam apenas `authenticated` e verificam o papel de proprietário no servidor. A CI da `main` passou em compilação, testes unitários, Lint, replay de migrações/autorização e emuladores Android 8/16. A validação de produção real ainda está pendente.
 - [ ] Testar ponta a ponta a autorização de preços com contas descartáveis de proprietário e funcionário no Supabase alojado, incluindo opção desligada, alteração individual confirmada, recusa de reduções, preço desatualizado, repetição idempotente, acesso entre restaurantes e consulta do histórico; repetir num telemóvel Android físico.
 - [ ] **Bloqueio de autenticação:** a proteção de palavras-passe comprometidas continua desativada. A organização Supabase está no plano Free e a [documentação oficial](https://supabase.com/docs/guides/auth/password-security) indica que esta proteção requer Pro ou superior. Não foi alterado o plano nem assumido qualquer custo; resolver por decisão explícita antes da utilização comercial com contas reais.
@@ -16,6 +16,25 @@
 - [ ] O Supabase Performance Advisor mostra índices sem utilização observada. Como as tabelas estão atualmente vazias, não remover índices com base nesse aviso isolado.
 
 Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige desenvolvimento/testes. Um botão presente na interface não prova que uma funcionalidade esteja completa.
+
+## Requisitos adicionais de segurança obrigatórios antes da primeira venda
+
+Estes cenários são critérios de aceitação, não apenas recomendações. Cada item só pode passar a concluído depois de testes no servidor e na aplicação Android:
+
+- [ ] **Pontos sem duplicação:** duas tentativas concorrentes com o mesmo pedido não podem creditar pontos duas vezes; o mesmo QR não pode ser usado com um segundo identificador de operação.
+- [x] **QR de cliente implementado:** o cliente autenticado gera um QR temporário de utilização única; expira ao fim de dois minutos, um novo QR invalida os anteriores ainda não utilizados e só um funcionário autenticado com permissão de Fidelização pode atribuir pontos. O servidor valida e consome o QR na mesma transação que credita os pontos. A CI PostgreSQL já cobre a autorização; falta o ensaio físico com câmara.
+- [x] **Loja de pontos implementada:** só o proprietário pode criar, editar, ativar ou desativar recompensas e definir custo em pontos e limite de stock. O cliente só consulta recompensas do seu próprio restaurante. O resgate desconta pontos e reserva stock numa transação; a equipa com permissão de Fidelização confirma a entrega. A CI PostgreSQL cobre o fluxo; falta validação Android com contas de teste reais.
+- [x] **Resgate único implementado no servidor:** confirma saldo e stock, desconta pontos e regista o resgate atomicamente. Repetições do mesmo pedido não descontam novamente; a concorrência é serializada no registo da recompensa. Falta ensaio simultâneo em contas reais.
+- [x] **Entrega de recompensas implementada:** apenas equipa autorizada do próprio restaurante pode confirmar; a confirmação repetida é inofensiva e o servidor regista quem entregou. Falta ensaio Android com duas contas reais.
+- [ ] **Isolamento entre restaurantes:** testar leitura e escrita cruzada em cartas, preços, clientes, pontos, QR, recompensas, resgates, reservas, pedidos e stock.
+- [x] **Separação de funções implementada na branch:** ações exclusivas do proprietário (equipa/códigos, catálogo de recompensas, consultor económico e definições) continuam protegidas no servidor. As permissões operacionais por funcionário são aplicadas por RLS/RPC.
+- [ ] Testar com contas reais a revogação de cada área, incluindo tentativa direta às RPCs depois de a permissão ser retirada.
+- [ ] **Alterações de preços:** validar quem pode alterar preços e confirmar que o cliente recebe o valor publicado, sem acesso ao custo interno.
+- [ ] **Falhas de rede:** interromper a ligação antes, durante e depois de cada escrita crítica; confirmar que reservas, pontos e resgates não ficam duplicados nem em estado parcial.
+- [ ] **Mudança de telemóvel:** entrar na mesma conta num segundo dispositivo e confirmar cartão, saldo, movimentos e resgates a partir do servidor.
+- [ ] **Cópias de segurança:** confirmar política e retenção efetivas no plano contratado e executar um restauro de teste num ambiente separado; não basta existir uma opção de backup no painel.
+
+Nenhum destes pontos deve ser anunciado como testado por existir apenas código, tabela ou botão. A validação de concorrência, autorização, falhas de rede e restauro tem de ficar documentada com o resultado do ensaio.
 
 ## Carta e menu
 
@@ -32,6 +51,8 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 
 - [x] Fluxo inicial de registo e estados (pendente, confirmada, cancelada, concluída, não compareceu).
 - [x] Validação no servidor da capacidade da mesa e da sobreposição de reservas pendentes/confirmadas atribuídas à mesma mesa.
+- [x] **Pedidos de reserva do cliente implementados:** cliente autenticado e associado ao restaurante pode enviar um pedido pendente, consultar apenas as suas próprias reservas e cancelar pedidos pendentes/confirmados. A equipa vê o pedido, atribui uma mesa com capacidade suficiente e só depois o pode confirmar; o servidor verifica conflitos de horário e impede confirmações sem mesa. A validação CI desta nova sequência ainda está pendente.
+- [ ] Testar em contas descartáveis que cada cliente só consulta/cancela os próprios pedidos, que pedidos repetidos não criam duplicados e que a mesma mesa não recebe duas reservas sobrepostas.
 - [ ] Definir horários de funcionamento, capacidade agregada por sala e regras de intervalos/preparação.
 - [ ] Edição/reagendamento, calendário visual, lembretes, confirmações por email e regras configuráveis de cancelamento.
 - [ ] Testar concorrência em dois dispositivos e alterações ao horário de funcionamento.
@@ -58,6 +79,8 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [ ] Automatizar regras de acumulação/resgate só depois de definir regras comerciais e prevenção de fraude.
 - [ ] Limitar tentativas repetidas de adivinhar códigos e monitorizar abusos.
 - [ ] Testar saldos negativos, limites, concorrência e reconciliação dos movimentos.
+- [x] O cliente autenticado consegue consultar os seus próprios resgates (prémio, pontos e estado de entrega) através de uma RPC que resolve o cartão no servidor por `auth.uid()`; não recebe um ID de cartão para escolher.
+- [ ] Testar em duas contas reais que um cliente não consegue consultar o histórico de resgates de outro utilizador, nem por alteração de pedidos/respostas.
 - [ ] Proteger os dados dos clientes e confirmar que cada cliente só vê o próprio cartão/histórico.
 
 ## Stock e inventário
@@ -78,7 +101,8 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [x] Separação de contas, papéis owner/staff e código de adesão de equipa.
 - [x] Proprietário pode consultar membros, remover o acesso de um funcionário e renovar automaticamente o código de adesão após a remoção.
 - [x] Verificado em teste transacional que operações administrativas de proprietário (consultar equipa, renovar códigos e remover membros) são recusadas a uma conta `staff`.
-- [ ] Definir e implementar permissões granulares para as restantes operações; atualmente os funcionários têm permissões operacionais gerais.
+- [x] Permissões granulares por funcionário implementadas na branch: Pedidos, Mesas, Reservas, Carta, Stock e Fidelização operacional. O proprietário configura cada área; a matriz fica em schema privado e o servidor valida cada operação. Funcionários antigos mantêm o acesso atual até ser guardada uma matriz personalizada.
+- [ ] Validar revogação e interface em duas contas reais e num Android físico.
 - [ ] Suspensão temporária, horários/turnos e trilho de auditoria administrativo completo.
 - [ ] Verificar em testes que a revogação é refletida em todos os dispositivos; ecrãs ativos podem continuar a mostrar dados já carregados até atualizar/reabrir.
 - [x] Ensaios transacionais live: duas contas só viram os próprios dados em `restaurants`, `restaurant_staff`, `menu_items`, `restaurant_tables` e `restaurant_orders`; RPCs de criação de stock/reserva para o restaurante alheio foram recusadas. Uma conta `staff` não conseguiu listar a equipa, renovar códigos de equipa/clientes ou remover outro membro. Os testes foram revertidos e verificou-se que não ficaram registos temporários.

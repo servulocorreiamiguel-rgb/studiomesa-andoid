@@ -717,6 +717,147 @@ object SupabaseApi {
         return JSONArray(response)
     }
 
+    fun listCustomerRewards(token: String, memberId: String): JSONArray {
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/get_customer_loyalty_rewards",
+            JSONObject().put("p_member_id", memberId),
+            token
+        )
+        return JSONArray(response)
+    }
+
+    fun listMyLoyaltyRewardRedemptions(token: String): JSONArray {
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/get_my_loyalty_reward_redemptions",
+            JSONObject(),
+            token
+        )
+        return JSONArray(response)
+    }
+
+    fun listRestaurantRewards(token: String, restaurantId: String): JSONArray {
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/get_restaurant_loyalty_rewards",
+            JSONObject().put("p_restaurant_id", restaurantId),
+            token
+        )
+        return JSONArray(response)
+    }
+
+    fun saveLoyaltyReward(
+        token: String,
+        restaurantId: String,
+        rewardId: String,
+        name: String,
+        description: String,
+        pointsCost: Int,
+        stockLimit: Int?,
+        active: Boolean
+    ): String {
+        require(runCatching { java.util.UUID.fromString(rewardId).toString() == rewardId }.getOrDefault(false)) {
+            "O identificador da recompensa não é válido."
+        }
+        val body = JSONObject()
+            .put("p_restaurant_id", restaurantId)
+            .put("p_reward_id", rewardId)
+            .put("p_name", name.trim())
+            .put("p_description", description.trim())
+            .put("p_points_cost", pointsCost)
+            .put("p_stock_limit", stockLimit ?: JSONObject.NULL)
+            .put("p_is_active", active)
+        val response = call("POST", "/rest/v1/rpc/save_loyalty_reward", body, token)
+        val savedId = response.trim().trim('"')
+        require(savedId == rewardId) { "O servidor não confirmou a gravação da recompensa." }
+        return savedId
+    }
+
+    fun createLoyaltyQrToken(token: String): JSONObject {
+        val response = call("POST", "/rest/v1/rpc/create_loyalty_qr_token", JSONObject(), token)
+        val rows = JSONArray(response)
+        if (rows.length() == 0) throw IllegalStateException("O servidor não gerou um QR de fidelização.")
+        val result = rows.getJSONObject(0)
+        val qrToken = result.optString("qr_token")
+        require(runCatching { java.util.UUID.fromString(qrToken) }.isSuccess) {
+            "O servidor devolveu um QR inválido."
+        }
+        return result
+    }
+
+    fun awardLoyaltyPointsFromQr(
+        token: String,
+        qrToken: String,
+        points: Int,
+        note: String?,
+        requestId: String
+    ): JSONObject {
+        require(runCatching { java.util.UUID.fromString(qrToken) }.isSuccess) {
+            "O QR não é válido."
+        }
+        require(runCatching { java.util.UUID.fromString(requestId) }.isSuccess) {
+            "O identificador desta operação não é válido."
+        }
+        val body = JSONObject()
+            .put("p_qr_token", qrToken)
+            .put("p_delta", points)
+            .put("p_client_request_id", requestId)
+            .put("p_note", note?.trim()?.takeIf { it.isNotEmpty() } ?: JSONObject.NULL)
+        val response = call("POST", "/rest/v1/rpc/award_loyalty_points_from_qr", body, token)
+        val rows = JSONArray(response)
+        if (rows.length() == 0) throw IllegalStateException("O servidor não confirmou a atribuição de pontos.")
+        val result = rows.getJSONObject(0)
+        if (result.optInt("points", -1) < 0 || result.optString("member_id").isBlank()) {
+            throw IllegalStateException("O servidor devolveu um saldo inválido.")
+        }
+        return result
+    }
+
+    fun redeemLoyaltyReward(token: String, rewardId: String, requestId: String): JSONObject {
+        require(runCatching { java.util.UUID.fromString(rewardId) }.isSuccess) {
+            "A recompensa selecionada não é válida."
+        }
+        require(runCatching { java.util.UUID.fromString(requestId) }.isSuccess) {
+            "O identificador do resgate não é válido."
+        }
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/redeem_loyalty_reward",
+            JSONObject().put("p_reward_id", rewardId).put("p_client_request_id", requestId),
+            token
+        )
+        val rows = JSONArray(response)
+        if (rows.length() == 0) throw IllegalStateException("O servidor não confirmou o resgate.")
+        val result = rows.getJSONObject(0)
+        if (result.optString("redemption_id").isBlank() || result.optInt("points_remaining", -1) < 0) {
+            throw IllegalStateException("O servidor devolveu uma confirmação de resgate inválida.")
+        }
+        return result
+    }
+
+    fun listRestaurantRewardRedemptions(token: String, restaurantId: String): JSONArray {
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/get_restaurant_reward_redemptions",
+            JSONObject().put("p_restaurant_id", restaurantId),
+            token
+        )
+        return JSONArray(response)
+    }
+
+    fun fulfillLoyaltyRewardRedemption(token: String, redemptionId: String) {
+        require(runCatching { java.util.UUID.fromString(redemptionId) }.isSuccess) {
+            "O identificador do resgate não é válido."
+        }
+        call(
+            "POST",
+            "/rest/v1/rpc/fulfill_loyalty_reward_redemption",
+            JSONObject().put("p_redemption_id", redemptionId),
+            token
+        )
+    }
+
     fun listMembers(token: String, restaurantId: String): JSONArray {
         val encoded = URLEncoder.encode(restaurantId, "UTF-8")
         return JSONArray(call("GET",
@@ -1071,6 +1212,75 @@ object SupabaseApi {
         return reservationId
     }
 
+    fun createCustomerReservationRequest(
+        token: String,
+        requestId: String,
+        guestName: String,
+        guestPhone: String,
+        partySize: Int,
+        reservationAt: String,
+        durationMinutes: Int,
+        notes: String
+    ): JSONObject {
+        require(runCatching { java.util.UUID.fromString(requestId).toString() == requestId }.getOrDefault(false)) {
+            "O identificador da tentativa de reserva não é válido."
+        }
+        val body = JSONObject()
+            .put("p_client_request_id", requestId)
+            .put("p_guest_name", guestName.trim())
+            .put("p_guest_phone", guestPhone.trim())
+            .put("p_party_size", partySize)
+            .put("p_reservation_at", reservationAt)
+            .put("p_duration_minutes", durationMinutes)
+            .put("p_notes", notes.trim())
+        val rows = JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/create_customer_reservation_request",
+            body,
+            token
+        ))
+        if (rows.length() == 0) throw IllegalStateException("O servidor não confirmou o pedido de reserva.")
+        val result = rows.getJSONObject(0)
+        if (result.optString("reservation_id").isBlank() || result.optString("status").isBlank()) {
+            throw IllegalStateException("O servidor devolveu uma confirmação de reserva inválida.")
+        }
+        return result
+    }
+
+    fun listMyRestaurantReservations(token: String): JSONArray {
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/get_my_restaurant_reservations",
+            JSONObject(),
+            token
+        ))
+    }
+
+    fun cancelMyRestaurantReservation(token: String, reservationId: String) {
+        require(runCatching { java.util.UUID.fromString(reservationId) }.isSuccess) {
+            "O identificador da reserva não é válido."
+        }
+        call(
+            "POST",
+            "/rest/v1/rpc/cancel_my_restaurant_reservation",
+            JSONObject().put("p_reservation_id", reservationId),
+            token
+        )
+    }
+
+    fun assignRestaurantReservationTable(token: String, reservationId: String, tableNumber: Int) {
+        require(runCatching { java.util.UUID.fromString(reservationId) }.isSuccess) {
+            "O identificador da reserva não é válido."
+        }
+        require(tableNumber in 1..100) { "Seleciona uma mesa válida." }
+        call(
+            "POST",
+            "/rest/v1/rpc/assign_restaurant_reservation_table",
+            JSONObject().put("p_reservation_id", reservationId).put("p_table_number", tableNumber),
+            token
+        )
+    }
+
     fun updateReservationStatus(token: String, reservationId: String, status: String) {
         require(status in setOf("Pendente", "Confirmada", "Cancelada", "Concluída", "Não compareceu")) {
             "Estado de reserva inválido."
@@ -1081,6 +1291,40 @@ object SupabaseApi {
             JSONObject().put("p_reservation_id", reservationId).put("p_status", status),
             token
         )
+    }
+
+    fun getMyRestaurantPermissions(token: String): JSONArray {
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/get_my_restaurant_permissions",
+            JSONObject(),
+            token
+        ))
+    }
+
+    fun getRestaurantStaffPermissions(token: String, userId: String): JSONArray {
+        require(userId.isNotBlank()) { "Seleciona um funcionário válido." }
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/get_restaurant_staff_permissions",
+            JSONObject().put("p_user_id", userId),
+            token
+        ))
+    }
+
+    fun setRestaurantStaffPermissions(
+        token: String,
+        userId: String,
+        permissions: Set<String>
+    ): JSONArray {
+        require(userId.isNotBlank()) { "Seleciona um funcionário válido." }
+        val payload = StaffPermissionSet.toJsonArray(permissions)
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/set_restaurant_staff_permissions",
+            JSONObject().put("p_user_id", userId).put("p_permissions", payload),
+            token
+        ))
     }
 
     fun listRestaurantTeam(token: String): JSONArray {
