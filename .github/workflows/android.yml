@@ -311,10 +311,14 @@ jobs:
           count=0
           while IFS= read -r migration; do
             echo "Replaying ${migration}"
+            if [[ "${migration}" == *"20261102135000_legacy_loyalty_rpc_private_boundary.sql" ]]; then
+              echo "Creating hosted-project legacy loyalty RPC fixtures for conditional-migration coverage."
+              psql --no-psqlrc --set ON_ERROR_STOP=1 --file scripts/ci/legacy_loyalty_rpc_pre_migration_fixtures.sql
+            fi
             psql --no-psqlrc --set ON_ERROR_STOP=1 --file "${migration}"
             count=$((count + 1))
           done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort)
-          test "${count}" -eq 42
+          test "${count}" -eq 48
           echo "Successfully replayed ${count} versioned migration files."
 
       - name: Assert core schema, RLS and RPCs exist
@@ -336,6 +340,179 @@ jobs:
               OR to_regprocedure('public.adjust_inventory_stock_idempotent(uuid,uuid,numeric,text)') IS NULL
               OR to_regprocedure('public.adjust_loyalty_points_idempotent(uuid,uuid,integer,text)') IS NULL THEN
               RAISE EXCEPTION 'A required RPC is missing after clean migration replay.';
+            END IF;
+
+            IF to_regclass('private.loyalty_invoice_qr_codes') IS NULL
+              OR to_regprocedure('public.issue_loyalty_invoice_qr(uuid,numeric,text,uuid)') IS NULL
+              OR to_regprocedure('public.redeem_loyalty_invoice_qr(uuid)') IS NULL THEN
+              RAISE EXCEPTION 'Invoice loyalty QR table or RPCs are missing after clean migration replay.';
+            END IF;
+
+            IF EXISTS (
+              SELECT 1 FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'public'
+                AND p.proname IN ('issue_loyalty_invoice_qr', 'redeem_loyalty_invoice_qr')
+                AND p.prosecdef
+            ) OR (
+              SELECT count(*) FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'private'
+                AND p.proname IN ('issue_loyalty_invoice_qr_internal', 'redeem_loyalty_invoice_qr_internal')
+                AND p.prosecdef
+                AND p.proconfig @> ARRAY['search_path=""']
+                AND NOT has_function_privilege('anon', p.oid, 'EXECUTE')
+                AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
+            ) <> 2 THEN
+              RAISE EXCEPTION 'Invoice QR endpoints must be invoker wrappers backed by private, pinned, authenticated-only functions.';
+            END IF;
+
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'private'
+                AND c.relname = 'loyalty_invoice_qr_codes'
+                AND c.relrowsecurity
+            ) THEN
+              RAISE EXCEPTION 'Invoice QR records are not protected by row-level security.';
+            END IF;
+
+            IF (
+                SELECT count(*)
+                FROM pg_proc p
+                JOIN pg_namespace n ON n.oid = p.pronamespace
+                WHERE n.nspname = 'public'
+                  AND p.proname IN (
+                    'create_loyalty_qr_token',
+                    'award_loyalty_points_from_qr',
+                    'get_member_restaurant_menu',
+                    'get_my_loyalty_membership',
+                    'get_restaurant_reward_redemptions'
+                  )
+              ) <> 5 OR (
+                SELECT count(*)
+                FROM pg_proc p
+                JOIN pg_namespace n ON n.oid = p.pronamespace
+                WHERE n.nspname = 'private'
+                  AND p.proname IN (
+                    'create_loyalty_qr_token_internal',
+                    'award_loyalty_points_from_qr_internal',
+                    'get_member_restaurant_menu_internal',
+                    'get_my_loyalty_membership_internal',
+                    'get_restaurant_reward_redemptions_internal'
+                  )
+              ) <> 5 OR EXISTS (
+                SELECT 1
+                FROM pg_proc p
+                JOIN pg_namespace n ON n.oid = p.pronamespace
+                WHERE n.nspname = 'public'
+                  AND p.proname IN (
+                    'create_loyalty_qr_token',
+                    'award_loyalty_points_from_qr',
+                    'get_member_restaurant_menu',
+                    'get_my_loyalty_membership',
+                    'get_restaurant_reward_redemptions'
+                  )
+                  AND (
+                    p.prosecdef
+                    OR NOT (p.proconfig @> ARRAY['search_path=""'])
+                    OR has_function_privilege('anon', p.oid, 'EXECUTE')
+                    OR NOT has_function_privilege('authenticated', p.oid, 'EXECUTE')
+                  )
+              ) OR EXISTS (
+                SELECT 1
+                FROM pg_proc p
+                JOIN pg_namespace n ON n.oid = p.pronamespace
+                WHERE n.nspname = 'private'
+                  AND p.proname IN (
+                    'create_loyalty_qr_token_internal',
+                    'award_loyalty_points_from_qr_internal',
+                    'get_member_restaurant_menu_internal',
+                    'get_my_loyalty_membership_internal',
+                    'get_restaurant_reward_redemptions_internal'
+                  )
+                  AND (
+                    NOT p.prosecdef
+                    OR NOT (p.proconfig @> ARRAY['search_path=""'])
+                    OR has_function_privilege('anon', p.oid, 'EXECUTE')
+                    OR NOT has_function_privilege('authenticated', p.oid, 'EXECUTE')
+                  )
+              ) OR has_schema_privilege('authenticated', 'private', 'USAGE') IS NOT TRUE THEN
+              RAISE EXCEPTION 'Legacy loyalty RPCs must remain authenticated-only invoker wrappers backed by pinned private functions.';
+            END IF;
+
+            IF has_table_privilege('authenticated', 'private.loyalty_invoice_qr_codes', 'SELECT')
+              OR has_function_privilege('anon', 'public.issue_loyalty_invoice_qr(uuid,numeric,text,uuid)', 'EXECUTE')
+              OR has_function_privilege('anon', 'public.redeem_loyalty_invoice_qr(uuid)', 'EXECUTE')
+              OR NOT has_function_privilege('authenticated', 'public.issue_loyalty_invoice_qr(uuid,numeric,text,uuid)', 'EXECUTE')
+              OR NOT has_function_privilege('authenticated', 'public.redeem_loyalty_invoice_qr(uuid)', 'EXECUTE') THEN
+              RAISE EXCEPTION 'Invoice QR RPC privileges are not restricted to authenticated callers.';
+            END IF;
+
+            IF to_regclass('public.loyalty_rewards') IS NULL
+              OR to_regclass('public.loyalty_reward_redemptions') IS NULL
+              OR to_regprocedure('public.save_loyalty_reward(uuid,uuid,text,text,integer,integer,boolean)') IS NULL
+              OR to_regprocedure('public.get_restaurant_loyalty_rewards(uuid)') IS NULL
+              OR to_regprocedure('public.get_customer_loyalty_rewards(uuid)') IS NULL
+              OR to_regprocedure('public.redeem_loyalty_reward(uuid,uuid)') IS NULL
+              OR to_regprocedure('public.fulfill_loyalty_reward_redemption(uuid)') IS NULL
+              OR to_regprocedure('public.get_my_loyalty_reward_redemptions()') IS NULL
+              OR to_regprocedure('public.get_restaurant_loyalty_reward_redemptions(uuid)') IS NULL THEN
+              RAISE EXCEPTION 'The loyalty shop schema or one of its RPCs is missing after clean migration replay.';
+            END IF;
+
+            IF pg_get_function_result('public.get_member_restaurant_menu(uuid)'::regprocedure)
+                 IS DISTINCT FROM
+               pg_get_function_result('private.get_member_restaurant_menu_internal(uuid)'::regprocedure) OR (
+              SELECT count(*)
+              FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'public'
+                AND p.proname IN (
+                  'save_loyalty_reward',
+                  'get_restaurant_loyalty_rewards',
+                  'get_customer_loyalty_rewards',
+                  'redeem_loyalty_reward',
+                  'fulfill_loyalty_reward_redemption',
+                  'get_my_loyalty_reward_redemptions',
+                  'get_restaurant_loyalty_reward_redemptions'
+                )
+                AND NOT p.prosecdef
+                AND p.proconfig @> ARRAY['search_path=""']
+                AND NOT has_function_privilege('anon', p.oid, 'EXECUTE')
+                AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
+            ) <> 7 OR (
+              SELECT count(*)
+              FROM pg_proc p
+              JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'private'
+                AND p.proname IN (
+                  'save_loyalty_reward_internal',
+                  'get_restaurant_loyalty_rewards_internal',
+                  'get_customer_loyalty_rewards_internal',
+                  'redeem_loyalty_reward_internal',
+                  'fulfill_loyalty_reward_redemption_internal',
+                  'get_my_loyalty_reward_redemptions_internal',
+                  'get_restaurant_loyalty_reward_redemptions_internal'
+                )
+                AND p.prosecdef
+                AND p.proconfig @> ARRAY['search_path=""']
+                AND NOT has_function_privilege('anon', p.oid, 'EXECUTE')
+                AND has_function_privilege('authenticated', p.oid, 'EXECUTE')
+            ) <> 7 OR has_schema_privilege('authenticated', 'private', 'USAGE') IS NOT TRUE THEN
+              RAISE EXCEPTION 'Loyalty shop RPCs must be invoker wrappers backed by private, pinned, authenticated-only functions.';
+            END IF;
+
+            IF EXISTS (
+              SELECT 1
+              FROM pg_class c
+              JOIN pg_namespace n ON n.oid = c.relnamespace
+              WHERE n.nspname = 'public'
+                AND c.relname IN ('loyalty_rewards', 'loyalty_reward_redemptions')
+                AND NOT c.relrowsecurity
+            ) OR has_table_privilege('authenticated', 'public.loyalty_rewards', 'SELECT')
+              OR has_table_privilege('authenticated', 'public.loyalty_reward_redemptions', 'SELECT') THEN
+              RAISE EXCEPTION 'Loyalty reward tables must have RLS enabled and remain inaccessible for direct authenticated reads.';
             END IF;
 
             IF to_regprocedure('public.save_inventory_item_with_cost(uuid,uuid,text,text,numeric,numeric,text,numeric)') IS NULL
