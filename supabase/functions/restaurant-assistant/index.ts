@@ -103,9 +103,12 @@ Deno.serve(
       body: JSON.stringify({
         system_instruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
         contents,
-        generationConfig: { temperature: 0.45, maxOutputTokens: 1400 },
+        generationConfig: {
+          maxOutputTokens: 4096,
+          thinkingConfig: { thinkingLevel: "medium" },
+        },
       }),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(60_000),
     });
     if (!geminiResponse.ok) {
       // Do not log request bodies or model responses containing user text.
