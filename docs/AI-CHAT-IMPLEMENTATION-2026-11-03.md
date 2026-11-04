@@ -4,7 +4,7 @@
 
 O assistente combina duas camadas:
 
-1. **Modelo generativo local:** LFM2.5 1.2B Instruct, quantização INT4, executado no Android através de LiteRT-LM 0.16.1. A inferência decorre no próprio dispositivo; a mensagem, o histórico e os dados selecionados não são enviados para uma API de IA.
+1. **Modelo generativo local:** LFM2.5 1.2B Instruct, quantização INT4, executado no Android através de LiteRT-LM 0.18.0. A inferência decorre no próprio dispositivo; a mensagem, o histórico e os dados selecionados não são enviados para uma API de IA.
 2. **Ferramentas determinísticas:** os cálculos e verificações existentes da StudioMesa continuam disponíveis para preços/custos, stock e operação. O modelo generativo não substitui as fórmulas nem transforma estimativas em valores contabilísticos oficiais.
 
 O modo Android Gemini que existiu numa primeira tentativa foi removido do caminho de conversação. A Edge Function `studiomesa-assistant` anteriormente publicada no Supabase não é chamada pela app Android desta branch e não é necessária ao modo local.
@@ -16,7 +16,7 @@ O modo Android Gemini que existiu numa primeira tentativa foi removido do caminh
 - Tamanho esperado: **736 015 744 bytes** (cerca de 736 MB decimais).
 - SHA-256 esperado: `a28b5c59ac204e2e51c1f98d2d6db6982f0e12da59a268fe498edcb33237e906`.
 - Origem: [Hugging Face — LiteRT Community](https://huggingface.co/litert-community/LFM2.5-1.2B-Instruct).
-- Runtime Android: [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM), versão `0.16.1`.
+- Runtime Android: [LiteRT-LM](https://github.com/google-ai-edge/LiteRT-LM), versão `0.18.0`.
 - Transferência inicial por HTTPS para a pasta privada da aplicação. O ficheiro temporário só é instalado após validação do tamanho e SHA-256.
 - Depois da instalação, a inferência não precisa de Internet e não tem custo por mensagem. A primeira transferência consome aproximadamente 736 MB de dados; recomenda-se Wi-Fi.
 - O modelo não é empacotado no APK para evitar um instalador de tamanho excessivo.
@@ -25,7 +25,7 @@ O modo Android Gemini que existiu numa primeira tentativa foi removido do caminh
 
 - Backend CPU por defeito, contexto máximo configurado de 4096 tokens e orçamento de saída de 2048 tokens, de acordo com a recomendação do manifesto do modelo.
 - O pedido inclui até quatro mensagens anteriores, com conteúdo limitado, além de um resumo compacto do contexto do restaurante. Os limites foram reduzidos para deixar espaço ao orçamento de saída dentro do contexto disponível.
-- O modelo recebe duas ferramentas locais de leitura: `get_restaurant_data` (resumo, carta, pedidos, stock e reservas já carregados) e `calculate_menu_price_reference` (cálculo indicativo a partir de custo registado e percentagem escolhida). O runtime executa as chamadas localmente e devolve os resultados ao modelo.
+- O modelo recebe duas ferramentas locais de leitura: `get_restaurant_data` (resumo, carta, pedidos, stock e reservas já carregados) e `calculate_menu_price_reference` (cálculo indicativo a partir de custo registado e percentagem escolhida). É necessário LiteRT-LM `0.18.0` ou superior: a versão `0.16.1` não interpreta as chamadas de ferramentas emitidas pelo ficheiro LFM2 reempacotado em 13/10/2026 e devolve-as como texto. A partir de `0.18.0`, o parser LFM2 permite ao runtime executar as chamadas automaticamente e devolver os resultados ao modelo.
 - As ferramentas não permitem gravar nem alterar preços, stock, pedidos, reservas, pagamentos ou permissões. A informação devolvida é limitada ao snapshot atual da conta; stock e reservas não são consultáveis quando não foram carregados/atualizados.
 - O motor é inicializado numa thread de trabalho, não na thread da interface. A resposta é apresentada por blocos.
 - A instância de inferência é libertada quando a Activity deixa de estar visível; o ficheiro do modelo permanece instalado.
