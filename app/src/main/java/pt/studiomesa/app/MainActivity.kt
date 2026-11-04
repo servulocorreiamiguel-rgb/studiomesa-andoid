@@ -4817,6 +4817,13 @@ class MainActivity : Activity() {
         ) {
             showGenerativeAiConsentDialog()
         }, LinearLayout.LayoutParams(-1, dp(42)))
+        addGap(container, 5)
+        container.addView(secondaryButton(
+            if (assistantGoogleSearchEnabled()) "Pesquisa na Internet ativa · gerir"
+            else "Ativar pesquisa na Internet (opcional)"
+        ) {
+            showGoogleSearchConsentDialog()
+        }, LinearLayout.LayoutParams(-1, dp(42)))
         addGap(container, 10)
 
         val activeThread = runCatching {
@@ -4958,6 +4965,50 @@ class MainActivity : Activity() {
             hasRemoteRestaurant() &&
             backendPrefs.getString("restaurant_role", "").orEmpty() == "owner"
 
+    private fun assistantGoogleSearchEnabled(): Boolean =
+        assistantGeminiEnabled() &&
+            assistantSettingsPrefs.getBoolean("gemini_google_search_enabled", false)
+
+    private fun showGoogleSearchConsentDialog() {
+        if (!assistantGeminiEnabled()) {
+            AlertDialog.Builder(this)
+                .setTitle("Pesquisa na Internet")
+                .setMessage("Ativa primeiro a conversa generativa Gemini. A pesquisa só funciona para o proprietário autenticado.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        if (assistantGoogleSearchEnabled()) {
+            AlertDialog.Builder(this)
+                .setTitle("Pesquisa na Internet")
+                .setMessage("Desativar a pesquisa com Google Search? O chat generativo continuará disponível sem pesquisa.")
+                .setNegativeButton("Manter ativa", null)
+                .setPositiveButton("Desativar") { _, _ ->
+                    assistantSettingsPrefs.edit()
+                        .putBoolean("gemini_google_search_enabled", false)
+                        .apply()
+                    renderApp()
+                }
+                .show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Ativar pesquisa na Internet")
+            .setMessage(
+                "Quando a pesquisa está ativa, o Gemini pode pesquisar na Web e acrescentar fontes às respostas. A pergunta e até 10 mensagens recentes da conversa são enviadas à Google, apenas se passarem os filtros de privacidade do StudioMesa. Faturas, IVA, valores, números, contactos, OCR e Memória continuam bloqueados e não são enviados.\n\n" +
+                    "A quota indicada pela Google para Gemini 3 inclui 5 000 pesquisas gratuitas por mês; depois, as pesquisas adicionais podem custar 14 USD por cada 1 000. A quota e os preços podem mudar, e a utilização depende do plano do projeto Google. Não assumes que a funcionalidade é sempre gratuita.\n\n" +
+                    "Ativa apenas se aceitares este tratamento de dados e possíveis custos. Podes desativar a pesquisa a qualquer momento."
+            )
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Aceitar e ativar") { _, _ ->
+                assistantSettingsPrefs.edit()
+                    .putBoolean("gemini_google_search_enabled", true)
+                    .apply()
+                renderApp()
+            }
+            .show()
+    }
+
     private fun showGenerativeAiConsentDialog() {
         if (!hasRemoteRestaurant() || backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") {
             AlertDialog.Builder(this)
@@ -4973,7 +5024,10 @@ class MainActivity : Activity() {
                 .setMessage("Desativar o envio de conversas gerais para o Gemini? O assistente continuará a responder com as ferramentas locais.")
                 .setNegativeButton("Manter ativo", null)
                 .setPositiveButton("Desativar") { _, _ ->
-                    assistantSettingsPrefs.edit().putBoolean("gemini_free_tier_enabled", false).apply()
+                    assistantSettingsPrefs.edit()
+                        .putBoolean("gemini_free_tier_enabled", false)
+                        .putBoolean("gemini_google_search_enabled", false)
+                        .apply()
                     renderApp()
                 }
                 .show()
@@ -5042,7 +5096,8 @@ class MainActivity : Activity() {
                         SupabaseApi.generateRestaurantAssistantReply(
                             backendToken(),
                             backendRestaurantId(),
-                            buildGeminiMessages(scope, conversationId)
+                            buildGeminiMessages(scope, conversationId),
+                            useGoogleSearch = assistantGoogleSearchEnabled()
                         )
                     }
                     runOnUiThread {
