@@ -26,6 +26,8 @@ class LocalAssistantModelArtifactTest {
         assertTrue(LocalAssistantModelManager.MAX_OUTPUT_TOKENS in 1..4096)
         assertTrue(LocalAssistantModelManager.MAX_HISTORY_MESSAGES in 1..16)
         assertTrue(LocalAssistantModelManager.MAX_HISTORY_MESSAGE_CHARS <= 1000)
+        assertEquals(1024, LocalAssistantModelManager.MAX_OUTPUT_TOKENS)
+        assertEquals(2, LocalAssistantModelManager.MAX_SESSION_USER_TURNS)
     }
     @Test
     fun runtimeSessionIsReusedOnlyWithinTheSameUserConversation() {
