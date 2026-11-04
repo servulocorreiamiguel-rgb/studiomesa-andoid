@@ -97,6 +97,7 @@ class MainActivity : Activity() {
     private var assistantComposerDraft = ""
     private var assistantChatError: String? = null
     private var assistantReplyPending = false
+    private var assistantLatestBubbleView: View? = null
     private val assistantSettingsPrefs by lazy { getSharedPreferences("studiomesa_assistant_settings_v1", MODE_PRIVATE) }
     private var assistantFinancialToolsExpanded = false
     private var assistantAnalysisExpanded = false
@@ -713,6 +714,15 @@ class MainActivity : Activity() {
         }
         appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(60)))
         setContentView(appRoot)
+        if (activePage == "Assistente" && activeAssistantConversationId != null) {
+            scroll.post {
+                val latestBubble = assistantLatestBubbleView
+                if (latestBubble != null && latestBubble.parent === content) {
+                    val targetScrollY = latestBubble.bottom - scroll.height + dp(24)
+                    scroll.scrollTo(0, targetScrollY.coerceAtLeast(0))
+                }
+            }
+        }
         updateKitchenAutoRefresh()
         updateInventoryAutoRefresh()
     }
@@ -4834,6 +4844,7 @@ class MainActivity : Activity() {
             assistantChatError = error.message ?: "Não foi possível abrir o histórico."
             emptyList()
         }
+        assistantLatestBubbleView = null
 
         if (turns.isEmpty()) {
             val welcome = makeCard(17)
@@ -4958,6 +4969,7 @@ class MainActivity : Activity() {
         val width = (resources.displayMetrics.widthPixels * 0.84f).toInt()
         row.addView(bubble, LinearLayout.LayoutParams(width, -2))
         parent.addView(row, LinearLayout.LayoutParams(-1, -2))
+        assistantLatestBubbleView = row
     }
 
     private fun assistantGeminiEnabled(): Boolean =
