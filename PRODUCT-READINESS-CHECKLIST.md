@@ -1,5 +1,18 @@
 # StudioMesa — lista de preparação para uso profissional
 
+**Estado atual em 04/11/2026: NÃO PRONTO para operação comercial real.**  
+Relatório técnico atualizado: [COMMERCIAL-READINESS-2026-11-04.md](docs/COMMERCIAL-READINESS-2026-11-04.md).
+
+- [x] Exportação do histórico operacional de pedidos em CSV integrada na `main`; CI completa aprovada no commit da PR #81 (build, replay SQL/autorização, unit tests/Lint e emuladores Android 8/16).
+- [ ] Aguardar sucesso da CI do commit de merge na `main` antes de gerar novos artefactos.
+- [ ] Reconciliar os 54 registos remotos e os 42 ficheiros locais de migração antes de qualquer deploy Supabase.
+- [ ] Aplicar, após reconciliação e backup/restauro testado, os dois índices das FKs do consultor de preços preparados na branch de lançamento.
+- [ ] Executar os testes ponta a ponta de autenticação, autorização, perda de rede, concorrência e eliminação de conta em dispositivos físicos e contas descartáveis.
+- [ ] Concluir política de privacidade, Data safety, contrato, suporte, configuração de assinatura e publicação.
+
+**Nota:** os registos abaixo incluem verificações históricas de 29/10/2026; quando diferirem do relatório de 04/11/2026, prevalece a fotografia mais recente documentada em `docs/COMMERCIAL-READINESS-2026-11-04.md`.
+
+
 **Estado de lançamento nesta revisão: não pronto para operação comercial real.**  
 **Auditoria de segurança, versão e preparação comercial — 29/10/2026**
 
