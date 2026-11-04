@@ -5416,7 +5416,37 @@ class MainActivity : Activity() {
         val totalInput = addCandidate("Total (€)", suggestions.totalAmount?.let {
             it.copy(value = it.value.replace('.', ','))
         })
-        val confirmedInvoiceType = suggestions.invoiceType?.value
+
+        // The document type must be visible and explicitly confirmed, never silently inferred.
+        val invoiceTypeOptions = arrayOf("Fatura", "Nota de crédito")
+        var selectedInvoiceType = (suggestions.invoiceType?.value ?: invoice.invoiceType)
+            .takeIf { it == "invoice" || it == "credit_note" } ?: "invoice"
+        fun invoiceTypeLabel(value: String): String =
+            if (value == "credit_note") "Nota de crédito" else "Fatura"
+        content.addView(label(
+            "Tipo de documento" + (suggestions.invoiceType?.let {
+                " · correspondência textual ${it.confidence}/100"
+            } ?: " · sem identificação automática"),
+            11f, true, forestDeep
+        ))
+        suggestions.invoiceType?.let {
+            content.addView(label("Fonte: ${it.evidence}", 9.5f, false, muted))
+        }
+        lateinit var invoiceTypeButton: Button
+        invoiceTypeButton = secondaryButton("Confirmar tipo: ${invoiceTypeLabel(selectedInvoiceType)}") {
+            AlertDialog.Builder(this)
+                .setTitle("Selecionar tipo de documento")
+                .setSingleChoiceItems(invoiceTypeOptions, if (selectedInvoiceType == "credit_note") 1 else 0) { choiceDialog, which ->
+                    selectedInvoiceType = if (which == 1) "credit_note" else "invoice"
+                    invoiceTypeButton.text = "Confirmar tipo: ${invoiceTypeLabel(selectedInvoiceType)}"
+                    choiceDialog.dismiss()
+                }
+                .setNegativeButton("Cancelar", null)
+                .show()
+        }
+        content.addView(invoiceTypeButton, LinearLayout.LayoutParams(-1, dp(44)).apply {
+            setMargins(0, dp(3), 0, dp(8))
+        })
 
         val scroll = ScrollView(this).apply { addView(content) }
         val dialog = AlertDialog.Builder(this)
@@ -5446,7 +5476,7 @@ class MainActivity : Activity() {
                         supplier = candidateText(supplierInput, invoice.supplier),
                         number = candidateText(numberInput, invoice.number),
                         invoiceDate = nextDate,
-                        invoiceType = confirmedInvoiceType ?: invoice.invoiceType,
+                        invoiceType = selectedInvoiceType,
                         netAmount = nextNet,
                         taxAmount = nextVat,
                         totalAmount = nextTotal
