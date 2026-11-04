@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.StatFs
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Contents
+import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
@@ -29,6 +30,17 @@ import kotlinx.coroutines.runBlocking
  * The model is downloaded once, stored in app-private files and verified before inference.
  * No user prompt, history, restaurant data or memory is sent to a server by this class.
  */
+internal object AssistantModelConversationPolicy {
+    fun requiresNewSession(
+        activeConversationId: String?,
+        requestedConversationId: String,
+        sessionAvailable: Boolean
+    ): Boolean =
+        requestedConversationId.isBlank() ||
+            !sessionAvailable ||
+            activeConversationId != requestedConversationId
+}
+
 internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
     data class Turn(val role: String, val content: String)
 
@@ -43,6 +55,10 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         MODEL_FILENAME
     )
     private var engine: Engine? = null
+    private var conversation: Conversation? = null
+    private var activeConversationId: String? = null
+    private var restaurantDataTool: StudioMesaRestaurantDataTool? = null
+    private var priceReferenceTool: StudioMesaPriceReferenceTool? = null
     @Volatile private var downloading = false
     @Volatile private var closed = false
     private var verifiedThisProcess = false
@@ -153,6 +169,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
     }
 
     fun generate(
+        conversationId: String,
         systemInstruction: String,
         snapshot: StudioMesaAssistantSnapshot,
         history: List<Turn>,
@@ -166,6 +183,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         }
         worker.execute {
             val result = runCatching {
+                require(conversationId.isNotBlank()) { "A conversa não está identificada." }
                 require(userMessage.isNotBlank()) { "A mensagem está vazia." }
                 require(isModelInstalled()) { "Transfere primeiro o modelo de IA local." }
 
@@ -176,8 +194,15 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     verifiedThisProcess = true
                 }
 
-                val activeEngine = engine ?: run {
-                    val created = Engine(
+                val sessionAvailable = engine != null && conversation != null
+                if (AssistantModelConversationPolicy.requiresNewSession(
+                        activeConversationId = activeConversationId,
+                        requestedConversationId = conversationId,
+                        sessionAvailable = sessionAvailable
+                    )) {
+                    closeActiveSession()
+
+                    val createdEngine = Engine(
                         EngineConfig(
                             modelPath = modelFile.absolutePath,
                             backend = Backend.CPU(),
@@ -185,65 +210,103 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                             cacheDir = File(appContext.cacheDir, "studiomesa-litert-cache").absolutePath
                         )
                     )
-                    // Do not close an Engine whose initialize() failed; LiteRT-LM documents
-                    // that only a successfully initialized engine may be closed.
-                    created.initialize()
-                    engine = created
-                    created
+                    // An Engine and its Conversation belong to one user conversation.
+                    // LiteRT-LM 0.18/LFM2 can retain short-convolution state when a second
+                    // Conversation is created on an already-used Engine.
+                    createdEngine.initialize()
+
+                    val dataTool = StudioMesaRestaurantDataTool(snapshot)
+                    val priceTool = StudioMesaPriceReferenceTool(snapshot)
+                    val initialMessages = history
+                        .takeLast(MAX_HISTORY_MESSAGES)
+                        .mapNotNull { turn ->
+                            val clean = turn.content.trim().take(MAX_HISTORY_MESSAGE_CHARS)
+                            when {
+                                clean.isBlank() -> null
+                                turn.role == "user" -> Message.user(clean)
+                                turn.role == "assistant" -> Message.model(clean)
+                                else -> null
+                            }
+                        }
+
+                    val createdConversation = try {
+                        createdEngine.createConversation(
+                            ConversationConfig(
+                                systemInstruction = Contents.of(systemInstruction.take(MAX_SYSTEM_INSTRUCTION_CHARS)),
+                                initialMessages = initialMessages,
+                                tools = listOf(tool(dataTool), tool(priceTool)),
+                                automaticToolCalling = true,
+                                samplerConfig = SamplerConfig(
+                                    topK = 40,
+                                    topP = 0.9,
+                                    temperature = 0.3
+                                ),
+                                maxOutputToken = MAX_OUTPUT_TOKENS,
+                                prefillPrefaceOnInit = false
+                            )
+                        )
+                    } catch (error: Exception) {
+                        // Only successfully initialized engines may be closed.
+                        runCatching { createdEngine.close() }
+                        throw error
+                    }
+
+                    engine = createdEngine
+                    conversation = createdConversation
+                    activeConversationId = conversationId
+                    restaurantDataTool = dataTool
+                    priceReferenceTool = priceTool
                 }
 
-                val initialMessages = history
-                    .takeLast(MAX_HISTORY_MESSAGES)
-                    .mapNotNull { turn ->
-                        val clean = turn.content.trim().take(MAX_HISTORY_MESSAGE_CHARS)
-                        when {
-                            clean.isBlank() -> null
-                            turn.role == "user" -> Message.user(clean)
-                            turn.role == "assistant" -> Message.model(clean)
-                            else -> null
+                // Keep the conversation's native history, but refresh the read-only tool
+                // snapshots before each user turn so the assistant cannot rely on stale
+                // menu, order, stock or reservation values.
+                restaurantDataTool?.updateSnapshot(snapshot)
+                    ?: throw IllegalStateException("As ferramentas de consulta não estão disponíveis.")
+                priceReferenceTool?.updateSnapshot(snapshot)
+                    ?: throw IllegalStateException("A ferramenta de preços não está disponível.")
+
+                val activeConversation = conversation
+                    ?: throw IllegalStateException("Não foi possível iniciar a conversa local.")
+
+                val answer = StringBuilder()
+                runBlocking {
+                    activeConversation.sendMessageAsync(
+                        Message.user(userMessage.take(MAX_USER_MESSAGE_CHARS))
+                    ).collect { chunk ->
+                        val text = chunk.toString()
+                        if (text.isNotEmpty()) {
+                            answer.append(text)
+                            onToken(text)
                         }
                     }
-
-                val currentSnapshot = snapshot
-                val conversation = activeEngine.createConversation(
-                    ConversationConfig(
-                        systemInstruction = Contents.of(systemInstruction.take(MAX_SYSTEM_INSTRUCTION_CHARS)),
-                        initialMessages = initialMessages,
-                        tools = listOf(
-                            tool(StudioMesaRestaurantDataTool(currentSnapshot)),
-                            tool(StudioMesaPriceReferenceTool(currentSnapshot))
-                        ),
-                        automaticToolCalling = true,
-                        samplerConfig = SamplerConfig(
-                            topK = 40,
-                            topP = 0.9,
-                            temperature = 0.3
-                        ),
-                        maxOutputToken = MAX_OUTPUT_TOKENS,
-                        prefillPrefaceOnInit = false
-                    )
-                )
-
-                try {
-                    val answer = StringBuilder()
-                    runBlocking {
-                        conversation.sendMessageAsync(Message.user(userMessage.take(MAX_USER_MESSAGE_CHARS)))
-                            .collect { chunk ->
-                                val text = chunk.toString()
-                                if (text.isNotEmpty()) {
-                                    answer.append(text)
-                                    onToken(text)
-                                }
-                            }
-                    }
-                    answer.toString().trim().ifBlank {
-                        throw IllegalStateException("O modelo local não devolveu uma resposta.")
-                    }
-                } finally {
-                    conversation.close()
+                }
+                answer.toString().trim().ifBlank {
+                    throw IllegalStateException("O modelo local não devolveu uma resposta.")
                 }
             }
+            if (result.isFailure) {
+                // A persisted conversation can be reconstructed from encrypted history
+                // on the next turn; discard possibly incomplete native state now.
+                runCatching { closeActiveSession() }
+            }
             onComplete(result)
+        }
+    }
+
+    private fun closeActiveSession() {
+        val currentConversation = conversation
+        val currentEngine = engine
+        conversation = null
+        engine = null
+        activeConversationId = null
+        restaurantDataTool = null
+        priceReferenceTool = null
+
+        try {
+            currentConversation?.close()
+        } finally {
+            currentEngine?.close()
         }
     }
 
@@ -251,9 +314,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
     fun releaseEngine() {
         if (closed) return
         worker.execute {
-            val current = engine ?: return@execute
-            engine = null
-            current.close()
+            closeActiveSession()
         }
     }
 
@@ -261,10 +322,11 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         if (closed) return
         closed = true
         worker.execute {
-            val current = engine
-            engine = null
-            if (current != null) current.close()
-            worker.shutdown()
+            try {
+                closeActiveSession()
+            } finally {
+                worker.shutdown()
+            }
         }
     }
 
