@@ -1,39 +1,49 @@
-# StudioMesa chat, memória e agente financeiro — 03/11/2026
+# StudioMesa — chat, memória e pesquisa assistida
 
-## Funcionalidades desta branch
+## Funcionalidades nesta branch
 
-- Chat com mensagens alinhadas, nova conversa, pesquisa e histórico acessível diretamente no ecrã.
-- O histórico permite pesquisar, reabrir e eliminar conversas.
-- Memória editável, consultável no chat e separada por conta/restaurante.
-- Histórico e memória cifrados com AES-GCM; chave mantida no Android Keystore.
-- Persistência local dos campos e relatórios do gestor económico.
-- Arquivo de faturas/notas de crédito, pesquisa, registo e exportação CSV.
-- Anexos originais cifrados com AES-GCM em armazenamento privado, com chave Android Keystore.
-- OCR local com ML Kit para imagens JPEG/PNG/WebP e páginas PDF convertidas localmente em imagens. O PDF é limitado a 10 páginas por leitura; o texto extraído é limitado a 20 000 caracteres. TXT e XML são lidos localmente.
-- O texto OCR fica guardado de forma cifrada junto da fatura e é pesquisável/consultável no assistente. É apresentado como texto por confirmar, não como validação do documento.
-- O assistente calcula totais registados de faturas/notas de crédito, IVA líquido e valores por fornecedor; pode devolver linhas/texto OCR para inspeção.
-- O proprietário mantém de confirmar fornecedor, número, data, base tributável, IVA e total. O OCR não preenche nem altera automaticamente estes campos.
+- Chat com mensagens, nova conversa, histórico pesquisável, reabertura e eliminação de conversas.
+- Memória editável, separada por conta/restaurante.
+- Histórico e memória cifrados localmente com AES-GCM; a chave permanece no Android Keystore.
+- Motor local para perguntas sobre a operação, dados económicos, faturas e notas de crédito.
+- Ligação opcional a Gemini através da Edge Function `restaurant-assistant`. Só o proprietário autenticado pode ativar. A chave do fornecedor fica no servidor, nunca no APK.
+- Contexto recente limitado às últimas 10 mensagens; não é enviado o histórico completo.
+- Pesquisa na Internet opcional, desligada por defeito e sujeita a consentimento separado. Quando ativada, o pedido pode usar Google Search grounding e apresentar até cinco fontes HTTPS devolvidas pelo fornecedor.
+- O texto enviado ao Gemini passa por filtros locais e no servidor. Perguntas com referências a faturas, IVA, NIF, fornecedores, compras, despesas, salários, margens, tesouraria, números, valores, contactos ou outros dados sensíveis são bloqueadas e permanecem no motor local.
+- OCR e leitura local de PDF/imagens/TXT/XML; os anexos, o texto OCR, a Memória e o arquivo financeiro nunca são incluídos no pedido generativo.
 
-## Limites importantes
+## Consentimento, custos e limites da IA generativa
 
-- Toda a persistência de histórico, memória, dados económicos, registo de faturas e texto OCR é **local ao dispositivo**, cifrada e separada por conta/restaurante. Não existe sincronização entre telemóveis nem backup cloud.
-- A interface de chat não significa que exista já um modelo ChatGPT, Gemini ou Grok ligado. As respostas continuam a usar o motor local determinístico e as análises explícitas. Não há respostas generativas, pesquisa na Internet nem chamadas a ferramentas externas.
-- O OCR é executado localmente e não envia documentos nem texto extraído para um serviço cloud. Pode interpretar mal números, datas, IVA, tabelas ou nomes; qualquer valor fiscal tem de ser confirmado contra o original.
-- O reconhecimento de PDF processa até 10 páginas por importação. Documentos com mais páginas, baixa resolução, texto manuscrito, tabelas complexas ou formatos não suportados podem não produzir resultado útil.
-- O arquivo local não está ligado a software de faturação/contabilidade. O SAF-T de faturação do restaurante não deve ser assumido como arquivo das faturas de compras de fornecedores.
-- A base Supabase alojada não foi alterada. A reconciliação documentada em `supabase/MIGRATION-RECONCILIATION-2026-11-02.md` continua a bloquear novas tabelas, buckets e sincronização cloud até revisão.
+A ativação do Gemini é opcional. O ecrã de consentimento informa que mensagens gerais e contexto recente podem ser processados pela Google e que, no escalão gratuito, a utilização pode estar sujeita a limites e às condições de utilização de dados do fornecedor.
 
-## Segurança
+A pesquisa Google Search tem um consentimento adicional. A documentação do Gemini indica 5 000 pesquisas gratuitas por mês para Gemini 3 e cobrança de 14 USD por 1 000 pesquisas adicionais, segundo as condições e quotas do projeto Google. Estes valores podem mudar; a app não garante custo zero. A pesquisa só é pedida quando o proprietário a ativa e o filtro de privacidade permite enviar a conversa.
 
-- Dados separados pelo âmbito do ID de conta e restaurante.
-- Histórico, memória, entradas financeiras, metadados da fatura e texto OCR guardados cifrados com AES-GCM; chave no Android Keystore.
-- Anexos originais cifrados numa pasta privada da app, também com chave no Android Keystore.
-- A análise financeira e o OCR não transmitem documentos a fornecedores externos nesta versão.
-- O acesso à área financeira/faturas fica limitado ao proprietário quando existe um restaurante remoto ligado. A proteção local do dispositivo não substitui gestão remota de sessões ou controlo de permissões cloud.
+A integração de código está versionada nesta branch, mas não fica operacional em produção até publicar a Edge Function no projeto Supabase e configurar o segredo `GEMINI_API_KEY` (e, opcionalmente, `GEMINI_MODEL`). Não incluir chaves no código Android, commits, logs ou ficheiros de configuração públicos.
 
-## Testes
+Os filtros são heurísticos. Não são uma garantia de anonimização nem de prevenção de fuga de dados. Podem bloquear perguntas legítimas por conterem números ou palavras sensíveis. Não escrever informação confidencial nas conversas generativas.
+
+## Arquivo de faturas e gestor económico
+
+- Arquivo cifrado local de faturas e notas de crédito, pesquisa, deteção de duplicados, anexos e exportação.
+- OCR local de imagens e das primeiras 10 páginas de PDF; TXT/XML são lidos localmente.
+- O parser apresenta sugestões editáveis de fornecedor, número, data, tipo de documento, base tributável, IVA e total.
+- O tipo de documento (fatura/nota de crédito) é apresentado e pode ser alterado antes da confirmação.
+- O proprietário tem de rever os campos sugeridos contra o documento original e confirmar. A pontuação apresentada é uma correspondência textual heurística, não uma probabilidade nem uma validação fiscal.
+- O gestor económico consulta os totais das faturas e notas de crédito que foram confirmadas no arquivo. Não soma automaticamente compras ao custo alimentar consumido, para evitar dupla contagem.
+- Perguntas financeiras, dados fiscais e documentos continuam no motor local; não são enviados ao Gemini.
+
+## O que ainda não está feito
+
+- Histórico, Memória, arquivo de faturas e anexos não sincronizam entre dispositivos nem têm backup cloud nesta versão.
+- A app não está ligada a um POS ou programa de faturação/contabilidade. A integração depende de identificar o software do restaurante e validar a API/exportação que esse fornecedor disponibiliza.
+- Não assumir que o SAF-T (PT) de faturação inclui as faturas de compras emitidas pelos fornecedores.
+- A Edge Function Gemini ainda precisa de deploy autenticado e configuração de segredo no Supabase.
+- Não foi alterado o esquema alojado do Supabase. A reconciliação do histórico de migrações e o plano de backup/restauro têm de estar concluídos antes de criar tabelas, buckets ou sincronização cloud.
+
+## Testes e segurança antes de distribuir
 
 - Testes instrumentados para persistência e separação por âmbito do histórico e memória.
-- Testes instrumentados para persistência cifrada de entradas económicas e faturas, pesquisa e rejeição de duplicados.
-- Ainda é necessário confirmar a nova dependência ML Kit, o OCR de imagens/PDF em dispositivos/emuladores e o percurso completo de importação.
-- A compilação, testes unitários, Lint, smoke tests Android 8/16 e replay/autorização das migrações têm de passar antes de integrar na branch principal ou distribuir APK.
+- Testes para parser de sugestões, duplicados, privacidade, OCR e arquivos cifrados.
+- CI tem de concluir compilação das cinco variantes, testes unitários, Lint, configuração comercial, replay de migrações desde base vazia, testes de autorização e smoke tests em Android 8 e Android 16.
+- Testes reais em dispositivos, contas e restaurantes de teste continuam necessários. O sucesso da CI não substitui testes de recuperação de conta, backup/restauro, utilização prolongada, rede instável ou permissões.
+- O assistente não substitui contabilista, validação fiscal, aconselhamento jurídico nem decisão do proprietário.
