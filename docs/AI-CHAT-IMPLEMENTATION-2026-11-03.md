@@ -34,6 +34,7 @@ O modo Android Gemini que existiu numa primeira tentativa foi removido do caminh
 - A resposta determinística continua disponível como alternativa enquanto o modelo não for instalado.
 - A quantidade de memória usada e a velocidade dependem do dispositivo, da versão Android e da carga do sistema. A compilação não prova que o modelo funcione com desempenho aceitável no OPPO A5m. É obrigatório testar instalação, inicialização, resposta, temperatura, memória e consumo de bateria no aparelho físico antes de o anunciar como compatível.
 - Um modelo de 1,2 mil milhões de parâmetros não é equivalente ao ChatGPT Plus. Tem menor capacidade de raciocínio, conhecimento e contexto; também não tem pesquisa web integrada nem conhecimento atualizado por si só.
+- O cartão público da conversão INT4 reporta que a sua pequena verificação de oito perguntas não passou no teste de referência com motor novo em duas tentativas. Este resultado não demonstra que todas as respostas falhem, mas é um sinal de qualidade que exige avaliação independente com perguntas reais de restauração, português europeu e cálculos antes de qualquer distribuição comercial.
 
 ## Contexto do restaurante
 
