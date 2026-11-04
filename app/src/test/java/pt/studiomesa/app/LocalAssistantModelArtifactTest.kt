@@ -34,6 +34,8 @@ class LocalAssistantModelArtifactTest {
             AssistantModelConversationPolicy.requiresNewSession(
                 activeConversationId = "thread-a",
                 requestedConversationId = "thread-a",
+                activeSystemInstruction = "memory-a",
+                requestedSystemInstruction = "memory-a",
                 sessionAvailable = true
             )
         )
@@ -42,6 +44,8 @@ class LocalAssistantModelArtifactTest {
             AssistantModelConversationPolicy.requiresNewSession(
                 activeConversationId = "thread-a",
                 requestedConversationId = "thread-b",
+                activeSystemInstruction = "memory-a",
+                requestedSystemInstruction = "memory-a",
                 sessionAvailable = true
             )
         )
@@ -50,6 +54,8 @@ class LocalAssistantModelArtifactTest {
             AssistantModelConversationPolicy.requiresNewSession(
                 activeConversationId = "thread-a",
                 requestedConversationId = "thread-a",
+                activeSystemInstruction = "memory-a",
+                requestedSystemInstruction = "memory-a",
                 sessionAvailable = false
             )
         )
@@ -58,7 +64,19 @@ class LocalAssistantModelArtifactTest {
             AssistantModelConversationPolicy.requiresNewSession(
                 activeConversationId = null,
                 requestedConversationId = "thread-a",
+                activeSystemInstruction = "memory-a",
+                requestedSystemInstruction = "memory-a",
                 sessionAvailable = false
+            )
+        )
+        assertEquals(
+            true,
+            AssistantModelConversationPolicy.requiresNewSession(
+                activeConversationId = "thread-a",
+                requestedConversationId = "thread-a",
+                activeSystemInstruction = "memory-a",
+                requestedSystemInstruction = "memory-b",
+                sessionAvailable = true
             )
         )
     }
