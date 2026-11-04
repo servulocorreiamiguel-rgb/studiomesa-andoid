@@ -90,3 +90,16 @@ A branch de preparação acrescenta `20261104100000_price_adviser_actor_indexes.
 6. **Release:** gerar AABs comerciais assinados a partir de um commit da `main` com CI completa aprovada e só depois iniciar publicação/distribuição.
 
 **Conclusão:** o StudioMesa tem uma base Android funcional, CI automatizada e funcionalidades úteis, mas ainda não está pronto para ser vendido como solução de gestão de restaurante em produção. Os bloqueios acima são requisitos de lançamento, não tarefas cosméticas.
+
+
+## 6. Requisitos atuais da Google Play
+
+Consulta das páginas oficiais da Google Play em 4/11/2026:
+
+- **Target API:** desde 31/08/2026, novas aplicações e atualizações móveis submetidas à Play Store devem visar Android 16 / API 36 ou superior. O projeto já usa `targetSdk = 36`; voltar a confirmar o valor no AAB comercial final. Fonte: https://support.google.com/googleplay/android-developer/answer/11926878
+- **Conta de programador:** o titular que se regista tem de ter pelo menos 18 anos. A taxa oficial indicada é de 25 USD, paga uma única vez. Confirmar o montante e as verificações no fluxo oficial de registo. Fonte: https://support.google.com/googleplay/android-developer/answer/6112435
+- **Teste fechado:** para contas pessoais criadas após 13/11/2023, a Google exige pelo menos 12 participantes inscritos continuamente num teste fechado durante 14 dias antes de solicitar acesso à produção. Esta condição depende do tipo/data da conta. Fonte: https://support.google.com/googleplay/android-developer/answer/14151465
+- **Privacidade e Data safety:** a política tem de estar disponível numa URL pública não editável, ligada na ficha da Play Store e acessível dentro da aplicação. O formulário Data safety tem de refletir os dados e fornecedores realmente usados. O rascunho atual contém campos por preencher, pelo que não pode ser publicado. Fonte: https://support.google.com/googleplay/android-developer/answer/10144311
+- **Eliminação de conta:** como o StudioMesa permite criar contas, é necessário manter uma via clara de eliminação dentro da aplicação e uma via web pública, eliminando os dados associados conforme as regras de retenção legitimamente aplicáveis. O endpoint web existe, mas falta testar o percurso completo com contas descartáveis e validar o resultado no backend. Fonte: https://support.google.com/googleplay/android-developer/answer/13327111
+
+A Google Play não é o único canal possível para uma instalação Android, mas APK debug não deve ser usado como pacote comercial. Mesmo para distribuição direta, assinatura comercial, contrato, política de privacidade, suporte, backups e testes operacionais continuam necessários.
