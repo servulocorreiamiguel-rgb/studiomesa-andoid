@@ -5042,6 +5042,7 @@ class MainActivity : Activity() {
                     .map { turn -> LocalAssistantModelManager.Turn(turn.role, turn.content) }
 
                 localAssistantModelManager.generate(
+                    conversationId = conversationId,
                     systemInstruction = buildLocalAssistantSystemInstruction(scope),
                     snapshot = assistantSnapshot(),
                     history = previousTurns,
