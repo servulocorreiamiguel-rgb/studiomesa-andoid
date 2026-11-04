@@ -2,6 +2,8 @@
 
 Protótipo Android de gestão de restaurante com identidade visual própria e dados de demonstração. Não é uma solução certificada para operação comercial. Antes de um restaurante o usar em serviço real, é obrigatório testar os fluxos, configurar as regras do restaurante e confirmar os requisitos legais e operacionais.
 
+> **Atualização de 04/11/2026:** continua a ser uma versão de demonstração, não pronta para operação comercial real. A fotografia técnica, os bloqueios de produção e a sequência de lançamento estão em [docs/COMMERCIAL-READINESS-2026-11-04.md](docs/COMMERCIAL-READINESS-2026-11-04.md). A exportação operacional de pedidos em CSV foi integrada; a integração de receitas, loja/QR e permissões granulares continua em revisão. Não aplicar migrações ao Supabase alojado enquanto o histórico não estiver reconciliado.
+
 ## Estrutura dos planos de demonstração
 
 - **Essencial — 890 € (referência):** aplicação de gestão do restaurante com mesas, carta, pedidos e fidelização.
@@ -14,6 +16,7 @@ Estes valores são propostas de referência para avaliação comercial, não pag
 
 - **Mesas:** 12 mesas iniciais por restaurante, com possibilidade de adicionar até 100 números de mesa e definir zona e capacidade. O estado livre/ocupada fica partilhado pela equipa.
 - **Pedidos:** criação de pedidos por mesa/artigo, fluxo Aberto → Em preparação → Pronto → Concluído e cancelamento com confirmação. O servidor regista a criação e cada mudança de estado no histórico, com data/hora e utilizador. As tentativas de gravação usam um UUID por conteúdo e verificam o registo existente após uma falha, evitando criar um pedido duplicado quando a confirmação da rede se perde.
+- **Exportação CSV:** a área Análise permite exportar o histórico operacional de pedidos, com leitura paginada, separador adequado a folhas de cálculo portuguesas e proteção contra fórmulas maliciosas. O CSV não é um documento fiscal, contabilístico nem comprovativo de pagamento.
 - **Vista de cozinha (todos os planos de gestão):** fila dedicada de pedidos ativos, com mesa, artigo, curso, notas da cozinha, estado e tempo de espera; permite avançar o pedido entre as fases. A fila consulta automaticamente o servidor a cada 15 segundos enquanto esta secção está aberta e a aplicação está em primeiro plano; o botão de atualização manual continua disponível. É atualização periódica por consulta, não uma subscrição em tempo real, e não funciona em segundo plano.
 - **Carta:** artigos editáveis com categoria, descrição, preço de venda, custo interno e informação declarada de alergénios. Os custos e margens permanecem na aplicação de gestão; o cartão de cliente só recebe nome, categoria, descrição, preço e nota de alergénios.
 - **Dados partilhados:** quando existe sessão e restaurante configurado, mesas, carta e pedidos são guardados no Supabase e podem ser atualizados em vários dispositivos autenticados. A sincronização é feita ao abrir a aplicação, após operações e manualmente; ainda não há atualização em tempo real por subscrição.
