@@ -4961,7 +4961,7 @@ class MainActivity : Activity() {
     }
 
     private fun assistantGeminiEnabled(): Boolean =
-        assistantSettingsPrefs.getBoolean("gemini_free_tier_enabled", false) &&
+        assistantSettingsPrefs.getBoolean("gemini_enabled", false) &&
             !isCustomerApp &&
             hasRemoteRestaurant() &&
             backendPrefs.getString("restaurant_role", "").orEmpty() == "owner"
@@ -4982,7 +4982,7 @@ class MainActivity : Activity() {
                 .setNegativeButton("Manter ativo", null)
                 .setPositiveButton("Desativar") { _, _ ->
                     assistantSettingsPrefs.edit()
-                        .putBoolean("gemini_free_tier_enabled", false)
+                        .putBoolean("gemini_enabled", false)
                         .apply()
                     renderApp()
                 }
@@ -4994,11 +4994,11 @@ class MainActivity : Activity() {
             .setMessage(
                 "A ligação Gemini é opcional e só deve ser ativada pelo proprietário depois de um responsável adulto (18+) configurar e aceitar os termos do Google Cloud. Para disponibilizar a Gemini API a utilizadores no Espaço Económico Europeu, o projeto Google Cloud tem de ter uma conta de faturação ativa. A quota sem custos pode ser limitada; depois dela, podem existir cobranças. Não assumas que a utilização é sempre gratuita.\n\n" +
                     "As mensagens de conversa geral e até 10 mensagens recentes podem ser enviadas à Google. O StudioMesa bloqueia mensagens detetadas como contendo faturas, IVA, valores financeiros, dados pessoais ou números. Anexos, texto OCR/XML, Memória e histórico de faturas nunca são enviados; essas perguntas continuam no motor local.\n\n" +
-                    "Não escrevas nomes, contactos, NIF, palavras-passe ou informação confidencial. A chave Gemini fica no servidor, nunca na aplicação. Esta ligação destina-se apenas à área de gestão do restaurante e não é disponibilizada na app de clientes."
+                    "Não escrevas nomes, contactos, NIF, palavras-passe ou informação confidencial. A chave Gemini fica no servidor, nunca na aplicação. Esta ligação destina-se apenas à área de gestão do restaurante e não é disponibilizada na app de clientes. O assistente não pesquisa a Internet nesta versão."
             )
             .setNegativeButton("Cancelar", null)
             .setPositiveButton("Concordo e ativar") { _, _ ->
-                assistantSettingsPrefs.edit().putBoolean("gemini_free_tier_enabled", true).apply()
+                assistantSettingsPrefs.edit().putBoolean("gemini_enabled", true).apply()
                 renderApp()
             }
             .show()
