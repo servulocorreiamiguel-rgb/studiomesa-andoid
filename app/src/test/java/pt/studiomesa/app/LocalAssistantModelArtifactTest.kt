@@ -36,6 +36,8 @@ class LocalAssistantModelArtifactTest {
                 requestedConversationId = "thread-a",
                 activeSystemInstruction = "memory-a",
                 requestedSystemInstruction = "memory-a",
+                activeUserTurns = 1,
+                maxUserTurnsPerSession = 2,
                 sessionAvailable = true
             )
         )
@@ -46,6 +48,8 @@ class LocalAssistantModelArtifactTest {
                 requestedConversationId = "thread-b",
                 activeSystemInstruction = "memory-a",
                 requestedSystemInstruction = "memory-a",
+                activeUserTurns = 1,
+                maxUserTurnsPerSession = 2,
                 sessionAvailable = true
             )
         )
@@ -56,6 +60,8 @@ class LocalAssistantModelArtifactTest {
                 requestedConversationId = "thread-a",
                 activeSystemInstruction = "memory-a",
                 requestedSystemInstruction = "memory-a",
+                activeUserTurns = 0,
+                maxUserTurnsPerSession = 2,
                 sessionAvailable = false
             )
         )
@@ -66,6 +72,8 @@ class LocalAssistantModelArtifactTest {
                 requestedConversationId = "thread-a",
                 activeSystemInstruction = "memory-a",
                 requestedSystemInstruction = "memory-a",
+                activeUserTurns = 0,
+                maxUserTurnsPerSession = 2,
                 sessionAvailable = false
             )
         )
@@ -76,6 +84,20 @@ class LocalAssistantModelArtifactTest {
                 requestedConversationId = "thread-a",
                 activeSystemInstruction = "memory-a",
                 requestedSystemInstruction = "memory-b",
+                activeUserTurns = 0,
+                maxUserTurnsPerSession = 2,
+                sessionAvailable = true
+            )
+        )
+        assertEquals(
+            true,
+            AssistantModelConversationPolicy.requiresNewSession(
+                activeConversationId = "thread-a",
+                requestedConversationId = "thread-a",
+                activeSystemInstruction = "memory-a",
+                requestedSystemInstruction = "memory-a",
+                activeUserTurns = 2,
+                maxUserTurnsPerSession = 2,
                 sessionAvailable = true
             )
         )
