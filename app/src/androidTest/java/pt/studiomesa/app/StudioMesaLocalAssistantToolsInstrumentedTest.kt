@@ -91,4 +91,47 @@ class StudioMesaLocalAssistantToolsInstrumentedTest {
         assertTrue(result.getString("message").contains("não está carregado"))
         assertTrue(result.getBoolean("read_only"))
     }
+    @Test
+    fun localToolsUseTheLatestSnapshotAfterEachChatTurn() {
+        val firstSnapshot = StudioMesaAssistantSnapshot(
+            isDemo = true,
+            restaurantConfigured = false,
+            menuItems = listOf(
+                AssistantMenuItem("Bife", BigDecimal("10.00"), BigDecimal("2.50"))
+            )
+        )
+        val refreshedSnapshot = StudioMesaAssistantSnapshot(
+            isDemo = true,
+            restaurantConfigured = false,
+            menuItems = listOf(
+                AssistantMenuItem("Bife", BigDecimal("12.00"), BigDecimal("3.00"))
+            )
+        )
+
+        val priceTool = StudioMesaPriceReferenceTool(firstSnapshot)
+        val dataTool = StudioMesaRestaurantDataTool(firstSnapshot)
+        priceTool.updateSnapshot(refreshedSnapshot)
+        dataTool.updateSnapshot(refreshedSnapshot)
+
+        val price = JSONObject(
+            priceTool.execute(
+                JSONObject()
+                    .put("item_name", "Bife")
+                    .put("target_cost_percent", 25)
+                    .toString()
+            )
+        )
+        val menu = JSONObject(
+            dataTool.execute(
+                JSONObject()
+                    .put("area", "menu")
+                    .toString()
+            )
+        ).getJSONArray("items").getJSONObject(0)
+
+        assertEquals("12.00", price.getString("current_selling_price_eur"))
+        assertEquals("3.00", price.getString("registered_unit_cost_eur"))
+        assertEquals("12.00", menu.getString("selling_price_eur"))
+    }
+
 }
