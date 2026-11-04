@@ -4784,8 +4784,10 @@ class MainActivity : Activity() {
         statusCard.addView(label("ASSISTENTE STUDIO MESA", 9.5f, true, copper))
         addGap(statusCard, 5)
         statusCard.addView(label(
-            if (assistantGeminiEnabled()) {
-                "Gemini generativo ativo para conversa geral. Perguntas com faturas, dados fiscais, valores financeiros, dados pessoais ou números continuam no motor local; nunca são enviados anexos, OCR ou Memória."
+            if (assistantGoogleSearchEnabled()) {
+                "Gemini generativo e pesquisa Google Search ativos para conversa geral. As fontes Web são apresentadas como ligações. Perguntas com faturas, dados fiscais, valores financeiros, dados pessoais ou números continuam no motor local; nunca são enviados anexos, OCR ou Memória."
+            } else if (assistantGeminiEnabled()) {
+                "Gemini generativo ativo para conversa geral, sem pesquisa na Internet. Perguntas com faturas, dados fiscais, valores financeiros, dados pessoais ou números continuam no motor local; nunca são enviados anexos, OCR ou Memória."
             } else {
                 "O histórico e a memória ficam cifrados neste dispositivo. O motor local trata das faturas e cálculos; podes ativar o Gemini gratuito para conversa geral, com envio de texto para a Google."
             },
@@ -4944,12 +4946,19 @@ class MainActivity : Activity() {
             if (isUser) copper else forestSoft
         ))
         addGap(bubble, 5)
-        bubble.addView(label(
+        val messageText = label(
             turn.content,
             13f,
             false,
             if (isUser) white else ink
-        ))
+        )
+        if (!isUser) {
+            // Make grounded source URLs returned by Google Search tappable.
+            messageText.autoLinkMask = android.text.util.Linkify.WEB_URLS
+            messageText.linksClickable = true
+            messageText.movementMethod = android.text.method.LinkMovementMethod.getInstance()
+        }
+        bubble.addView(messageText)
         addGap(bubble, 5)
         val time = SimpleDateFormat("HH:mm", Locale("pt", "PT")).format(Date(turn.createdAtMillis))
         bubble.addView(label(time, 9f, false, if (isUser) copperPale else muted).apply {
