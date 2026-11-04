@@ -39,8 +39,8 @@ class AssistantChatUiInstrumentedTest {
                 onView(withContentDescription("Abrir menu de navegação")).perform(click())
                 onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
 
-                // Web research is visibly opt-in and stays disabled by default.
-                onView(withText("Ativar pesquisa na Internet (opcional)"))
+                // Generative AI is an explicit owner-controlled opt-in.
+                onView(withText("Ativar conversa generativa"))
                     .check(matches(isDisplayed()))
 
                 onView(withText("Histórico")).check(matches(isDisplayed())).perform(click())
