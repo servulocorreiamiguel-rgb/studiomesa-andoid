@@ -251,7 +251,7 @@ object SupabaseApi {
             "/functions/v1/restaurant-assistant",
             JSONObject().put("restaurant_id", restaurantId).put("messages", messages),
             token = accessToken,
-            readTimeoutMillis = 40_000
+            readTimeoutMillis = 70_000
         )
         val reply = response.optString("reply").trim()
         if (reply.isBlank()) throw IllegalStateException("O servidor não devolveu uma resposta generativa.")
