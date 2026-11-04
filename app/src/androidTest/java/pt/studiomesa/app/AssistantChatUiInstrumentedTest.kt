@@ -39,6 +39,10 @@ class AssistantChatUiInstrumentedTest {
                 onView(withContentDescription("Abrir menu de navegação")).perform(click())
                 onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
 
+                // Web research is visibly opt-in and stays disabled by default.
+                onView(withText("Ativar pesquisa na Internet (opcional)"))
+                    .check(matches(isDisplayed()))
+
                 onView(withText("Histórico")).check(matches(isDisplayed())).perform(click())
                 onView(withText("Histórico de conversas")).check(matches(isDisplayed()))
                 onView(withText("Fechar")).perform(click())
