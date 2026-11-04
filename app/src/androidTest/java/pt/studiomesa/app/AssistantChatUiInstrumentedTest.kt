@@ -37,7 +37,7 @@ class AssistantChatUiInstrumentedTest {
         try {
             ActivityScenario.launch(MainActivity::class.java).use {
                 onView(withContentDescription("Abrir menu de navegação")).perform(click())
-                onView(withContentDescription("Abrir secção Assistente")).perform(click())
+                onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
 
                 onView(withText("Histórico")).check(matches(isDisplayed())).perform(click())
                 onView(withText("Histórico de conversas")).check(matches(isDisplayed()))
@@ -80,7 +80,7 @@ class AssistantChatUiInstrumentedTest {
         try {
             ActivityScenario.launch(MainActivity::class.java).use {
                 onView(withContentDescription("Abrir menu de navegação")).perform(click())
-                onView(withContentDescription("Abrir secção Assistente")).perform(click())
+                onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
                 onView(withText("＋ Ferramentas financeiras")).perform(scrollTo(), click())
                 onView(withText("＋ Registar fatura ou nota de crédito")).perform(scrollTo(), click())
 

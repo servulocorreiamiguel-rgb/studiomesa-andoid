@@ -659,6 +659,9 @@ class MainActivitySmokeTest {
             onView(withText("Valor nominal dos pedidos criados no período e concluídos"))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
+            onView(withText("Exportar histórico completo em CSV"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
         }
     }
 

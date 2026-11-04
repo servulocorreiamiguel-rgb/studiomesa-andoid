@@ -43,6 +43,9 @@ import java.util.Locale
 import java.util.TimeZone
 
 class MainActivity : Activity() {
+    companion object {
+        private const val REQUEST_EXPORT_ORDERS_CSV = 7812
+    }
     private lateinit var store: RestaurantStore
     private lateinit var appRoot: LinearLayout
     private var activePage = "Início"
@@ -85,6 +88,7 @@ class MainActivity : Activity() {
     private var pendingInvoiceAttachmentId: String? = null
     private var pendingInvoiceExportId: String? = null
     private var pendingInvoiceCsvScope: String? = null
+    private var pendingCsvExport: String? = null
     private val invoiceAttachmentRequestCode = 7101
     private val invoiceExportRequestCode = 7102
     private val invoiceCsvExportRequestCode = 7103
@@ -192,8 +196,41 @@ class MainActivity : Activity() {
 
     @Deprecated("Use the document-picker result API when migrating to Activity Result APIs.")
     @Suppress("DEPRECATION")
+    @Deprecated("Uses Android's document picker result contract for compatibility with Activity.")
+    @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_EXPORT_ORDERS_CSV) {
+            val csv = pendingCsvExport
+            pendingCsvExport = null
+            val uri = data?.data
+            if (resultCode != RESULT_OK || uri == null) return
+            if (csv == null) {
+                AlertDialog.Builder(this)
+                    .setTitle("Exportação interrompida")
+                    .setMessage("O relatório deixou de estar disponível. Abre Análise e inicia a exportação novamente.")
+                    .setPositiveButton("OK", null)
+                    .show()
+                return
+            }
+            try {
+                val output = contentResolver.openOutputStream(uri)
+                    ?: throw IllegalStateException("Não foi possível abrir o ficheiro escolhido.")
+                output.use { it.write(csv.toByteArray(Charsets.UTF_8)) }
+                AlertDialog.Builder(this)
+                    .setTitle("Relatório exportado")
+                    .setMessage("O CSV foi guardado no destino escolhido. Contém dados operacionais, não comprovativos de pagamento ou contabilidade oficial.")
+                    .setPositiveButton("OK", null)
+                    .show()
+            } catch (_: Exception) {
+                AlertDialog.Builder(this)
+                    .setTitle("Não foi possível exportar")
+                    .setMessage("Não foi possível guardar o ficheiro. Escolhe outro destino com espaço disponível e tenta novamente.")
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
+            return
+        }
         if (resultCode != RESULT_OK || data?.data == null) {
             pendingInvoiceAttachmentId = null
             pendingInvoiceExportId = null
@@ -430,8 +467,8 @@ class MainActivity : Activity() {
         }
         val pageGroups = listOf(
             "OPERAÇÃO" to listOf("Início", "Mesas", "Pedidos", "Cozinha"),
-            "GESTÃO DO RESTAURANTE" to listOf("Carta", "Pontos", "Reservas", "Preço Justo", "Stock", "Análise"),
             "ASSISTÊNCIA" to listOf("Assistente"),
+            "GESTÃO DO RESTAURANTE" to listOf("Carta", "Pontos", "Reservas", "Preço Justo", "Stock", "Análise"),
             "CONTA" to listOf("Conta")
         )
         pageGroups.forEach { (groupTitle, groupPages) ->
@@ -6010,6 +6047,22 @@ class MainActivity : Activity() {
         container.addView(toggle, cardParams())
         if (!economicManagerEnabled) return
 
+        val invoiceSummary = makeCard(15)
+        invoiceSummary.addView(label("Faturas e notas de crédito registadas", 16f, true, forestDeep))
+        addGap(invoiceSummary, 5)
+        val invoiceSummaryText = runCatching {
+            answerRegisteredInvoices("Resumo geral das faturas", scope)
+        }.getOrElse {
+            "Não foi possível consultar o arquivo financeiro cifrado. Os documentos não foram alterados."
+        }
+        invoiceSummary.addView(label(invoiceSummaryText, 12f, false, ink))
+        addGap(invoiceSummary, 5)
+        invoiceSummary.addView(label(
+            "Os valores representam documentos registados e confirmados pelo proprietário. Não os somes automaticamente ao custo alimentar consumido: compras e consumo de stock são momentos diferentes e fazê-lo pode duplicar custos.",
+            11f, false, muted
+        ))
+        container.addView(invoiceSummary, cardParams())
+
         addGap(container, 6)
         val monthly = makeCard(15)
         monthly.addView(label("1 · Indicadores económicos mensais", 17f, true, forestDeep))
@@ -6485,6 +6538,116 @@ class MainActivity : Activity() {
             12.5f, false, ink
         ))
         container.addView(note, cardParams())
+        addGap(container, 8)
+        container.addView(
+            primaryButton("Exportar histórico completo em CSV") { exportOrdersCsv() },
+            LinearLayout.LayoutParams(-1, dp(48))
+        )
+        addGap(container, 6)
+        container.addView(label(
+            "Inclui o histórico de pedidos disponível no servidor ou neste dispositivo. Não inclui dados pessoais de clientes e não substitui um relatório contabilístico.",
+            11.5f, false, muted
+        ))
+    }
+
+    private fun exportOrdersCsv() {
+        if (hasRemoteRestaurant()) {
+            runBackend({
+                val token = backendToken()
+                val restaurantId = backendRestaurantId()
+                require(token.isNotBlank() && restaurantId.isNotBlank()) {
+                    "Inicia sessão e seleciona um restaurante antes de exportar."
+                }
+                val orders = SupabaseApi.listOrders(token, restaurantId)
+                val records = (0 until orders.length()).mapNotNull { index ->
+                    val order = orders.optJSONObject(index) ?: return@mapNotNull null
+                    val amount = order.optDouble("amount", Double.NaN)
+                    require(amount.isFinite() && amount >= 0.0) {
+                        "O relatório contém um preço inválido. Corrige o pedido antes de exportar."
+                    }
+                    OrderReportRecord(
+                        orderId = order.optString("id"),
+                        createdAt = reportDate(parseOrderTimestamp(order.optString("created_at"))),
+                        tableNumber = order.optInt("table_number", 0),
+                        itemName = order.optString("item_name", "Artigo"),
+                        quantity = order.optInt("quantity", 0),
+                        unitPrice = BigDecimal.valueOf(amount),
+                        status = order.optString("status", "Desconhecido")
+                    )
+                }
+                if (records.isEmpty()) "" else ReportCsvExporter.toCsv(records)
+            }, onError = { error ->
+                AlertDialog.Builder(this)
+                    .setTitle("Relatório não preparado")
+                    .setMessage(friendlyBackendError(error.message))
+                    .setPositiveButton("OK", null)
+                    .show()
+            }) { csv ->
+                if (csv.isBlank()) showNoOrdersForExport() else launchCsvDocumentPicker(csv)
+            }
+            return
+        }
+
+        try {
+            val records = store.getOrders().map { order ->
+                require(order.amount.isFinite() && order.amount >= 0.0) {
+                    "O relatório contém um preço inválido. Corrige o pedido antes de exportar."
+                }
+                OrderReportRecord(
+                    orderId = order.id.toString(),
+                    createdAt = reportDate(order.createdAt),
+                    tableNumber = order.table,
+                    itemName = order.itemName,
+                    quantity = order.quantity,
+                    unitPrice = BigDecimal.valueOf(order.amount),
+                    status = order.status
+                )
+            }
+            if (records.isEmpty()) {
+                showNoOrdersForExport()
+                return
+            }
+            launchCsvDocumentPicker(ReportCsvExporter.toCsv(records))
+        } catch (error: Exception) {
+            AlertDialog.Builder(this)
+                .setTitle("Relatório não preparado")
+                .setMessage(error.message ?: "Verifica os dados dos pedidos e tenta novamente.")
+                .setPositiveButton("OK", null)
+                .show()
+        }
+    }
+
+    private fun showNoOrdersForExport() {
+        AlertDialog.Builder(this)
+            .setTitle("Sem pedidos para exportar")
+            .setMessage("Cria ou sincroniza pelo menos um pedido antes de gerar o relatório.")
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
+    private fun launchCsvDocumentPicker(csv: String) {
+        try {
+            pendingCsvExport = csv
+            val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+            val picker = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "text/csv"
+                putExtra(Intent.EXTRA_TITLE, "studiomesa-pedidos-$date.csv")
+            }
+            startActivityForResult(picker, REQUEST_EXPORT_ORDERS_CSV)
+        } catch (error: Exception) {
+            pendingCsvExport = null
+            AlertDialog.Builder(this)
+                .setTitle("Relatório não preparado")
+                .setMessage(error.message ?: "Não foi possível abrir o seletor de ficheiros. Tenta novamente.")
+                .setPositiveButton("OK", null)
+                .show()
+        }
+    }
+
+    private fun reportDate(epochMillis: Long): String {
+        if (epochMillis <= 0L) return ""
+        return SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT).format(Date(epochMillis))
     }
 
     private fun showCreateOrderDialog() {
