@@ -715,13 +715,27 @@ class MainActivity : Activity() {
         appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(60)))
         setContentView(appRoot)
         if (activePage == "Assistente" && activeAssistantConversationId != null) {
-            scroll.post {
-                val latestBubble = assistantLatestBubbleView
-                if (latestBubble != null && latestBubble.parent === content) {
-                    val targetScrollY = latestBubble.bottom - scroll.height + dp(24)
-                    scroll.scrollTo(0, targetScrollY.coerceAtLeast(0))
+            val scrollListener = object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
+                override fun onGlobalLayout() {
+                    val latestBubble = assistantLatestBubbleView
+                    if (latestBubble == null || latestBubble.parent !== content) {
+                        if (scroll.viewTreeObserver.isAlive) {
+                            scroll.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                        }
+                        return
+                    }
+                    if (!scroll.isLaidOut || !content.isLaidOut || latestBubble.height <= 0) return
+                    if (scroll.viewTreeObserver.isAlive) {
+                        scroll.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                    }
+                    scroll.post {
+                        val maxScrollY = (content.height - scroll.height).coerceAtLeast(0)
+                        val targetScrollY = (latestBubble.top - dp(12)).coerceIn(0, maxScrollY)
+                        scroll.scrollTo(0, targetScrollY)
+                    }
                 }
             }
+            scroll.viewTreeObserver.addOnGlobalLayoutListener(scrollListener)
         }
         updateKitchenAutoRefresh()
         updateInventoryAutoRefresh()
@@ -4804,21 +4818,26 @@ class MainActivity : Activity() {
         container.addView(statusCard, cardParams())
 
         val toolbar = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        val primaryActions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        toolbar.addView(secondaryButton("＋ Nova conversa") {
+        primaryActions.addView(secondaryButton("＋ Nova conversa") {
             activeAssistantConversationId = null
             assistantComposerDraft = ""
             assistantChatError = null
             renderApp()
         }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { setMargins(0, 0, dp(4), 0) })
-        toolbar.addView(secondaryButton("Histórico") {
+        primaryActions.addView(secondaryButton("Histórico") {
             showAssistantHistoryDialog()
-        }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { setMargins(dp(4), 0, dp(4), 0) })
+        }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { setMargins(dp(4), 0, 0, 0) })
+        toolbar.addView(primaryActions, LinearLayout.LayoutParams(-1, -2))
+        addGap(toolbar, 5)
         toolbar.addView(secondaryButton("Memória") {
             showAssistantMemoryDialog()
-        }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { setMargins(dp(4), 0, 0, 0) })
+        }, LinearLayout.LayoutParams(-1, dp(44)))
         container.addView(toolbar, LinearLayout.LayoutParams(-1, -2))
         addGap(container, 5)
         container.addView(secondaryButton(
