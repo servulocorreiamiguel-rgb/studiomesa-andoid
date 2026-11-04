@@ -370,6 +370,11 @@ jobs:
               RAISE EXCEPTION 'Inventory cost snapshot trigger is missing or runs with SECURITY DEFINER.';
             END IF;
 
+            IF to_regclass('private.restaurant_price_adviser_audit_acted_by_idx') IS NULL
+              OR to_regclass('private.restaurant_price_adviser_settings_updated_by_idx') IS NULL THEN
+              RAISE EXCEPTION 'Price-adviser actor foreign-key indexes are missing after clean migration replay.';
+            END IF;
+
             IF has_function_privilege(
               'anon',
               'public.save_inventory_item_with_cost(uuid,uuid,text,text,numeric,numeric,text,numeric)',
