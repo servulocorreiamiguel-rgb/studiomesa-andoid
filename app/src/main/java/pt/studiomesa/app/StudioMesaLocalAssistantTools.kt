@@ -14,8 +14,12 @@ import org.json.JSONObject
  * They deliberately have no write operations and never receive customer PII.
  */
 internal class StudioMesaRestaurantDataTool(
-    private val snapshot: StudioMesaAssistantSnapshot
+    @Volatile private var snapshot: StudioMesaAssistantSnapshot
 ) : OpenApiTool {
+
+    fun updateSnapshot(snapshot: StudioMesaAssistantSnapshot) {
+        this.snapshot = snapshot
+    }
 
     override fun getToolDescriptionJsonString(): String {
         val areas = JSONArray()
@@ -211,8 +215,12 @@ internal class StudioMesaRestaurantDataTool(
 
 /** Read-only arithmetic based on costs already registered in the current menu snapshot. */
 internal class StudioMesaPriceReferenceTool(
-    private val snapshot: StudioMesaAssistantSnapshot
+    @Volatile private var snapshot: StudioMesaAssistantSnapshot
 ) : OpenApiTool {
+
+    fun updateSnapshot(snapshot: StudioMesaAssistantSnapshot) {
+        this.snapshot = snapshot
+    }
 
     override fun getToolDescriptionJsonString(): String {
         val itemName = JSONObject()
