@@ -241,7 +241,8 @@ object SupabaseApi {
     fun generateRestaurantAssistantReply(
         accessToken: String,
         restaurantId: String,
-        messages: JSONArray
+        messages: JSONArray,
+        useGoogleSearch: Boolean = false
     ): String {
         require(accessToken.isNotBlank()) { "Inicia sessão para usar a IA generativa." }
         require(restaurantId.matches(Regex("^[0-9a-fA-F-]{36}$"))) { "O restaurante não é válido." }
@@ -249,7 +250,10 @@ object SupabaseApi {
         val response = jsonCall(
             "POST",
             "/functions/v1/restaurant-assistant",
-            JSONObject().put("restaurant_id", restaurantId).put("messages", messages),
+            JSONObject()
+                .put("restaurant_id", restaurantId)
+                .put("messages", messages)
+                .put("use_google_search", useGoogleSearch),
             token = accessToken,
             readTimeoutMillis = 40_000
         )
