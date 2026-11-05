@@ -27,6 +27,13 @@ internal class AssistantCloudSyncCoordinator {
             "Inicia sessão e confirma o restaurante antes de sincronizar."
         }
 
+        // Process encrypted deletion tombstones before downloading remote history.
+        // If the network fails, the tombstone remains and the stale conversation is not restored locally.
+        store.listPendingConversationDeletions(scope).forEach { conversationId ->
+            SupabaseApi.deleteAssistantConversation(token, restaurantId, conversationId)
+            store.acknowledgeConversationDeletion(scope, conversationId)
+        }
+
         val localConversations = store.listConversationsForSync(scope)
         val remoteConversationsBefore = SupabaseApi.listAssistantConversations(token, restaurantId)
         val remoteById = buildMap<String, JSONObject> {
