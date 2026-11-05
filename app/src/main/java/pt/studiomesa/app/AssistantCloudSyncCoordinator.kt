@@ -110,7 +110,9 @@ internal class AssistantCloudSyncCoordinator {
                 scope = scope,
                 conversationId = id,
                 title = row.optString("title", "Conversa sincronizada"),
-                turns = turns
+                turns = turns,
+                remoteCreatedAtMillis = parseTimestamp(row.optString("created_at")),
+                remoteUpdatedAtMillis = parseTimestamp(row.optString("updated_at"))
             )
         }
 
