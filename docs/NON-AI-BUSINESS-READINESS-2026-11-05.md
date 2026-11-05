@@ -14,7 +14,9 @@ Esta branch junta à revisão atual da `main`, sem incluir o trabalho de IA:
 - Pedidos de reserva na aplicação Cliente: criação idempotente, consulta e cancelamento pelo próprio titular.
 - Atribuição de mesa e confirmação sob controlo da equipa, com validação de capacidade e conflitos no servidor.
 - Permissões granulares por funcionário para pedidos, mesas, reservas, carta, stock e fidelização; ações administrativas e económicas continuam reservadas ao proprietário.
-- Testes unitários de permissões, testes PostgreSQL de autorização e casos de interface/documentação para os novos fluxos.
+- Fichas técnicas por artigo da carta, associação a ingredientes de stock e consumo automático transacional quando o pedido entra em preparação. A ativação começa desligada e exige aprovação explícita do proprietário; stock insuficiente reverte toda a operação e um pedido já consumido não desconta novamente.
+- Validação de quantidades e desperdício por dose, mantendo unidades iguais entre receita e inventário nesta fase; conversões kg/g e L/ml ficam para uma melhoria posterior.
+- Testes unitários das receitas, testes PostgreSQL de autorização/idempotência/consumo atómico e casos de interface/documentação para os novos fluxos.
 
 A branch preserva as funcionalidades que já estavam na `main`, incluindo mesas, carta, pedidos, cozinha, stock, desperdício, custos de inventário, gestão económica, análise por período e exportação CSV.
 
@@ -24,7 +26,7 @@ Não foram integradas as PRs #79 e #80 nem qualquer modelo generativo, OCR de fa
 
 ## Migrações e Supabase
 
-A integração acrescenta oito ficheiros SQL novos à branch e mantém o ficheiro de custo de inventário já existente na `main`, evitando duplicar a mesma migração com outro timestamp. A CI está configurada para reproduzir 51 ficheiros SQL numa base descartável.
+A integração acrescenta nove ficheiros SQL novos à branch — receitas/consumo de stock, QR/loja de fidelização, reservas e permissões — e mantém o ficheiro de custo de inventário já existente na `main`, evitando duplicar a mesma migração com outro timestamp. A CI está configurada para reproduzir 52 ficheiros SQL numa base descartável.
 
 **Não executar `db push`, `migration repair`, `apply_migration` nem alterações manuais no Supabase alojado.** A auditoria de 4/11 registou 54 versões remotas e 43 ficheiros SQL locais na `main`; a branch de integração altera essa contagem, mas isso não demonstra alinhamento com o histórico remoto. Antes de qualquer deploy são obrigatórios:
 
@@ -41,6 +43,7 @@ A CI da branch deve passar, no commit final, em todos os blocos:
 - Testes unitários e Android Lint.
 - Replay SQL limpo e testes PostgreSQL de isolamento entre restaurantes, autorização e idempotência.
 - Smoke tests Android 8 e Android 16.
+- Testes de receita: consumo atómico, stock insuficiente, pedidos antigos, idempotência após repetição, aprovação exclusiva do proprietário e não duplicação do consumo.
 
 A CI histórica de branches anteriores não substitui a execução desta branch consolidada. Depois da CI, continuam obrigatórios testes num telemóvel físico e com duas contas descartáveis.
 
@@ -51,6 +54,7 @@ A CI histórica de branches anteriores não substitui a execução desta branch 
 - Um funcionário não consegue conceder permissões a si próprio nem aceder a outro restaurante.
 - Um QR não pode ser reutilizado, pertence ao titular e expira.
 - Resgates repetidos não descontam pontos nem stock duas vezes.
+- Receitas só podem ser aprovadas pelo proprietário; o consumo é todo-ou-nada, respeita quantidades/unidades e não volta a descontar em reaberturas do mesmo pedido.
 - Reservas concorrentes, lotação insuficiente e horários sobrepostos são recusados.
 - Falha de rede após escrita não cria pedidos, movimentos ou reservas duplicados.
 - Permissão de câmara só é pedida ao utilizar leitura QR; recusa de permissão não bloqueia o resto da aplicação.
