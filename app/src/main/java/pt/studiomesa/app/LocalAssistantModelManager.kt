@@ -67,6 +67,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
     private var activeUserTurns = 0
     private var restaurantDataTool: StudioMesaRestaurantDataTool? = null
     private var priceReferenceTool: StudioMesaPriceReferenceTool? = null
+    private var supplierInvoiceTool: StudioMesaSupplierInvoiceTool? = null
     @Volatile private var downloading = false
     @Volatile private var closed = false
     private var verifiedThisProcess = false
@@ -236,6 +237,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
 
                     val dataTool = StudioMesaRestaurantDataTool(snapshot)
                     val priceTool = StudioMesaPriceReferenceTool(snapshot)
+                    val invoiceTool = StudioMesaSupplierInvoiceTool(snapshot)
                     val initialMessages = history
                         .takeLast(MAX_HISTORY_MESSAGES)
                         .mapNotNull { turn ->
@@ -253,7 +255,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                             ConversationConfig(
                                 systemInstruction = Contents.of(effectiveSystemInstruction),
                                 initialMessages = initialMessages,
-                                tools = listOf(tool(dataTool), tool(priceTool)),
+                                tools = listOf(tool(dataTool), tool(priceTool), tool(invoiceTool)),
                                 automaticToolCalling = true,
                                 samplerConfig = SamplerConfig(
                                     topK = 40,
@@ -277,6 +279,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     activeUserTurns = 0
                     restaurantDataTool = dataTool
                     priceReferenceTool = priceTool
+                    supplierInvoiceTool = invoiceTool
                 }
 
                 // Keep the conversation's native history, but refresh the read-only tool
@@ -286,6 +289,8 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     ?: throw IllegalStateException("As ferramentas de consulta não estão disponíveis.")
                 priceReferenceTool?.updateSnapshot(snapshot)
                     ?: throw IllegalStateException("A ferramenta de preços não está disponível.")
+                supplierInvoiceTool?.updateSnapshot(snapshot)
+                    ?: throw IllegalStateException("A ferramenta de faturas não está disponível.")
 
                 val activeConversation = conversation
                     ?: throw IllegalStateException("Não foi possível iniciar a conversa local.")
@@ -327,6 +332,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         activeUserTurns = 0
         restaurantDataTool = null
         priceReferenceTool = null
+        supplierInvoiceTool = null
 
         try {
             currentConversation?.close()
