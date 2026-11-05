@@ -83,6 +83,30 @@ class AssistantChatStoreInstrumentedTest {
     }
 
     @Test
+    fun remoteDeletionRemovesLocalConversationAndAcknowledgesPendingDelete() {
+        val store = AssistantChatStore(context)
+        val scope = "test:" + UUID.randomUUID()
+        try {
+            val conversationId = store.appendTurn(
+                scope,
+                null,
+                "user",
+                "Conversa que será eliminada noutro dispositivo."
+            )
+            store.deleteConversation(scope, conversationId)
+            assertEquals(listOf(conversationId), store.listPendingConversationDeletions(scope))
+
+            // A tombstone downloaded from Supabase on another device is authoritative.
+            store.applyRemoteConversationDeletion(scope, conversationId)
+
+            assertTrue(store.listConversations(scope).isEmpty())
+            assertTrue(store.listPendingConversationDeletions(scope).isEmpty())
+        } finally {
+            runCatching { store.clearScope(scope) }
+        }
+    }
+
+    @Test
     fun remoteConversationMergeIsIdempotentAndPreservesServerTimestamps() {
         val store = AssistantChatStore(context)
         val scope = "test:" + UUID.randomUUID()
