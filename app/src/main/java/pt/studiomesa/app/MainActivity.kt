@@ -492,7 +492,7 @@ class MainActivity : Activity() {
      * Padding is always based on the root's original values so inset updates never
      * accumulate padding as the system UI changes (for example, on rotation).
      */
-    private fun applySystemBarInsets(root: View) {
+    private fun applySystemBarInsets(root: View, includeIme: Boolean = false) {
         // Traditional decor fitting already keeps content below the system bars on
         // Android 14 and earlier, so manual padding is only needed from API 35 onward.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) return
@@ -506,11 +506,18 @@ class MainActivity : Activity() {
             val safeInsets = insets.getInsets(
                 WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()
             )
+            // In edge-to-edge mode, the IME does not resize the content automatically.
+            // Reserve the keyboard height on the chat screen so its composer stays above it.
+            val bottomInset = if (includeIme) {
+                maxOf(safeInsets.bottom, insets.getInsets(WindowInsets.Type.ime()).bottom)
+            } else {
+                safeInsets.bottom
+            }
             view.setPadding(
                 baseLeft + safeInsets.left,
                 baseTop + safeInsets.top,
                 baseRight + safeInsets.right,
-                baseBottom + safeInsets.bottom
+                baseBottom + bottomInset
             )
             insets
         }
@@ -667,7 +674,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(paper)
         }
-        applySystemBarInsets(appRoot)
+        applySystemBarInsets(appRoot, includeIme = true)
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
 
         val toolbar = LinearLayout(this).apply {
