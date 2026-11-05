@@ -20,6 +20,10 @@ Esta branch junta à revisão atual da `main`, sem incluir o trabalho de IA:
 
 A branch preserva as funcionalidades que já estavam na `main`, incluindo mesas, carta, pedidos, cozinha, stock, desperdício, custos de inventário, gestão económica, análise por período e exportação CSV.
 
+## Interface do assistente
+
+A entrada «Assistente StudioMesa» abre uma conversa em ecrã completo, com mensagens, envio, nova conversa, perguntas rápidas e navegação de regresso. As ferramentas de apoio à gestão ficam num ecrã separado, acessível pelo ícone de ferramentas, e mantêm o gestor económico, o consultor de preços, alertas, engenharia da carta e rascunhos de conteúdo. As mensagens são mantidas apenas na sessão atual; não há ainda histórico persistente nem sincronização entre dispositivos.
+
 ## IA deliberadamente excluída
 
 Não foram integradas as PRs #79 e #80 nem qualquer modelo generativo, OCR de faturas ou serviço externo. A IA fica para uma fase separada de Codex, como pedido no projeto. Não configurar chaves, faturação de API nem Edge Functions de IA nesta fase.
