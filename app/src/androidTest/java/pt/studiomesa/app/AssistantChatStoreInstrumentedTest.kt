@@ -56,6 +56,22 @@ class AssistantChatStoreInstrumentedTest {
 
             reopenedStore.deleteConversation(scope, conversationId)
             assertTrue(reopenedStore.listConversations(scope).isEmpty())
+            assertEquals(listOf(conversationId), reopenedStore.listPendingConversationDeletions(scope))
+
+            // A stale cloud copy must not resurrect a conversation while its deletion is pending.
+            val staleMerge = reopenedStore.mergeRemoteConversation(
+                scope = scope,
+                conversationId = conversationId,
+                title = "Resumo mensal",
+                turns = turns,
+                remoteCreatedAtMillis = 1_700_000_000_000L,
+                remoteUpdatedAtMillis = 1_700_000_001_000L
+            )
+            assertEquals(0, staleMerge)
+            assertTrue(reopenedStore.listConversations(scope).isEmpty())
+
+            reopenedStore.acknowledgeConversationDeletion(scope, conversationId)
+            assertTrue(reopenedStore.listPendingConversationDeletions(scope).isEmpty())
             assertEquals(
                 "Restaurante de peixe; objetivo: reduzir desperdício.",
                 reopenedStore.readMemory(scope)
