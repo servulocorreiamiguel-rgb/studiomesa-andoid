@@ -114,6 +114,26 @@ WITH CHECK (
     )
 );
 
+-- A stale device must never turn a tombstone back into a live conversation by upserting old history.
+CREATE OR REPLACE FUNCTION public.reject_assistant_conversation_resurrection()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $function$
+BEGIN
+    IF OLD.deleted_at IS NOT NULL THEN
+        RAISE EXCEPTION 'Uma conversa eliminada não pode ser restaurada ou alterada.';
+    END IF;
+    RETURN NEW;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.reject_assistant_conversation_resurrection() FROM PUBLIC, anon, authenticated;
+
+CREATE TRIGGER restaurant_assistant_conversations_reject_resurrection
+BEFORE UPDATE ON public.restaurant_assistant_conversations
+FOR EACH ROW EXECUTE FUNCTION public.reject_assistant_conversation_resurrection();
+
 CREATE POLICY restaurant_assistant_messages_owner_all
 ON public.restaurant_assistant_messages
 FOR ALL TO authenticated
