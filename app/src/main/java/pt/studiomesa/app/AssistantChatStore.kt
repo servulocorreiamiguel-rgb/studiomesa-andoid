@@ -302,6 +302,27 @@ class AssistantChatStore(context: Context) {
     }
 
     @Synchronized
+    fun applyRemoteConversationDeletion(scope: String, conversationId: String) {
+        require(conversationId.isNotBlank()) { "A conversa remota não tem identificador." }
+        val root = load(scope)
+        val conversations = root.optJSONArray("conversations") ?: JSONArray()
+        for (index in conversations.length() - 1 downTo 0) {
+            if (conversations.optJSONObject(index)?.optString("id") == conversationId) {
+                conversations.remove(index)
+            }
+        }
+        root.put("conversations", conversations)
+
+        // A cloud tombstone is authoritative, so discard both the local copy and any pending retry.
+        val pending = root.optJSONArray("pending_conversation_deletions") ?: JSONArray()
+        for (index in pending.length() - 1 downTo 0) {
+            if (pending.optString(index) == conversationId) pending.remove(index)
+        }
+        root.put("pending_conversation_deletions", pending)
+        save(scope, root)
+    }
+
+    @Synchronized
     fun clearScope(scope: String) {
         if (!preferences.edit().remove(storageKey(scope)).commit()) {
             throw IllegalStateException("Não foi possível eliminar o histórico local.")
