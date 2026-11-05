@@ -9,7 +9,7 @@
 
 - Chat no ecrã principal, com novas conversas, respostas em streaming e motor determinístico disponível mesmo antes de descarregar o modelo.
 - Modelo LFM2.5-1.2B-Instruct INT4 executado no Android por LiteRT-LM 0.18.0 (CPU).
-- Transferência iniciada apenas após confirmação; cerca de 736 MB, verificação do tamanho e SHA-256.
+- Transferência iniciada apenas após confirmação; 736 015 744 bytes, verificação do tamanho e SHA-256. O ficheiro está fixado à revisão Hugging Face `d23bed4d8871e970d9d4d7de087377a90ecb1b4e` e ao SHA-256 `e904729a8a8a0160658cb7cd22992e270a0547c05cc45b08c47ece5c0e29425b`.
 - Sem API generativa externa, chave de fornecedor ou custo por mensagem depois da transferência.
 - Pesquisa externa sem chave através da API pública da Wikipédia em português, com fallback para inglês. Só envia uma consulta curta e genérica; não envia o histórico nem os dados carregados do restaurante. É uma fonte limitada, pode estar desatualizada e pode impor limites de utilização.
 - O modelo é pequeno e limitado a um contexto aproximado de 4 096 tokens. Não é equivalente a modelos de grande dimensão, não deve ser apresentado como ChatGPT e pode produzir erros. O desempenho em português europeu e no OPPO A5m tem de ser medido fisicamente.
@@ -19,8 +19,8 @@
 
 - Histórico pesquisável, reabertura e eliminação; memória editável por conta/restaurante.
 - A cópia local do histórico e da memória é cifrada com AES-GCM e chave no Android Keystore.
-- Para contas de proprietário autenticadas, o histórico e a memória podem sincronizar entre dispositivos através do Supabase. Mensagens usam IDs estáveis e inserção idempotente; o merge preserva as datas remotas e a memória usa timestamps para resolver conflitos simples.
-- As tabelas cloud têm RLS e políticas de proprietário por restaurante. A cópia na cloud **não é cifrada ponta a ponta**: o acesso é controlado por autenticação e RLS do Supabase. A cópia local continua cifrada.
+- Para contas de proprietário autenticadas, o histórico e a memória podem sincronizar entre dispositivos através do Supabase. Mensagens usam IDs estáveis e inserção idempotente; o merge preserva as datas remotas e a memória usa timestamps para resolver conflitos simples. A eliminação de uma conversa grava uma tombstone cloud sem conteúdo: os outros dispositivos removem a cópia local, os textos das mensagens são apagados e triggers impedem que cópias antigas voltem a criar mensagens ou restaurar o título.
+- As tabelas cloud têm RLS e políticas de proprietário por restaurante. A eliminação é feita por RPC de proprietário, preservando apenas o identificador e a data de eliminação. A cópia na cloud **não é cifrada ponta a ponta**: o acesso é controlado por autenticação e RLS do Supabase. A cópia local continua cifrada.
 - Não se sincroniza o histórico de contas de funcionário; o Assistente é uma área do proprietário.
 
 ## OCR de faturas e arquivo privado
