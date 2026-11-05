@@ -49,6 +49,6 @@ class AssistantThinkingModePolicyTest {
     fun standardInstructionIsBoundedWithoutChangingItsMeaningWhenItFits() {
         val base = "Contexto de restaurante com dados confirmados."
         val result = AssistantThinkingModePolicy.buildSystemInstruction(base, false, 12)
-        assertEquals("Contexto de re", result)
+        assertEquals(base.take(12), result)
     }
 }
