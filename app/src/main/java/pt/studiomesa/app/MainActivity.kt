@@ -191,6 +191,17 @@ class MainActivity : Activity() {
 
     @Deprecated("Uses Android's document picker result contract for compatibility with Activity.")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        val scanResult = IntentIntegrator.parseActivityResult(requestCode, resultCode, data)
+        if (scanResult != null) {
+            val contents = scanResult.contents
+            if (contents.isNullOrBlank()) {
+                Toast.makeText(this, "Leitura do QR cancelada.", Toast.LENGTH_SHORT).show()
+            } else {
+                handleLoyaltyQrPayload(contents)
+            }
+            return
+        }
+
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != REQUEST_EXPORT_ORDERS_CSV) return
         val csv = pendingCsvExport
@@ -473,20 +484,6 @@ class MainActivity : Activity() {
             )
             insets
         }
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        val scanResult = IntentIntegrator.parseActivityResult(requestCode, resultCode, data)
-        if (scanResult != null) {
-            val contents = scanResult.contents
-            if (contents.isNullOrBlank()) {
-                Toast.makeText(this, "Leitura do QR cancelada.", Toast.LENGTH_SHORT).show()
-            } else {
-                handleLoyaltyQrPayload(contents)
-            }
-            return
-        }
-        super.onActivityResult(requestCode, resultCode, data)
     }
 
     private fun renderApp() {
