@@ -267,7 +267,10 @@ BEGIN
                 26214400,
                 ARRAY['application/pdf', 'image/jpeg', 'image/png', 'image/webp']::text[]
             )
-            ON CONFLICT (id) DO NOTHING
+            ON CONFLICT (id) DO UPDATE
+            SET public = false,
+                file_size_limit = EXCLUDED.file_size_limit,
+                allowed_mime_types = EXCLUDED.allowed_mime_types
         $sql$;
     END IF;
 
