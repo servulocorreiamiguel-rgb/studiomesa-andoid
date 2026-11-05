@@ -203,13 +203,11 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     verifiedThisProcess = true
                 }
 
-                val effectiveSystemInstruction = buildString {
-                    append(systemInstruction.take(MAX_SYSTEM_INSTRUCTION_CHARS))
-                    if (deepThinking) {
-                        appendLine()
-                        appendLine("MODO PENSAR MAIS: revê a pergunta com especial cuidado; identifica os dados confirmados, as hipóteses e o que falta; verifica novamente cálculos e unidades; compara alternativas e riscos; procura contradições antes de responder. Apresenta apenas conclusões, fórmulas e justificações verificáveis, sem revelar raciocínio interno privado.")
-                    }
-                }.take(MAX_SYSTEM_INSTRUCTION_CHARS)
+                val effectiveSystemInstruction = AssistantThinkingModePolicy.buildSystemInstruction(
+                    systemInstruction,
+                    deepThinking,
+                    MAX_SYSTEM_INSTRUCTION_CHARS
+                )
 
                 val sessionAvailable = engine != null && conversation != null
                 if (AssistantModelConversationPolicy.requiresNewSession(
@@ -260,9 +258,9 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                                 samplerConfig = SamplerConfig(
                                     topK = 40,
                                     topP = 0.9,
-                                    temperature = if (deepThinking) 0.2 else 0.3
+                                    temperature = AssistantThinkingModePolicy.temperature(deepThinking)
                                 ),
-                                maxOutputToken = if (deepThinking) DEEP_MAX_OUTPUT_TOKENS else MAX_OUTPUT_TOKENS,
+                                maxOutputToken = AssistantThinkingModePolicy.maxOutputTokens(deepThinking),
                                 prefillPrefaceOnInit = false
                             )
                         )
@@ -275,7 +273,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     engine = createdEngine
                     conversation = createdConversation
                     activeConversationId = conversationId
-                    activeSystemInstruction = systemInstruction.take(MAX_SYSTEM_INSTRUCTION_CHARS)
+                    activeSystemInstruction = effectiveSystemInstruction
                     activeUserTurns = 0
                     restaurantDataTool = dataTool
                     priceReferenceTool = priceTool
@@ -380,7 +378,6 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         const val MODEL_DIRECTORY = "studiomesa_ai_models"
         const val MAX_CONTEXT_TOKENS = 4096
         const val MAX_OUTPUT_TOKENS = 1024
-        const val DEEP_MAX_OUTPUT_TOKENS = 1400
         const val MAX_HISTORY_MESSAGES = 4
         const val MAX_SESSION_USER_TURNS = 2
         const val MAX_HISTORY_MESSAGE_CHARS = 300
