@@ -41,6 +41,8 @@ class MainActivitySmokeTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
             onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            onView(withText("Assistente StudioMesa")).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir ferramentas do assistente")).perform(click())
 
             onView(withText("Consultor de preços"))
                 .perform(scrollTo())
@@ -57,6 +59,35 @@ class MainActivitySmokeTest {
                 .check(matches(isDisplayed()))
             onView(withText(containsString("Rever e aplicar")))
                 .check(doesNotExist())
+        }
+    }
+
+    @Test
+    fun assistantButtonOpensChatAndSendsAMessage() {
+        assumeFalse("The customer variant does not include the restaurant assistant.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withText("ABRIR ASSISTENTE"))
+                .perform(scrollTo(), click())
+
+            onView(withText("Assistente StudioMesa"))
+                .check(matches(isDisplayed()))
+            onView(withHint("Escreve uma mensagem..."))
+                .check(matches(isDisplayed()))
+                .perform(replaceText("Como posso melhorar os preços da carta?"))
+            onView(withText("Enviar")).perform(click())
+
+            onView(withText("Como posso melhorar os preços da carta?"))
+                .check(matches(isDisplayed()))
+            onView(withText(containsString("Análise de preços")))
+                .check(matches(isDisplayed()))
+
+            onView(withContentDescription("Nova conversa")).perform(click())
+            onView(withText("Nova conversa iniciada. Em que posso ajudar com o restaurante?"))
+                .check(matches(isDisplayed()))
+
+            onView(withContentDescription("Voltar ao painel principal")).perform(click())
+            onView(withText("Painel de operação")).check(matches(isDisplayed()))
         }
     }
 
