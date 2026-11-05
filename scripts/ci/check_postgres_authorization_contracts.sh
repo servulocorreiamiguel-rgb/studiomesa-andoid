@@ -196,6 +196,74 @@ test -n "$RESTAURANT_A"
 test -n "$RESTAURANT_B"
 test "$RESTAURANT_A" != "$RESTAURANT_B"
 
+# Cross-device assistant deletion keeps a content-free cloud tombstone.
+# Only the owner of that restaurant may request the deletion.
+ASSISTANT_CONVERSATION_ID="77777777-7777-4777-8777-777777777777"
+ASSISTANT_MESSAGE_ID="88888888-8888-4888-8888-888888888888"
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+INSERT INTO public.restaurant_assistant_conversations (
+  id, restaurant_id, title, created_by
+) VALUES (
+  '$ASSISTANT_CONVERSATION_ID'::uuid, '$RESTAURANT_A'::uuid,
+  'Conversa privada de teste', '$USER_A'::uuid
+);
+INSERT INTO public.restaurant_assistant_messages (
+  id, restaurant_id, conversation_id, role, content, created_by
+) VALUES (
+  '$ASSISTANT_MESSAGE_ID'::uuid, '$RESTAURANT_A'::uuid,
+  '$ASSISTANT_CONVERSATION_ID'::uuid, 'user',
+  'Conteúdo que deve desaparecer depois da eliminação.', '$USER_A'::uuid
+);
+COMMIT;
+SQL
+
+if psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
+SET LOCAL ROLE authenticated;
+SELECT public.delete_assistant_conversation('$RESTAURANT_A'::uuid, '$ASSISTANT_CONVERSATION_ID'::uuid);
+COMMIT;
+SQL
+then
+  echo "ERROR: another restaurant owner deleted this restaurant's assistant conversation." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT public.delete_assistant_conversation('$RESTAURANT_A'::uuid, '$ASSISTANT_CONVERSATION_ID'::uuid);
+COMMIT;
+SQL
+then
+  echo "ERROR: a staff member deleted the owner's assistant conversation." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.delete_assistant_conversation('$RESTAURANT_A'::uuid, '$ASSISTANT_CONVERSATION_ID'::uuid);
+COMMIT;
+SQL
+
+assistant_deleted_at="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \\
+  -c "SELECT (deleted_at IS NOT NULL)::text FROM public.restaurant_assistant_conversations WHERE id = '$ASSISTANT_CONVERSATION_ID'::uuid;")"
+assistant_deleted_title="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \\
+  -c "SELECT title FROM public.restaurant_assistant_conversations WHERE id = '$ASSISTANT_CONVERSATION_ID'::uuid;")"
+assistant_deleted_messages="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \\
+  -c "SELECT count(*)::text FROM public.restaurant_assistant_messages WHERE conversation_id = '$ASSISTANT_CONVERSATION_ID'::uuid;")"
+if [ "$assistant_deleted_at" != "true" ] || [ "$assistant_deleted_title" != "Conversa eliminada" ] || [ "$assistant_deleted_messages" != "0" ]; then
+  echo "ERROR: assistant deletion did not retain only a content-free tombstone." >&2
+  exit 1
+fi
+echo "PASS: assistant conversation deletion is owner-only, cross-tenant/staff requests are denied, and message content is removed."
+
 # Exercise the corrected staff-join RPC in PostgreSQL, not just migration replay.
 # Repeating the same join must be safe; attempting a second restaurant must fail.
 STAFF_CODE_A="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
