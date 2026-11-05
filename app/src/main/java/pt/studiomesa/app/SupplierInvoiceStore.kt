@@ -69,6 +69,29 @@ internal class SupplierInvoiceStore(context: Context) {
         list(scope).firstOrNull { it.id == id }
 
     @Synchronized
+    fun findDuplicate(
+        scope: String,
+        supplierName: String,
+        supplierVatNumber: String,
+        invoiceNumber: String,
+        issueDate: String
+    ): SupplierInvoiceRecord? {
+        val cleanNumber = invoiceNumber.trim().uppercase()
+        val cleanVat = supplierVatNumber.filter(Char::isLetterOrDigit).uppercase()
+        val cleanSupplier = supplierName.trim().lowercase().replace(Regex("\\s+"), " ")
+        return list(scope).firstOrNull { existing ->
+            val sameNumber = existing.invoiceNumber.trim().uppercase() == cleanNumber
+            val existingVat = existing.supplierVatNumber.filter(Char::isLetterOrDigit).uppercase()
+            val sameSupplier = if (cleanVat.isNotBlank() && existingVat.isNotBlank()) {
+                cleanVat == existingVat
+            } else {
+                existing.supplierName.trim().lowercase().replace(Regex("\\s+"), " ") == cleanSupplier
+            }
+            sameSupplier && sameNumber && existing.issueDate == issueDate
+        }
+    }
+
+    @Synchronized
     fun save(scope: String, record: SupplierInvoiceRecord) {
         require(scope.isNotBlank())
         val root = load(scope)
