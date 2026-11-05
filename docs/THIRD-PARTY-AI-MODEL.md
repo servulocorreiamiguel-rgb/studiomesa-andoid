@@ -34,6 +34,8 @@ O repositório `litert-community` é uma conversão comunitária e declara não 
 
 ## Privacidade e utilização
 
+A geração do texto continua local. Quando a ferramenta de pesquisa é usada, a aplicação envia apenas uma consulta pública curta à API da Wikipédia em português (e só tenta inglês se não houver resultados). Não envia mensagens completas, histórico nem dados operacionais da StudioMesa. Os resultados incluem ligações à fonte; a disponibilidade e os limites são definidos pela Wikimedia. A pesquisa não é uma busca geral na Web e não deve ser usada como confirmação de notícias recentes ou decisões críticas.
+
 Depois da instalação, a inferência é executada localmente. As mensagens, o histórico e o contexto selecionado para o modelo não são enviados a um serviço externo de IA por esta funcionalidade. A transferência inicial do ficheiro requer Internet e consome cerca de 736 MB de dados.
 
 A execução local não garante que as respostas estejam corretas. O modelo pode falhar, inventar informação ou não compreender contextos complexos. Verificar os cálculos e decisões importantes. A IA não substitui um contabilista certificado nem executa alterações financeiras ou operacionais.
