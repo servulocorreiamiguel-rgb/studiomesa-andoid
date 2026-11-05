@@ -1,12 +1,15 @@
 # StudioMesa — lista de preparação para uso profissional
 
-**Estado atual em 04/11/2026: NÃO PRONTO para operação comercial real.**  
-Relatório técnico atualizado: [COMMERCIAL-READINESS-2026-11-04.md](docs/COMMERCIAL-READINESS-2026-11-04.md).
+**Estado atual em 05/11/2026: NÃO PRONTO para operação comercial real.**  
+Relatório técnico: [COMMERCIAL-READINESS-2026-11-04.md](docs/COMMERCIAL-READINESS-2026-11-04.md), com atualização de verificação em 05/11/2026.
 
-- [x] Exportação do histórico operacional de pedidos em CSV integrada na `main`; CI completa aprovada no commit da PR #81 (build, replay SQL/autorização, unit tests/Lint e emuladores Android 8/16).
-- [ ] Aguardar sucesso da CI do commit de merge na `main` antes de gerar novos artefactos.
-- [ ] Reconciliar os 54 registos remotos e os 42 ficheiros locais de migração antes de qualquer deploy Supabase.
-- [ ] Aplicar, após reconciliação e backup/restauro testado, os dois índices das FKs do consultor de preços preparados na branch de lançamento.
+- [x] Exportação do histórico operacional de pedidos em CSV integrada na `main`.
+- [x] CI completa da revisão `bc7ad0025d61b9e1d218fdcf0c6553f6701ca741` aprovada na execução [41790761282](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/41790761282): compilação, testes unitários/Lint, replay SQL/autorização e testes de interface Android 8/16.
+- [x] Cinco APKs de demonstração/debug (Essencial, Profissional e Premium, nas variantes Restaurante/Cliente aplicáveis) produzidos a partir dessa revisão. São builds de teste, não versões comerciais assinadas.
+- [ ] Validar a revisão atual da `main` (`e86e09296ecfd42fee539e6081a2c508dbfd3267`): a execução acima e os APKs são do commit anterior `bc7ad002`, não desta revisão.
+- [ ] Reconciliar os 54 registos remotos e os 43 ficheiros SQL de migração da revisão atual antes de qualquer deploy Supabase.
+- [ ] Aplicar, após reconciliação e backup/restauro testado, os dois índices das FKs do consultor de preços.
+- [ ] Integrar receitas, QR/loja de fidelização, reservas de cliente e permissões granulares apenas depois de rebase, CI completa e revisão da sequência de migrações.
 - [ ] Executar os testes ponta a ponta de autenticação, autorização, perda de rede, concorrência e eliminação de conta em dispositivos físicos e contas descartáveis.
 - [ ] Concluir política de privacidade, Data safety, contrato, suporte, configuração de assinatura e publicação.
 
