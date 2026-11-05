@@ -129,6 +129,7 @@ class MainActivitySmokeTest {
                 .perform(scrollTo(), click())
             onView(withHint("Escreve uma mensagem..."))
                 .perform(click())
+                .check(matches(isCompletelyDisplayed()))
             onView(withText("Enviar"))
                 .check(matches(isCompletelyDisplayed()))
         }
