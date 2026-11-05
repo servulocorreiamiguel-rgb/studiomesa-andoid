@@ -154,9 +154,9 @@ WITH CHECK (
     )
 );
 
-CREATE POLICY restaurant_supplier_invoices_owner_all
+CREATE POLICY restaurant_supplier_invoices_owner_select
 ON public.restaurant_supplier_invoices
-FOR ALL TO authenticated
+FOR SELECT TO authenticated
 USING (
     EXISTS (
         SELECT 1 FROM public.restaurant_staff rs
@@ -164,7 +164,11 @@ USING (
           AND rs.user_id = (SELECT auth.uid())
           AND rs.role = 'owner'
     )
-)
+);
+
+CREATE POLICY restaurant_supplier_invoices_owner_insert
+ON public.restaurant_supplier_invoices
+FOR INSERT TO authenticated
 WITH CHECK (
     created_by = (SELECT auth.uid())
     AND EXISTS (
@@ -174,6 +178,80 @@ WITH CHECK (
           AND rs.role = 'owner'
     )
 );
+
+CREATE POLICY restaurant_supplier_invoices_owner_update
+ON public.restaurant_supplier_invoices
+FOR UPDATE TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.restaurant_staff rs
+        WHERE rs.restaurant_id = restaurant_supplier_invoices.restaurant_id
+          AND rs.user_id = (SELECT auth.uid())
+          AND rs.role = 'owner'
+    )
+)
+WITH CHECK (
+    EXISTS (
+        SELECT 1 FROM public.restaurant_staff rs
+        WHERE rs.restaurant_id = restaurant_supplier_invoices.restaurant_id
+          AND rs.user_id = (SELECT auth.uid())
+          AND rs.role = 'owner'
+    )
+);
+
+CREATE POLICY restaurant_supplier_invoices_owner_delete
+ON public.restaurant_supplier_invoices
+FOR DELETE TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.restaurant_staff rs
+        WHERE rs.restaurant_id = restaurant_supplier_invoices.restaurant_id
+          AND rs.user_id = (SELECT auth.uid())
+          AND rs.role = 'owner'
+    )
+);
+
+CREATE OR REPLACE FUNCTION public.review_supplier_invoice(
+    p_invoice_id uuid,
+    p_review_status text
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SET search_path = ''
+AS $function$
+DECLARE
+    v_restaurant_id uuid;
+BEGIN
+    IF (SELECT auth.uid()) IS NULL THEN
+        RAISE EXCEPTION 'É necessário iniciar sessão.';
+    END IF;
+    IF p_review_status NOT IN ('approved', 'rejected') THEN
+        RAISE EXCEPTION 'Estado de revisão inválido.';
+    END IF;
+
+    UPDATE public.restaurant_supplier_invoices AS invoice
+       SET review_status = p_review_status,
+           reviewed_by = (SELECT auth.uid()),
+           reviewed_at = now(),
+           updated_at = now()
+     WHERE invoice.id = p_invoice_id
+       AND EXISTS (
+           SELECT 1 FROM public.restaurant_staff rs
+           WHERE rs.restaurant_id = invoice.restaurant_id
+             AND rs.user_id = (SELECT auth.uid())
+             AND rs.role = 'owner'
+       )
+    RETURNING invoice.restaurant_id INTO v_restaurant_id;
+
+    IF v_restaurant_id IS NULL THEN
+        RAISE EXCEPTION 'Fatura não encontrada ou sem autorização para a rever.';
+    END IF;
+    RETURN p_invoice_id;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.review_supplier_invoice(uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.review_supplier_invoice(uuid, text) TO authenticated;
 
 -- The CI PostgreSQL replay has no Storage extension. Create a private bucket and
 -- owner-folder policies only where Supabase Storage exists (hosted deployment).
