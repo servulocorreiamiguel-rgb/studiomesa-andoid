@@ -311,3 +311,90 @@ internal class StudioMesaPriceReferenceTool(
         val HUNDRED = BigDecimal("100")
     }
 }
+
+
+/** Read-only account of supplier invoices already reviewed or awaiting review. */
+internal class StudioMesaSupplierInvoiceTool(
+    snapshot: StudioMesaAssistantSnapshot
+) : OpenApiTool {
+    @Volatile private var snapshot = snapshot
+
+    fun updateSnapshot(snapshot: StudioMesaAssistantSnapshot) {
+        this.snapshot = snapshot
+    }
+
+    override fun getToolDescriptionJsonString(): String {
+        val supplier = JSONObject()
+            .put("type", "string")
+            .put("description", "Filtro opcional pelo nome do fornecedor.")
+        val status = JSONObject()
+            .put("type", "string")
+            .put("enum", JSONArray().put("all").put("pending_review").put("approved").put("rejected"))
+            .put("description", "Estado da revisão. Por omissão usa all.")
+        val parameters = JSONObject()
+            .put("type", "object")
+            .put("properties", JSONObject().put("supplier", supplier).put("status", status))
+        return JSONObject()
+            .put("name", "get_supplier_invoice_summary")
+            .put(
+                "description",
+                "Consulta metadados de faturas de fornecedores que o proprietário já importou e confirmou no arquivo. É apenas leitura: não aprova, rejeita, altera, paga ou apaga faturas. Não revela o texto OCR nem o caminho privado dos ficheiros. Os totais são somas dos documentos arquivados, não prova de pagamento nem lançamento contabilístico."
+            )
+            .put("parameters", parameters)
+            .toString()
+    }
+
+    override fun execute(paramsJsonString: String): String = runCatching {
+        val params = JSONObject(paramsJsonString)
+        val supplierQuery = params.optString("supplier").trim()
+        val statusFilter = params.optString("status", "all").ifBlank { "all" }
+        if (statusFilter !in setOf("all", "pending_review", "approved", "rejected")) {
+            return@runCatching JSONObject().put("error", "Estado de fatura inválido.").toString()
+        }
+        val rows = snapshot.supplierInvoices.filter { invoice ->
+            (supplierQuery.isBlank() || invoice.supplierName.contains(supplierQuery, ignoreCase = true)) &&
+                (statusFilter == "all" || invoice.reviewStatus == statusFilter)
+        }.sortedByDescending { it.issueDate }
+        val gross = rows.fold(BigDecimal.ZERO) { total, invoice ->
+            total.add(invoice.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO)
+        }.setScale(2, RoundingMode.HALF_UP)
+        val net = rows.fold(BigDecimal.ZERO) { total, invoice ->
+            total.add(invoice.netAmount?.toBigDecimalOrNull() ?: BigDecimal.ZERO)
+        }.setScale(2, RoundingMode.HALF_UP)
+        val vat = rows.fold(BigDecimal.ZERO) { total, invoice ->
+            total.add(invoice.vatAmount?.toBigDecimalOrNull() ?: BigDecimal.ZERO)
+        }.setScale(2, RoundingMode.HALF_UP)
+        val items = JSONArray()
+        rows.take(20).forEach { invoice ->
+            items.put(
+                JSONObject()
+                    .put("supplier", invoice.supplierName)
+                    .put("invoice_number", invoice.invoiceNumber)
+                    .put("issue_date", invoice.issueDate)
+                    .put("due_date", invoice.dueDate.ifBlank { JSONObject.NULL })
+                    .put("net_amount_eur", invoice.netAmount ?: JSONObject.NULL)
+                    .put("vat_amount_eur", invoice.vatAmount ?: JSONObject.NULL)
+                    .put("total_amount_eur", invoice.totalAmount)
+                    .put("status", invoice.reviewStatus)
+                    .put("document_verified_by_owner", invoice.reviewStatus == "approved")
+            )
+        }
+        JSONObject()
+            .put("count", rows.size)
+            .put("pending_review", rows.count { it.reviewStatus == "pending_review" })
+            .put("approved", rows.count { it.reviewStatus == "approved" })
+            .put("rejected", rows.count { it.reviewStatus == "rejected" })
+            .put("net_total_eur", net.toPlainString())
+            .put("vat_total_eur", vat.toPlainString())
+            .put("gross_total_eur", gross.toPlainString())
+            .put("supplier_filter", supplierQuery)
+            .put("status_filter", statusFilter)
+            .put("documents", items)
+            .put("truncated", rows.size > 20)
+            .put("read_only", true)
+            .put("warning", "Soma os valores extraídos e guardados. Não prova pagamento, dedutibilidade fiscal ou reconciliação bancária.")
+            .toString()
+    }.getOrElse {
+        JSONObject().put("error", "Não foi possível consultar as faturas importadas.").toString()
+    }
+}
