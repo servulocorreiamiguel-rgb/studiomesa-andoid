@@ -67,6 +67,57 @@ class AssistantChatStoreInstrumentedTest {
     }
 
     @Test
+    fun remoteConversationMergeIsIdempotentAndPreservesServerTimestamps() {
+        val store = AssistantChatStore(context)
+        val scope = "test:" + UUID.randomUUID()
+        val conversationId = UUID.randomUUID().toString()
+        val turns = listOf(
+            AssistantChatStore.Turn("user", "Quanto gastei este mês?", 1_700_000_000_000L, "message-1"),
+            AssistantChatStore.Turn("assistant", "O total confirmado é 100 euros.", 1_700_000_001_000L, "message-2")
+        )
+        try {
+            val firstMerge = store.mergeRemoteConversation(
+                scope = scope,
+                conversationId = conversationId,
+                title = "Resumo mensal",
+                turns = turns,
+                remoteCreatedAtMillis = 1_700_000_000_000L,
+                remoteUpdatedAtMillis = 1_700_000_001_000L
+            )
+            val secondMerge = store.mergeRemoteConversation(
+                scope = scope,
+                conversationId = conversationId,
+                title = "Resumo mensal",
+                turns = turns,
+                remoteCreatedAtMillis = 1_700_000_000_000L,
+                remoteUpdatedAtMillis = 1_700_000_001_000L
+            )
+            assertEquals(2, firstMerge)
+            assertEquals(0, secondMerge)
+            assertEquals(2, store.readTurns(scope, conversationId).size)
+            val conversation = store.listConversations(scope).single()
+            assertEquals(1_700_000_000_000L, conversation.createdAtMillis)
+            assertEquals(1_700_000_001_000L, conversation.updatedAtMillis)
+        } finally {
+            runCatching { store.clearScope(scope) }
+        }
+    }
+
+    @Test
+    fun remoteMemoryUsesNewestTimestampAndIgnoresOlderCopies() {
+        val store = AssistantChatStore(context)
+        val scope = "test:" + UUID.randomUUID()
+        try {
+            assertTrue(store.mergeRemoteMemory(scope, "Memória mais recente", 2_000L))
+            assertFalse(store.mergeRemoteMemory(scope, "Memória antiga", 1_000L))
+            assertEquals("Memória mais recente", store.readMemory(scope))
+            assertEquals(2_000L, store.readMemoryUpdatedAtMillis(scope))
+        } finally {
+            runCatching { store.clearScope(scope) }
+        }
+    }
+
+    @Test
     fun assistantCannotCreateAnOrphanConversation() {
         val store = AssistantChatStore(context)
         val scope = "test:${UUID.randomUUID()}"
