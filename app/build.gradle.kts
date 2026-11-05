@@ -114,6 +114,9 @@ android {
 }
 
 dependencies {
+    // Local, on-device invoice OCR (Latin script covers Portuguese); the model is bundled with the APK.
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+
     testImplementation("junit:junit:4.13.2")
 
     // Device/emulator smoke tests for real Android Activity and UI behavior.

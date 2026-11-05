@@ -1,9 +1,9 @@
 package pt.studiomesa.app
 
 import android.app.Activity
-import android.content.Intent
 import android.app.Dialog
 import android.content.ClipData
+import android.content.Intent
 import android.content.ClipboardManager
 import android.content.res.ColorStateList
 import android.app.AlertDialog
@@ -46,7 +46,6 @@ class MainActivity : Activity() {
     companion object {
         private const val REQUEST_EXPORT_ORDERS_CSV = 7812
     }
-
     private lateinit var store: RestaurantStore
     private lateinit var appRoot: LinearLayout
     private var activePage = "Início"
@@ -84,6 +83,24 @@ class MainActivity : Activity() {
     }
     private var assistantQuestion = ""
     private var assistantAnswer: StudioMesaAssistantAnswer? = null
+    private val assistantChatStore by lazy { AssistantChatStore(this) }
+    private val assistantInvoiceFileStore by lazy { AssistantInvoiceFileStore(this) }
+    private var pendingInvoiceAttachmentId: String? = null
+    private var pendingInvoiceExportId: String? = null
+    private var pendingInvoiceCsvScope: String? = null
+    private var pendingCsvExport: String? = null
+    private val invoiceAttachmentRequestCode = 7101
+    private val invoiceExportRequestCode = 7102
+    private val invoiceCsvExportRequestCode = 7103
+    private var activeAssistantConversationId: String? = null
+    private var assistantChatScopeKey: String? = null
+    private var assistantComposerDraft = ""
+    private var assistantChatError: String? = null
+    private var assistantReplyPending = false
+    private var assistantLatestBubbleView: View? = null
+    private val assistantSettingsPrefs by lazy { getSharedPreferences("studiomesa_assistant_settings_v1", MODE_PRIVATE) }
+    private var assistantFinancialToolsExpanded = false
+    private var assistantAnalysisExpanded = false
     private var selectedAnalysisPeriod = SalesAnalysisPeriod.ALL_TIME
 
     // Owner-controlled economic tools: session-only until persistent authorization is designed.
@@ -104,8 +121,6 @@ class MainActivity : Activity() {
     // Reservation contacts are kept in memory only, not persisted to SharedPreferences.
     private var reservationCache = JSONArray()
     private var reservationsLoaded = false
-    // CSV remains in memory only until the user chooses a destination.
-    private var pendingCsvExport: String? = null
 
     private val flavor = BuildConfig.FLAVOR.lowercase(Locale.ROOT)
     private val isCustomerApp = flavor.contains("cliente")
@@ -173,6 +188,7 @@ class MainActivity : Activity() {
     }
 
     override fun onPause() {
+        persistEconomicManagerState()
         activityResumed = false
         stopKitchenAutoRefresh()
         stopInventoryAutoRefresh()
@@ -180,36 +196,137 @@ class MainActivity : Activity() {
     }
 
     @Deprecated("Uses Android's document picker result contract for compatibility with Activity.")
+    @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != REQUEST_EXPORT_ORDERS_CSV) return
-        val csv = pendingCsvExport
-        pendingCsvExport = null
-        val uri = data?.data
-        if (resultCode != RESULT_OK || uri == null) return
-        if (csv == null) {
-            AlertDialog.Builder(this)
-                .setTitle("Exportação interrompida")
-                .setMessage("O relatório deixou de estar disponível. Abre Análise e inicia a exportação novamente.")
-                .setPositiveButton("OK", null)
-                .show()
+        if (requestCode == REQUEST_EXPORT_ORDERS_CSV) {
+            val csv = pendingCsvExport
+            pendingCsvExport = null
+            val uri = data?.data
+            if (resultCode != RESULT_OK || uri == null) return
+            if (csv == null) {
+                AlertDialog.Builder(this)
+                    .setTitle("Exportação interrompida")
+                    .setMessage("O relatório deixou de estar disponível. Abre Análise e inicia a exportação novamente.")
+                    .setPositiveButton("OK", null)
+                    .show()
+                return
+            }
+            try {
+                val output = contentResolver.openOutputStream(uri)
+                    ?: throw IllegalStateException("Não foi possível abrir o ficheiro escolhido.")
+                output.use { it.write(csv.toByteArray(Charsets.UTF_8)) }
+                AlertDialog.Builder(this)
+                    .setTitle("Relatório exportado")
+                    .setMessage("O CSV foi guardado no destino escolhido. Contém dados operacionais, não comprovativos de pagamento ou contabilidade oficial.")
+                    .setPositiveButton("OK", null)
+                    .show()
+            } catch (_: Exception) {
+                AlertDialog.Builder(this)
+                    .setTitle("Não foi possível exportar")
+                    .setMessage("Não foi possível guardar o ficheiro. Escolhe outro destino com espaço disponível e tenta novamente.")
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
             return
         }
-        try {
-            val output = contentResolver.openOutputStream(uri)
-                ?: throw IllegalStateException("Não foi possível abrir o ficheiro escolhido.")
-            output.use { it.write(csv.toByteArray(Charsets.UTF_8)) }
-            AlertDialog.Builder(this)
-                .setTitle("Relatório exportado")
-                .setMessage("O CSV foi guardado no destino escolhido. Contém dados operacionais, não comprovativos de pagamento ou contabilidade oficial.")
-                .setPositiveButton("OK", null)
-                .show()
-        } catch (_: Exception) {
-            AlertDialog.Builder(this)
-                .setTitle("Não foi possível exportar")
-                .setMessage("Não foi possível guardar o ficheiro. Escolhe outro destino com espaço disponível e tenta novamente.")
-                .setPositiveButton("OK", null)
-                .show()
+        if (resultCode != RESULT_OK || data?.data == null) {
+            pendingInvoiceAttachmentId = null
+            pendingInvoiceExportId = null
+            return
+        }
+        val uri = data.data ?: return
+        when (requestCode) {
+            invoiceAttachmentRequestCode -> {
+                val invoiceId = pendingInvoiceAttachmentId
+                pendingInvoiceAttachmentId = null
+                if (invoiceId.isNullOrBlank()) return
+                val scope = assistantChatScope()
+                Thread {
+                    try {
+                        val attachment = assistantInvoiceFileStore.importFromUri(uri)
+                        assistantChatStore.updateInvoiceAttachment(
+                            scope, invoiceId, attachment.id, attachment.fileName, attachment.mimeType
+                        )
+                        val extraction = runCatching {
+                            InvoiceDocumentTextExtractor.extract(applicationContext, uri, attachment.mimeType)
+                        }
+                        val recognized = extraction.getOrNull()
+                        val extractedTextSaved = if (recognized != null && recognized.text.isNotBlank()) {
+                            runCatching {
+                                assistantChatStore.updateInvoiceExtractedText(scope, invoiceId, recognized.text)
+                            }.isSuccess
+                        } else {
+                            false
+                        }
+                        runOnUiThread {
+                            val notice = when {
+                                recognized == null ->
+                                    "Documento guardado e cifrado. Não foi possível reconhecer texto automaticamente; confirma os dados visualmente."
+                                !extractedTextSaved ->
+                                    "Documento guardado e cifrado, mas o texto reconhecido não ficou guardado. Abre novamente o documento e tenta importar."
+                                recognized.truncated ->
+                                    "Documento guardado. Texto reconhecido localmente em ${recognized.pagesProcessed} página(s), com limite de leitura atingido. Confirma os dados."
+                                else ->
+                                    "Documento guardado. Texto reconhecido localmente em ${recognized.pagesProcessed} página(s). Confirma fornecedor, datas e valores antes de usar."
+                            }
+                            Toast.makeText(this, notice, Toast.LENGTH_LONG).show()
+                            if (recognized != null) {
+                                showInvoiceExtractionSuggestions(scope, invoiceId, recognized.text)
+                            } else {
+                                showAssistantInvoiceDetails(scope, invoiceId)
+                            }
+                        }
+                    } catch (error: Exception) {
+                        runOnUiThread {
+                            Toast.makeText(this, error.message ?: "Não foi possível importar o documento.", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }.start()
+            }
+            invoiceExportRequestCode -> {
+                val invoiceId = pendingInvoiceExportId
+                pendingInvoiceExportId = null
+                if (invoiceId.isNullOrBlank()) return
+                val invoice = runCatching {
+                    assistantChatStore.listInvoices(assistantChatScope()).firstOrNull { it.id == invoiceId }
+                }.getOrNull() ?: return
+                val attachmentId = invoice.attachmentId ?: return
+                Thread {
+                    try {
+                        assistantInvoiceFileStore.exportToUri(attachmentId, uri)
+                        runOnUiThread {
+                            Toast.makeText(this, "Documento exportado.", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (error: Exception) {
+                        runOnUiThread {
+                            Toast.makeText(this, error.message ?: "Não foi possível exportar o documento.", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }.start()
+            }
+            invoiceCsvExportRequestCode -> {
+                val scope = pendingInvoiceCsvScope
+                pendingInvoiceCsvScope = null
+                if (scope.isNullOrBlank() || !canManageInvoices()) return
+                Thread {
+                    try {
+                        val csv = buildInvoiceCsv(scope)
+                        contentResolver.openOutputStream(uri, "wt")?.use { output ->
+                            output.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()))
+                            output.write(csv.toByteArray(Charsets.UTF_8))
+                            output.flush()
+                        } ?: throw IllegalStateException("Não foi possível escrever no ficheiro CSV.")
+                        runOnUiThread {
+                            Toast.makeText(this, "Histórico financeiro exportado em CSV.", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (error: Exception) {
+                        runOnUiThread {
+                            Toast.makeText(this, error.message ?: "Não foi possível exportar o histórico.", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }.start()
+            }
         }
     }
 
@@ -349,8 +466,8 @@ class MainActivity : Activity() {
         }
         val pageGroups = listOf(
             "OPERAÇÃO" to listOf("Início", "Mesas", "Pedidos", "Cozinha"),
-            "GESTÃO DO RESTAURANTE" to listOf("Carta", "Pontos", "Reservas", "Preço Justo", "Stock", "Análise"),
             "ASSISTÊNCIA" to listOf("Assistente"),
+            "GESTÃO DO RESTAURANTE" to listOf("Carta", "Pontos", "Reservas", "Preço Justo", "Stock", "Análise"),
             "CONTA" to listOf("Conta")
         )
         pageGroups.forEach { (groupTitle, groupPages) ->
@@ -464,6 +581,7 @@ class MainActivity : Activity() {
             return
         }
         if (activePage !in availablePages()) activePage = "Início"
+        persistEconomicManagerState()
 
         appRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -596,6 +714,29 @@ class MainActivity : Activity() {
         }
         appRoot.addView(nav, LinearLayout.LayoutParams(-1, dp(60)))
         setContentView(appRoot)
+        if (activePage == "Assistente" && activeAssistantConversationId != null) {
+            val scrollListener = object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
+                override fun onGlobalLayout() {
+                    val latestBubble = assistantLatestBubbleView
+                    if (latestBubble == null || latestBubble.parent !== content) {
+                        if (scroll.viewTreeObserver.isAlive) {
+                            scroll.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                        }
+                        return
+                    }
+                    if (!scroll.isLaidOut || !content.isLaidOut || latestBubble.height <= 0) return
+                    if (scroll.viewTreeObserver.isAlive) {
+                        scroll.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                    }
+                    scroll.post {
+                        val maxScrollY = (content.height - scroll.height).coerceAtLeast(0)
+                        val targetScrollY = (latestBubble.top - dp(12)).coerceIn(0, maxScrollY)
+                        scroll.scrollTo(0, targetScrollY)
+                    }
+                }
+            }
+            scroll.viewTreeObserver.addOnGlobalLayoutListener(scrollListener)
+        }
         updateKitchenAutoRefresh()
         updateInventoryAutoRefresh()
     }
@@ -4637,97 +4778,1194 @@ class MainActivity : Activity() {
     private fun formatAdvicePercent(value: java.math.BigDecimal): String =
         value.stripTrailingZeros().toPlainString().replace('.', ',')
 
+    private fun assistantChatScope(): String {
+        val userId = backendPrefs.getString("user_id", "").orEmpty().trim()
+        val restaurantId = backendRestaurantId().trim()
+        return if (userId.isNotBlank()) {
+            "account:$userId:restaurant:${restaurantId.ifBlank { "none" }}"
+        } else {
+            "demo:${BuildConfig.FLAVOR}"
+        }
+    }
+
     private fun renderAssistant(container: LinearLayout) {
-        val snapshot = assistantSnapshot()
-        pageIntro(container, "Assistente StudioMesa", "Apoio à operação com os dados que já estão disponíveis.")
+        val scope = assistantChatScope()
+        if (assistantChatScopeKey != scope) {
+            assistantChatScopeKey = scope
+            activeAssistantConversationId = null
+            assistantComposerDraft = ""
+            assistantChatError = null
+        }
+
+        pageIntro(
+            container,
+            "Assistente StudioMesa",
+            "Um espaço de conversa para analisar a operação e apoiar a gestão do restaurante."
+        )
         addGap(container, 8)
 
-        assistantAnswer?.let { answer ->
-            val answerCard = makeCard(16, copperPale)
-            answerCard.addView(label(answer.title, 17f, true, forestDeep))
-            addGap(answerCard, 7)
-            answerCard.addView(label(answer.response, 12.5f, false, ink))
-            assistantActionTarget(answer.actionPage)?.let { target ->
-                addGap(answerCard, 10)
-                answerCard.addView(secondaryButton("Abrir " + target) {
-                    activePage = target
-                    renderApp()
-                }, LinearLayout.LayoutParams(-1, dp(44)))
-            }
-            container.addView(answerCard, cardParams())
+        val statusCard = makeCard(13, forest)
+        statusCard.addView(label("ASSISTENTE STUDIO MESA", 9.5f, true, copper))
+        addGap(statusCard, 5)
+        statusCard.addView(label(
+            if (assistantGeminiEnabled()) {
+                "Autorizaste o envio de conversa geral ao Gemini. A resposta generativa só estará disponível quando o serviço estiver configurado no servidor. Perguntas com faturas, dados fiscais, valores financeiros, dados pessoais ou números continuam no motor local; nunca são enviados anexos, OCR ou Memória."
+            } else {
+                "O histórico e a memória ficam cifrados neste dispositivo. O motor local trata das faturas e cálculos; o proprietário pode ativar uma ligação generativa depois de configurar o projeto Google Cloud."
+            },
+            11.5f, false, white
+        ))
+        container.addView(statusCard, cardParams())
+
+        val toolbar = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        val primaryActions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        primaryActions.addView(secondaryButton("＋ Nova conversa") {
+            activeAssistantConversationId = null
+            assistantComposerDraft = ""
+            assistantChatError = null
+            renderApp()
+        }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { setMargins(0, 0, dp(4), 0) })
+        primaryActions.addView(secondaryButton("Histórico") {
+            showAssistantHistoryDialog()
+        }, LinearLayout.LayoutParams(0, dp(44), 1f).apply { setMargins(dp(4), 0, 0, 0) })
+        toolbar.addView(primaryActions, LinearLayout.LayoutParams(-1, -2))
+        addGap(toolbar, 5)
+        toolbar.addView(secondaryButton("Memória") {
+            showAssistantMemoryDialog()
+        }, LinearLayout.LayoutParams(-1, dp(44)))
+        container.addView(toolbar, LinearLayout.LayoutParams(-1, -2))
+        addGap(container, 5)
+        container.addView(secondaryButton(
+            if (assistantGeminiEnabled()) "Gemini autorizado · gerir consentimento"
+            else "Ativar conversa generativa"
+        ) {
+            showGenerativeAiConsentDialog()
+        }, LinearLayout.LayoutParams(-1, dp(42)))
+        addGap(container, 10)
+
+        val activeThread = runCatching {
+            assistantChatStore.listConversations(scope)
+                .firstOrNull { it.id == activeAssistantConversationId }
+        }.getOrNull()
+        if (activeThread != null) {
+            container.addView(label(activeThread.title, 15f, true, forestDeep))
             addGap(container, 6)
         }
 
-        val privacyCard = makeCard(15, forest)
-        privacyCard.addView(label("ASSISTENTE LOCAL · SEM API PAGA", 10f, true, copper))
-        addGap(privacyCard, 5)
-        privacyCard.addView(label(
-            "As análises são calculadas neste dispositivo. As perguntas não são enviadas nem guardadas como histórico. Esta versão usa regras e cálculos locais, não um modelo generativo; não altera registos por ti.",
-            12.5f, false, white
-        ))
-        container.addView(privacyCard, cardParams())
+        val turns = try {
+            activeAssistantConversationId?.let { assistantChatStore.readTurns(scope, it) }.orEmpty()
+        } catch (error: Exception) {
+            assistantChatError = error.message ?: "Não foi possível abrir o histórico."
+            emptyList()
+        }
+        assistantLatestBubbleView = null
 
-        addGap(container, 9)
-        renderEconomicManager(container)
+        if (turns.isEmpty()) {
+            val welcome = makeCard(17)
+            welcome.addView(label("Olá. Em que posso ajudar com o restaurante?", 18f, true, forestDeep))
+            addGap(welcome, 7)
+            welcome.addView(label(
+                "Podes perguntar sobre custos, preços, pedidos, stock, reservas e desempenho da carta. Também podes guardar notas na Memória para as próximas conversas.",
+                12.5f, false, muted
+            ))
+            container.addView(welcome, cardParams())
 
-        if (isPremium) {
-            addGap(container, 9)
-            renderRestaurantPriceAdvisor(container)
+            val suggestions = listOf(
+                "Como posso melhorar a margem dos pratos?",
+                "Que pontos devo rever no negócio?",
+                "Faz um resumo da operação"
+            )
+            suggestions.forEach { suggestion ->
+                container.addView(secondaryButton(suggestion) {
+                    sendAssistantMessage(suggestion)
+                }, LinearLayout.LayoutParams(-1, dp(42)).apply {
+                    setMargins(0, 0, 0, dp(6))
+                })
+            }
+        } else {
+            turns.forEach { turn -> renderAssistantBubble(container, turn) }
+        }
+
+        if (assistantReplyPending) {
+            val pendingCard = makeCard(11, copperPale)
+            pendingCard.addView(label("A IA está a preparar uma resposta…", 11.5f, true, forestDeep))
+            container.addView(pendingCard, cardParams())
+        }
+        assistantChatError?.let { error ->
+            val errorCard = makeCard(11, paleRed)
+            errorCard.addView(label(error, 11.5f, true, red))
+            container.addView(errorCard, cardParams())
         }
 
         addGap(container, 5)
-        sectionHeading(container, "Pergunta ao assistente", "Experimenta perguntar sobre custos, preços, pedidos, stock, reservas ou um problema de sincronização.")
-        val questionField = multilineInputField("Ex.: Como posso melhorar o preço dos pratos?")
-        questionField.setText(assistantQuestion)
-        container.addView(questionField, multilineFieldParams())
-        container.addView(primaryButton("Analisar pergunta") {
-            assistantQuestion = questionField.text.toString().trim().take(400)
-            assistantAnswer = StudioMesaAdvisor.answerQuestion(assistantQuestion, snapshot)
-            renderApp()
+        sectionHeading(container, "Mensagem", "As conversas ficam guardadas no histórico deste dispositivo.")
+        val composer = multilineInputField("Escreve uma mensagem…").apply {
+            minLines = 3
+            maxLines = 5
+            setText(assistantComposerDraft)
+        }
+        container.addView(composer, LinearLayout.LayoutParams(-1, dp(96)).apply {
+            setMargins(0, dp(4), 0, dp(7))
+        })
+        container.addView(primaryButton("Enviar mensagem  ↑") {
+            assistantComposerDraft = composer.text.toString()
+            sendAssistantMessage(assistantComposerDraft)
         }, LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(container, 5)
-        container.addView(secondaryButton("Gerar resumo da operação") {
-            // Keep the user's question intact; the briefing is a separate action.
-            assistantAnswer = StudioMesaAdvisor.dailyBriefing(assistantSnapshot())
-            renderApp()
-        }, LinearLayout.LayoutParams(-1, dp(46)))
         addGap(container, 12)
 
-        sectionHeading(container, "Sugestões para rever", "Prioridades estimadas. Confirma os dados e decide antes de alterar qualquer coisa.")
+        container.addView(secondaryButton(
+            if (assistantFinancialToolsExpanded) "− Ocultar ferramentas financeiras" else "＋ Ferramentas financeiras"
+        ) {
+            assistantFinancialToolsExpanded = !assistantFinancialToolsExpanded
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(46)))
+
+        if (assistantFinancialToolsExpanded) {
+            addGap(container, 8)
+            renderEconomicManager(container)
+            if (isPremium) {
+                addGap(container, 8)
+                renderRestaurantPriceAdvisor(container)
+            }
+            addGap(container, 8)
+            renderAssistantInvoices(container, scope)
+        }
+
+        addGap(container, 8)
+        container.addView(secondaryButton(
+            if (assistantAnalysisExpanded) "− Ocultar análises rápidas" else "＋ Análises rápidas"
+        ) {
+            assistantAnalysisExpanded = !assistantAnalysisExpanded
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(46)))
+        if (assistantAnalysisExpanded) {
+            addGap(container, 8)
+            renderAssistantInsights(container, assistantSnapshot())
+        }
+    }
+
+    private fun renderAssistantBubble(
+        parent: LinearLayout,
+        turn: AssistantChatStore.Turn
+    ) {
+        val isUser = turn.role == "user"
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = if (isUser) Gravity.END else Gravity.START
+            setPadding(0, dp(2), 0, dp(7))
+        }
+        val bubble = makeCard(13, if (isUser) forest else white)
+        bubble.addView(label(
+            if (isUser) "TU" else "STUDIOMESA",
+            9f,
+            true,
+            if (isUser) copper else forestSoft
+        ))
+        addGap(bubble, 5)
+        val messageText = label(
+            turn.content,
+            13f,
+            false,
+            if (isUser) white else ink
+        )
+        if (!isUser) {
+            // Make grounded source URLs returned by Google Search tappable.
+            messageText.autoLinkMask = android.text.util.Linkify.WEB_URLS
+            messageText.linksClickable = true
+            messageText.movementMethod = android.text.method.LinkMovementMethod.getInstance()
+        }
+        bubble.addView(messageText)
+        addGap(bubble, 5)
+        val time = SimpleDateFormat("HH:mm", Locale("pt", "PT")).format(Date(turn.createdAtMillis))
+        bubble.addView(label(time, 9f, false, if (isUser) copperPale else muted).apply {
+            gravity = Gravity.END
+        })
+        val width = (resources.displayMetrics.widthPixels * 0.84f).toInt()
+        row.addView(bubble, LinearLayout.LayoutParams(width, -2))
+        parent.addView(row, LinearLayout.LayoutParams(-1, -2))
+        assistantLatestBubbleView = row
+    }
+
+    private fun assistantGeminiEnabled(): Boolean =
+        assistantSettingsPrefs.getBoolean("gemini_enabled", false) &&
+            !isCustomerApp &&
+            hasRemoteRestaurant() &&
+            backendPrefs.getString("restaurant_role", "").orEmpty() == "owner"
+
+    private fun showGenerativeAiConsentDialog() {
+        if (!hasRemoteRestaurant() || backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") {
+            AlertDialog.Builder(this)
+                .setTitle("IA generativa")
+                .setMessage("Esta ligação só pode ser ativada pelo proprietário de um restaurante configurado e autenticado.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        if (assistantGeminiEnabled()) {
+            AlertDialog.Builder(this)
+                .setTitle("Gemini autorizado")
+                .setMessage("Desativar o envio de conversas gerais para o Gemini? O assistente continuará a responder com as ferramentas locais.")
+                .setNegativeButton("Manter ativo", null)
+                .setPositiveButton("Desativar") { _, _ ->
+                    assistantSettingsPrefs.edit()
+                        .putBoolean("gemini_enabled", false)
+                        .apply()
+                    renderApp()
+                }
+                .show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Ativar Gemini")
+            .setMessage(
+                "A ligação Gemini é opcional e só deve ser ativada pelo proprietário depois de um responsável adulto (18+) configurar e aceitar os termos do Google Cloud. Para disponibilizar a Gemini API a utilizadores no Espaço Económico Europeu, o projeto Google Cloud tem de ter uma conta de faturação ativa. A quota sem custos pode ser limitada; depois dela, podem existir cobranças. Não assumas que a utilização é sempre gratuita.\n\n" +
+                    "As mensagens de conversa geral e até 10 mensagens recentes podem ser enviadas à Google. O StudioMesa bloqueia mensagens detetadas como contendo faturas, IVA, valores financeiros, dados pessoais ou números. Anexos, texto OCR/XML, Memória e histórico de faturas nunca são enviados; essas perguntas continuam no motor local.\n\n" +
+                    "Não escrevas nomes, contactos, NIF, palavras-passe ou informação confidencial. A chave Gemini fica no servidor, nunca na aplicação. Esta ligação destina-se apenas à área de gestão do restaurante e não é disponibilizada na app de clientes. O assistente não pesquisa a Internet nesta versão."
+            )
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Concordo e ativar") { _, _ ->
+                assistantSettingsPrefs.edit().putBoolean("gemini_enabled", true).apply()
+                renderApp()
+            }
+            .show()
+    }
+
+    private fun shouldUseGemini(scope: String, conversationId: String): Boolean {
+        if (!assistantGeminiEnabled()) return false
+        val turns = runCatching { assistantChatStore.readTurns(scope, conversationId) }.getOrDefault(emptyList())
+        return turns.isNotEmpty() && GenerativeAssistantPrivacyFilter.isSafeToSend(turns.takeLast(10).map { it.content })
+    }
+
+    private fun buildGeminiMessages(scope: String, conversationId: String): JSONArray {
+        val turns = assistantChatStore.readTurns(scope, conversationId).takeLast(10)
+        require(turns.isNotEmpty() && GenerativeAssistantPrivacyFilter.isSafeToSend(turns.map { it.content })) {
+            "Esta conversa contém dados que devem permanecer no motor local."
+        }
+        return JSONArray().apply {
+            turns.forEach { turn ->
+                put(JSONObject()
+                    .put("role", if (turn.role == "assistant") "assistant" else "user")
+                    .put("text", turn.content.take(1600)))
+            }
+        }
+    }
+
+    private fun sendAssistantMessage(rawMessage: String) {
+        val question = rawMessage.trim().take(1000)
+        if (question.isBlank()) {
+            Toast.makeText(this, "Escreve uma mensagem primeiro.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (assistantReplyPending) return
+
+        val scope = assistantChatScope()
+        try {
+            val conversationId = assistantChatStore.appendTurn(
+                scope,
+                activeAssistantConversationId,
+                "user",
+                question
+            )
+            activeAssistantConversationId = conversationId
+            assistantComposerDraft = ""
+            assistantChatError = null
+            if (shouldUseGemini(scope, conversationId)) {
+                assistantReplyPending = true
+                renderApp()
+                Thread {
+                    val result = runCatching {
+                        refreshSessionIfNeeded()
+                        SupabaseApi.generateRestaurantAssistantReply(
+                            backendToken(),
+                            backendRestaurantId(),
+                            buildGeminiMessages(scope, conversationId)
+                        )
+                    }
+                    runOnUiThread {
+                        assistantReplyPending = false
+                        val reply = result.getOrElse { error ->
+                            val local = runCatching {
+                                answerAssistantChatMessage(question, scope, conversationId)
+                            }.getOrElse { "Não foi possível gerar uma resposta neste momento." }
+                            "A IA generativa não está disponível neste momento (" +
+                                (error.message ?: "erro de ligação") + ").\n\nResposta local do StudioMesa:\n$local"
+                        }
+                        runCatching {
+                            assistantChatStore.appendTurn(scope, conversationId, "assistant", reply)
+                        }.onFailure {
+                            assistantChatError = "A resposta chegou, mas não foi possível guardá-la no histórico."
+                        }
+                        renderApp()
+                    }
+                }.start()
+                return
+            }
+
+            val reply = answerAssistantChatMessage(question, scope, conversationId)
+            assistantChatStore.appendTurn(scope, conversationId, "assistant", reply)
+            assistantChatError = null
+        } catch (error: Exception) {
+            assistantChatError = error.message ?: "Não foi possível guardar ou responder à mensagem."
+        }
+        renderApp()
+    }
+
+    private fun answerAssistantChatMessage(
+        question: String,
+        scope: String,
+        conversationId: String
+    ): String {
+        val normalized = java.text.Normalizer.normalize(
+            question.lowercase(Locale.ROOT),
+            java.text.Normalizer.Form.NFD
+        ).replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
+            .replace(Regex("[^a-z0-9 ]"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+        val memory = assistantChatStore.readMemory(scope)
+        val asksAboutMemory = listOf(
+            "o que sabes", "o que te lembras", "do que te lembras",
+            "o que guardaste", "qual e a minha memoria", "mostra a memoria"
+        ).any { normalized.contains(it) } || normalized == "memoria"
+        if (asksAboutMemory) {
+            return if (memory.isBlank()) {
+                "Ainda não guardaste notas na Memória do assistente. Usa o botão «Memória» para registar informação útil sobre o restaurante."
+            } else {
+                "Estas são as notas guardadas na Memória deste dispositivo:\n\n$memory"
+            }
+        }
+
+        if (RestaurantAssistantIntentClassifier.classify(question).intent ==
+            RestaurantAssistantIntent.DAILY_BRIEFING
+        ) {
+            val briefing = StudioMesaAdvisor.dailyBriefing(assistantSnapshot())
+            return "${briefing.title}\n\n${briefing.response}"
+        }
+
+        val asksAboutInvoices = listOf(
+            "fatura", "faturas", "factura", "facturas", "saft", "documento contabilistico",
+            "fatura de fornecedor", "despesa de fornecedor", "compras a fornecedor",
+            "compras a fornecedores", "total de compras", "quanto gastei em compras",
+            "quanto gastamos em compras", "quanto paguei aos fornecedores",
+            "gastos com fornecedores", "notas de credito"
+        ).any { normalized.contains(it) }
+        if (asksAboutInvoices) {
+            return answerRegisteredInvoices(question, scope)
+        }
+
+        val previousUserQuestion = runCatching {
+            assistantChatStore.readTurns(scope, conversationId)
+                .dropLast(1)
+                .lastOrNull { it.role == "user" }?.content
+        }.getOrNull()
+        val isShortFollowUp = normalized.length <= 35 && listOf(
+            "e como", "e porque", "porquê", "explica melhor", "mais detalhes",
+            "e depois", "e isso", "como assim"
+        ).any { normalized.startsWith(it) }
+        val questionForLocalEngine = if (isShortFollowUp && !previousUserQuestion.isNullOrBlank()) {
+            "$previousUserQuestion. Seguimento: $question"
+        } else {
+            question
+        }
+
+        val answer = StudioMesaAdvisor.answerQuestion(questionForLocalEngine, assistantSnapshot())
+        val contextNote = if (memory.isNotBlank() && listOf(
+            "restaurante", "negocio", "empresa", "equipa", "objetivo", "preferencia"
+        ).any { normalized.contains(it) }) {
+            "\n\nNota da Memória: $memory"
+        } else {
+            ""
+        }
+        return "${answer.title}\n\n${answer.response}$contextNote"
+    }
+
+
+    private fun canManageInvoices(): Boolean =
+        !hasRemoteRestaurant() || backendPrefs.getString("restaurant_role", "").orEmpty() == "owner"
+
+    private fun renderAssistantInvoices(container: LinearLayout, scope: String) {
+        sectionHeading(
+            container,
+            "Faturas e despesas",
+            "Arquivo privado do restaurante. Os valores são confirmados pelo proprietário; o anexo original fica cifrado no dispositivo."
+        )
+        if (!canManageInvoices()) {
+            container.addView(emptyCard("Só o proprietário pode consultar ou importar documentos financeiros."), cardParams())
+            return
+        }
+        val invoices = runCatching { assistantChatStore.listInvoices(scope) }.getOrElse {
+            container.addView(emptyCard("Não foi possível abrir o arquivo cifrado de faturas."), cardParams())
+            return
+        }
+        val netTotal = invoices.fold(BigDecimal.ZERO) { sum, invoice ->
+            val amount = runCatching { BigDecimal(invoice.totalAmount) }.getOrDefault(BigDecimal.ZERO)
+            if (invoice.invoiceType == "credit_note") sum.subtract(amount) else sum.add(amount)
+        }
+        val card = makeCard(14, copperPale)
+        card.addView(label("DOCUMENTOS REGISTADOS", 9.5f, true, forestDeep))
+        addGap(card, 5)
+        card.addView(label("${invoices.size} documentos · compras líquidas registadas: ${money(netTotal)}", 14f, true, forestDeep))
+        addGap(card, 5)
+        card.addView(label("Inclui apenas documentos introduzidos e conferidos. Não é uma integração automática com a contabilidade.", 11f, false, muted))
+        container.addView(card, cardParams())
+        addGap(container, 7)
+        container.addView(primaryButton("＋ Registar fatura ou nota de crédito") {
+            showAssistantInvoiceForm(scope)
+        }, LinearLayout.LayoutParams(-1, dp(46)))
+        addGap(container, 5)
+        container.addView(secondaryButton("Ver histórico de faturas (${invoices.size})") {
+            showAssistantInvoiceList(scope)
+        }, LinearLayout.LayoutParams(-1, dp(44)))
+        addGap(container, 5)
+        container.addView(secondaryButton("Exportar histórico financeiro (CSV)") {
+            requestInvoiceCsvExport(scope)
+        }, LinearLayout.LayoutParams(-1, dp(44)))
+        addGap(container, 7)
+        container.addView(label(
+            "Importação: PDF, XML, TXT, JPEG, PNG e WebP até 12 MB. OCR local tenta ler imagens e as primeiras 10 páginas de PDF; TXT/XML são lidos diretamente. O texto fica cifrado, tem de ser confirmado e não sincroniza na cloud.",
+            10.5f, false, muted
+        ))
+    }
+
+    private fun parseInvoiceAmount(raw: String, fieldName: String): String {
+        var clean = raw.trim().replace(" ", "")
+        if (clean.contains(',')) clean = clean.replace(".", "").replace(',', '.')
+        val value = runCatching { BigDecimal(clean) }.getOrNull()
+            ?: throw IllegalArgumentException("O valor de $fieldName não é válido.")
+        require(value.signum() >= 0 && value <= BigDecimal("999999999.99") && value.scale().coerceAtMost(2) == value.scale()) {
+            "O valor de $fieldName deve ser não negativo e ter até duas casas decimais."
+        }
+        return value.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString()
+    }
+
+    private fun showAssistantInvoiceForm(scope: String) {
+        if (!canManageInvoices()) {
+            Toast.makeText(this, "Apenas o proprietário pode registar faturas.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(4))
+        }
+        fun addField(title: String, hint: String, type: Int = InputType.TYPE_CLASS_TEXT): EditText {
+            form.addView(label(title, 11f, true, forestDeep))
+            val input = inputField(hint, type)
+            form.addView(input, LinearLayout.LayoutParams(-1, dp(46)).apply {
+                setMargins(0, dp(3), 0, dp(7))
+            })
+            return input
+        }
+        val supplier = addField("Fornecedor", "Ex.: Distribuidor alimentar")
+        val number = addField("Número do documento", "Ex.: FT A/2026/104")
+        val defaultInvoiceDate = SimpleDateFormat("dd/MM/yyyy", Locale("pt", "PT")).format(Date())
+        val date = addField("Data (DD/MM/AAAA)", defaultInvoiceDate).apply {
+            setText(defaultInvoiceDate)
+        }
+        val type = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                listOf("Fatura", "Nota de crédito")
+            )
+        }
+        form.addView(label("Tipo de documento", 11f, true, forestDeep))
+        form.addView(type, LinearLayout.LayoutParams(-1, dp(46)))
+        val net = addField("Base tributável (€)", "Ex.: 100,00", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+        val vat = addField("IVA (€)", "Ex.: 23,00", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+        val total = addField("Total (€)", "Ex.: 123,00", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL)
+        form.addView(label("Notas / linhas transcritas (opcional)", 11f, true, forestDeep))
+        val notes = multilineInputField("Ex.: 10 kg de arroz; 4 caixas de óleo…").apply {
+            minLines = 3
+            maxLines = 6
+            filters = filters + InputFilter.LengthFilter(4000)
+        }
+        form.addView(notes, LinearLayout.LayoutParams(-1, dp(110)))
+        val scroll = ScrollView(this).apply { addView(form) }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Novo documento financeiro")
+            .setView(scroll)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Guardar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                try {
+                    val parsedDate = SimpleDateFormat("dd/MM/yyyy", Locale("pt", "PT")).apply {
+                        isLenient = false
+                    }.parse(date.text.toString().trim())
+                        ?: throw IllegalArgumentException("A data não é válida.")
+                    val isoDate = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(parsedDate)
+                    val netValue = parseInvoiceAmount(net.text.toString(), "base tributável")
+                    val vatValue = parseInvoiceAmount(vat.text.toString(), "IVA")
+                    val totalValue = parseInvoiceAmount(total.text.toString(), "total")
+                    val calculatedTotal = BigDecimal(netValue).add(BigDecimal(vatValue))
+                    require(calculatedTotal.subtract(BigDecimal(totalValue)).abs() <= BigDecimal("0.02")) {
+                        "O total deve corresponder à base tributável mais IVA (diferença máxima de 0,02 €)."
+                    }
+                    val invoice = AssistantChatStore.Invoice(
+                        id = java.util.UUID.randomUUID().toString(),
+                        supplier = supplier.text.toString().trim(),
+                        number = number.text.toString().trim(),
+                        invoiceDate = isoDate,
+                        invoiceType = if (type.selectedItemPosition == 1) "credit_note" else "invoice",
+                        netAmount = netValue,
+                        taxAmount = vatValue,
+                        totalAmount = totalValue,
+                        notes = notes.text.toString().trim(),
+                        attachmentId = null,
+                        attachmentName = null,
+                        attachmentMimeType = null,
+                        createdAtMillis = System.currentTimeMillis()
+                    )
+                    assistantChatStore.saveInvoice(scope, invoice)
+                    dialog.dismiss()
+                    Toast.makeText(this, "Documento guardado no arquivo cifrado.", Toast.LENGTH_SHORT).show()
+                    window.decorView.post { showAssistantInvoiceDetails(scope, invoice.id) }
+                } catch (error: Exception) {
+                    AlertDialog.Builder(this)
+                        .setTitle("Não foi possível guardar")
+                        .setMessage(error.message ?: "Confirma os valores e a data.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showAssistantInvoiceList(scope: String) {
+        if (!canManageInvoices()) return
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(8), dp(14), dp(4))
+        }
+        val search = inputField("Pesquisar fornecedor, número ou notas…", InputType.TYPE_CLASS_TEXT)
+        panel.addView(search, fieldParams())
+        val results = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val scroll = ScrollView(this).apply { addView(results) }
+        panel.addView(scroll, LinearLayout.LayoutParams(-1, dp(400)))
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Histórico de faturas")
+            .setView(panel)
+            .setNegativeButton("Fechar", null)
+            .create()
+        fun refresh(query: String) {
+            results.removeAllViews()
+            val invoices = runCatching { assistantChatStore.listInvoices(scope, query) }.getOrElse {
+                results.addView(emptyCard("Não foi possível abrir o arquivo de faturas."))
+                return
+            }
+            if (invoices.isEmpty()) {
+                results.addView(emptyCard(if (query.isBlank()) "Ainda não há documentos registados." else "Não encontrei documentos com esse texto."))
+                return
+            }
+            invoices.forEach { invoice ->
+                val card = makeCard(12)
+                card.addView(label("${invoice.supplier} · ${invoice.number.ifBlank { "Sem número" }}", 14f, true, forestDeep))
+                addGap(card, 3)
+                val typeLabel = if (invoice.invoiceType == "credit_note") "Nota de crédito" else "Fatura"
+                card.addView(label("$typeLabel · ${invoice.invoiceDate} · ${money(BigDecimal(invoice.totalAmount))}", 11f, false, muted))
+                if (invoice.attachmentId != null) {
+                    card.addView(label("Documento original anexado", 10f, true, forestSoft))
+                }
+                card.setOnClickListener {
+                    dialog.dismiss()
+                    showAssistantInvoiceDetails(scope, invoice.id)
+                }
+                card.setOnLongClickListener {
+                    AlertDialog.Builder(this)
+                        .setTitle("Eliminar documento?")
+                        .setMessage("A fatura e o anexo cifrado serão eliminados deste dispositivo.")
+                        .setNegativeButton("Cancelar", null)
+                        .setPositiveButton("Eliminar") { _, _ ->
+                            runCatching {
+                                val attachmentId = assistantChatStore.deleteInvoice(scope, invoice.id)
+                                attachmentId?.let { assistantInvoiceFileStore.delete(it) }
+                            }.onFailure {
+                                Toast.makeText(this, "Não foi possível eliminar o documento.", Toast.LENGTH_SHORT).show()
+                            }
+                            refresh(search.text.toString())
+                        }
+                        .show()
+                    true
+                }
+                results.addView(card, cardParams())
+            }
+        }
+        search.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                refresh(s?.toString().orEmpty())
+            }
+            override fun afterTextChanged(s: android.text.Editable?) = Unit
+        })
+        refresh("")
+        dialog.show()
+    }
+
+    private fun showInvoiceExtractionSuggestions(scope: String, invoiceId: String, extractedText: String) {
+        if (!canManageInvoices()) return
+        val invoice = runCatching {
+            assistantChatStore.listInvoices(scope).firstOrNull { it.id == invoiceId }
+        }.getOrNull() ?: return
+        val suggestions = InvoiceExtractionSuggestionParser.parse(extractedText)
+        if (suggestions.isEmpty()) {
+            showAssistantInvoiceDetails(scope, invoiceId)
+            return
+        }
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(6))
+        }
+        content.addView(label(
+            "O OCR identificou estes valores candidatos por correspondência de texto (pontuação heurística, não probabilidade). Confirma-os visualmente com o documento original; o reconhecimento não é uma validação fiscal.",
+            12f, false, muted
+        ))
+        addGap(content, 9)
+
+        fun addCandidate(labelText: String, candidate: InvoiceExtractionSuggestionParser.Candidate?): EditText? {
+            if (candidate == null) return null
+            content.addView(label(
+                "$labelText · correspondência textual ${candidate.confidence}/100",
+                11f, true, forestDeep
+            ))
+            content.addView(label("Fonte: ${candidate.evidence}", 9.5f, false, muted))
+            val input = inputField("Confirma ou corrige $labelText", InputType.TYPE_CLASS_TEXT)
+            input.setText(candidate.value)
+            content.addView(input, LinearLayout.LayoutParams(-1, dp(44)).apply {
+                setMargins(0, dp(3), 0, dp(8))
+            })
+            return input
+        }
+
+        val supplierInput = addCandidate("Fornecedor", suggestions.supplier)
+        val numberInput = addCandidate("Número do documento", suggestions.documentNumber)
+        val dateInput = addCandidate("Data (AAAA-MM-DD)", suggestions.invoiceDate)
+        val netInput = addCandidate("Base tributável (€)", suggestions.netAmount?.let {
+            it.copy(value = it.value.replace('.', ','))
+        })
+        val vatInput = addCandidate("IVA (€)", suggestions.taxAmount?.let {
+            it.copy(value = it.value.replace('.', ','))
+        })
+        val totalInput = addCandidate("Total (€)", suggestions.totalAmount?.let {
+            it.copy(value = it.value.replace('.', ','))
+        })
+
+        // The document type must be visible and explicitly confirmed, never silently inferred.
+        val invoiceTypeOptions = arrayOf("Fatura", "Nota de crédito")
+        var selectedInvoiceType = (suggestions.invoiceType?.value ?: invoice.invoiceType)
+            .takeIf { it == "invoice" || it == "credit_note" } ?: "invoice"
+        fun invoiceTypeLabel(value: String): String =
+            if (value == "credit_note") "Nota de crédito" else "Fatura"
+        content.addView(label(
+            "Tipo de documento" + (suggestions.invoiceType?.let {
+                " · correspondência textual ${it.confidence}/100"
+            } ?: " · sem identificação automática"),
+            11f, true, forestDeep
+        ))
+        suggestions.invoiceType?.let {
+            content.addView(label("Fonte: ${it.evidence}", 9.5f, false, muted))
+        }
+        lateinit var invoiceTypeButton: Button
+        invoiceTypeButton = secondaryButton("Confirmar tipo: ${invoiceTypeLabel(selectedInvoiceType)}") {
+            AlertDialog.Builder(this)
+                .setTitle("Selecionar tipo de documento")
+                .setSingleChoiceItems(invoiceTypeOptions, if (selectedInvoiceType == "credit_note") 1 else 0) { choiceDialog, which ->
+                    selectedInvoiceType = if (which == 1) "credit_note" else "invoice"
+                    invoiceTypeButton.text = "Confirmar tipo: ${invoiceTypeLabel(selectedInvoiceType)}"
+                    choiceDialog.dismiss()
+                }
+                .setNegativeButton("Cancelar", null)
+                .show()
+        }
+        content.addView(invoiceTypeButton, LinearLayout.LayoutParams(-1, dp(44)).apply {
+            setMargins(0, dp(3), 0, dp(8))
+        })
+
+        val scroll = ScrollView(this).apply { addView(content) }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Confirmar dados reconhecidos")
+            .setView(scroll)
+            .setNegativeButton("Ignorar", null)
+            .setPositiveButton("Confirmar dados", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener {
+                dialog.dismiss()
+                showAssistantInvoiceDetails(scope, invoiceId)
+            }
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                try {
+                    fun candidateText(input: EditText?, old: String): String =
+                        input?.text?.toString()?.trim()?.takeIf { it.isNotBlank() } ?: old
+                    val nextNet = netInput?.let { parseInvoiceAmount(it.text.toString(), "base tributável") } ?: invoice.netAmount
+                    val nextVat = vatInput?.let { parseInvoiceAmount(it.text.toString(), "IVA") } ?: invoice.taxAmount
+                    val nextTotal = totalInput?.let { parseInvoiceAmount(it.text.toString(), "total") } ?: invoice.totalAmount
+                    val sum = BigDecimal(nextNet).add(BigDecimal(nextVat))
+                    require(sum.subtract(BigDecimal(nextTotal)).abs() <= BigDecimal("0.02")) {
+                        "A base tributável mais o IVA não coincide com o total. Corrige os campos ou ignora as sugestões."
+                    }
+                    val nextDate = dateInput?.text?.toString()?.trim()?.takeIf { it.isNotBlank() } ?: invoice.invoiceDate
+                    val updated = invoice.copy(
+                        supplier = candidateText(supplierInput, invoice.supplier),
+                        number = candidateText(numberInput, invoice.number),
+                        invoiceDate = nextDate,
+                        invoiceType = selectedInvoiceType,
+                        netAmount = nextNet,
+                        taxAmount = nextVat,
+                        totalAmount = nextTotal
+                    )
+                    assistantChatStore.saveInvoice(scope, updated)
+                    dialog.dismiss()
+                    Toast.makeText(this, "Os valores confirmados foram guardados. Revê o documento original.", Toast.LENGTH_LONG).show()
+                    window.decorView.post { showAssistantInvoiceDetails(scope, invoiceId) }
+                } catch (error: Exception) {
+                    AlertDialog.Builder(this)
+                        .setTitle("Não foi possível aplicar as sugestões")
+                        .setMessage(error.message ?: "Revê os campos e tenta novamente.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showAssistantInvoiceDetails(scope: String, invoiceId: String) {
+        val invoice = runCatching {
+            assistantChatStore.listInvoices(scope).firstOrNull { it.id == invoiceId }
+        }.getOrNull() ?: return
+        if (!canManageInvoices()) return
+        val typeLabel = if (invoice.invoiceType == "credit_note") "Nota de crédito" else "Fatura"
+        val message = buildString {
+            append(typeLabel).append("\n")
+            append("Fornecedor: ").append(invoice.supplier).append("\n")
+            append("Documento: ").append(invoice.number.ifBlank { "Não indicado" }).append("\n")
+            append("Data: ").append(invoice.invoiceDate).append("\n")
+            append("Base tributável: ").append(money(BigDecimal(invoice.netAmount))).append("\n")
+            append("IVA: ").append(money(BigDecimal(invoice.taxAmount))).append("\n")
+            append("Total: ").append(money(BigDecimal(invoice.totalAmount))).append("\n\n")
+            append("Notas / linhas introduzidas: ").append(invoice.notes.ifBlank { "Sem notas transcritas." })
+            if (invoice.extractedText.isNotBlank()) {
+                append("\n\nTexto reconhecido localmente (OCR/XML; confirma manualmente):\n")
+                append(invoice.extractedText.take(5000))
+                if (invoice.extractedText.length > 5000) append("\n[Texto cortado nesta vista; a versão completa fica guardada no arquivo.]")
+            }
+            append("\n\n")
+            append(if (invoice.attachmentId == null) "Sem documento original anexado." else "Anexo: ${invoice.attachmentName}")
+        }
+        val builder = AlertDialog.Builder(this)
+            .setTitle("Documento financeiro")
+            .setMessage(message)
+            .setNegativeButton("Fechar", null)
+        if (invoice.attachmentId == null) {
+            builder.setNeutralButton("Anexar ficheiro") { _, _ -> requestInvoiceAttachment(invoice.id) }
+        } else {
+            builder.setNeutralButton("Exportar original") { _, _ -> requestInvoiceExport(invoice.id) }
+            builder.setPositiveButton("Remover anexo") { _, _ ->
+                try {
+                    assistantInvoiceFileStore.delete(invoice.attachmentId)
+                    assistantChatStore.clearInvoiceAttachment(scope, invoice.id)
+                    Toast.makeText(this, "Anexo removido.", Toast.LENGTH_SHORT).show()
+                } catch (error: Exception) {
+                    Toast.makeText(this, error.message ?: "Não foi possível remover o anexo.", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        builder.show()
+    }
+
+
+    @Suppress("DEPRECATION")
+    private fun requestInvoiceCsvExport(scope: String) {
+        if (!canManageInvoices()) return
+        val invoices = runCatching { assistantChatStore.listInvoices(scope) }.getOrDefault(emptyList())
+        if (invoices.isEmpty()) {
+            Toast.makeText(this, "Não existem documentos para exportar.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        pendingInvoiceCsvScope = scope
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "text/csv"
+            putExtra(
+                Intent.EXTRA_TITLE,
+                "studiomesa-faturas-" + SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date()) + ".csv"
+            )
+        }
+        startActivityForResult(intent, invoiceCsvExportRequestCode)
+    }
+
+    private fun buildInvoiceCsv(scope: String): String {
+        val invoices = assistantChatStore.listInvoices(scope)
+        fun cell(value: String, protectFormula: Boolean = true): String {
+            val safe = if (protectFormula && value.trimStart().firstOrNull() in setOf('=', '+', '-', '@')) {
+                "'$value"
+            } else value
+            return "\"" + safe.replace("\"", "\"\"") + "\""
+        }
+        val rows = mutableListOf(
+            listOf("Tipo", "Fornecedor", "Número", "Data", "Base tributável (EUR)", "IVA (EUR)", "Total (EUR)", "Notas transcritas", "Anexo original", "Texto OCR (não validado)")
+                .joinToString(";") { cell(it, false) }
+        )
+        invoices.forEach { invoice ->
+            rows += listOf(
+                if (invoice.invoiceType == "credit_note") "Nota de crédito" else "Fatura",
+                invoice.supplier,
+                invoice.number,
+                invoice.invoiceDate,
+                invoice.netAmount,
+                invoice.taxAmount,
+                invoice.totalAmount,
+                invoice.notes,
+                invoice.attachmentName.orEmpty(),
+                invoice.extractedText
+            ).mapIndexed { index, value -> cell(value, protectFormula = index in setOf(1, 2, 7, 8, 9)) }
+                .joinToString(";")
+        }
+        return rows.joinToString("\r\n") + "\r\n"
+    }
+
+    @Suppress("DEPRECATION")
+    private fun requestInvoiceAttachment(invoiceId: String) {
+        if (!canManageInvoices()) return
+        pendingInvoiceAttachmentId = invoiceId
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(
+                Intent.EXTRA_MIME_TYPES,
+                arrayOf("application/pdf", "application/xml", "text/xml", "text/plain", "image/jpeg", "image/png", "image/webp")
+            )
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivityForResult(intent, invoiceAttachmentRequestCode)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun requestInvoiceExport(invoiceId: String) {
+        if (!canManageInvoices()) return
+        val invoice = runCatching {
+            assistantChatStore.listInvoices(assistantChatScope()).firstOrNull { it.id == invoiceId }
+        }.getOrNull() ?: return
+        val attachmentId = invoice.attachmentId ?: return
+        if (!assistantInvoiceFileStore.exists(attachmentId)) {
+            Toast.makeText(this, "O anexo já não existe neste dispositivo.", Toast.LENGTH_LONG).show()
+            return
+        }
+        pendingInvoiceExportId = invoiceId
+        val mimeType = invoice.attachmentMimeType ?: "application/octet-stream"
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = mimeType
+            val safeName = (invoice.attachmentName ?: "documento")
+                .replace(Regex("[^A-Za-z0-9._-]"), "_").take(150).ifBlank { "documento" }
+            putExtra(Intent.EXTRA_TITLE, safeName)
+        }
+        startActivityForResult(intent, invoiceExportRequestCode)
+    }
+
+    private fun answerRegisteredInvoices(question: String, scope: String): String {
+        if (!canManageInvoices()) {
+            return "O arquivo financeiro está reservado ao proprietário do restaurante. Não consultei nem expus documentos nesta conta."
+        }
+        val all = runCatching { assistantChatStore.listInvoices(scope) }.getOrElse {
+            return "Não consegui abrir o arquivo cifrado de faturas. Os documentos não foram apagados."
+        }
+        if (all.isEmpty()) {
+            return "Ainda não existem faturas registadas no arquivo deste dispositivo. Abre «Ferramentas financeiras» e seleciona «Registar fatura ou nota de crédito». Só analisarei valores depois de serem introduzidos e conferidos."
+        }
+        val normalized = java.text.Normalizer.normalize(
+            question.lowercase(Locale.ROOT), java.text.Normalizer.Form.NFD
+        ).replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
+        val monthPrefix = when {
+            normalized.contains("este mes") || normalized.contains("neste mes") ->
+                SimpleDateFormat("yyyy-MM", Locale.ROOT).format(Date())
+            normalized.contains("mes passado") -> {
+                val calendar = Calendar.getInstance().apply { add(Calendar.MONTH, -1) }
+                SimpleDateFormat("yyyy-MM", Locale.ROOT).format(calendar.time)
+            }
+            else -> null
+        }
+        val periodInvoices = if (monthPrefix == null) all else all.filter { it.invoiceDate.startsWith(monthPrefix) }
+        val stopWords = setOf(
+            "fatura", "faturas", "factura", "facturas", "documento", "contabilistico",
+            "quanto", "gastei", "gastamos", "compras", "fornecedor", "fornecedores",
+            "este", "neste", "mes", "passado", "total", "despesa", "despesas",
+            "mostra", "analisa", "consulta", "quero", "saber", "valor", "valores",
+            "paguei", "pagamos", "pagar", "gastos", "saft", "notas", "credito"
+        )
+        val terms = normalized.split(Regex("[^a-z0-9]+"))
+            .filter { it.length >= 3 && it !in stopWords }
+        fun normalizeInvoiceSearch(value: String): String =
+            java.text.Normalizer.normalize(value.lowercase(Locale.ROOT), java.text.Normalizer.Form.NFD)
+                .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
+        val supplierMatches = if (terms.isEmpty()) emptyList() else periodInvoices.filter { invoice ->
+            val supplierText = normalizeInvoiceSearch(invoice.supplier)
+            val numberText = normalizeInvoiceSearch(invoice.number)
+            terms.any { supplierText.contains(it) || numberText.contains(it) }
+        }
+        val requestedSupplier = Regex("""fornecedor(?:es)?\s+(.+)$""")
+            .find(normalized)?.groupValues?.get(1)?.trim()
+        if (!requestedSupplier.isNullOrBlank() && supplierMatches.isEmpty()) {
+            return "Não encontrei faturas ou notas de crédito registadas para o fornecedor «$requestedSupplier»" +
+                if (monthPrefix == null) "." else " em $monthPrefix."
+        }
+        val selected = if (supplierMatches.isNotEmpty()) supplierMatches else periodInvoices
+        if (selected.isEmpty()) {
+            return "Não encontrei faturas registadas para o período pedido. O arquivo tem ${all.size} documentos no total; não vou estimar valores para um período sem registos."
+        }
+        val asksForInvoiceContents = listOf(
+            "que produtos", "quais produtos", "que artigos", "quais artigos",
+            "o que consta", "o que contem", "conteudo da fatura", "conteudo das faturas",
+            "linhas da fatura", "itens da fatura", "lista os produtos", "descrimina os artigos",
+            "que mercadoria", "que materiais"
+        ).any { normalized.contains(it) } || normalized.contains("itens comprados")
+        if (asksForInvoiceContents) {
+            val documents = selected.mapNotNull { invoice ->
+                val content = invoice.extractedText.ifBlank { invoice.notes }.trim()
+                if (content.isBlank()) null else {
+                    val label = if (invoice.invoiceType == "credit_note") "Nota de crédito" else "Fatura"
+                    "$label · ${invoice.supplier} · ${invoice.number} · ${invoice.invoiceDate}\n" +
+                        "Texto transcrito/reconhecido (não validado):\n" + content.take(3500)
+                }
+            }
+            return if (documents.isEmpty()) {
+                "Encontrei ${selected.size} documento(s), mas não têm texto OCR nem linhas transcritas. Abre os detalhes da fatura e anexa um PDF, XML ou imagem legível. O texto reconhecido tem sempre de ser conferido por uma pessoa."
+            } else {
+                "Conteúdo disponível dos documentos selecionados — texto OCR/transcrito, sujeito a erros e confirmação:\n\n" +
+                    documents.take(5).joinToString("\n\n---\n\n") +
+                    "\n\nNão trate este texto como validação fiscal nem como valores contabilísticos confirmados."
+            }
+        }
+        val invoices = selected.filter { it.invoiceType == "invoice" }
+        val credits = selected.filter { it.invoiceType == "credit_note" }
+        val invoiceTotal = invoices.fold(BigDecimal.ZERO) { sum, item -> sum.add(BigDecimal(item.totalAmount)) }
+        val creditTotal = credits.fold(BigDecimal.ZERO) { sum, item -> sum.add(BigDecimal(item.totalAmount)) }
+        val netPurchases = invoiceTotal.subtract(creditTotal)
+        val vat = selected.fold(BigDecimal.ZERO) { sum, item ->
+            val amount = BigDecimal(item.taxAmount)
+            if (item.invoiceType == "credit_note") sum.subtract(amount) else sum.add(amount)
+        }
+        val suppliers = selected.groupBy { it.supplier }.mapValues { (_, rows) ->
+            rows.fold(BigDecimal.ZERO) { sum, item ->
+                val amount = BigDecimal(item.totalAmount)
+                if (item.invoiceType == "credit_note") sum.subtract(amount) else sum.add(amount)
+            }
+        }.entries.sortedByDescending { it.value }
+        return buildString {
+            append("Análise do arquivo de documentos deste dispositivo")
+            if (monthPrefix != null) append(" · ").append(monthPrefix)
+            if (supplierMatches.isNotEmpty()) append(" · fornecedor: ").append(supplierMatches.first().supplier)
+            append("\n\n")
+            append("Documentos analisados: ").append(selected.size).append("\n")
+            append("Faturas: ").append(invoices.size).append(" · ").append(money(invoiceTotal)).append("\n")
+            append("Notas de crédito: ").append(credits.size).append(" · ").append(money(creditTotal)).append("\n")
+            append("Compras líquidas registadas: ").append(money(netPurchases)).append("\n")
+            append("IVA líquido registado: ").append(money(vat)).append("\n\n")
+            append("Por fornecedor:\n")
+            suppliers.take(10).forEach { append("• ").append(it.key).append(": ").append(money(it.value)).append("\n") }
+            append("\nEstes totais usam os valores introduzidos manualmente nas faturas guardadas. Não confirmam a situação fiscal, não incluem documentos ausentes e não substituem a contabilidade.")
+        }
+    }
+
+
+    private fun showAssistantHistoryDialog() {
+        val scope = assistantChatScope()
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(4))
+        }
+        val search = inputField(
+            "Pesquisar conversas…",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        )
+        panel.addView(search, fieldParams())
+        val results = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val scroll = ScrollView(this).apply {
+            isFillViewport = false
+            addView(results)
+        }
+        panel.addView(scroll, LinearLayout.LayoutParams(-1, dp(380)))
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Histórico de conversas")
+            .setView(panel)
+            .setNegativeButton("Fechar", null)
+            .create()
+
+        fun refreshResults(query: String) {
+            results.removeAllViews()
+            val conversations = runCatching {
+                assistantChatStore.listConversations(scope, query)
+            }.getOrElse {
+                results.addView(emptyCard("Não foi possível abrir o histórico cifrado. Os dados não foram apagados."))
+                return
+            }
+            if (conversations.isEmpty()) {
+                results.addView(emptyCard(
+                    if (query.isBlank()) "Ainda não existem conversas guardadas."
+                    else "Não encontrei conversas com esse texto."
+                ))
+                return
+            }
+            conversations.forEach { conversation ->
+                val card = makeCard(12)
+                card.addView(label(conversation.title, 14f, true, forestDeep))
+                addGap(card, 4)
+                val date = SimpleDateFormat("dd/MM/yyyy · HH:mm", Locale("pt", "PT"))
+                    .format(Date(conversation.updatedAtMillis))
+                card.addView(label(
+                    "$date · ${conversation.messageCount} mensagens",
+                    10.5f, false, muted
+                ))
+                card.setOnClickListener {
+                    activeAssistantConversationId = conversation.id
+                    assistantChatError = null
+                    dialog.dismiss()
+                    renderApp()
+                }
+                card.setOnLongClickListener {
+                    AlertDialog.Builder(this)
+                        .setTitle("Eliminar conversa?")
+                        .setMessage("Esta conversa será removida do histórico deste dispositivo.")
+                        .setNegativeButton("Cancelar", null)
+                        .setPositiveButton("Eliminar") { _, _ ->
+                            runCatching {
+                                assistantChatStore.deleteConversation(scope, conversation.id)
+                            }.onFailure {
+                                Toast.makeText(this, "Não foi possível eliminar a conversa.", Toast.LENGTH_SHORT).show()
+                            }
+                            if (activeAssistantConversationId == conversation.id) {
+                                activeAssistantConversationId = null
+                            }
+                            refreshResults(search.text.toString())
+                        }
+                        .show()
+                    true
+                }
+                results.addView(card, cardParams())
+            }
+        }
+
+        search.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                refreshResults(s?.toString().orEmpty())
+            }
+            override fun afterTextChanged(s: android.text.Editable?) = Unit
+        })
+        refreshResults("")
+        dialog.show()
+    }
+
+    private fun showAssistantMemoryDialog() {
+        val scope = assistantChatScope()
+        val memory = runCatching { assistantChatStore.readMemory(scope) }.getOrDefault("")
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(4))
+        }
+        form.addView(label(
+            "Guarda informação estável que o assistente deve consultar nas próximas conversas. Evita palavras-passe, dados bancários e informação pessoal desnecessária.",
+            12f, false, muted
+        ))
+        addGap(form, 7)
+        val memoryField = multilineInputField("Ex.: tipo de restaurante, objetivos, regras da casa e preferências…").apply {
+            minLines = 6
+            maxLines = 9
+            filters = filters + InputFilter.LengthFilter(2500)
+            setText(memory)
+        }
+        form.addView(memoryField, LinearLayout.LayoutParams(-1, dp(160)))
+
+        AlertDialog.Builder(this)
+            .setTitle("Memória do assistente")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setNeutralButton("Apagar memória", null)
+            .setPositiveButton("Guardar") { _, _ ->
+                runCatching {
+                    assistantChatStore.saveMemory(scope, memoryField.text.toString())
+                }.onSuccess {
+                    Toast.makeText(this, "Memória guardada neste dispositivo.", Toast.LENGTH_SHORT).show()
+                }.onFailure {
+                    Toast.makeText(this, "Não foi possível guardar a memória.", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .create()
+            .apply {
+                setOnShowListener {
+                    getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                        AlertDialog.Builder(this@MainActivity)
+                            .setTitle("Apagar memória?")
+                            .setMessage("As notas guardadas serão eliminadas deste dispositivo.")
+                            .setNegativeButton("Cancelar", null)
+                            .setPositiveButton("Apagar") { _, _ ->
+                                runCatching { assistantChatStore.saveMemory(scope, "") }
+                                memoryField.setText("")
+                                dismiss()
+                                Toast.makeText(this@MainActivity, "Memória apagada.", Toast.LENGTH_SHORT).show()
+                            }
+                            .show()
+                    }
+                }
+                show()
+            }
+    }
+
+    private fun renderAssistantInsights(
+        container: LinearLayout,
+        snapshot: StudioMesaAssistantSnapshot
+    ) {
+        sectionHeading(
+            container,
+            "Sugestões para rever",
+            "Prioridades estimadas. Confirma os dados antes de tomar decisões."
+        )
         StudioMesaAdvisor.recommendations(snapshot).forEach { recommendation ->
             val (priorityText, textColor, backColor) = when (recommendation.priority) {
                 AssistantPriority.URGENT -> Triple("PRIORIDADE ALTA", red, paleRed)
                 AssistantPriority.ATTENTION -> Triple("A REVER", forestDeep, copperPale)
                 AssistantPriority.TIP -> Triple("SUGESTÃO", forestSoft, paleGreen)
             }
-            val card = makeCard(15)
+            val card = makeCard(14)
             card.addView(label(priorityText, 9f, true, textColor).apply {
                 setPadding(dp(8), dp(5), dp(8), dp(5))
                 background = rounded(backColor, 10)
             }, LinearLayout.LayoutParams(-2, -2))
-            addGap(card, 8)
-            card.addView(label(recommendation.title, 16f, true, forestDeep))
-            addGap(card, 5)
-            card.addView(label(recommendation.detail, 12.5f, false, muted))
+            addGap(card, 7)
+            card.addView(label(recommendation.title, 15f, true, forestDeep))
+            addGap(card, 4)
+            card.addView(label(recommendation.detail, 12f, false, muted))
             assistantActionTarget(recommendation.actionPage)?.let { target ->
-                addGap(card, 10)
-                card.addView(secondaryButton("Abrir " + target) {
+                addGap(card, 8)
+                card.addView(secondaryButton("Abrir $target") {
                     activePage = target
                     renderApp()
-                }, LinearLayout.LayoutParams(-1, dp(44)))
+                }, LinearLayout.LayoutParams(-1, dp(42)))
             }
             container.addView(card, cardParams())
         }
-        sectionHeading(container, "Engenharia da carta", "Combina unidades de pedidos concluídos com a contribuição estimada por artigo.")
+
+        sectionHeading(
+            container,
+            "Engenharia da carta",
+            "Combina vendas concluídas com a contribuição estimada por artigo."
+        )
         val engineering = StudioMesaAdvisor.menuEngineering(snapshot)
         if (!engineering.hasEnoughSales) {
             container.addView(emptyCard(
-                "Ainda não há pelo menos ${engineering.requiredUnits} unidades concluídas que correspondam aos artigos atuais (${engineering.completedUnits} encontradas). A análise não inventa popularidade."
+                "São necessárias pelo menos ${engineering.requiredUnits} unidades concluídas correspondentes aos artigos atuais. Foram encontradas ${engineering.completedUnits}."
             ), cardParams())
         } else {
-            if (!engineering.hasMarginData) {
-                container.addView(emptyCard("Existem vendas, mas faltam custos válidos nos artigos vendidos para comparar a contribuição. Confirma os custos na Carta."), cardParams())
-            }
             engineering.items.forEach { item ->
                 val title = when (item.classification) {
                     MenuEngineeringClass.STAR -> "ESTRELA"
@@ -4736,61 +5974,77 @@ class MainActivity : Activity() {
                     MenuEngineeringClass.DOG -> "REVER ARTIGO"
                     MenuEngineeringClass.MISSING_COST -> "CUSTO EM FALTA"
                 }
-                val backColor = when (item.classification) {
-                    MenuEngineeringClass.STAR -> paleGreen
-                    MenuEngineeringClass.WORKHORSE, MenuEngineeringClass.PUZZLE -> copperPale
-                    MenuEngineeringClass.DOG, MenuEngineeringClass.MISSING_COST -> paleRed
-                }
-                val card = makeCard(14)
-                card.addView(label(title, 9f, true, forestDeep).apply {
-                    setPadding(dp(8), dp(5), dp(8), dp(5))
-                    background = rounded(backColor, 10)
-                }, LinearLayout.LayoutParams(-2, -2))
-                addGap(card, 7)
-                card.addView(label(item.itemName, 16f, true, forestDeep))
+                val card = makeCard(13)
+                card.addView(label(title, 9f, true, forestDeep))
+                addGap(card, 6)
+                card.addView(label(item.itemName, 15f, true, forestDeep))
                 addGap(card, 4)
                 card.addView(label(
-                    "${item.unitsSold} unidade(s) concluídas · ${item.popularitySharePercent}% das unidades correspondentes · contribuição atual: ${item.contributionPerUnit?.let { money(it) } ?: "custo em falta"} por unidade.",
-                    11.5f, true, muted
+                    "${item.unitsSold} unidade(s) concluídas · contribuição atual: ${item.contributionPerUnit?.let { money(it) } ?: "custo em falta"} por unidade.",
+                    11f, true, muted
                 ))
                 addGap(card, 5)
-                card.addView(label(item.recommendation, 12.5f, false, ink))
+                card.addView(label(item.recommendation, 12f, false, ink))
                 container.addView(card, cardParams())
             }
-            container.addView(label(
-                "Triagem com pedidos concluídos e preço/custo atuais; não é lucro contabilístico nem custo histórico e não inclui IVA, mão de obra, desperdício ou encargos.",
-                10.5f, false, muted
-            ))
         }
 
-        sectionHeading(container, "Ideias de conteúdo", "Rascunhos para revisão; só usam nomes, descrições e preços registados na carta.")
+        sectionHeading(
+            container,
+            "Ideias de conteúdo",
+            "Rascunhos baseados apenas nos nomes, descrições e preços da carta."
+        )
         val drafts = StudioMesaAdvisor.marketingDrafts(snapshot)
         if (drafts.isEmpty()) {
             container.addView(emptyCard("Adiciona artigos com nome e preço válidos para criar rascunhos."), cardParams())
         } else {
             drafts.forEach { draft ->
-                val card = makeCard(14)
-                card.addView(label(draft.itemName, 16f, true, forestDeep))
-                addGap(card, 6)
-                card.addView(label(draft.caption, 13f, false, ink))
+                val card = makeCard(13)
+                card.addView(label(draft.itemName, 15f, true, forestDeep))
                 addGap(card, 5)
-                card.addView(label(draft.basis, 10.5f, false, muted))
-                addGap(card, 8)
+                card.addView(label(draft.caption, 12f, false, ink))
+                addGap(card, 7)
                 card.addView(secondaryButton("Copiar rascunho") {
                     copyAssistantText(draft.caption)
-                }, LinearLayout.LayoutParams(-1, dp(44)))
+                }, LinearLayout.LayoutParams(-1, dp(42)))
                 container.addView(card, cardParams())
             }
         }
 
-        addGap(container, 4)
         container.addView(label(
-            if (snapshot.isDemo) "Fonte atual: dados de demonstração locais. Liga um restaurante na secção Conta para analisar dados partilhados."
-            else "Fonte atual: dados guardados em cache pela aplicação. Confirma a última atualização antes de decidir; esta análise não verifica a conectividade em tempo real.",
-            11f, false, muted
+            if (snapshot.isDemo) "Fonte: dados de demonstração locais."
+            else "Fonte: última cache carregada pela aplicação. Confirma a atualização dos dados antes de decidir.",
+            10.5f, false, muted
         ))
     }
 
+    private fun economicPersistenceScope(): String {
+        return if (hasRemoteRestaurant()) {
+            "economic:restaurant:" + backendRestaurantId() + ":" + backendPrefs.getString("user_id", "").orEmpty()
+        } else {
+            "economic:demo:$flavor"
+        }
+    }
+
+    private fun persistEconomicManagerState() {
+        val scope = economicScopeKey ?: return
+        if (hasRemoteRestaurant() && backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") return
+        runCatching {
+            val storedValues = economicInputs.toMutableMap().apply {
+                put("reportEconomic", economicReportText)
+                put("reportRecipe", recipeReportText)
+                put("reportReorder", reorderReportText)
+                put("reportWaste", wasteReportText)
+                put("reportSupplier", supplierReportText)
+                put("reportBudget", budgetReportText)
+                put("reportUsage", usageReportText)
+                put("reportLabour", labourReportText)
+            }
+            assistantChatStore.saveEconomicState(scope, economicManagerEnabled, storedValues)
+        }.onFailure {
+            assistantChatError = "Não foi possível guardar os dados económicos cifrados."
+        }
+    }
 
     private fun clearEconomicManagerState() {
         economicManagerEnabled = false
@@ -4807,10 +6061,28 @@ class MainActivity : Activity() {
     }
 
     private fun renderEconomicManager(container: LinearLayout) {
-        val scope = if (hasRemoteRestaurant()) {
-            "restaurant:" + backendRestaurantId() + ":" + backendPrefs.getString("user_id", "").orEmpty()
-        } else "demo"
-        if (economicScopeKey != null && economicScopeKey != scope) clearEconomicManagerState()
+        val scope = economicPersistenceScope()
+        if (economicScopeKey != scope) {
+            clearEconomicManagerState()
+            economicScopeKey = scope
+            runCatching {
+                val storedValues = assistantChatStore.readEconomicInputs(scope).toMutableMap()
+                economicReportText = storedValues.remove("reportEconomic").orEmpty()
+                recipeReportText = storedValues.remove("reportRecipe").orEmpty()
+                reorderReportText = storedValues.remove("reportReorder").orEmpty()
+                wasteReportText = storedValues.remove("reportWaste").orEmpty()
+                supplierReportText = storedValues.remove("reportSupplier").orEmpty()
+                budgetReportText = storedValues.remove("reportBudget").orEmpty()
+                usageReportText = storedValues.remove("reportUsage").orEmpty()
+                labourReportText = storedValues.remove("reportLabour").orEmpty()
+                economicInputs.putAll(storedValues)
+                economicManagerEnabled = assistantChatStore.isEconomicManagerEnabled(scope)
+            }.onFailure {
+                economicManagerEnabled = false
+                economicInputs.clear()
+                assistantChatError = "Não foi possível abrir os dados económicos cifrados."
+            }
+        }
 
         if (hasRemoteRestaurant() && backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") {
             clearEconomicManagerState()
@@ -4824,10 +6096,11 @@ class MainActivity : Activity() {
         val toggle = makeCard(14)
         toggle.addView(label(if (economicManagerEnabled) "Gestor ativo nesta sessão" else "Gestor desativado", 15f, true, forestDeep))
         addGap(toggle, 5)
-        toggle.addView(label("Os valores ficam só em memória nesta sessão: não são guardados, sincronizados nem enviados para a Internet.", 11.5f, false, muted))
+        toggle.addView(label("Os valores ficam guardados de forma cifrada neste dispositivo e separados por restaurante. Ainda não são sincronizados entre telemóveis.", 11.5f, false, muted))
         addGap(toggle, 8)
         toggle.addView(secondaryButton(if (economicManagerEnabled) "Desativar e limpar valores" else "Ativar gestão económica") {
             if (economicManagerEnabled) {
+                assistantChatStore.saveEconomicState(scope, false, emptyMap())
                 clearEconomicManagerState()
             } else {
                 economicManagerEnabled = true
@@ -4836,11 +6109,28 @@ class MainActivity : Activity() {
                 economicReportText = ""
                 recipeReportText = ""
                 reorderReportText = ""
+                assistantChatStore.saveEconomicState(scope, true, emptyMap())
             }
             renderApp()
         }, LinearLayout.LayoutParams(-1, dp(44)))
         container.addView(toggle, cardParams())
         if (!economicManagerEnabled) return
+
+        val invoiceSummary = makeCard(15)
+        invoiceSummary.addView(label("Faturas e notas de crédito registadas", 16f, true, forestDeep))
+        addGap(invoiceSummary, 5)
+        val invoiceSummaryText = runCatching {
+            answerRegisteredInvoices("Resumo geral das faturas", scope)
+        }.getOrElse {
+            "Não foi possível consultar o arquivo financeiro cifrado. Os documentos não foram alterados."
+        }
+        invoiceSummary.addView(label(invoiceSummaryText, 12f, false, ink))
+        addGap(invoiceSummary, 5)
+        invoiceSummary.addView(label(
+            "Os valores representam documentos registados e confirmados pelo proprietário. Não os somes automaticamente ao custo alimentar consumido: compras e consumo de stock são momentos diferentes e fazê-lo pode duplicar custos.",
+            11f, false, muted
+        ))
+        container.addView(invoiceSummary, cardParams())
 
         addGap(container, 6)
         val monthly = makeCard(15)

@@ -22,12 +22,13 @@ object SupabaseApi {
         path: String,
         body: JSONObject? = null,
         accessToken: String? = null,
-        returnRepresentation: Boolean = false
+        returnRepresentation: Boolean = false,
+        readTimeoutMillis: Int = 12000
     ): String {
         val connection = (URL(BASE_URL + path).openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = 12000
-            readTimeout = 12000
+            readTimeout = readTimeoutMillis
             // Supabase REST/Auth endpoints should return API responses, not redirects.
             // Fail closed instead of following a redirect with session headers.
             instanceFollowRedirects = false
@@ -91,8 +92,14 @@ object SupabaseApi {
         if (rows.length() == 0) throw IllegalStateException(emptyMessage)
     }
 
-    private fun jsonCall(method: String, path: String, body: JSONObject? = null, token: String? = null): JSONObject {
-        val response = call(method, path, body, token)
+    private fun jsonCall(
+        method: String,
+        path: String,
+        body: JSONObject? = null,
+        token: String? = null,
+        readTimeoutMillis: Int = 12000
+    ): JSONObject {
+        val response = call(method, path, body, token, readTimeoutMillis = readTimeoutMillis)
         return if (response.isBlank()) JSONObject() else JSONObject(response)
     }
 
@@ -228,6 +235,27 @@ object SupabaseApi {
     fun signOut(accessToken: String) {
         if (accessToken.isBlank()) return
         call("POST", "/auth/v1/logout?scope=local", accessToken = accessToken)
+    }
+
+    /** Sends only owner-authorized, privacy-filtered text to the restaurant-assistant Edge Function. */
+    fun generateRestaurantAssistantReply(
+        accessToken: String,
+        restaurantId: String,
+        messages: JSONArray
+    ): String {
+        require(accessToken.isNotBlank()) { "Inicia sessão para usar a IA generativa." }
+        require(restaurantId.matches(Regex("^[0-9a-fA-F-]{36}$"))) { "O restaurante não é válido." }
+        require(messages.length() in 1..10) { "O contexto da conversa não é válido." }
+        val response = jsonCall(
+            "POST",
+            "/functions/v1/restaurant-assistant",
+            JSONObject().put("restaurant_id", restaurantId).put("messages", messages),
+            token = accessToken,
+            readTimeoutMillis = 70_000
+        )
+        val reply = response.optString("reply").trim()
+        if (reply.isBlank()) throw IllegalStateException("O servidor não devolveu uma resposta generativa.")
+        return reply.take(6000)
     }
 
     /**
