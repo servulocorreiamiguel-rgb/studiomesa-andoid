@@ -38,7 +38,7 @@ CREATE TABLE public.restaurant_supplier_invoices (
     id uuid PRIMARY KEY,
     restaurant_id uuid NOT NULL REFERENCES public.restaurants(id) ON DELETE CASCADE,
     supplier_name text NOT NULL CHECK (char_length(btrim(supplier_name)) BETWEEN 1 AND 100),
-    supplier_vat_number text NOT NULL DEFAULT '' CHECK (supplier_vat_number = '' OR supplier_vat_number ~ '^[0-9]{9}$'),
+    supplier_vat_number text NOT NULL DEFAULT '' CHECK (char_length(supplier_vat_number) <= 30),
     invoice_number text NOT NULL CHECK (char_length(btrim(invoice_number)) BETWEEN 1 AND 40),
     issue_date date NOT NULL,
     due_date date,
