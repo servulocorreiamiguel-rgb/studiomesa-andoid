@@ -41,13 +41,14 @@ class AssistantChatUiInstrumentedTest {
 
                 // Generative AI is an explicit owner-controlled opt-in.
                 onView(withText("Ativar conversa generativa"))
+                    .perform(scrollTo())
                     .check(matches(isDisplayed()))
 
-                onView(withText("Histórico")).check(matches(isDisplayed())).perform(scrollTo(), click())
+                onView(withText("Histórico")).perform(scrollTo()).check(matches(isDisplayed())).perform(click())
                 onView(withText("Histórico de conversas")).check(matches(isDisplayed()))
                 onView(withText("Fechar")).perform(click())
 
-                onView(withText("Memória")).check(matches(isDisplayed())).perform(scrollTo(), click())
+                onView(withText("Memória")).perform(scrollTo()).check(matches(isDisplayed())).perform(click())
                 onView(withText("Memória do assistente")).check(matches(isDisplayed()))
                 onView(withText("Cancelar")).perform(click())
 
@@ -55,13 +56,13 @@ class AssistantChatUiInstrumentedTest {
                     .perform(scrollTo(), replaceText(question), closeSoftKeyboard())
                 onView(withText("Enviar mensagem  ↑")).perform(scrollTo(), click())
 
-                onView(withText("TU")).check(matches(isDisplayed()))
-                onView(withText("STUDIOMESA")).check(matches(isDisplayed()))
+                onView(withText("TU")).perform(scrollTo()).check(matches(isDisplayed()))
+                onView(withText("STUDIOMESA")).perform(scrollTo()).check(matches(isDisplayed()))
 
                 onView(withText("Histórico")).perform(scrollTo(), click())
                 onView(withHint("Pesquisar conversas…"))
                     .perform(replaceText(uniqueMarker))
-                onView(withText(question)).check(matches(isDisplayed()))
+                onView(withText(question)).perform(scrollTo()).check(matches(isDisplayed()))
             }
         } finally {
             val store = AssistantChatStore(context)
