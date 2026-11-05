@@ -8,6 +8,7 @@ import androidx.test.espresso.action.ViewActions.scrollTo
 import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
+import androidx.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.hasErrorText
 import androidx.test.espresso.matcher.ViewMatchers.withHint
 import androidx.test.espresso.matcher.ViewMatchers.withContentDescription
@@ -93,6 +94,20 @@ class MainActivitySmokeTest {
 
             onView(withContentDescription("Voltar ao painel principal")).perform(click())
             onView(withText("Painel de operação")).check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
+    fun assistantComposerRemainsVisibleWhenKeyboardOpens() {
+        assumeFalse("The customer variant does not include the restaurant assistant.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withText("ABRIR ASSISTENTE"))
+                .perform(scrollTo(), click())
+            onView(withHint("Escreve uma mensagem..."))
+                .perform(click())
+            onView(withText("Enviar"))
+                .check(matches(isCompletelyDisplayed()))
         }
     }
 
