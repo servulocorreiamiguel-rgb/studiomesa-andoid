@@ -377,7 +377,6 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
             "https://huggingface.co/litert-community/LFM2.5-1.2B-Instruct/resolve/main/LFM2.5-1.2B-Instruct_int4.litertlm"
         const val MODEL_DIRECTORY = "studiomesa_ai_models"
         const val MAX_CONTEXT_TOKENS = 4096
-        const val MAX_OUTPUT_TOKENS = 1024
         const val MAX_HISTORY_MESSAGES = 4
         const val MAX_SESSION_USER_TURNS = 2
         const val MAX_HISTORY_MESSAGE_CHARS = 300
