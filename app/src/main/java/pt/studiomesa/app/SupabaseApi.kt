@@ -185,7 +185,7 @@ object SupabaseApi {
     fun listAssistantConversations(token: String, restaurantId: String): JSONArray {
         require(token.isNotBlank() && restaurantId.isNotBlank())
         val restaurant = URLEncoder.encode(restaurantId, "UTF-8")
-        return JSONArray(call("GET", "/rest/v1/restaurant_assistant_conversations?select=id,restaurant_id,title,created_by,created_at,updated_at&restaurant_id=eq.$restaurant&order=updated_at.asc&limit=50", accessToken = token))
+        return JSONArray(call("GET", "/rest/v1/restaurant_assistant_conversations?select=id,restaurant_id,title,created_by,created_at,updated_at,deleted_at&restaurant_id=eq.$restaurant&order=updated_at.asc&limit=50", accessToken = token))
     }
 
     fun upsertAssistantConversations(token: String, rows: JSONArray) {
@@ -203,13 +203,14 @@ object SupabaseApi {
         require(token.isNotBlank())
         require(restaurantId.matches(Regex("^[0-9a-fA-F-]{36}$")))
         require(conversationId.matches(Regex("^[0-9a-fA-F-]{36}$")))
-        val restaurant = URLEncoder.encode(restaurantId, "UTF-8")
-        val id = URLEncoder.encode(conversationId, "UTF-8")
-        // RLS restricts this cascade delete to the authenticated restaurant owner.
+        // The owner-only SECURITY DEFINER RPC deletes message content and leaves a minimal tombstone.
         call(
-            "DELETE",
-            "/rest/v1/restaurant_assistant_conversations?id=eq.$id&restaurant_id=eq.$restaurant",
-            accessToken = token
+            "POST",
+            "/rest/v1/rpc/delete_assistant_conversation",
+            JSONObject()
+                .put("p_restaurant_id", restaurantId)
+                .put("p_conversation_id", conversationId),
+            token
         )
     }
 
