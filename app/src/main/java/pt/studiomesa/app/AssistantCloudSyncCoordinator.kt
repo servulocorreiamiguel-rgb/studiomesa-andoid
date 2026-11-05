@@ -63,7 +63,8 @@ internal class AssistantCloudSyncCoordinator {
                         .put("id", local.id)
                         .put("restaurant_id", restaurantId)
                         .put("title", local.title.take(120))
-                        .put("created_by", userId)
+                        // Keep original attribution on an existing cloud conversation.
+                        .put("created_by", remote?.optString("created_by")?.takeIf { it.isNotBlank() } ?: userId)
                         .put("created_at", iso(local.createdAtMillis))
                         .put("updated_at", iso(local.updatedAtMillis))
                 )
