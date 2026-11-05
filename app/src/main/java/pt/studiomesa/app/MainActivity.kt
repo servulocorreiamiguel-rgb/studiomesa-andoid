@@ -190,11 +190,6 @@ class MainActivity : Activity() {
 
     @Deprecated("Deprecated in Android API 33; retained for compatibility with older devices.")
     override fun onBackPressed() {
-        if (activePage == "Assistente" && assistantDocumentsVisible) {
-            assistantDocumentsVisible = false
-            renderApp()
-            return
-        }
         if (activePage == "Assistente" && assistantToolsVisible) {
             assistantToolsVisible = false
             renderApp()
@@ -591,11 +586,7 @@ class MainActivity : Activity() {
         }
         if (activePage !in availablePages()) activePage = "Início"
         if (activePage == "Assistente") {
-            when {
-                assistantDocumentsVisible -> renderAssistantDocumentsScreen()
-                assistantToolsVisible -> renderAssistantToolsScreen()
-                else -> renderAssistantChatScreen()
-            }
+            if (assistantToolsVisible) renderAssistantToolsScreen() else renderAssistantChatScreen()
             return
         }
 
@@ -832,11 +823,7 @@ class MainActivity : Activity() {
             background = rippleBackground(paper, 12)
             isClickable = true
             isFocusable = true
-            setOnClickListener {
-                assistantDocumentsVisible = true
-                assistantToolsVisible = false
-                renderApp()
-            }
+            setOnClickListener { showSupplierInvoiceArchiveDialog() }
         }
         toolbar.addView(documentsButton, LinearLayout.LayoutParams(dp(34), dp(44)))
 
@@ -1026,6 +1013,503 @@ class MainActivity : Activity() {
         conversationScroll.post { conversationScroll.fullScroll(View.FOCUS_DOWN) }
         updateKitchenAutoRefresh()
         updateInventoryAutoRefresh()
+    }
+
+
+    private fun showSupplierInvoiceArchiveDialog() {
+        val scope = assistantChatScope()
+        val records = runCatching { supplierInvoiceStore.list(scope) }.getOrDefault(emptyList())
+        val total = records.fold(BigDecimal.ZERO) { sum, item ->
+            sum.add(item.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO)
+        }
+        val text = buildString {
+            append("Documentos: ").append(records.size)
+            append("\nPendentes de revisão: ").append(records.count { it.reviewStatus == "pending_review" })
+            append("\nTotal arquivado: ").append(formatInvoiceEuro(total))
+            if (records.isEmpty()) {
+                append("\n\nAinda não existem faturas importadas.")
+            } else {
+                append("\n\n")
+                records.take(30).forEach { item ->
+                    val status = when (item.reviewStatus) {
+                        "approved" -> "Confirmada"
+                        "rejected" -> "Rejeitada"
+                        else -> "Pendente"
+                    }
+                    append("• ").append(item.supplierName).append(" · ")
+                        .append(item.invoiceNumber).append(" · ")
+                        .append(item.issueDate).append(" · ")
+                        .append(formatInvoiceEuro(item.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO))
+                        .append(" · ").append(status).append('\n')
+                }
+                if (records.size > 30) append("\nA mostrar os primeiros 30 documentos.")
+            }
+            append("\n\nO OCR corre no telemóvel. Só o proprietário pode sincronizar documentos para o arquivo privado do restaurante.")
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Documentos e faturas")
+            .setMessage(text)
+            .setNegativeButton("Fechar", null)
+            .setNeutralButton("Importar PDF / imagem", null)
+            .setPositiveButton("Atualizar arquivo", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                dialog.dismiss()
+                openSupplierInvoicePicker()
+            }
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                dialog.dismiss()
+                refreshSupplierInvoicesFromCloud(showFeedback = true)
+            }
+        }
+        dialog.show()
+    }
+
+    private fun openSupplierInvoicePicker() {
+        val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/pdf", "image/jpeg", "image/png", "image/webp"))
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+        }
+        runCatching {
+            startActivityForResult(picker, REQUEST_IMPORT_SUPPLIER_INVOICE)
+        }.onFailure {
+            AlertDialog.Builder(this)
+                .setTitle("Não foi possível abrir os documentos")
+                .setMessage("O seletor de ficheiros não está disponível neste dispositivo.")
+                .setPositiveButton("OK", null)
+                .show()
+        }
+    }
+
+    private fun processSupplierInvoiceDocument(uri: android.net.Uri) {
+        if (invoiceImportInFlight) return
+        invoiceImportInFlight = true
+        val progress = AlertDialog.Builder(this)
+            .setTitle("A ler documento no telemóvel")
+            .setMessage("A extrair texto localmente. Nenhum documento está a ser enviado para uma API de IA.")
+            .setCancelable(false)
+            .create()
+        progress.show()
+        Thread {
+            val result = runCatching {
+                val document = InvoiceDocumentProcessor(this).process(uri)
+                val source = if (document.mimeType == "application/pdf") "pdf_ocr" else "image_ocr"
+                PendingInvoiceImport(uri, document, SupplierInvoiceTextParser.parse(document.extractedText, source))
+            }
+            runOnUiThread {
+                invoiceImportInFlight = false
+                progress.dismiss()
+                result.fold(
+                    onSuccess = { pending ->
+                        pendingInvoiceImport = pending
+                        showSupplierInvoiceReviewDialog(pending)
+                    },
+                    onFailure = { error ->
+                        AlertDialog.Builder(this)
+                            .setTitle("Não foi possível ler a fatura")
+                            .setMessage(error.message ?: "A leitura local falhou. Experimenta uma imagem mais nítida ou introduz os valores manualmente.")
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
+                )
+            }
+        }.start()
+    }
+
+    private fun showSupplierInvoiceReviewDialog(pending: PendingInvoiceImport) {
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(8), dp(18), dp(8))
+        }
+        form.addView(label(
+            "Confirma todos os campos na fatura original. O OCR pode trocar algarismos, datas ou separadores decimais.",
+            11.5f, false, muted
+        ))
+        addGap(form, 7)
+        if (pending.draft.warnings.isNotEmpty()) {
+            val warnings = makeCard(10, copperPale)
+            warnings.addView(label(pending.draft.warnings.joinToString("\n• ", prefix = "• "), 10.5f, true, forestDeep))
+            form.addView(warnings, cardParams())
+            addGap(form, 7)
+        }
+        fun field(title: String, hint: String, value: String, type: Int = InputType.TYPE_CLASS_TEXT): EditText {
+            form.addView(label(title, 10f, true, forestSoft))
+            val edit = inputField(hint, type).apply { setText(value) }
+            form.addView(edit, fieldParams())
+            addGap(form, 4)
+            return edit
+        }
+        val supplier = field("Fornecedor", "Nome do fornecedor", pending.draft.supplierName)
+        val vat = field("NIF / VAT", "NIF ou número VAT", pending.draft.supplierVatNumber)
+        val invoice = field("Número da fatura", "Número da fatura", pending.draft.invoiceNumber)
+        val issue = field("Data de emissão (AAAA-MM-DD)", "AAAA-MM-DD", pending.draft.issueDate)
+        val due = field("Data de vencimento (opcional)", "AAAA-MM-DD", pending.draft.dueDate)
+        val amountType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL or InputType.TYPE_NUMBER_FLAG_SIGNED
+        val net = field("Base tributável (€)", "0,00", pending.draft.netAmount?.toPlainString().orEmpty(), amountType)
+        val vatAmount = field("IVA (€)", "0,00", pending.draft.vatAmount?.toPlainString().orEmpty(), amountType)
+        val total = field("Total a pagar (€)", "0,00", pending.draft.totalAmount?.toPlainString().orEmpty(), amountType)
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Rever fatura")
+            .setView(ScrollView(this).apply { addView(form) })
+            .setNegativeButton("Guardar pendente", null)
+            .setNeutralButton("Cancelar", null)
+            .setPositiveButton("Confirmar fatura", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener {
+                saveReviewedSupplierInvoice(pending, "pending_review", supplier, vat, invoice, issue, due, net, vatAmount, total, dialog)
+            }
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                saveReviewedSupplierInvoice(pending, "approved", supplier, vat, invoice, issue, due, net, vatAmount, total, dialog)
+            }
+        }
+        dialog.show()
+        dialog.window?.setLayout(-1, dp(660))
+    }
+
+    private fun saveReviewedSupplierInvoice(
+        pending: PendingInvoiceImport,
+        status: String,
+        supplierField: EditText,
+        vatField: EditText,
+        invoiceField: EditText,
+        issueField: EditText,
+        dueField: EditText,
+        netField: EditText,
+        vatFieldAmount: EditText,
+        totalField: EditText,
+        dialog: AlertDialog
+    ) {
+        val supplier = supplierField.text.toString().trim().take(100)
+        val vatNumber = vatField.text.toString().trim().take(30)
+        val invoiceNumber = invoiceField.text.toString().trim().take(40)
+        val issueDate = parseInvoiceDate(issueField.text.toString())
+        val dueDate = parseInvoiceDate(dueField.text.toString())
+        val netAmount = netField.text.toString().trim().takeIf { it.isNotBlank() }?.let(SupplierInvoiceTextParser::parseAmount)
+        val vatAmount = vatFieldAmount.text.toString().trim().takeIf { it.isNotBlank() }?.let(SupplierInvoiceTextParser::parseAmount)
+        val totalAmount = SupplierInvoiceTextParser.parseAmount(totalField.text.toString())
+        if (supplier.isBlank()) { supplierField.error = "Indica o fornecedor."; return }
+        if (invoiceNumber.isBlank()) { invoiceField.error = "Indica o número da fatura."; return }
+        if (issueDate == null) { issueField.error = "Usa uma data válida no formato AAAA-MM-DD."; return }
+        if (dueField.text.isNotBlank() && dueDate == null) { dueField.error = "Usa uma data válida ou deixa vazio."; return }
+        if (totalAmount == null || totalAmount <= BigDecimal.ZERO) { totalField.error = "Indica um total superior a zero."; return }
+        if (vatNumber.length == 9 && vatNumber.all(Char::isDigit) && !SupplierInvoiceTextParser.isValidPortugueseVatNumber(vatNumber)) {
+            vatField.error = "O NIF português não passou o dígito de controlo. Confirma-o."
+            return
+        }
+        val warning = if (netAmount != null && vatAmount != null) {
+            SupplierInvoiceDraft(netAmount = netAmount, vatAmount = vatAmount, totalAmount = totalAmount).arithmeticWarning()
+        } else null
+        if (warning != null && status == "approved") {
+            AlertDialog.Builder(this)
+                .setTitle("Valores não coincidem")
+                .setMessage("$warning Confirma os valores no original antes de aprovar.")
+                .setNegativeButton("Voltar a rever", null)
+                .setPositiveButton("Confirmar mesmo assim") { _, _ ->
+                    persistSupplierInvoice(pending, status, supplier, vatNumber, invoiceNumber, issueDate, dueDate.orEmpty(), netAmount, vatAmount, totalAmount, warning, dialog)
+                }
+                .show()
+            return
+        }
+        persistSupplierInvoice(pending, status, supplier, vatNumber, invoiceNumber, issueDate, dueDate.orEmpty(), netAmount, vatAmount, totalAmount, warning, dialog)
+    }
+
+    private fun parseInvoiceDate(value: String): String? {
+        val clean = value.trim()
+        if (clean.isBlank()) return null
+        return runCatching { java.time.LocalDate.parse(clean).toString() }.getOrElse {
+            listOf("d/M/uuuu", "d-M-uuuu", "d.M.uuuu").firstNotNullOfOrNull { pattern ->
+                runCatching {
+                    java.time.LocalDate.parse(clean, java.time.format.DateTimeFormatter.ofPattern(pattern, Locale.ROOT)).toString()
+                }.getOrNull()
+            }
+        }
+    }
+
+    private fun persistSupplierInvoice(
+        pending: PendingInvoiceImport,
+        status: String,
+        supplier: String,
+        vatNumber: String,
+        invoiceNumber: String,
+        issueDate: String,
+        dueDate: String,
+        netAmount: BigDecimal?,
+        vatAmount: BigDecimal?,
+        totalAmount: BigDecimal,
+        warning: String?,
+        dialog: AlertDialog
+    ) {
+        val scope = assistantChatScope()
+        val now = System.currentTimeMillis()
+        val id = java.util.UUID.randomUUID().toString()
+        val warnings = pending.draft.warnings + listOfNotNull(warning)
+        val record = SupplierInvoiceRecord(
+            id = id,
+            supplierName = supplier,
+            supplierVatNumber = vatNumber,
+            invoiceNumber = invoiceNumber,
+            issueDate = issueDate,
+            dueDate = dueDate,
+            netAmount = netAmount?.toPlainString(),
+            vatAmount = vatAmount?.toPlainString(),
+            totalAmount = totalAmount.toPlainString(),
+            currency = "EUR",
+            mimeType = pending.document.mimeType,
+            byteSize = pending.document.byteSize,
+            documentSha256 = pending.document.sha256,
+            documentUri = pending.uri.toString(),
+            documentPath = null,
+            sourceType = pending.draft.source,
+            reviewStatus = status,
+            warnings = warnings,
+            createdAtMillis = now,
+            updatedAtMillis = now
+        )
+        try {
+            supplierInvoiceStore.save(scope, record)
+        } catch (error: Exception) {
+            Toast.makeText(this, error.message ?: "Não foi possível guardar a fatura localmente.", Toast.LENGTH_LONG).show()
+            return
+        }
+        dialog.dismiss()
+        pendingInvoiceImport = null
+        showSupplierInvoiceArchiveDialog()
+
+        val ownerConnected = hasRemoteRestaurant() && backendToken().isNotBlank() &&
+            backendPrefs.getString("restaurant_role", "") == "owner"
+        if (!ownerConnected) {
+            Toast.makeText(
+                this,
+                if (status == "approved") "Fatura confirmada apenas neste dispositivo. Liga a conta do proprietário para arquivar no servidor."
+                else "Fatura guardada neste dispositivo como pendente de revisão.",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+
+        runBackend({
+            val bytes = InvoiceDocumentProcessor(this).readVerifiedDocumentBytes(pending.uri, pending.document.sha256)
+            val objectPath = SupabaseApi.uploadSupplierInvoiceDocument(
+                backendToken(), backendRestaurantId(), id, pending.document.mimeType, pending.document.sha256, bytes
+            )
+            try {
+                val row = JSONObject()
+                    .put("id", id)
+                    .put("restaurant_id", backendRestaurantId())
+                    .put("supplier_name", supplier)
+                    .put("supplier_vat_number", vatNumber)
+                    .put("invoice_number", invoiceNumber)
+                    .put("issue_date", issueDate)
+                    .put("due_date", dueDate.ifBlank { JSONObject.NULL })
+                    .put("currency", "EUR")
+                    .put("net_amount", netAmount?.toPlainString() ?: JSONObject.NULL)
+                    .put("vat_amount", vatAmount?.toPlainString() ?: JSONObject.NULL)
+                    .put("total_amount", totalAmount.toPlainString())
+                    .put("review_status", status)
+                    .put("source_type", pending.draft.source)
+                    .put("mime_type", pending.document.mimeType)
+                    .put("byte_size", pending.document.byteSize)
+                    .put("document_sha256", pending.document.sha256)
+                    .put("document_path", objectPath)
+                    .put("warnings", JSONArray(warnings))
+                    .put("created_by", backendPrefs.getString("user_id", ""))
+                if (status == "approved") {
+                    row.put("reviewed_by", backendPrefs.getString("user_id", ""))
+                        .put("reviewed_at", java.time.Instant.now().toString())
+                }
+                SupabaseApi.insertSupplierInvoice(backendToken(), row)
+            } catch (error: Exception) {
+                runCatching { SupabaseApi.deleteSupplierInvoiceDocument(backendToken(), objectPath) }
+                throw error
+            }
+            objectPath
+        }, onError = { error ->
+            Toast.makeText(
+                this,
+                "A cópia local está guardada, mas a sincronização falhou: ${friendlyBackendError(error.message)}",
+                Toast.LENGTH_LONG
+            ).show()
+        }) { objectPath ->
+            supplierInvoiceStore.save(scope, record.copy(documentPath = objectPath, documentUri = null, updatedAtMillis = System.currentTimeMillis()))
+            Toast.makeText(this, "Fatura enviada para o arquivo privado do restaurante.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun showSupplierInvoiceDetails(invoice: SupplierInvoiceRecord) {
+        val message = buildString {
+            append("Fornecedor: ").append(invoice.supplierName).append('\n')
+            append("NIF / VAT: ").append(invoice.supplierVatNumber.ifBlank { "Não registado" }).append('\n')
+            append("Fatura: ").append(invoice.invoiceNumber).append('\n')
+            append("Emissão: ").append(invoice.issueDate).append('\n')
+            if (invoice.dueDate.isNotBlank()) append("Vencimento: ").append(invoice.dueDate).append('\n')
+            append("Base: ").append(invoice.netAmount ?: "não identificada").append(" €\n")
+            append("IVA: ").append(invoice.vatAmount ?: "não identificado").append(" €\n")
+            append("Total: ").append(invoice.totalAmount).append(" €\n")
+            append("Estado: ").append(invoice.reviewStatus)
+            if (invoice.warnings.isNotEmpty()) append("\n\nAvisos:\n• ").append(invoice.warnings.joinToString("\n• "))
+            append("\n\nNão é um lançamento contabilístico nem prova de pagamento.")
+        }
+        val builder = AlertDialog.Builder(this)
+            .setTitle("Fatura · ${invoice.invoiceNumber}")
+            .setMessage(message)
+            .setNegativeButton("Fechar", null)
+        if (invoice.reviewStatus == "pending_review") {
+            builder.setPositiveButton("Confirmar fatura") { _, _ -> updateSupplierInvoiceReview(invoice, "approved") }
+                .setNeutralButton("Rejeitar") { _, _ -> updateSupplierInvoiceReview(invoice, "rejected") }
+        } else {
+            builder.setPositiveButton("Eliminar do arquivo") { _, _ -> deleteSupplierInvoice(invoice) }
+        }
+        builder.show()
+    }
+
+    private fun updateSupplierInvoiceReview(invoice: SupplierInvoiceRecord, status: String) {
+        val oldRecord = invoice
+        val updated = invoice.copy(reviewStatus = status, updatedAtMillis = System.currentTimeMillis())
+        supplierInvoiceStore.save(assistantChatScope(), updated)
+        val ownerConnected = hasRemoteRestaurant() && backendToken().isNotBlank() &&
+            backendPrefs.getString("restaurant_role", "") == "owner"
+        if (ownerConnected && !invoice.documentPath.isNullOrBlank()) {
+            runBackend({
+                SupabaseApi.updateSupplierInvoiceReview(backendToken(), backendRestaurantId(), invoice.id, status)
+                "OK"
+            }, onError = { error ->
+                supplierInvoiceStore.save(assistantChatScope(), oldRecord)
+                Toast.makeText(this, friendlyBackendError(error.message), Toast.LENGTH_LONG).show()
+            }) {
+                Toast.makeText(this, "Revisão guardada no servidor.", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            Toast.makeText(this, "Revisão atualizada apenas neste dispositivo.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun deleteSupplierInvoice(invoice: SupplierInvoiceRecord) {
+        val ownerConnected = hasRemoteRestaurant() && backendToken().isNotBlank() &&
+            backendPrefs.getString("restaurant_role", "") == "owner"
+        if (ownerConnected && !invoice.documentPath.isNullOrBlank()) {
+            runBackend({
+                SupabaseApi.deleteSupplierInvoiceDocument(backendToken(), invoice.documentPath)
+                SupabaseApi.deleteSupplierInvoiceMetadata(backendToken(), backendRestaurantId(), invoice.id)
+                "OK"
+            }, onError = { error ->
+                Toast.makeText(this, friendlyBackendError(error.message), Toast.LENGTH_LONG).show()
+            }) {
+                supplierInvoiceStore.delete(assistantChatScope(), invoice.id)
+                showSupplierInvoiceArchiveDialog()
+            }
+        } else {
+            supplierInvoiceStore.delete(assistantChatScope(), invoice.id)
+            showSupplierInvoiceArchiveDialog()
+        }
+    }
+
+    private var supplierInvoiceRefreshInFlight = false
+    private var lastSupplierInvoiceRefreshAtMillis = 0L
+
+    private fun refreshSupplierInvoicesFromCloud(showFeedback: Boolean) {
+        if (!hasRemoteRestaurant() || backendToken().isBlank() ||
+            backendPrefs.getString("restaurant_role", "") != "owner") {
+            if (showFeedback) Toast.makeText(this, "Só o proprietário pode atualizar o arquivo partilhado.", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (supplierInvoiceRefreshInFlight) return
+        val now = System.currentTimeMillis()
+        if (!showFeedback && now - lastSupplierInvoiceRefreshAtMillis < 60_000L) return
+        supplierInvoiceRefreshInFlight = true
+        lastSupplierInvoiceRefreshAtMillis = now
+        runBackend({
+            SupabaseApi.listSupplierInvoices(backendToken(), backendRestaurantId()).toString()
+        }, onError = { error ->
+            supplierInvoiceRefreshInFlight = false
+            if (showFeedback) Toast.makeText(this, "O arquivo remoto não está disponível: ${friendlyBackendError(error.message)}", Toast.LENGTH_LONG).show()
+        }) { raw ->
+            supplierInvoiceRefreshInFlight = false
+            val rows = JSONArray(raw)
+            for (index in 0 until rows.length()) {
+                val row = rows.optJSONObject(index) ?: continue
+                val id = row.optString("id")
+                if (id.isBlank()) continue
+                val warnings = row.optJSONArray("warnings") ?: JSONArray()
+                val existing = supplierInvoiceStore.get(assistantChatScope(), id)
+                supplierInvoiceStore.save(
+                    assistantChatScope(),
+                    SupplierInvoiceRecord(
+                        id = id,
+                        supplierName = row.optString("supplier_name"),
+                        supplierVatNumber = row.optString("supplier_vat_number"),
+                        invoiceNumber = row.optString("invoice_number"),
+                        issueDate = row.optString("issue_date"),
+                        dueDate = row.optString("due_date"),
+                        netAmount = if (row.isNull("net_amount")) null else row.optString("net_amount"),
+                        vatAmount = if (row.isNull("vat_amount")) null else row.optString("vat_amount"),
+                        totalAmount = row.optString("total_amount"),
+                        currency = row.optString("currency", "EUR"),
+                        mimeType = row.optString("mime_type"),
+                        byteSize = row.optLong("byte_size"),
+                        documentSha256 = row.optString("document_sha256"),
+                        documentUri = existing?.documentUri,
+                        documentPath = row.optString("document_path").takeIf { it.isNotBlank() },
+                        sourceType = row.optString("source_type"),
+                        reviewStatus = row.optString("review_status", "pending_review"),
+                        warnings = (0 until warnings.length()).map { warnings.optString(it) },
+                        createdAtMillis = parseServerTimestamp(row.optString("created_at")),
+                        updatedAtMillis = parseServerTimestamp(row.optString("updated_at"))
+                    )
+                )
+            }
+            if (showFeedback) Toast.makeText(this, "${rows.length()} fatura(s) no arquivo privado.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun parseServerTimestamp(value: String): Long =
+        runCatching { java.time.Instant.parse(value).toEpochMilli() }.getOrDefault(0L)
+
+    private fun formatInvoiceEuro(value: BigDecimal): String =
+        NumberFormat.getCurrencyInstance(Locale("pt", "PT")).format(value)
+
+    private fun syncAssistantCloud(silent: Boolean) {
+        val token = backendToken()
+        val userId = backendPrefs.getString("user_id", "").orEmpty()
+        val restaurantId = backendRestaurantId()
+        val ownerConnected = token.isNotBlank() && userId.isNotBlank() && restaurantId.isNotBlank() &&
+            backendPrefs.getString("restaurant_role", "") == "owner"
+        if (!ownerConnected) {
+            if (!silent) Toast.makeText(this, "A sincronização está disponível apenas para o proprietário com sessão iniciada.", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (assistantCloudSyncInFlight) return
+        if (silent && System.currentTimeMillis() - assistantCloudLastSyncAtMillis < 60_000L) return
+        assistantCloudSyncInFlight = true
+        assistantCloudLastSyncAtMillis = System.currentTimeMillis()
+        Thread {
+            val result = runCatching {
+                assistantCloudSyncCoordinator.sync(token, userId, restaurantId, assistantChatScope(), assistantChatStore)
+            }
+            runOnUiThread {
+                assistantCloudSyncInFlight = false
+                result.fold(
+                    onSuccess = { sync ->
+                        if (!silent) Toast.makeText(
+                            this,
+                            "Histórico sincronizado: ${sync.conversationsUploaded} conversas enviadas e ${sync.messagesDownloaded} mensagens recebidas.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    },
+                    onFailure = { error ->
+                        if (!silent) Toast.makeText(
+                            this,
+                            "Não foi possível sincronizar. A cópia local continua guardada: ${friendlyBackendError(error.message)}",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                )
+            }
+        }.start()
     }
 
 
