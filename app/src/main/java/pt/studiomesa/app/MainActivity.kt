@@ -1304,7 +1304,7 @@ class MainActivity : Activity() {
                     .put("supplier_vat_number", vatNumber)
                     .put("invoice_number", invoiceNumber)
                     .put("issue_date", issueDate)
-                    .put("due_date", dueDate.ifBlank { JSONObject.NULL })
+                    .put("due_date", if (dueDate.isBlank()) JSONObject.NULL else dueDate)
                     .put("currency", "EUR")
                     .put("net_amount", netAmount?.toPlainString() ?: JSONObject.NULL)
                     .put("vat_amount", vatAmount?.toPlainString() ?: JSONObject.NULL)
