@@ -279,6 +279,18 @@ if [ "$STAFF_JOIN_FIRST" != "$EXPECTED_STAFF_JOIN" ] || [ "$STAFF_JOIN_RETRY" !=
   exit 1
 fi
 
+if psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT public.delete_assistant_conversation('$RESTAURANT_A'::uuid, '$ASSISTANT_CONVERSATION_ID'::uuid);
+COMMIT;
+SQL
+then
+  echo "ERROR: a staff member deleted the owner's assistant conversation." >&2
+  exit 1
+fi
+
 if join_staff_member "$USER_C" "$STAFF_CODE_B" >/dev/null 2>&1; then
   echo "ERROR: staff account unexpectedly joined a second restaurant." >&2
   exit 1
