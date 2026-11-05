@@ -162,7 +162,6 @@ object SupabaseApi {
         try {
             if (payload != null) {
                 connection.doOutput = true
-                connection.setRequestProperty("Content-Length", payload.size.toString())
                 connection.outputStream.use { it.write(payload) }
             }
             val code = connection.responseCode
