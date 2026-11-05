@@ -255,7 +255,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                             ConversationConfig(
                                 systemInstruction = Contents.of(effectiveSystemInstruction),
                                 initialMessages = initialMessages,
-                                tools = listOf(tool(dataTool), tool(priceTool), tool(invoiceTool)),
+                                tools = listOf(tool(dataTool), tool(priceTool), tool(invoiceTool), tool(StudioMesaWikipediaSearchTool())),
                                 automaticToolCalling = true,
                                 samplerConfig = SamplerConfig(
                                     topK = 40,
