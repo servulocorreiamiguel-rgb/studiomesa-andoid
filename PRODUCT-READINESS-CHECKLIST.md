@@ -1,17 +1,18 @@
 # StudioMesa — lista de preparação para uso profissional
 
-**Estado atual em 05/11/2026: NÃO PRONTO para operação comercial real.**  
-Relatório técnico: [COMMERCIAL-READINESS-2026-11-04.md](docs/COMMERCIAL-READINESS-2026-11-04.md), com atualização de verificação em 05/11/2026.
+**Estado atual em 05/11/2026: CANDIDATO NÃO-IA EM VALIDAÇÃO; NÃO PRONTO para operação comercial real.**  
+Plano de integração: [NON-AI-BUSINESS-READINESS-2026-11-05.md](docs/NON-AI-BUSINESS-READINESS-2026-11-05.md).
 
-- [x] Exportação do histórico operacional de pedidos em CSV integrada na `main`.
-- [x] CI completa da revisão `bc7ad0025d61b9e1d218fdcf0c6553f6701ca741` aprovada na execução [41790761282](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/41790761282): compilação, testes unitários/Lint, replay SQL/autorização e testes de interface Android 8/16.
-- [x] Cinco APKs de demonstração/debug (Essencial, Profissional e Premium, nas variantes Restaurante/Cliente aplicáveis) produzidos a partir dessa revisão. São builds de teste, não versões comerciais assinadas.
-- [ ] Validar a revisão atual da `main` (`e86e09296ecfd42fee539e6081a2c508dbfd3267`): a execução acima e os APKs são do commit anterior `bc7ad002`, não desta revisão.
-- [ ] Reconciliar os 54 registos remotos e os 43 ficheiros SQL de migração da revisão atual antes de qualquer deploy Supabase.
-- [ ] Aplicar, após reconciliação e backup/restauro testado, os dois índices das FKs do consultor de preços.
-- [ ] Integrar receitas, QR/loja de fidelização, reservas de cliente e permissões granulares apenas depois de rebase, CI completa e revisão da sequência de migrações.
-- [ ] Executar os testes ponta a ponta de autenticação, autorização, perda de rede, concorrência e eliminação de conta em dispositivos físicos e contas descartáveis.
-- [ ] Concluir política de privacidade, Data safety, contrato, suporte, configuração de assinatura e publicação.
+- [x] Exportação operacional de pedidos em CSV integrada na `main`.
+- [x] Cinco APKs de demonstração/debug produzidos anteriormente; não são versões comerciais assinadas.
+- [x] Branch `integration/non-ai-core-2026-11-05` criada a partir da `main`, com loja/QR de fidelização, reservas de cliente, permissões granulares e respetivas migrações/testes.
+- [ ] Executar e aprovar a CI completa da branch consolidada (cinco variantes, testes unitários, Lint, replay SQL/autorização e emuladores Android 8/16).
+- [ ] Resolver eventuais falhas de compilação/teste; não integrar na `main` enquanto a CI final não estiver verde.
+- [ ] Testes em Android físico e E2E com contas descartáveis, incluindo isolamento de clientes, permissões, QR, reservas concorrentes, rede e logout.
+- [ ] Reconciliar as versões de migração remotas e locais; não executar migrações no Supabase alojado antes de backup/restauro e plano de reversão.
+- [ ] Configurar Auth/SMTP/OAuth, assinatura comercial, política de privacidade, Data safety, contrato, suporte e piloto.
+- [ ] IA generativa, OCR de faturas e sincronização de memória/faturas permanecem fora desta branch; fase posterior com Codex.
+- [ ] Site institucional StudioMesa e páginas comerciais só depois de fechar a validação funcional e os materiais legais.
 
 **Nota:** os registos abaixo incluem verificações históricas de 29/10/2026; quando diferirem do relatório de 04/11/2026, prevalece a fotografia mais recente documentada em `docs/COMMERCIAL-READINESS-2026-11-04.md`.
 
