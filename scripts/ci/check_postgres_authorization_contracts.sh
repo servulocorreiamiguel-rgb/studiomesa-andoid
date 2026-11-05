@@ -252,12 +252,9 @@ SELECT public.delete_assistant_conversation('$RESTAURANT_A'::uuid, '$ASSISTANT_C
 COMMIT;
 SQL
 
-assistant_deleted_at="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \\
-  -c "SELECT (deleted_at IS NOT NULL)::text FROM public.restaurant_assistant_conversations WHERE id = '$ASSISTANT_CONVERSATION_ID'::uuid;")"
-assistant_deleted_title="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \\
-  -c "SELECT title FROM public.restaurant_assistant_conversations WHERE id = '$ASSISTANT_CONVERSATION_ID'::uuid;")"
-assistant_deleted_messages="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \\
-  -c "SELECT count(*)::text FROM public.restaurant_assistant_messages WHERE conversation_id = '$ASSISTANT_CONVERSATION_ID'::uuid;")"
+assistant_deleted_at="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1  -c "SELECT (deleted_at IS NOT NULL)::text FROM public.restaurant_assistant_conversations WHERE id = '$ASSISTANT_CONVERSATION_ID'::uuid;")"
+assistant_deleted_title="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1  -c "SELECT title FROM public.restaurant_assistant_conversations WHERE id = '$ASSISTANT_CONVERSATION_ID'::uuid;")"
+assistant_deleted_messages="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1  -c "SELECT count(*)::text FROM public.restaurant_assistant_messages WHERE conversation_id = '$ASSISTANT_CONVERSATION_ID'::uuid;")"
 if [ "$assistant_deleted_at" != "true" ] || [ "$assistant_deleted_title" != "Conversa eliminada" ] || [ "$assistant_deleted_messages" != "0" ]; then
   echo "ERROR: assistant deletion did not retain only a content-free tombstone." >&2
   exit 1
