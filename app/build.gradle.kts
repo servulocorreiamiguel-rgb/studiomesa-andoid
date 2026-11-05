@@ -118,6 +118,8 @@ kotlin {
 dependencies {
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.18.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+    // Bundled on-device OCR; no paid API and no Play Services model download.
+    implementation("com.google.mlkit:text-recognition:16.0.1")
     // QR scanning/generation for one-time loyalty tokens.
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 
