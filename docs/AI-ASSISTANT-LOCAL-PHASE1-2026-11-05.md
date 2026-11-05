@@ -1,54 +1,63 @@
-# StudioMesa — IA local, fase 1
+# StudioMesa — IA local, documentos e sincronização
 
 **Data:** 5 de novembro de 2026  
 **Branch:** `feature/assistant-local-ai-phase1-2026-11-05`  
 **Base:** `integration/non-ai-core-2026-11-05`  
 **Estado:** implementação em validação; não integrada na branch de operação e não aprovada para produção.
 
-## Incluído nesta fase
+## IA generativa local
 
-- Chat no ecrã principal do Assistente com mensagens, novas conversas, resposta em streaming e continuação do motor determinístico quando o modelo local ainda não foi instalado.
-- Modelo generativo LFM2.5-1.2B-Instruct quantizado INT4, executado no próprio Android através de LiteRT-LM 0.18.0.
-- Transferência iniciada pelo utilizador, de cerca de 736 MB, para a pasta privada da aplicação; valida tamanho e SHA-256 antes de aceitar o ficheiro.
-- Histórico cifrado com AES-GCM e chave no Android Keystore, pesquisável, reabrível e eliminável.
-- Memória editável, também cifrada e separada por conta/restaurante.
-- Ferramentas locais de leitura para resumo da operação, carta, pedidos, stock e reservas que já estejam carregados na aplicação; cálculo matemático de referência de preço com custos registados.
-- Modo **Pensar mais**, que acrescenta instruções de verificação, utiliza temperatura inferior e aumenta o limite de saída de 1 024 para 1 400 tokens. Não é uma exposição de raciocínio interno, nem muda o modelo instalado.
-- Libertação do motor nativo ao colocar a app em segundo plano e encerramento no fim do ciclo de vida da Activity.
+- Chat no ecrã principal, com novas conversas, respostas em streaming e motor determinístico disponível mesmo antes de descarregar o modelo.
+- Modelo LFM2.5-1.2B-Instruct INT4 executado no Android por LiteRT-LM 0.18.0 (CPU).
+- Transferência iniciada apenas após confirmação; cerca de 736 MB, verificação do tamanho e SHA-256.
+- Sem API generativa externa, chave de fornecedor ou custo por mensagem depois da transferência.
+- O modelo é pequeno e limitado a um contexto aproximado de 4 096 tokens. Não é equivalente a modelos de grande dimensão, não deve ser apresentado como ChatGPT e pode produzir erros. O desempenho em português europeu e no OPPO A5m tem de ser medido fisicamente.
+- O modo **Pensar mais** acrescenta instruções de verificação, diminui a temperatura e aumenta o limite de saída de 1 024 para 1 400 tokens. Não revela raciocínio interno privado.
 
-## Custos e utilização
+## Histórico, memória e sincronização
 
-A inferência é local. Não foi introduzida uma API de IA, uma chave de fornecedor, uma Edge Function de IA ou uma cobrança por mensagem.
+- Histórico pesquisável, reabertura e eliminação; memória editável por conta/restaurante.
+- A cópia local do histórico e da memória é cifrada com AES-GCM e chave no Android Keystore.
+- Para contas de proprietário autenticadas, o histórico e a memória podem sincronizar entre dispositivos através do Supabase. Mensagens usam IDs estáveis e inserção idempotente; o merge preserva as datas remotas e a memória usa timestamps para resolver conflitos simples.
+- As tabelas cloud têm RLS e políticas de proprietário por restaurante. A cópia na cloud **não é cifrada ponta a ponta**: o acesso é controlado por autenticação e RLS do Supabase. A cópia local continua cifrada.
+- Não se sincroniza o histórico de contas de funcionário; o Assistente é uma área do proprietário.
 
-A primeira instalação transfere aproximadamente 736 MB e precisa de espaço adicional temporário. Recomenda-se Wi-Fi: se o utilizador escolher dados móveis, o consumo fica sujeito ao tarifário da operadora. O modelo usa memória, CPU, bateria e armazenamento do próprio telemóvel.
+## OCR de faturas e arquivo privado
 
-Não foi configurado Google Gemini nem outro serviço de inferência remota. A publicação na Play Store também não faz parte desta fase; os testes são distribuídos por APK. Qualquer decisão de publicação deve ser tomada separadamente depois de avaliar os custos e requisitos aplicáveis.
+- PDFs e imagens JPG/PNG/WebP são processados localmente com ML Kit bundled e Android PdfRenderer. Não é usada API de OCR/IA paga.
+- Limites atuais: 25 MB por documento, até 10 páginas de PDF e até 50 000 caracteres OCR.
+- O parser extrai campos candidatos: fornecedor, NIF/VAT, número, data de emissão/vencimento, base tributável, IVA e total. O NIF português é validado pelo dígito de controlo; os totais são comparados com tolerância de 0,05 €.
+- Campos incertos ficam assinalados. O utilizador tem de rever e confirmar; o OCR nunca aprova ou lança uma despesa automaticamente. A deteção de duplicados usa fornecedor, número e data.
+- O índice local de metadados é cifrado com Android Keystore. O texto OCR bruto não é persistido.
+- Quando existe sessão do proprietário, o ficheiro original é enviado para um bucket privado Supabase e os metadados ficam acessíveis em todos os dispositivos do proprietário. Quando não existe ligação, fica guardada a metadata cifrada e uma referência SAF ao documento; o documento original não é copiado para uma pasta privada autónoma, e a sua disponibilidade local depende da persistência da permissão do fornecedor de ficheiros.
+- A aplicação permite retomar envios locais depois de falhas de rede e abrir o documento original a partir do arquivo privado com sessão autenticada e verificação SHA-256.
+- O agente só consulta metadados e totais. Não aprova, rejeita, paga ou altera documentos por si.
+- Os totais arquivados não são prova de pagamento, reconciliação bancária, lançamento contabilístico ou valor fiscalmente dedutível.
 
-## Contexto financeiro e segurança
+## Segurança e limites financeiros
 
-O modelo recebe apenas o contexto operacional que a aplicação já tem disponível. As ferramentas são apenas de leitura: não podem alterar preços, pedidos, stock, reservas, pagamentos, permissões ou documentos.
+O modelo só recebe os dados operacionais que a aplicação já carregou e as faturas registadas no arquivo. As suas ferramentas são apenas de leitura. Não podem alterar preços, stock, pedidos, reservas, permissões, documentos ou estados de pagamento.
 
-Os cálculos de custos e preços continuam apoiados no motor determinístico já existente. O modelo pode explicar, resumir e comparar, mas não deve inventar dados em falta. Custos, margens e stock podem estar desatualizados ou não carregados; a aplicação deve indicar essa limitação. A resposta generativa não é um registo contabilístico nem uma decisão financeira.
+Os cálculos de preço e gestão económica continuam a ser determinísticos e devem indicar os dados em falta. Não se promete previsões, reconciliação bancária ou aconselhamento fiscal/contabilístico.
 
-O histórico e a memória ficam cifrados no dispositivo e separados por conta/restaurante. Não sincronizam entre dispositivos. Os dados financeiros e operacionais não são enviados para um fornecedor de IA nesta fase.
+O SAF-T(PT) de vendas do adquirente não inclui as faturas comerciais dos fornecedores. Para obter documentos de compras, é necessária a importação do próprio documento ou uma exportação do programa de compras/contabilidade. A versão atual aceita PDFs e imagens; ainda não implementa uma integração direta com um POS/ERP específico nem um importador genérico de CSV/SAF-T. Isso depende do fornecedor efetivamente usado pelo restaurante.
 
-## Limitações conhecidas
+## Custos e distribuição
 
-- O modelo de 1,2 mil milhões de parâmetros é muito mais limitado do que modelos de grande dimensão como os usados no ChatGPT; a qualidade em português europeu ainda exige avaliação.
-- O desempenho e a memória ainda precisam de ser medidos no OPPO A5m físico.
-- O contexto é limitado a 4 096 tokens; a reconstrução nativa usa um conjunto reduzido de mensagens recentes.
-- A IA só pode consultar dados efetivamente carregados na sessão; não tem acesso autónomo a todos os registos do restaurante.
-- Não inclui OCR nem arquivo de faturas, integração com POS/faturação/contabilidade, pesquisa na Internet ou sincronização cloud de histórico/memória.
-- A licença do modelo LFM e a licença Apache 2.0 do runtime têm de ser revistas e cumpridas antes de qualquer venda ou distribuição comercial. Consultar `docs/THIRD-PARTY-AI-MODEL.md`.
+- Sem API paga de IA e sem custo por mensagem.
+- A transferência inicial do modelo consome cerca de 736 MB de Internet e espaço local. OCR e inferência consomem CPU, RAM, bateria e armazenamento do telemóvel.
+- Não foi configurada faturação de Gemini ou de outro serviço de IA remoto.
+- A publicação na Play Store não faz parte desta fase; os testes são distribuídos em APK. Não foi feita qualquer publicação.
+- As licenças LFM Open License v1.0 do modelo e Apache 2.0 do runtime têm de ser revistas antes de qualquer uso comercial.
 
 ## Validação obrigatória
 
 - Compilar as cinco variantes Android.
-- Executar testes unitários, Android Lint e smoke tests Android 8/API 26 e Android 16.
-- Confirmar que histórico e memória não atravessam contas/restaurantes.
-- Confirmar o botão Pensar mais, os limites de saída e a manutenção do modo normal.
-- Confirmar que as ferramentas de IA não alteram dados.
-- Testar instalação, integridade, transferência interrompida, espaço insuficiente e recuperação de sessão.
-- Medir arranque, RAM, latência, temperatura e autonomia num telemóvel físico, incluindo o OPPO A5m.
+- Testes unitários das cinco variantes, Android Lint e replay das migrações numa base descartável.
+- Smoke tests Android 8/API 26 e Android 16, incluindo chat, teclado, sincronização, OCR, arquivo, permissões e anexos.
+- Testar isolamento entre restaurantes e recusa de acesso a funcionários a histórico, memória e faturas.
+- Testar documentos truncados, MIME incorreto, PDFs com muitas páginas, NIF inválido, totais inconsistentes, faturas duplicadas, perda de rede, sincronização repetida e permissões SAF revogadas.
+- Medir instalação, arranque, RAM, latência, temperatura, bateria e qualidade de respostas no OPPO A5m físico.
+- Ensaiar backup/restauro e política de retenção dos documentos antes de piloto real.
 
-**Nenhum APK com IA deve ser tratado como versão de venda até a CI desta branch passar e a execução física ser avaliada.**
+**Nenhum APK com IA deve ser tratado como versão comercial até a CI da última revisão passar e os testes físicos e de privacidade estarem concluídos.**
