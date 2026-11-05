@@ -34,13 +34,22 @@ internal class AssistantCloudSyncCoordinator {
             store.acknowledgeConversationDeletion(scope, conversationId)
         }
 
-        val localConversations = store.listConversationsForSync(scope)
         val remoteConversationsBefore = SupabaseApi.listAssistantConversations(token, restaurantId)
+        for (index in 0 until remoteConversationsBefore.length()) {
+            val row = remoteConversationsBefore.optJSONObject(index) ?: continue
+            val id = row.optString("id")
+            if (id.isNotBlank() && isDeleted(row)) {
+                store.applyRemoteConversationDeletion(scope, id)
+            }
+        }
+
+        // Load local history only after applying cloud tombstones from other devices.
+        val localConversations = store.listConversationsForSync(scope)
         val remoteById = buildMap<String, JSONObject> {
             for (index in 0 until remoteConversationsBefore.length()) {
                 val row = remoteConversationsBefore.optJSONObject(index) ?: continue
                 val id = row.optString("id")
-                if (id.isNotBlank()) put(id, row)
+                if (id.isNotBlank() && !isDeleted(row)) put(id, row)
             }
         }
 
@@ -90,6 +99,13 @@ internal class AssistantCloudSyncCoordinator {
         }
 
         val remoteConversations = SupabaseApi.listAssistantConversations(token, restaurantId)
+        for (index in 0 until remoteConversations.length()) {
+            val row = remoteConversations.optJSONObject(index) ?: continue
+            val id = row.optString("id")
+            if (id.isNotBlank() && isDeleted(row)) {
+                store.applyRemoteConversationDeletion(scope, id)
+            }
+        }
         val remoteMessages = SupabaseApi.listAssistantMessages(token, restaurantId)
         val groupedMessages = mutableMapOf<String, MutableList<AssistantChatStore.Turn>>()
         for (index in 0 until remoteMessages.length()) {
@@ -111,7 +127,7 @@ internal class AssistantCloudSyncCoordinator {
         for (index in 0 until remoteConversations.length()) {
             val row = remoteConversations.optJSONObject(index) ?: continue
             val id = row.optString("id")
-            if (id.isBlank()) continue
+            if (id.isBlank() || isDeleted(row)) continue
             val turns = groupedMessages[id].orEmpty().sortedBy { it.createdAtMillis }
             downloaded += store.mergeRemoteConversation(
                 scope = scope,
@@ -162,6 +178,9 @@ internal class AssistantCloudSyncCoordinator {
             memoryDownloaded = memoryDownloaded
         )
     }
+
+    private fun isDeleted(row: JSONObject): Boolean =
+        !row.isNull("deleted_at") && row.optString("deleted_at").isNotBlank()
 
     private fun iso(epochMillis: Long): String =
         Instant.ofEpochMilli(epochMillis.coerceAtLeast(1L)).toString()
