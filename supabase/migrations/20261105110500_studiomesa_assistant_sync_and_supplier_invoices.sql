@@ -10,6 +10,8 @@ CREATE TABLE public.restaurant_assistant_conversations (
     created_by uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
+    -- Retain a content-free tombstone so other devices cannot resurrect a deleted conversation.
+    deleted_at timestamptz,
     UNIQUE (id, restaurant_id)
 );
 
@@ -210,6 +212,53 @@ USING (
           AND rs.role = 'owner'
     )
 );
+
+CREATE OR REPLACE FUNCTION public.delete_assistant_conversation(
+    p_restaurant_id uuid,
+    p_conversation_id uuid
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+DECLARE
+    v_conversation_id uuid;
+BEGIN
+    IF (SELECT auth.uid()) IS NULL THEN
+        RAISE EXCEPTION 'É necessário iniciar sessão.';
+    END IF;
+
+    -- Verify the caller is the owner before touching any message rows.
+    UPDATE public.restaurant_assistant_conversations AS conversation
+       SET title = 'Conversa eliminada',
+           deleted_at = COALESCE(conversation.deleted_at, now()),
+           updated_at = now()
+     WHERE conversation.id = p_conversation_id
+       AND conversation.restaurant_id = p_restaurant_id
+       AND EXISTS (
+           SELECT 1 FROM public.restaurant_staff rs
+           WHERE rs.restaurant_id = conversation.restaurant_id
+             AND rs.user_id = (SELECT auth.uid())
+             AND rs.role = 'owner'
+       )
+    RETURNING conversation.id INTO v_conversation_id;
+
+    IF v_conversation_id IS NULL THEN
+        RAISE EXCEPTION 'Conversa não encontrada ou sem autorização para a eliminar.';
+    END IF;
+
+    -- Remove the conversation contents immediately; only the minimal deletion marker remains.
+    DELETE FROM public.restaurant_assistant_messages
+    WHERE conversation_id = v_conversation_id
+      AND restaurant_id = p_restaurant_id;
+
+    RETURN v_conversation_id;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.delete_assistant_conversation(uuid, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.delete_assistant_conversation(uuid, uuid) TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.review_supplier_invoice(
     p_invoice_id uuid,
