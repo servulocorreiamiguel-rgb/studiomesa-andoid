@@ -199,7 +199,9 @@ class AssistantChatStore(context: Context) {
         scope: String,
         conversationId: String,
         title: String,
-        turns: List<Turn>
+        turns: List<Turn>,
+        remoteCreatedAtMillis: Long = 0L,
+        remoteUpdatedAtMillis: Long = 0L
     ): Int {
         require(conversationId.isNotBlank()) { "A conversa remota não tem identificador." }
         val root = load(scope)
@@ -210,8 +212,8 @@ class AssistantChatStore(context: Context) {
             item = JSONObject()
                 .put("id", conversationId)
                 .put("title", title.trim().take(TITLE_CHARS).ifBlank { "Conversa sincronizada" })
-                .put("created_at", now)
-                .put("updated_at", now)
+                .put("created_at", remoteCreatedAtMillis.takeIf { it > 0L } ?: now)
+                .put("updated_at", remoteUpdatedAtMillis.takeIf { it > 0L } ?: now)
                 .put("messages", JSONArray())
             conversations.put(item)
         }
@@ -240,7 +242,11 @@ class AssistantChatStore(context: Context) {
             }
         }
         while (messages.length() > MAX_TURNS) messages.remove(0)
-        item.put("updated_at", maxOf(item.optLong("updated_at", 0L), now))
+        val latestTurnAt = turns.maxOfOrNull { it.createdAtMillis } ?: 0L
+        item.put(
+            "updated_at",
+            maxOf(item.optLong("updated_at", 0L), remoteUpdatedAtMillis, latestTurnAt)
+        )
         root.put("conversations", conversations)
         while (conversations.length() > MAX_CONVERSATIONS) {
             val oldestIndex = oldestConversationIndex(conversations, conversationId)
