@@ -72,12 +72,17 @@ class MainActivitySmokeTest {
 
             onView(withText("Assistente StudioMesa"))
                 .check(matches(isDisplayed()))
+            onView(withText("EXPERIMENTA PERGUNTAR"))
+                .check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir ferramentas do assistente")).perform(click())
+            onView(withText("Engenharia da carta")).perform(scrollTo()).check(matches(isDisplayed()))
+            onView(withContentDescription("Voltar à conversa")).perform(click())
             onView(withHint("Escreve uma mensagem..."))
                 .check(matches(isDisplayed()))
-                .perform(replaceText("Como posso melhorar os preços da carta?"))
+                .perform(replaceText("Como melhorar o preço?"))
             onView(withText("Enviar")).perform(click())
 
-            onView(withText("Como posso melhorar os preços da carta?"))
+            onView(withText("Como melhorar o preço?"))
                 .check(matches(isDisplayed()))
             onView(withText(containsString("Análise de preços")))
                 .check(matches(isDisplayed()))
@@ -450,6 +455,7 @@ class MainActivitySmokeTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
             onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            onView(withContentDescription("Abrir ferramentas do assistente")).perform(click())
             onView(withText("Assistente StudioMesa")).check(matches(isDisplayed()))
             onView(withText(containsString("SEM API PAGA"))).check(matches(isDisplayed()))
             onView(withHint("Ex.: Como posso melhorar o preço dos pratos?"))
@@ -469,6 +475,7 @@ class MainActivitySmokeTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
             onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            onView(withContentDescription("Abrir ferramentas do assistente")).perform(click())
             onView(withText("Engenharia da carta")).perform(scrollTo()).check(matches(isDisplayed()))
             onView(withText("Ideias de conteúdo")).perform(scrollTo()).check(matches(isDisplayed()))
             onView(withText("Gerar resumo da operação")).perform(scrollTo(), click())
@@ -539,6 +546,7 @@ class MainActivitySmokeTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
             onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            onView(withContentDescription("Abrir ferramentas do assistente")).perform(click())
 
             onView(withText("Gestor económico · opcional"))
                 .perform(scrollTo())
@@ -575,6 +583,7 @@ class MainActivitySmokeTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
             onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            onView(withContentDescription("Abrir ferramentas do assistente")).perform(click())
             onView(withText("Ativar gestão económica")).perform(scrollTo(), click())
 
             onView(withHint("Farinha | 0,2 | 2,50 | 5\nMolho | 0,1 | 4,00 | 0"))
@@ -601,6 +610,7 @@ class MainActivitySmokeTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
             onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            onView(withContentDescription("Abrir ferramentas do assistente")).perform(click())
             onView(withText("Ativar gestão económica")).perform(scrollTo(), click())
 
             onView(withHint("Ex.: 18000")).perform(scrollTo(), replaceText("1000000"))
@@ -627,6 +637,7 @@ class MainActivitySmokeTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
             onView(withContentDescription("Abrir secção Assistente")).perform(scrollTo(), click())
+            onView(withContentDescription("Abrir ferramentas do assistente")).perform(click())
             onView(withText("Ativar gestão económica")).perform(scrollTo(), click())
 
             onView(withHint("Frango | 20 | 23 | 6,50\nQueijo | 5 | 4 | 8,00"))
