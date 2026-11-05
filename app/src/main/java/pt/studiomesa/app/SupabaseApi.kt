@@ -199,6 +199,20 @@ object SupabaseApi {
         )
     }
 
+    fun deleteAssistantConversation(token: String, restaurantId: String, conversationId: String) {
+        require(token.isNotBlank())
+        require(restaurantId.matches(Regex("^[0-9a-fA-F-]{36}$")))
+        require(conversationId.matches(Regex("^[0-9a-fA-F-]{36}$")))
+        val restaurant = URLEncoder.encode(restaurantId, "UTF-8")
+        val id = URLEncoder.encode(conversationId, "UTF-8")
+        // RLS restricts this cascade delete to the authenticated restaurant owner.
+        call(
+            "DELETE",
+            "/rest/v1/restaurant_assistant_conversations?id=eq.$id&restaurant_id=eq.$restaurant",
+            accessToken = token
+        )
+    }
+
     fun listAssistantMessages(token: String, restaurantId: String): JSONArray {
         require(token.isNotBlank() && restaurantId.isNotBlank())
         val restaurant = URLEncoder.encode(restaurantId, "UTF-8")
