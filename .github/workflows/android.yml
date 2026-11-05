@@ -253,7 +253,7 @@ jobs:
         with:
           api-level: 26
           target: google_apis
-          arch: x86
+          arch: x86_64
           profile: Nexus 5X
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot
