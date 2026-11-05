@@ -53,6 +53,19 @@ internal class InvoiceDocumentProcessor(private val context: Context) {
         }
     }
 
+    fun readVerifiedDocumentBytes(uri: Uri, expectedSha256: String): ByteArray {
+        require(expectedSha256.matches(Regex("^[a-f0-9]{64}$"))) {
+            "O identificador de integridade do documento é inválido."
+        }
+        val bytes = readDocumentBytes(context.contentResolver, uri)
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(bytes).joinToString("") { "%02x".format(it) }
+        require(digest.equals(expectedSha256, ignoreCase = true)) {
+            "O documento mudou depois da extração OCR. Importa-o novamente."
+        }
+        return bytes
+    }
+
     private fun extractPdfText(uri: Uri, recognizer: TextRecognizer): Pair<String, Int> {
         val descriptor = context.contentResolver.openFileDescriptor(uri, "r")
             ?: throw FileNotFoundException("Não foi possível abrir o PDF.")
