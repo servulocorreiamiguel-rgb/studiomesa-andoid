@@ -927,8 +927,8 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(8), 0, 0, 0)
         }
-        titleStack.addView(label("Ferramentas do assistente", 16f, true, forestDeep))
-        titleStack.addView(label("Análises e apoio à gestão", 10f, false, muted))
+        titleStack.addView(label("Assistente StudioMesa", 16f, true, forestDeep))
+        titleStack.addView(label("Ferramentas e análises", 10f, false, muted))
         toolbar.addView(titleStack, LinearLayout.LayoutParams(0, -2, 1f))
         appRoot.addView(toolbar, LinearLayout.LayoutParams(-1, -2))
 
