@@ -455,8 +455,8 @@ class MainActivitySmokeTest {
             onView(withHint("Escreve uma mensagem…"))
                 .perform(scrollTo(), replaceText("Faz um resumo da operação"), closeSoftKeyboard())
             onView(withText("Enviar mensagem  ↑")).perform(scrollTo(), click())
-            onView(withText(containsString("Resumo da operação"))).perform(scrollTo()).check(matches(isDisplayed()))
-            onView(withText(containsString("não é previsão de vendas"))).perform(scrollTo()).check(matches(isDisplayed()))
+            onView(withText(containsString("Resumo da operação"))).check(matches(isDisplayed()))
+            onView(withText(containsString("não é previsão de vendas"))).check(matches(isDisplayed()))
         }
     }
 
