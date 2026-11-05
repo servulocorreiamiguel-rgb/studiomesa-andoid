@@ -1648,7 +1648,7 @@ class MainActivity : Activity() {
             appendLine("Não és contabilista certificado. Não substituis aconselhamento fiscal, jurídico ou contabilístico. Distingue valores com IVA e sem IVA.")
             appendLine("Não podes alterar preços, stock, pedidos, reservas, pagamentos, permissões ou documentos. Apenas analisa e recomenda; qualquer operação exige confirmação humana através dos controlos da aplicação.")
             appendLine("Não afirmes que tens acesso à Internet, a bancos, a programas de faturação ou a faturas que não estejam importadas.")
-            appendLine("Quando precisares de dados atuais da app, usa as ferramentas de leitura disponíveis: get_restaurant_data para resumo, carta, pedidos, stock ou reservas; calculate_menu_price_reference para calcular uma referência com o custo registado.")
+            appendLine("Quando precisares de dados atuais da app, usa as ferramentas de leitura disponíveis: get_restaurant_data para resumo, carta, pedidos, stock ou reservas; calculate_menu_price_reference para calcular uma referência com o custo registado; get_supplier_invoice_summary para consultar metadados e totais de faturas importadas.")
             appendLine("As ferramentas são exclusivamente de leitura. Não inventes os seus resultados, não repitas chamadas desnecessárias e nunca afirmes que alteraste registos.")
             appendLine()
             appendLine("CONTEXTO ATUAL DO STUDIO MESA")
@@ -1788,6 +1788,7 @@ class MainActivity : Activity() {
                                 onSuccess = { reply ->
                                     runCatching {
                                         assistantChatStore.appendTurn(scope, conversationId, "assistant", reply)
+                                        syncAssistantCloud(silent = true)
                                     }.onFailure { error ->
                                         assistantChatError = error.message ?: "A resposta chegou, mas não foi possível guardar o histórico."
                                     }
@@ -1805,6 +1806,7 @@ class MainActivity : Activity() {
 
             val reply = answerAssistantChatMessage(question, scope, conversationId)
             assistantChatStore.appendTurn(scope, conversationId, "assistant", reply)
+            syncAssistantCloud(silent = true)
         } catch (error: Exception) {
             assistantSending = false
             assistantStreamingTextView = null
@@ -1846,8 +1848,35 @@ class MainActivity : Activity() {
             "fatura de fornecedor", "despesa de fornecedor"
         ).any { normalized.contains(it) }
         if (asksAboutInvoices) {
-            return "Ainda não consigo consultar faturas contabilísticas nesta versão. O projeto não tem um arquivo de faturas de fornecedores nem uma ligação ao programa de faturação/contabilidade do restaurante. O QR existente está ligado à fidelização, não à leitura de documentos contabilísticos. A Autoridade Tributária esclarece que o SAF-T (PT) do adquirente não inclui os documentos comerciais a fornecedores; por isso, não basta assumir que um SAF-T de vendas contém as faturas de compras.\n\nQuando a integração estiver configurada, o agente poderá cruzar compras e custos com vendas e stock, sempre com acesso reservado ao proprietário."
+            val invoices = runCatching { supplierInvoiceStore.list(scope) }.getOrDefault(emptyList())
+            if (invoices.isEmpty()) {
+                return "O arquivo ainda não tem faturas importadas. Abre Documentos e faturas para importar um PDF ou uma fotografia. A leitura é feita localmente e os campos ficam pendentes até os confirmares."
+            }
+            val approved = invoices.filter { it.reviewStatus == "approved" }
+            val pending = invoices.filter { it.reviewStatus == "pending_review" }
+            val approvedTotal = approved.fold(BigDecimal.ZERO) { sum, item ->
+                sum.add(item.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO)
+            }
+            val pendingTotal = pending.fold(BigDecimal.ZERO) { sum, item ->
+                sum.add(item.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO)
+            }
+            return buildString {
+                appendLine("Resumo do arquivo de fornecedores")
+                appendLine("Documentos guardados: ${invoices.size}.")
+                appendLine("Confirmados pelo proprietário: ${approved.size} · total ${formatInvoiceEuro(approvedTotal)}.")
+                appendLine("Pendentes de revisão: ${pending.size} · total ${formatInvoiceEuro(pendingTotal)}.")
+                appendLine("Estes totais representam documentos importados, não pagamentos efetuados, custos reconhecidos ou valores fiscalmente dedutíveis.")
+                val latest = invoices.take(5)
+                if (latest.isNotEmpty()) {
+                    appendLine()
+                    appendLine("Documentos recentes:")
+                    latest.forEach { item ->
+                        appendLine("- ${item.supplierName}: ${item.invoiceNumber}, ${item.issueDate}, ${formatInvoiceEuro(item.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO)} (${item.reviewStatus}).")
+                    }
+                }
+            }.trim()
         }
+
 
         val previousUserQuestion = runCatching {
             assistantChatStore.readTurns(scope, conversationId)
@@ -1998,6 +2027,7 @@ class MainActivity : Activity() {
                     assistantChatStore.saveMemory(scope, memoryField.text.toString())
                 }.onSuccess {
                     Toast.makeText(this, "Memória guardada neste dispositivo.", Toast.LENGTH_SHORT).show()
+                    syncAssistantCloud(silent = true)
                 }.onFailure {
                     Toast.makeText(this, "Não foi possível guardar a memória.", Toast.LENGTH_SHORT).show()
                 }
@@ -2015,6 +2045,7 @@ class MainActivity : Activity() {
                                 memoryField.setText("")
                                 dismiss()
                                 Toast.makeText(this@MainActivity, "Memória apagada.", Toast.LENGTH_SHORT).show()
+                                syncAssistantCloud(silent = true)
                             }
                             .show()
                     }
