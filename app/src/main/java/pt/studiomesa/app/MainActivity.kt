@@ -104,6 +104,7 @@ class MainActivity : Activity() {
             text = "Olá! Sou o Assistente StudioMesa. Pergunta sobre preços, carta, pedidos, stock, reservas ou gestão do restaurante."
         )
     )
+    private var assistantToolsVisible = false
     private var selectedAnalysisPeriod = SalesAnalysisPeriod.ALL_TIME
 
     // Owner-controlled economic tools: session-only until persistent authorization is designed.
@@ -157,6 +158,21 @@ class MainActivity : Activity() {
             flavor.contains("premium") -> "PREMIUM"
             else -> "PROFISSIONAL"
         }
+
+    @Deprecated("Deprecated in Android API 33; retained for compatibility with older devices.")
+    override fun onBackPressed() {
+        if (activePage == "Assistente" && assistantToolsVisible) {
+            assistantToolsVisible = false
+            renderApp()
+            return
+        }
+        if (activePage == "Assistente") {
+            activePage = "Início"
+            renderApp()
+            return
+        }
+        super.onBackPressed()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -507,7 +523,7 @@ class MainActivity : Activity() {
         }
         if (activePage !in availablePages()) activePage = "Início"
         if (activePage == "Assistente") {
-            renderAssistantChatScreen()
+            if (assistantToolsVisible) renderAssistantToolsScreen() else renderAssistantChatScreen()
             return
         }
 
@@ -697,7 +713,10 @@ class MainActivity : Activity() {
             background = rippleBackground(paper, 13)
             isClickable = true
             isFocusable = true
-            setOnClickListener { showAssistantToolsDialog() }
+            setOnClickListener {
+                assistantToolsVisible = true
+                renderApp()
+            }
         }
         toolbar.addView(toolsButton, LinearLayout.LayoutParams(dp(44), dp(46)))
 
@@ -738,6 +757,23 @@ class MainActivity : Activity() {
         }
         assistantChatMessages.forEach { message ->
             addAssistantChatBubble(conversation, message)
+        }
+        if (assistantChatMessages.size == 1) {
+            val suggestions = makeCard(15, white)
+            suggestions.addView(label("EXPERIMENTA PERGUNTAR", 9f, true, forestSoft))
+            addGap(suggestions, 7)
+            listOf(
+                "Como melhorar o preço?",
+                "Faz um resumo da operação",
+                "O que devo rever no stock?"
+            ).forEach { prompt ->
+                suggestions.addView(secondaryButton(prompt) {
+                    sendAssistantChatQuestion(prompt)
+                }, LinearLayout.LayoutParams(-1, dp(43)).apply {
+                    setMargins(0, dp(3), 0, dp(3))
+                })
+            }
+            conversation.addView(suggestions, cardParams())
         }
         conversationScroll.addView(conversation)
         appRoot.addView(conversationScroll, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -829,11 +865,18 @@ class MainActivity : Activity() {
             messageField.error = "Escreve uma mensagem primeiro."
             return
         }
-        assistantQuestion = question
-        assistantChatMessages.add(AssistantChatMessage(fromUser = true, text = question))
+        sendAssistantChatQuestion(question)
+    }
+
+    private fun sendAssistantChatQuestion(question: String) {
+        val cleanQuestion = question.trim().take(1000)
+        if (cleanQuestion.isBlank()) return
+
+        assistantQuestion = cleanQuestion
+        assistantChatMessages.add(AssistantChatMessage(fromUser = true, text = cleanQuestion))
 
         val answer = runCatching {
-            StudioMesaAdvisor.answerQuestion(question, assistantSnapshot())
+            StudioMesaAdvisor.answerQuestion(cleanQuestion, assistantSnapshot())
         }.getOrElse {
             StudioMesaAssistantAnswer(
                 "Não foi possível analisar a pergunta",
@@ -851,25 +894,60 @@ class MainActivity : Activity() {
         renderAssistantChatScreen()
     }
 
-    private fun showAssistantToolsDialog() {
-        val content = LinearLayout(this).apply {
+    private fun renderAssistantToolsScreen() {
+        appRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(8), dp(12), dp(8))
+            setBackgroundColor(paper)
         }
-        renderEconomicManager(content)
-        if (isPremium) {
-            addGap(content, 8)
-            renderRestaurantPriceAdvisor(content)
+        applySystemBarInsets(appRoot)
+
+        val toolbar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(7), dp(12), dp(7))
+            setBackgroundColor(white)
+            elevation = dp(2).toFloat()
         }
+        val backButton = TextView(this).apply {
+            text = "‹"
+            textSize = 31f
+            gravity = Gravity.CENTER
+            setTextColor(forestDeep)
+            contentDescription = "Voltar à conversa"
+            background = rippleBackground(paper, 14)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                assistantToolsVisible = false
+                renderApp()
+            }
+        }
+        toolbar.addView(backButton, LinearLayout.LayoutParams(dp(46), dp(48)))
+        val titleStack = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(8), 0, 0, 0)
+        }
+        titleStack.addView(label("Ferramentas do assistente", 16f, true, forestDeep))
+        titleStack.addView(label("Análises e apoio à gestão", 10f, false, muted))
+        toolbar.addView(titleStack, LinearLayout.LayoutParams(0, -2, 1f))
+        appRoot.addView(toolbar, LinearLayout.LayoutParams(-1, -2))
+
         val scroll = ScrollView(this).apply {
             isFillViewport = false
-            addView(content)
+            clipToPadding = false
+            overScrollMode = View.OVER_SCROLL_NEVER
         }
-        AlertDialog.Builder(this)
-            .setTitle("Ferramentas do assistente")
-            .setView(scroll)
-            .setPositiveButton("Fechar", null)
-            .show()
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(16), dp(16), dp(24))
+        }
+        scroll.addView(content)
+        appRoot.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        renderAssistant(content)
+
+        setContentView(appRoot)
+        updateKitchenAutoRefresh()
+        updateInventoryAutoRefresh()
     }
 
     private fun renderPage(container: LinearLayout) {
