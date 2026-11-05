@@ -296,8 +296,7 @@ then
   exit 1
 fi
 
-assistant_messages_after_replay="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \\
-  -c "SELECT count(*)::text FROM public.restaurant_assistant_messages WHERE conversation_id = '$ASSISTANT_CONVERSATION_ID'::uuid;")"
+assistant_messages_after_replay="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1  -c "SELECT count(*)::text FROM public.restaurant_assistant_messages WHERE conversation_id = '$ASSISTANT_CONVERSATION_ID'::uuid;")"
 if [ "$assistant_messages_after_replay" != "0" ]; then
   echo "ERROR: stale client activity restored assistant message content after deletion." >&2
   exit 1
