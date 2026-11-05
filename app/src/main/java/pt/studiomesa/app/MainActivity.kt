@@ -1508,9 +1508,15 @@ class MainActivity : Activity() {
                 "image/webp" -> "webp"
                 else -> throw IllegalArgumentException("Formato do documento não suportado.")
             }
+            require(invoice.id.matches(Regex("^[0-9a-fA-F-]{36}$"))) {
+                "O identificador do documento não é válido."
+            }
             val directory = java.io.File(cacheDir, "invoices").apply {
-                if (exists()) deleteRecursively()
-                if (!mkdirs() && !exists()) throw IllegalStateException("Não foi possível preparar a cache privada.")
+                if (!exists() && !mkdirs()) {
+                    throw IllegalStateException("Não foi possível preparar a cache privada.")
+                }
+                val expiry = System.currentTimeMillis() - 24L * 60L * 60L * 1000L
+                listFiles()?.filter { it.isFile && it.lastModified() < expiry }?.forEach { it.delete() }
             }
             val file = java.io.File(directory, "${invoice.id}.$extension")
             file.writeBytes(bytes)
