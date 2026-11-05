@@ -35,6 +35,7 @@ import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.content.FileProvider
 import org.json.JSONArray
 import org.json.JSONObject
 import java.math.BigDecimal
@@ -1433,17 +1434,109 @@ class MainActivity : Activity() {
             if (invoice.warnings.isNotEmpty()) append("\n\nAvisos:\n• ").append(invoice.warnings.joinToString("\n• "))
             append("\n\nNão é um lançamento contabilístico nem prova de pagamento.")
         }
+        val hasAttachment = !invoice.documentUri.isNullOrBlank() || !invoice.documentPath.isNullOrBlank()
         val builder = AlertDialog.Builder(this)
             .setTitle("Fatura · ${invoice.invoiceNumber}")
             .setMessage(message)
             .setNegativeButton("Fechar", null)
         if (invoice.reviewStatus == "pending_review") {
-            builder.setPositiveButton("Confirmar fatura") { _, _ -> updateSupplierInvoiceReview(invoice, "approved") }
-                .setNeutralButton("Rejeitar") { _, _ -> updateSupplierInvoiceReview(invoice, "rejected") }
+            builder.setPositiveButton("Confirmar fatura") { _, _ ->
+                updateSupplierInvoiceReview(invoice, "approved")
+            }
         } else {
-            builder.setPositiveButton("Eliminar do arquivo") { _, _ -> deleteSupplierInvoice(invoice) }
+            builder.setPositiveButton("Eliminar do arquivo") { _, _ ->
+                deleteSupplierInvoice(invoice)
+            }
         }
-        builder.show()
+        if (hasAttachment) builder.setNeutralButton("Abrir documento original", null)
+        val dialog = builder.create()
+        dialog.setOnShowListener {
+            if (hasAttachment) {
+                dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                    dialog.dismiss()
+                    openSupplierInvoiceAttachment(invoice)
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun openSupplierInvoiceAttachment(invoice: SupplierInvoiceRecord) {
+        val localUri = invoice.documentUri
+        val remotePath = invoice.documentPath
+        if (localUri.isNullOrBlank() && remotePath.isNullOrBlank()) {
+            Toast.makeText(this, "O documento original não está disponível.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val remote = localUri.isNullOrBlank()
+        if (remote && (!hasRemoteRestaurant() || backendToken().isBlank() ||
+                backendPrefs.getString("restaurant_role", "") != "owner")) {
+            Toast.makeText(this, "Só o proprietário pode abrir o documento privado do restaurante.", Toast.LENGTH_LONG).show()
+            return
+        }
+        runBackend({
+            val bytes = if (!localUri.isNullOrBlank()) {
+                val input = contentResolver.openInputStream(android.net.Uri.parse(localUri))
+                    ?: throw java.io.FileNotFoundException("O documento local já não está disponível.")
+                input.use { stream ->
+                    val output = java.io.ByteArrayOutputStream()
+                    val buffer = ByteArray(64 * 1024)
+                    var total = 0
+                    while (true) {
+                        val count = stream.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        require(total <= InvoiceDocumentProcessor.MAX_DOCUMENT_BYTES) {
+                            "O documento excede 25 MB."
+                        }
+                        output.write(buffer, 0, count)
+                    }
+                    output.toByteArray()
+                }
+            } else {
+                SupabaseApi.downloadSupplierInvoiceDocument(backendToken(), requireNotNull(remotePath))
+            }
+            val actualHash = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(bytes).joinToString("") { "%02x".format(it) }
+            require(actualHash.equals(invoice.documentSha256, ignoreCase = true)) {
+                "A verificação de integridade do documento falhou. Não abri o ficheiro."
+            }
+            val extension = when (invoice.mimeType) {
+                "application/pdf" -> "pdf"
+                "image/jpeg" -> "jpg"
+                "image/png" -> "png"
+                "image/webp" -> "webp"
+                else -> throw IllegalArgumentException("Formato do documento não suportado.")
+            }
+            val directory = java.io.File(cacheDir, "invoices").apply {
+                if (exists()) deleteRecursively()
+                if (!mkdirs() && !exists()) throw IllegalStateException("Não foi possível preparar a cache privada.")
+            }
+            val file = java.io.File(directory, "${invoice.id}.$extension")
+            file.writeBytes(bytes)
+            require(file.length() == invoice.byteSize || invoice.byteSize <= 0L) {
+                "O tamanho do documento não corresponde ao registo guardado."
+            }
+            file.absolutePath
+        }, refreshSession = remote, onError = { error ->
+            Toast.makeText(this, friendlyBackendError(error.message), Toast.LENGTH_LONG).show()
+        }) { filePath ->
+            runCatching {
+                val file = java.io.File(filePath)
+                val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", file)
+                val view = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, invoice.mimeType)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                startActivity(Intent.createChooser(view, "Abrir fatura"))
+            }.onFailure {
+                Toast.makeText(
+                    this,
+                    "Não existe uma aplicação compatível para abrir este documento.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
     }
 
     private fun updateSupplierInvoiceReview(invoice: SupplierInvoiceRecord, status: String) {
