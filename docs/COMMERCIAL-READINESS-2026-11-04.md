@@ -6,6 +6,17 @@
 
 Esta auditoria distingue código presente, testes automatizados, estado do backend alojado e requisitos que dependem de configuração/validação externa. Um APK de demonstração ou uma CI verde não constitui certificação de segurança, conformidade ou aptidão para operar um restaurante.
 
+## Atualização de verificação — 05/11/2026
+
+- A revisão atual da `main` é `e86e09296ecfd42fee539e6081a2c508dbfd3267`. A execução [41790761282](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/41790761282) terminou com sucesso nos quatro jobs principais, mas foi executada sobre o commit anterior `bc7ad0025d61b9e1d218fdcf0c6553f6701ca741`. Não a apresentar como CI do commit `e86e092`.
+- A execução produziu o artefacto `StudioMesa-1.5.0-Demo-APKs`, com cinco APKs debug. São adequados para testes de demonstração, não para distribuição comercial; o artefacto do GitHub tem expiração indicada para 18/11/2026.
+- O commit `e86e092` acrescenta uma migração local de índices e documentação. Não foi confirmada uma nova build para esse SHA nesta verificação. O artefacto APK anterior não contém alterações Android posteriores, embora a aplicação Kotlin não tenha sido alterada nesse commit.
+- A branch de receitas `feat/recipes-and-order-stock-consumption-2026-10-30` tem uma execução CI completa aprovada no commit `e209f53`, mas está divergente da `main` e a nova migração ainda não foi aplicada ao Supabase alojado.
+- A branch `feature/loyalty-shop-qr-security` tem CI aprovada no commit `4aece3d`, mas está divergente da `main`; as migrações de QR/loja/permissões continuam sem deploy aprovado.
+- A branch `feature/customer-reservations` foi atualizada depois da execução bem-sucedida histórica: o head verificado `d9f0f15` tem a execução `41640097317` com conclusão **failure**. Não considerar a revisão atual validada.
+- A branch `feature/assistant-chat-history-invoices` tem a execução `42011814895` com conclusão **failure**. A integração generativa continua separada, depende de configuração de servidor e de uma chave externa, e não foi ativada nesta revisão.
+- Nenhuma destas verificações autoriza alterações ao Supabase alojado. O histórico remoto/local continua a exigir reconciliação, backup, ensaio de restauro e plano de reversão.
+
 ## 1. Estado técnico observado
 
 | Área | Estado observado |
