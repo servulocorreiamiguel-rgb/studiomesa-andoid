@@ -808,7 +808,37 @@ class MainActivity : Activity() {
             isFocusable = true
             setOnClickListener { showAssistantMemoryDialog() }
         }
-        toolbar.addView(memoryButton, LinearLayout.LayoutParams(dp(36), dp(44)))
+        toolbar.addView(memoryButton, LinearLayout.LayoutParams(dp(34), dp(44)))
+
+        val syncButton = TextView(this).apply {
+            text = "⟳"
+            textSize = 20f
+            gravity = Gravity.CENTER
+            setTextColor(forestDeep)
+            contentDescription = "Sincronizar histórico e memória"
+            background = rippleBackground(paper, 12)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { syncAssistantCloud(silent = false) }
+        }
+        toolbar.addView(syncButton, LinearLayout.LayoutParams(dp(34), dp(44)))
+
+        val documentsButton = TextView(this).apply {
+            text = "▤"
+            textSize = 19f
+            gravity = Gravity.CENTER
+            setTextColor(forestDeep)
+            contentDescription = "Abrir documentos e faturas"
+            background = rippleBackground(paper, 12)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                assistantDocumentsVisible = true
+                assistantToolsVisible = false
+                renderApp()
+            }
+        }
+        toolbar.addView(documentsButton, LinearLayout.LayoutParams(dp(34), dp(44)))
 
         val toolsButton = TextView(this).apply {
             text = "⚙"
@@ -1161,7 +1191,7 @@ class MainActivity : Activity() {
             }
             appendLine("Reservas disponíveis no contexto: ${if (snapshot.reservationsLoaded) "sim" else "não carregadas"}.")
             if (snapshot.reservationsLoaded) appendLine("Reservas pendentes: ${snapshot.pendingReservations}.")
-            appendLine("As faturas de fornecedores ainda não estão integradas nem armazenadas nesta aplicação.")
+            appendLine("Quando existirem faturas importadas, usa get_supplier_invoice_summary para consultar apenas os metadados guardados. Não assumes que uma fatura foi paga nem que está contabilisticamente validada.")
             if (memory.isNotBlank()) {
                 appendLine()
                 appendLine("MEMÓRIA DO UTILIZADOR PARA ESTE RESTAURANTE")
@@ -5968,7 +5998,10 @@ class MainActivity : Activity() {
             reservationsFeatureAvailable = hasCalculator,
             reservationsLoaded = reservationsAreLoaded,
             pendingReservations = pendingReservations,
-            salesLines = salesLines
+            salesLines = salesLines,
+            supplierInvoices = runCatching {
+                supplierInvoiceStore.list(assistantChatScope())
+            }.getOrDefault(emptyList())
         )
     }
 
