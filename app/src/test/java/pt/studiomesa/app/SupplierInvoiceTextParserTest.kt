@@ -53,7 +53,7 @@ class SupplierInvoiceTextParserTest {
 
     @Test
     fun doesNotMarkPartialExtractionAsReviewable() {
-        val draft = SupplierInvoiceTextParser.parse("FATURA FT/22\\nTotal a pagar: 12,00 €")
+        val draft = SupplierInvoiceTextParser.parse("FATURA FT/22\nTotal a pagar: 12,00 €")
         assertFalse(draft.isReviewable)
         assertTrue(draft.warnings.isNotEmpty())
     }
