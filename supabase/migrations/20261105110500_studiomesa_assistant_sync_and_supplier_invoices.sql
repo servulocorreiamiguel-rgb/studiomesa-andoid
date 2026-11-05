@@ -133,7 +133,44 @@ WITH CHECK (
           AND rs.user_id = (SELECT auth.uid())
           AND rs.role = 'owner'
     )
+    AND EXISTS (
+        SELECT 1 FROM public.restaurant_assistant_conversations conversation
+        WHERE conversation.id = restaurant_assistant_messages.conversation_id
+          AND conversation.restaurant_id = restaurant_assistant_messages.restaurant_id
+          AND conversation.deleted_at IS NULL
+    )
 );
+
+-- Serialize message insertion against conversation deletion. If an insert gets the
+-- row lock first, the deleting transaction waits and deletes that message; if the
+-- deletion gets the lock first, the insert resumes and sees the tombstone.
+CREATE OR REPLACE FUNCTION public.guard_assistant_message_parent()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $function$
+DECLARE
+    v_deleted_at timestamptz;
+BEGIN
+    SELECT conversation.deleted_at
+      INTO v_deleted_at
+      FROM public.restaurant_assistant_conversations AS conversation
+     WHERE conversation.id = NEW.conversation_id
+       AND conversation.restaurant_id = NEW.restaurant_id
+     FOR UPDATE;
+
+    IF NOT FOUND OR v_deleted_at IS NOT NULL THEN
+        RAISE EXCEPTION 'A conversa foi eliminada ou não está disponível.';
+    END IF;
+    RETURN NEW;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.guard_assistant_message_parent() FROM PUBLIC, anon, authenticated;
+
+CREATE TRIGGER restaurant_assistant_messages_require_active_conversation
+BEFORE INSERT OR UPDATE ON public.restaurant_assistant_messages
+FOR EACH ROW EXECUTE FUNCTION public.guard_assistant_message_parent();
 
 CREATE POLICY restaurant_assistant_memory_owner_all
 ON public.restaurant_assistant_memory
@@ -224,16 +261,16 @@ SET search_path = ''
 AS $function$
 DECLARE
     v_conversation_id uuid;
+    v_deleted_at timestamptz;
 BEGIN
     IF (SELECT auth.uid()) IS NULL THEN
         RAISE EXCEPTION 'É necessário iniciar sessão.';
     END IF;
 
-    -- Verify the caller is the owner before touching any message rows.
-    UPDATE public.restaurant_assistant_conversations AS conversation
-       SET title = 'Conversa eliminada',
-           deleted_at = COALESCE(conversation.deleted_at, now()),
-           updated_at = now()
+    -- Lock and authorize the conversation before touching its messages.
+    SELECT conversation.id, conversation.deleted_at
+      INTO v_conversation_id, v_deleted_at
+      FROM public.restaurant_assistant_conversations AS conversation
      WHERE conversation.id = p_conversation_id
        AND conversation.restaurant_id = p_restaurant_id
        AND EXISTS (
@@ -242,13 +279,22 @@ BEGIN
              AND rs.user_id = (SELECT auth.uid())
              AND rs.role = 'owner'
        )
-    RETURNING conversation.id INTO v_conversation_id;
+     FOR UPDATE;
 
     IF v_conversation_id IS NULL THEN
         RAISE EXCEPTION 'Conversa não encontrada ou sem autorização para a eliminar.';
     END IF;
 
-    -- Remove the conversation contents immediately; only the minimal deletion marker remains.
+    IF v_deleted_at IS NULL THEN
+        UPDATE public.restaurant_assistant_conversations
+           SET title = 'Conversa eliminada',
+               deleted_at = now(),
+               updated_at = now()
+         WHERE id = v_conversation_id
+           AND restaurant_id = p_restaurant_id;
+    END IF;
+
+    -- Idempotently remove any messages, including writes that completed before the row lock.
     DELETE FROM public.restaurant_assistant_messages
     WHERE conversation_id = v_conversation_id
       AND restaurant_id = p_restaurant_id;
