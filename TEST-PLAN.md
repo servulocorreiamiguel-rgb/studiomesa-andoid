@@ -207,7 +207,7 @@ A aplicação consulta apenas os pedidos ativos a cada 15 segundos quando a sec�
 | WST-08 | Histórico | Consultar o registo de desperdício | Só aparecem movimentos negativos com o prefixo de desperdício, por ordem mais recente; a consulta indica o limite de 100 registos |
 | WST-09 | Inválido | Observação com mais de 350 caracteres | Rejeitada antes do envio |
 
-O registo guarda quantidade e motivo no histórico de movimentos de stock existente. Não calcula o custo financeiro da perda enquanto não existir um custo de aquisição unitário fiável por artigo.
+O registo guarda quantidade e motivo no histórico de movimentos. Quando existe custo de aquisição conhecido, os novos movimentos preservam uma fotografia desse custo e permitem estimar o valor das perdas. Movimentos antigos sem custo continuam desconhecidos.
 
 ## Atualização automática do inventário
 
@@ -221,6 +221,25 @@ O registo guarda quantidade e motivo no histórico de movimentos de stock existe
 | STK-06 | Isolamento | Trocar de sessão/restaurante enquanto uma leitura está pendente | A resposta antiga não substitui o inventário da nova conta/restaurante |
 
 A atualização periódica é polling, não uma subscrição Supabase Realtime, e só funciona com a página Stock visível e a aplicação em primeiro plano.
+
+## Receitas e consumo automático de stock
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| RCP-01 | Configuração | Associar um artigo da carta a um ingrediente, quantidade por dose e desperdício | A linha fica guardada no restaurante correto; a receita permanece desligada |
+| RCP-02 | Permissões | Funcionário tenta ativar ou desativar consumo automático | O servidor rejeita; só o proprietário pode aprovar |
+| RCP-03 | Reaprovação | Editar ou remover uma linha depois de a receita estar ativa | A receita fica automaticamente desligada até nova aprovação do proprietário |
+| RCP-04 | Cálculo | Pedido de duas doses com 0,300 kg por dose e 5% de desperdício | Desconto de 0,632 kg, arredondado conservadoramente a três casas decimais |
+| RCP-05 | Transação | Preparar pedido com stock suficiente em todos os ingredientes | Estado e todos os movimentos são gravados na mesma transação |
+| RCP-06 | Falta de stock | Um ingrediente não tem quantidade suficiente | A alteração de estado falha; não fica nenhum movimento nem desconto parcial |
+| RCP-07 | Idempotência | Reabrir e voltar a preparar o mesmo pedido | Não desconta os ingredientes novamente |
+| RCP-08 | Cancelamento | Cancelar um pedido ainda não preparado | Não consome stock |
+| RCP-09 | Compatibilidade | Preparar um pedido antigo sem menu_item_id | Mantém o fluxo antigo e não tenta deduzir ingredientes |
+| RCP-10 | Isolamento | Conta de outro restaurante tenta consultar, editar ou ativar receita | RLS/RPC impedem a leitura e a operação |
+| RCP-11 | Unidades | Configurar ingredientes com unidades incompatíveis | A aplicação explica que não há conversão automática; a equipa tem de manter unidades compatíveis |
+
+O servidor é a autoridade final para quantidades e stock. Os ensaios de CI usam uma base PostgreSQL descartável; a validação em dois dispositivos físicos continua pendente.
+
 ## Custo unitário de compra e valorização do desperdício
 
 | ID | Categoria | Ação / dados | Resultado esperado / estado |
@@ -236,6 +255,88 @@ A atualização periódica é polling, não uma subscrição Supabase Realtime, 
 | UCV-09 | Isolamento | Tentar consultar ou alterar custo de artigo de outro restaurante | Operação recusada pelas verificações de autorização e RLS |
 | UCV-10 | Arredondamento | Multiplicar 0,500 por 0,0500 € | A estimativa da perda é 0,03 € com arredondamento HALF_UP |
 
-A migration `20261030120000_inventory_unit_cost_and_waste_snapshots.sql` tem de estar aplicada no Supabase antes de testar a nova versão Android. Estes casos exigem CI aprovada e testes ponta a ponta com contas descartáveis; a CI, por si só, não valida a configuração do projeto Supabase de produção.\n## Assistente económico ligado ao inventário\n\n| ID | Categoria | Ação / dados | Resultado esperado / estado |\n|---|---|---|---|\n| ASI-01 | Fonte de dados | Abrir o Assistente com o inventário Premium carregado | A IA recebe unidade, quantidade, limite mínimo e custo unitário atual de cada artigo |\n| ASI-02 | Stock específico | Arroz: 2 kg disponíveis, mínimo 5 kg e custo 3,5000 €/kg | Responde 2 kg, custo unitário, valor estimado de 7,00 € e custo indicativo de 10,50 € para voltar ao mínimo |\n| ASI-03 | Valor global | Somar artigos com custo conhecido e excluir artigo sem custo | Apresenta apenas a soma conhecida e indica quantos artigos ficaram excluídos |\n| ASI-04 | Dados em falta | Todos os artigos sem custo unitário | Não inventa o valor do stock; indica que é necessário preencher custos |\n| ASI-05 | Cache não confirmada | Perguntar pelo valor do stock antes de carregar/atualizar inventário | Não mostra valores guardados numa cache não confirmada |\n| ASI-06 | Reposição | Artigo abaixo do limite mínimo, com custo unitário conhecido | Calcula apenas a quantidade e o custo para atingir o limite mínimo configurado; não cria encomenda |\n| ASI-07 | Limite de recomendação | Artigo acima do limite mínimo | Não sugere reposição nem gasto desnecessário |\n| ASI-08 | Sem custo | Artigo abaixo do limite mas sem custo de compra | Mostra o alerta de stock baixo sem inventar custo de reposição |
+A migration `20261030120000_inventory_unit_cost_and_waste_snapshots.sql` tem de estar aplicada no Supabase antes de testar a nova versão Android. Estes casos exigem CI aprovada e testes ponta a ponta com contas descartáveis; a CI, por si só, não valida a configuração do projeto Supabase de produção.
+## Assistente económico ligado ao inventário
+
+| ID | Categoria | Ação / dados | Resultado esperado / estado |
+|---|---|---|---|
+| ASI-01 | Fonte de dados | Abrir o Assistente com o inventário Premium carregado | A IA recebe unidade, quantidade, limite mínimo e custo unitário atual de cada artigo |
+| ASI-02 | Stock específico | Arroz: 2 kg disponíveis, mínimo 5 kg e custo 3,5000 €/kg | Responde 2 kg, custo unitário, valor estimado de 7,00 € e custo indicativo de 10,50 € para voltar ao mínimo |
+| ASI-03 | Valor global | Somar artigos com custo conhecido e excluir artigo sem custo | Apresenta apenas a soma conhecida e indica quantos artigos ficaram excluídos |
+| ASI-04 | Dados em falta | Todos os artigos sem custo unitário | Não inventa o valor do stock; indica que é necessário preencher custos |
+| ASI-05 | Cache não confirmada | Perguntar pelo valor do stock antes de carregar/atualizar inventário | Não mostra valores guardados numa cache não confirmada |
+| ASI-06 | Reposição | Artigo abaixo do limite mínimo, com custo unitário conhecido | Calcula apenas a quantidade e o custo para atingir o limite mínimo configurado; não cria encomenda |
+| ASI-07 | Limite de recomendação | Artigo acima do limite mínimo | Não sugere reposição nem gasto desnecessário |
+| ASI-08 | Sem custo | Artigo abaixo do limite mas sem custo de compra | Mostra o alerta de stock baixo sem inventar custo de reposição |
 | ASI-09 | Frescura | Inventário atualizado há menos de cinco minutos e leitura bem-sucedida | A IA pode utilizar quantidades e custos confirmados |
-| ASI-10 | Cache antiga/falha | Última leitura há mais de cinco minutos, sem leitura nesta sessão ou falha da atualização | A IA não apresenta valores de stock e pede atualização na secção Stock |\n\nOs valores de stock são estimativas ao custo de compra atual e não incluem portes, embalagens, descontos, IVA recuperável, perdas futuras ou condições de fornecedor. Não são uma avaliação FIFO/custo médio nem uma ordem de compra.\n
+| ASI-10 | Cache antiga/falha | Última leitura há mais de cinco minutos, sem leitura nesta sessão ou falha da atualização | A IA não apresenta valores de stock e pede atualização na secção Stock |
+
+Os valores de stock são estimativas ao custo de compra atual e não incluem portes, embalagens, descontos, IVA recuperável, perdas futuras ou condições de fornecedor. Não são uma avaliação FIFO/custo médio nem uma ordem de compra.
+
+
+## Ensaios adicionais — loja de pontos, QR e segurança (obrigatórios antes da venda)
+
+| ID | Cenário | Resultado esperado |
+|---|---|---|
+| LOY-QR-01 | Cliente autenticado pede QR | É emitido um código aleatório válido por dois minutos, associado apenas ao seu cartão |
+| LOY-QR-02 | Cliente gera um segundo QR | O QR anterior ainda não utilizado deixa de ser aceite |
+| LOY-QR-03 | Funcionário autorizado lê QR válido | O servidor credita os pontos e consome o QR na mesma transação |
+| LOY-QR-04 | Segundo funcionário tenta usar o mesmo QR com outro pedido | O servidor rejeita; o saldo não volta a aumentar |
+| LOY-QR-05 | Repetição da mesma chamada após perda da resposta | O servidor devolve o resultado original sem creditar pontos novamente |
+| LOY-QR-06 | QR expirado, inventado ou de outro restaurante | O servidor rejeita sem alterar qualquer saldo |
+| LOY-QR-07 | Utilizador sem sessão ou cliente tenta creditar pontos | O servidor rejeita a operação |
+| LOY-SHOP-01 | Proprietário cria uma recompensa com custo e stock | A recompensa surge na loja dos clientes desse restaurante |
+| LOY-SHOP-02 | Funcionário tenta alterar a loja de pontos | Operação recusada pelo servidor |
+| LOY-SHOP-03 | Cliente tenta consultar catálogo de outro restaurante | Operação recusada pelo servidor |
+| LOY-SHOP-04 | Cliente sem pontos suficientes tenta resgatar | Resgate recusado; saldo e stock mantêm-se |
+| LOY-SHOP-05 | Cliente repete o mesmo resgate | É devolvido o resgate original; os pontos só são descontados uma vez |
+| LOY-SHOP-06 | Duas contas tentam resgatar a última unidade em simultâneo | Apenas uma consegue; stock nunca fica negativo nem abaixo de zero |
+| LOY-SHOP-07 | Funcionário confirma um resgate pendente | Estado passa a entregue e fica registado o funcionário |
+| LOY-SHOP-08 | Funcionário repete a confirmação ou pertence a outro restaurante | Repetição não altera o resultado; outro restaurante é recusado |
+| SEC-01 | Funcionário tenta gerir equipa, preços protegidos ou definições do proprietário | A autorização é recusada no servidor |
+| SEC-02 | Duas contas de restaurantes diferentes tentam aceder aos mesmos IDs | Só conseguem consultar e alterar os próprios dados |
+| SEC-03 | Internet falha em reserva, atribuição de pontos e resgate | Sem registos duplicados nem estados parciais após reconexão |
+| SEC-04 | Cliente inicia sessão noutro telemóvel | O cartão, saldo, movimentos e resgates são recuperados do servidor |
+| SEC-05 | Restauro a partir de cópia de segurança | Restauro concluído e conferido num projeto de teste separado |
+
+Todos os testes devem ser executados com contas e dados descartáveis. Registar o resultado, versão da app, migração aplicada e ambiente utilizado. Não testar eliminações ou restauros com dados reais de clientes.
+
+
+| LOY-HISTORY-01 | Cliente autenticado consulta os seus resgates | Só aparecem os prémios associados ao cartão da própria conta |
+| LOY-HISTORY-02 | Outra conta consulta o seu histórico | Não recebe os resgates do primeiro cliente; não existe parâmetro para escolher o cartão de terceiros |
+| LOY-HISTORY-03 | Resgate passa de pendente a entregue | O histórico do cliente mostra o estado atualizado depois de sincronizar |
+
+
+## Permissões granulares da equipa
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| STAFF-PERM-01 | Compatibilidade | Funcionário antigo sem matriz personalizada inicia sessão | Mantém as seis áreas operacionais até o proprietário guardar uma matriz |
+| STAFF-PERM-02 | Proprietário | Proprietário consulta e guarda as permissões de um funcionário do mesmo restaurante | O servidor devolve a matriz efetiva e confirma a alteração |
+| STAFF-PERM-03 | Autoelevação | Funcionário tenta alterar as próprias permissões | RPC recusada; matriz inalterada |
+| STAFF-PERM-04 | Isolamento | Proprietário de outro restaurante tenta alterar um funcionário | RPC recusada; nenhum dado alterado |
+| STAFF-PERM-05 | Valor inválido | Proprietário envia uma permissão desconhecida ou duplicada | RPC recusa a matriz |
+| STAFF-PERM-06 | Matriz vazia | Proprietário desativa todas as áreas | Funcionário deixa de consultar ou alterar módulos operacionais |
+| STAFF-PERM-07 | Pedidos | Ativar e depois desativar Pedidos; tentar atualizar diretamente por REST | Ativo: operação permitida; desativado: RLS recusa a escrita |
+| STAFF-PERM-08 | Mesas e carta | Desativar Mesas/Carta e tentar alterar diretamente as tabelas | Escritas recusadas pelo servidor; secções ocultas na navegação |
+| STAFF-PERM-09 | Reservas e stock | Ativar/desativar as áreas e chamar diretamente as RPCs | Só as operações com permissão ativa são aceites |
+| STAFF-PERM-10 | Fidelização | Desativar Fidelização e tentar atribuir pontos por QR ou confirmar entrega | RPC recusada; saldo, QR e resgate permanecem inalterados |
+| STAFF-PERM-11 | Dados de outro restaurante | Funcionário tenta consultar ou alterar dados por ID alheio | Sem acesso, mesmo com a área ativa no próprio restaurante |
+| STAFF-PERM-12 | Ações do proprietário | Funcionário tenta gerir equipa/códigos, catálogo de recompensas ou consultor económico | Operação recusada independentemente da matriz |
+| STAFF-PERM-13 | Revogação | Proprietário retira uma permissão enquanto o funcionário tem a app aberta | Nova operação é recusada no servidor; após sincronização a secção desaparece |
+| STAFF-PERM-14 | Troca de conta | Terminar sessão e iniciar outra conta no mesmo dispositivo | A matriz anterior não é reutilizada; permissões são carregadas do servidor |
+
+## Pedidos de reserva pelo cliente e atribuição de mesa
+
+| ID | Cenário | Resultado esperado |
+|---|---|---|
+| CRES-01 | Cliente autenticado e associado envia um pedido de reserva válido | Pedido guardado com estado pendente e sem mesa atribuída |
+| CRES-02 | Cliente repete o mesmo pedido após resposta perdida | É devolvido o pedido original; não é criado um segundo registo |
+| CRES-03 | Cliente consulta a lista de reservas | Só aparecem reservas criadas pela própria conta e associadas ao seu restaurante |
+| CRES-04 | Cliente tenta cancelar a reserva de outra conta | Operação recusada sem alterar o estado |
+| CRES-05 | Cliente cancela o seu pedido duas vezes | O estado permanece Cancelada sem erro na repetição |
+| CRES-06 | Equipa tenta confirmar pedido sem mesa atribuída | Operação recusada pelo servidor |
+| CRES-07 | Equipa atribui mesa com lugares suficientes e sem sobreposição | Mesa associada; reserva continua pendente até confirmação |
+| CRES-08 | Equipa tenta atribuir mesa com capacidade insuficiente ou horário ocupado | Operação recusada, sem mudar a reserva |
+| CRES-09 | Equipa de outro restaurante tenta atribuir mesa | Operação recusada |
+| CRES-10 | O restaurante atribui a mesa e o cliente repete o pedido original | O servidor devolve o mesmo pedido já tratado, sem duplicar nem desfazer a atribuição |
