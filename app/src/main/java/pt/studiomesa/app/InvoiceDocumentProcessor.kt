@@ -72,7 +72,7 @@ internal class InvoiceDocumentProcessor(private val context: Context) {
         descriptor.use { pfd ->
             PdfRenderer(pfd).use { renderer ->
                 require(renderer.pageCount in 1..MAX_PDF_PAGES) {
-                    "O PDF tem \${renderer.pageCount} páginas. Nesta versão são aceites até $MAX_PDF_PAGES páginas."
+                    "O PDF tem ${renderer.pageCount} páginas. Nesta versão são aceites até $MAX_PDF_PAGES páginas."
                 }
                 val output = StringBuilder()
                 for (index in 0 until renderer.pageCount) {
@@ -84,7 +84,7 @@ internal class InvoiceDocumentProcessor(private val context: Context) {
                         try {
                             page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
                             val recognized = Tasks.await(recognizer.process(InputImage.fromBitmap(bitmap, 0)))
-                            if (output.isNotEmpty()) output.append("\\n\\n--- Página ").append(index + 1).append(" ---\\n")
+                            if (output.isNotEmpty()) output.append("\n\n--- Página ").append(index + 1).append(" ---\n")
                             output.append(recognized.text)
                         } finally {
                             bitmap.recycle()
