@@ -13,11 +13,17 @@ class LocalAssistantModelArtifactTest {
         )
         assertEquals(736_015_744L, LocalAssistantModelManager.MODEL_SIZE_BYTES)
         assertEquals(
-            "a28b5c59ac204e2e51c1f98d2d6db6982f0e12da59a268fe498edcb33237e906",
+            "e904729a8a8a0160658cb7cd22992e270a0547c05cc45b08c47ece5c0e29425b",
             LocalAssistantModelManager.MODEL_SHA256
         )
         assertEquals(64, LocalAssistantModelManager.MODEL_SHA256.length)
         assertTrue(LocalAssistantModelManager.MODEL_DOWNLOAD_URL.startsWith("https://huggingface.co/"))
+        assertTrue(
+            "Model URL must be pinned to an immutable Hugging Face revision.",
+            LocalAssistantModelManager.MODEL_DOWNLOAD_URL.contains(
+                "/resolve/d23bed4d8871e970d9d4d7de087377a90ecb1b4e/"
+            )
+        )
     }
 
     @Test
