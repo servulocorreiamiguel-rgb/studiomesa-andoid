@@ -299,13 +299,8 @@ object SupabaseApi {
         status: String
     ) {
         require(status in setOf("approved", "rejected"))
-        val restaurant = URLEncoder.encode(restaurantId, "UTF-8")
-        val id = URLEncoder.encode(invoiceId, "UTF-8")
-        val body = JSONObject()
-            .put("review_status", status)
-            .put("reviewed_by", "auth.uid()")
-        // The server fills reviewed_at via a dedicated review RPC; the client cannot
-        // assert an approval identity through a literal value.
+        require(restaurantId.isNotBlank() && invoiceId.isNotBlank())
+        // The database derives reviewed_by from auth.uid() and checks owner RLS.
         call("POST", "/rest/v1/rpc/review_supplier_invoice", JSONObject()
             .put("p_invoice_id", invoiceId)
             .put("p_review_status", status), token)
