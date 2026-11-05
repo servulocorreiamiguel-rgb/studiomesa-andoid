@@ -33,7 +33,16 @@ class AssistantChatStore(context: Context) {
     data class Turn(
         val role: String,
         val content: String,
-        val createdAtMillis: Long
+        val createdAtMillis: Long,
+        val id: String = ""
+    )
+
+    data class SyncConversation(
+        val id: String,
+        val title: String,
+        val createdAtMillis: Long,
+        val updatedAtMillis: Long,
+        val turns: List<Turn>
     )
 
     private val preferences = context.applicationContext
@@ -81,7 +90,12 @@ class AssistantChatStore(context: Context) {
             if (role !in ALLOWED_ROLES || content.isBlank()) null else Turn(
                 role = role,
                 content = content,
-                createdAtMillis = message.optLong("created_at")
+                createdAtMillis = message.optLong("created_at"),
+                id = message.optString("id").ifBlank {
+                    UUID.nameUUIDFromBytes(
+                        "$conversationId|$role|$content|${message.optLong("created_at")}".toByteArray(Charsets.UTF_8)
+                    ).toString()
+                }
             )
         }
     }
@@ -124,6 +138,7 @@ class AssistantChatStore(context: Context) {
         }
         messages.put(
             JSONObject()
+                .put("id", UUID.randomUUID().toString())
                 .put("role", role)
                 .put("content", cleanContent)
                 .put("created_at", now)
@@ -148,7 +163,92 @@ class AssistantChatStore(context: Context) {
     fun saveMemory(scope: String, memory: String) {
         val root = load(scope)
         root.put("memory", memory.trim().take(MAX_MEMORY_CHARS))
+        root.put("memory_updated_at", System.currentTimeMillis())
         save(scope, root)
+    }
+
+    @Synchronized
+    fun readMemoryUpdatedAtMillis(scope: String): Long =
+        load(scope).optLong("memory_updated_at", 0L)
+
+    @Synchronized
+    fun mergeRemoteMemory(scope: String, memory: String, updatedAtMillis: Long): Boolean {
+        val root = load(scope)
+        val localTimestamp = root.optLong("memory_updated_at", 0L)
+        if (updatedAtMillis <= localTimestamp) return false
+        root.put("memory", memory.trim().take(MAX_MEMORY_CHARS))
+        root.put("memory_updated_at", updatedAtMillis)
+        save(scope, root)
+        return true
+    }
+
+    @Synchronized
+    fun listConversationsForSync(scope: String): List<SyncConversation> =
+        listConversations(scope).map { conversation ->
+            SyncConversation(
+                id = conversation.id,
+                title = conversation.title,
+                createdAtMillis = conversation.createdAtMillis,
+                updatedAtMillis = conversation.updatedAtMillis,
+                turns = readTurns(scope, conversation.id)
+            )
+        }
+
+    @Synchronized
+    fun mergeRemoteConversation(
+        scope: String,
+        conversationId: String,
+        title: String,
+        turns: List<Turn>
+    ): Int {
+        require(conversationId.isNotBlank()) { "A conversa remota não tem identificador." }
+        val root = load(scope)
+        val conversations = root.optJSONArray("conversations") ?: JSONArray()
+        val now = System.currentTimeMillis()
+        var item = findConversation(conversations, conversationId)
+        if (item == null) {
+            item = JSONObject()
+                .put("id", conversationId)
+                .put("title", title.trim().take(TITLE_CHARS).ifBlank { "Conversa sincronizada" })
+                .put("created_at", now)
+                .put("updated_at", now)
+                .put("messages", JSONArray())
+            conversations.put(item)
+        }
+        val messages = item.optJSONArray("messages") ?: JSONArray().also { item.put("messages", it) }
+        val knownIds = (0 until messages.length()).mapNotNull { index ->
+            messages.optJSONObject(index)?.optString("id")?.takeIf { it.isNotBlank() }
+        }.toMutableSet()
+        var added = 0
+        turns.forEach { turn ->
+            require(turn.role in ALLOWED_ROLES)
+            val stableId = turn.id.ifBlank {
+                UUID.nameUUIDFromBytes(
+                    "$conversationId|${turn.role}|${turn.content}|${turn.createdAtMillis}".toByteArray(Charsets.UTF_8)
+                ).toString()
+            }
+            if (stableId !in knownIds && turn.content.isNotBlank()) {
+                messages.put(
+                    JSONObject()
+                        .put("id", stableId)
+                        .put("role", turn.role)
+                        .put("content", turn.content.trim().take(MAX_MESSAGE_CHARS))
+                        .put("created_at", turn.createdAtMillis.coerceAtLeast(1L))
+                )
+                knownIds += stableId
+                added++
+            }
+        }
+        while (messages.length() > MAX_TURNS) messages.remove(0)
+        item.put("updated_at", maxOf(item.optLong("updated_at", 0L), now))
+        root.put("conversations", conversations)
+        while (conversations.length() > MAX_CONVERSATIONS) {
+            val oldestIndex = oldestConversationIndex(conversations, conversationId)
+            if (oldestIndex < 0) break
+            conversations.remove(oldestIndex)
+        }
+        save(scope, root)
+        return added
     }
 
     @Synchronized
