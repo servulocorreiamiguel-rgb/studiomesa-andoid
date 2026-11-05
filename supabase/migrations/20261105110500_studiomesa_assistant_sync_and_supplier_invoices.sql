@@ -93,9 +93,34 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.restaurant_assistant_messag
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.restaurant_assistant_memory TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.restaurant_supplier_invoices TO authenticated;
 
-CREATE POLICY restaurant_assistant_conversations_owner_all
+CREATE POLICY restaurant_assistant_conversations_owner_select
 ON public.restaurant_assistant_conversations
-FOR ALL TO authenticated
+FOR SELECT TO authenticated
+USING (
+    EXISTS (
+        SELECT 1 FROM public.restaurant_staff rs
+        WHERE rs.restaurant_id = restaurant_assistant_conversations.restaurant_id
+          AND rs.user_id = (SELECT auth.uid())
+          AND rs.role = 'owner'
+    )
+);
+
+CREATE POLICY restaurant_assistant_conversations_owner_insert
+ON public.restaurant_assistant_conversations
+FOR INSERT TO authenticated
+WITH CHECK (
+    created_by = (SELECT auth.uid())
+    AND EXISTS (
+        SELECT 1 FROM public.restaurant_staff rs
+        WHERE rs.restaurant_id = restaurant_assistant_conversations.restaurant_id
+          AND rs.user_id = (SELECT auth.uid())
+          AND rs.role = 'owner'
+    )
+);
+
+CREATE POLICY restaurant_assistant_conversations_owner_update
+ON public.restaurant_assistant_conversations
+FOR UPDATE TO authenticated
 USING (
     EXISTS (
         SELECT 1 FROM public.restaurant_staff rs
@@ -105,8 +130,19 @@ USING (
     )
 )
 WITH CHECK (
-    created_by = (SELECT auth.uid())
-    AND EXISTS (
+    EXISTS (
+        SELECT 1 FROM public.restaurant_staff rs
+        WHERE rs.restaurant_id = restaurant_assistant_conversations.restaurant_id
+          AND rs.user_id = (SELECT auth.uid())
+          AND rs.role = 'owner'
+    )
+);
+
+CREATE POLICY restaurant_assistant_conversations_owner_delete
+ON public.restaurant_assistant_conversations
+FOR DELETE TO authenticated
+USING (
+    EXISTS (
         SELECT 1 FROM public.restaurant_staff rs
         WHERE rs.restaurant_id = restaurant_assistant_conversations.restaurant_id
           AND rs.user_id = (SELECT auth.uid())
@@ -123,6 +159,12 @@ AS $function$
 BEGIN
     IF OLD.deleted_at IS NOT NULL THEN
         RAISE EXCEPTION 'Uma conversa eliminada não pode ser restaurada ou alterada.';
+    END IF;
+    IF NEW.id IS DISTINCT FROM OLD.id
+       OR NEW.restaurant_id IS DISTINCT FROM OLD.restaurant_id
+       OR NEW.created_by IS DISTINCT FROM OLD.created_by
+       OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+        RAISE EXCEPTION 'A identidade e autoria da conversa são imutáveis.';
     END IF;
     RETURN NEW;
 END;
@@ -276,7 +318,7 @@ CREATE OR REPLACE FUNCTION public.delete_assistant_conversation(
 )
 RETURNS uuid
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = ''
 AS $function$
 DECLARE
