@@ -99,6 +99,28 @@ class MainActivitySmokeTest {
     }
 
     @Test
+    fun assistantHistoryMemoryAndDeepThinkingControlsAreAvailable() {
+        assumeFalse("Customer variant does not include the restaurant assistant.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withText("ABRIR ASSISTENTE"))
+                .perform(scrollTo(), click())
+
+            onView(withContentDescription("Histórico de conversas")).perform(click())
+            onView(withText("Histórico de conversas")).check(matches(isDisplayed()))
+            onView(withText("Fechar")).perform(click())
+
+            onView(withContentDescription("Memória do assistente")).perform(click())
+            onView(withText("Memória do assistente")).check(matches(isDisplayed()))
+            onView(withText("Cancelar")).perform(click())
+
+            onView(withText(containsString("Pensar mais"))).perform(click())
+            onView(withText("Pensar mais")).check(matches(isDisplayed()))
+            onView(withText("Agora não")).perform(click())
+        }
+    }
+
+    @Test
     fun assistantComposerRemainsVisibleWhenKeyboardOpens() {
         assumeFalse("The customer variant does not include the restaurant assistant.", isCustomerVariant())
 
