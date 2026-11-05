@@ -207,7 +207,7 @@ A aplicação consulta apenas os pedidos ativos a cada 15 segundos quando a sec�
 | WST-08 | Histórico | Consultar o registo de desperdício | Só aparecem movimentos negativos com o prefixo de desperdício, por ordem mais recente; a consulta indica o limite de 100 registos |
 | WST-09 | Inválido | Observação com mais de 350 caracteres | Rejeitada antes do envio |
 
-O registo guarda quantidade e motivo no histórico de movimentos de stock existente. Não calcula o custo financeiro da perda enquanto não existir um custo de aquisição unitário fiável por artigo.
+O registo guarda quantidade e motivo no histórico de movimentos. Quando existe custo de aquisição conhecido, os novos movimentos preservam uma fotografia desse custo e permitem estimar o valor das perdas. Movimentos antigos sem custo continuam desconhecidos.
 
 ## Atualização automática do inventário
 
@@ -221,6 +221,25 @@ O registo guarda quantidade e motivo no histórico de movimentos de stock existe
 | STK-06 | Isolamento | Trocar de sessão/restaurante enquanto uma leitura está pendente | A resposta antiga não substitui o inventário da nova conta/restaurante |
 
 A atualização periódica é polling, não uma subscrição Supabase Realtime, e só funciona com a página Stock visível e a aplicação em primeiro plano.
+
+## Receitas e consumo automático de stock
+
+| ID | Categoria | Ação / dados | Resultado esperado |
+|---|---|---|---|
+| RCP-01 | Configuração | Associar um artigo da carta a um ingrediente, quantidade por dose e desperdício | A linha fica guardada no restaurante correto; a receita permanece desligada |
+| RCP-02 | Permissões | Funcionário tenta ativar ou desativar consumo automático | O servidor rejeita; só o proprietário pode aprovar |
+| RCP-03 | Reaprovação | Editar ou remover uma linha depois de a receita estar ativa | A receita fica automaticamente desligada até nova aprovação do proprietário |
+| RCP-04 | Cálculo | Pedido de duas doses com 0,300 kg por dose e 5% de desperdício | Desconto de 0,632 kg, arredondado conservadoramente a três casas decimais |
+| RCP-05 | Transação | Preparar pedido com stock suficiente em todos os ingredientes | Estado e todos os movimentos são gravados na mesma transação |
+| RCP-06 | Falta de stock | Um ingrediente não tem quantidade suficiente | A alteração de estado falha; não fica nenhum movimento nem desconto parcial |
+| RCP-07 | Idempotência | Reabrir e voltar a preparar o mesmo pedido | Não desconta os ingredientes novamente |
+| RCP-08 | Cancelamento | Cancelar um pedido ainda não preparado | Não consome stock |
+| RCP-09 | Compatibilidade | Preparar um pedido antigo sem menu_item_id | Mantém o fluxo antigo e não tenta deduzir ingredientes |
+| RCP-10 | Isolamento | Conta de outro restaurante tenta consultar, editar ou ativar receita | RLS/RPC impedem a leitura e a operação |
+| RCP-11 | Unidades | Configurar ingredientes com unidades incompatíveis | A aplicação explica que não há conversão automática; a equipa tem de manter unidades compatíveis |
+
+O servidor é a autoridade final para quantidades e stock. Os ensaios de CI usam uma base PostgreSQL descartável; a validação em dois dispositivos físicos continua pendente.
+
 ## Custo unitário de compra e valorização do desperdício
 
 | ID | Categoria | Ação / dados | Resultado esperado / estado |
@@ -236,6 +255,20 @@ A atualização periódica é polling, não uma subscrição Supabase Realtime, 
 | UCV-09 | Isolamento | Tentar consultar ou alterar custo de artigo de outro restaurante | Operação recusada pelas verificações de autorização e RLS |
 | UCV-10 | Arredondamento | Multiplicar 0,500 por 0,0500 € | A estimativa da perda é 0,03 € com arredondamento HALF_UP |
 
-A migration `20261030120000_inventory_unit_cost_and_waste_snapshots.sql` tem de estar aplicada no Supabase antes de testar a nova versão Android. Estes casos exigem CI aprovada e testes ponta a ponta com contas descartáveis; a CI, por si só, não valida a configuração do projeto Supabase de produção.\n## Assistente económico ligado ao inventário\n\n| ID | Categoria | Ação / dados | Resultado esperado / estado |\n|---|---|---|---|\n| ASI-01 | Fonte de dados | Abrir o Assistente com o inventário Premium carregado | A IA recebe unidade, quantidade, limite mínimo e custo unitário atual de cada artigo |\n| ASI-02 | Stock específico | Arroz: 2 kg disponíveis, mínimo 5 kg e custo 3,5000 €/kg | Responde 2 kg, custo unitário, valor estimado de 7,00 € e custo indicativo de 10,50 € para voltar ao mínimo |\n| ASI-03 | Valor global | Somar artigos com custo conhecido e excluir artigo sem custo | Apresenta apenas a soma conhecida e indica quantos artigos ficaram excluídos |\n| ASI-04 | Dados em falta | Todos os artigos sem custo unitário | Não inventa o valor do stock; indica que é necessário preencher custos |\n| ASI-05 | Cache não confirmada | Perguntar pelo valor do stock antes de carregar/atualizar inventário | Não mostra valores guardados numa cache não confirmada |\n| ASI-06 | Reposição | Artigo abaixo do limite mínimo, com custo unitário conhecido | Calcula apenas a quantidade e o custo para atingir o limite mínimo configurado; não cria encomenda |\n| ASI-07 | Limite de recomendação | Artigo acima do limite mínimo | Não sugere reposição nem gasto desnecessário |\n| ASI-08 | Sem custo | Artigo abaixo do limite mas sem custo de compra | Mostra o alerta de stock baixo sem inventar custo de reposição |
+A migration `20261030120000_inventory_unit_cost_and_waste_snapshots.sql` tem de estar aplicada no Supabase antes de testar a nova versão Android. Estes casos exigem CI aprovada e testes ponta a ponta com contas descartáveis; a CI, por si só, não valida a configuração do projeto Supabase de produção.
+## Assistente económico ligado ao inventário
+
+| ID | Categoria | Ação / dados | Resultado esperado / estado |
+|---|---|---|---|
+| ASI-01 | Fonte de dados | Abrir o Assistente com o inventário Premium carregado | A IA recebe unidade, quantidade, limite mínimo e custo unitário atual de cada artigo |
+| ASI-02 | Stock específico | Arroz: 2 kg disponíveis, mínimo 5 kg e custo 3,5000 €/kg | Responde 2 kg, custo unitário, valor estimado de 7,00 € e custo indicativo de 10,50 € para voltar ao mínimo |
+| ASI-03 | Valor global | Somar artigos com custo conhecido e excluir artigo sem custo | Apresenta apenas a soma conhecida e indica quantos artigos ficaram excluídos |
+| ASI-04 | Dados em falta | Todos os artigos sem custo unitário | Não inventa o valor do stock; indica que é necessário preencher custos |
+| ASI-05 | Cache não confirmada | Perguntar pelo valor do stock antes de carregar/atualizar inventário | Não mostra valores guardados numa cache não confirmada |
+| ASI-06 | Reposição | Artigo abaixo do limite mínimo, com custo unitário conhecido | Calcula apenas a quantidade e o custo para atingir o limite mínimo configurado; não cria encomenda |
+| ASI-07 | Limite de recomendação | Artigo acima do limite mínimo | Não sugere reposição nem gasto desnecessário |
+| ASI-08 | Sem custo | Artigo abaixo do limite mas sem custo de compra | Mostra o alerta de stock baixo sem inventar custo de reposição |
 | ASI-09 | Frescura | Inventário atualizado há menos de cinco minutos e leitura bem-sucedida | A IA pode utilizar quantidades e custos confirmados |
-| ASI-10 | Cache antiga/falha | Última leitura há mais de cinco minutos, sem leitura nesta sessão ou falha da atualização | A IA não apresenta valores de stock e pede atualização na secção Stock |\n\nOs valores de stock são estimativas ao custo de compra atual e não incluem portes, embalagens, descontos, IVA recuperável, perdas futuras ou condições de fornecedor. Não são uma avaliação FIFO/custo médio nem uma ordem de compra.\n
+| ASI-10 | Cache antiga/falha | Última leitura há mais de cinco minutos, sem leitura nesta sessão ou falha da atualização | A IA não apresenta valores de stock e pede atualização na secção Stock |
+
+Os valores de stock são estimativas ao custo de compra atual e não incluem portes, embalagens, descontos, IVA recuperável, perdas futuras ou condições de fornecedor. Não são uma avaliação FIFO/custo médio nem uma ordem de compra.
