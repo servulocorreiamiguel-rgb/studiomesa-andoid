@@ -371,7 +371,7 @@ internal class StudioMesaSupplierInvoiceTool(
                     .put("supplier", invoice.supplierName)
                     .put("invoice_number", invoice.invoiceNumber)
                     .put("issue_date", invoice.issueDate)
-                    .put("due_date", invoice.dueDate.ifBlank { JSONObject.NULL })
+                    .put("due_date", if (invoice.dueDate.isBlank()) JSONObject.NULL else invoice.dueDate)
                     .put("net_amount_eur", invoice.netAmount ?: JSONObject.NULL)
                     .put("vat_amount_eur", invoice.vatAmount ?: JSONObject.NULL)
                     .put("total_amount_eur", invoice.totalAmount)
