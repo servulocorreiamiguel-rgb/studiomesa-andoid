@@ -182,6 +182,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         snapshot: StudioMesaAssistantSnapshot,
         history: List<Turn>,
         userMessage: String,
+        deepThinking: Boolean = false,
         onToken: (String) -> Unit,
         onComplete: (Result<String>) -> Unit
     ) {
@@ -202,12 +203,20 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     verifiedThisProcess = true
                 }
 
+                val effectiveSystemInstruction = buildString {
+                    append(systemInstruction.take(MAX_SYSTEM_INSTRUCTION_CHARS))
+                    if (deepThinking) {
+                        appendLine()
+                        appendLine("MODO PENSAR MAIS: revê a pergunta com especial cuidado; identifica os dados confirmados, as hipóteses e o que falta; verifica novamente cálculos e unidades; compara alternativas e riscos; procura contradições antes de responder. Apresenta apenas conclusões, fórmulas e justificações verificáveis, sem revelar raciocínio interno privado.")
+                    }
+                }.take(MAX_SYSTEM_INSTRUCTION_CHARS)
+
                 val sessionAvailable = engine != null && conversation != null
                 if (AssistantModelConversationPolicy.requiresNewSession(
                         activeConversationId = activeConversationId,
                         requestedConversationId = conversationId,
                         activeSystemInstruction = activeSystemInstruction,
-                        requestedSystemInstruction = systemInstruction.take(MAX_SYSTEM_INSTRUCTION_CHARS),
+                        requestedSystemInstruction = effectiveSystemInstruction,
                         activeUserTurns = activeUserTurns,
                         maxUserTurnsPerSession = MAX_SESSION_USER_TURNS,
                         sessionAvailable = sessionAvailable
@@ -244,16 +253,16 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     val createdConversation = try {
                         createdEngine.createConversation(
                             ConversationConfig(
-                                systemInstruction = Contents.of(systemInstruction.take(MAX_SYSTEM_INSTRUCTION_CHARS)),
+                                systemInstruction = Contents.of(effectiveSystemInstruction),
                                 initialMessages = initialMessages,
                                 tools = listOf(tool(dataTool), tool(priceTool)),
                                 automaticToolCalling = true,
                                 samplerConfig = SamplerConfig(
                                     topK = 40,
                                     topP = 0.9,
-                                    temperature = 0.3
+                                    temperature = if (deepThinking) 0.2 else 0.3
                                 ),
-                                maxOutputToken = MAX_OUTPUT_TOKENS,
+                                maxOutputToken = if (deepThinking) DEEP_MAX_OUTPUT_TOKENS else MAX_OUTPUT_TOKENS,
                                 prefillPrefaceOnInit = false
                             )
                         )
@@ -371,10 +380,11 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         const val MODEL_DIRECTORY = "studiomesa_ai_models"
         const val MAX_CONTEXT_TOKENS = 4096
         const val MAX_OUTPUT_TOKENS = 1024
+        const val DEEP_MAX_OUTPUT_TOKENS = 1400
         const val MAX_HISTORY_MESSAGES = 4
         const val MAX_SESSION_USER_TURNS = 2
         const val MAX_HISTORY_MESSAGE_CHARS = 300
-        const val MAX_SYSTEM_INSTRUCTION_CHARS = 2500
+        const val MAX_SYSTEM_INSTRUCTION_CHARS = 3200
         const val MAX_USER_MESSAGE_CHARS = 1600
         const val MINIMUM_FREE_SPACE_BYTES = 128L * 1024L * 1024L
         const val BUFFER_SIZE = 1024 * 1024
