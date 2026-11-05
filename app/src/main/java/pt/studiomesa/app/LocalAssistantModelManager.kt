@@ -378,9 +378,9 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
     internal companion object {
         const val MODEL_FILENAME = "LFM2.5-1.2B-Instruct_int4.litertlm"
         const val MODEL_SIZE_BYTES = 736_015_744L
-        const val MODEL_SHA256 = "a28b5c59ac204e2e51c1f98d2d6db6982f0e12da59a268fe498edcb33237e906"
+        const val MODEL_SHA256 = "e904729a8a8a0160658cb7cd22992e270a0547c05cc45b08c47ece5c0e29425b"
         const val MODEL_DOWNLOAD_URL =
-            "https://huggingface.co/litert-community/LFM2.5-1.2B-Instruct/resolve/main/LFM2.5-1.2B-Instruct_int4.litertlm"
+            "https://huggingface.co/litert-community/LFM2.5-1.2B-Instruct/resolve/d23bed4d8871e970d9d4d7de087377a90ecb1b4e/LFM2.5-1.2B-Instruct_int4.litertlm"
         const val MODEL_DIRECTORY = "studiomesa_ai_models"
         const val MAX_CONTEXT_TOKENS = 4096
         const val MAX_HISTORY_MESSAGES = 4
