@@ -92,6 +92,51 @@ class StudioMesaLocalAssistantToolsInstrumentedTest {
         assertTrue(result.getBoolean("read_only"))
     }
     @Test
+    fun invoiceToolSummarisesOnlyImportedDocumentsAndNeverWrites() {
+        val invoice = SupplierInvoiceRecord(
+            id = "00000000-0000-0000-0000-000000000001",
+            supplierName = "Mercearia Central",
+            supplierVatNumber = "501234560",
+            invoiceNumber = "FT/2026/001",
+            issueDate = "2026-11-05",
+            dueDate = "",
+            netAmount = "100.00",
+            vatAmount = "23.00",
+            totalAmount = "123.00",
+            currency = "EUR",
+            mimeType = "application/pdf",
+            byteSize = 1024,
+            documentSha256 = "a".repeat(64),
+            documentUri = null,
+            documentPath = null,
+            sourceType = "pdf_ocr",
+            reviewStatus = "approved",
+            warnings = emptyList(),
+            createdAtMillis = 1_700_000_000_000L,
+            updatedAtMillis = 1_700_000_000_000L
+        )
+        val snapshot = StudioMesaAssistantSnapshot(
+            isDemo = false,
+            restaurantConfigured = true,
+            menuItems = emptyList(),
+            supplierInvoices = listOf(invoice)
+        )
+        val tool = StudioMesaSupplierInvoiceTool(snapshot)
+        val result = JSONObject(
+            tool.execute(JSONObject().put("status", "approved").toString())
+        )
+        assertEquals(1, result.getInt("count"))
+        assertEquals("123.00", result.getString("gross_total_eur"))
+        assertEquals(1, result.getInt("approved"))
+        assertTrue(result.getBoolean("read_only"))
+        assertTrue(result.getString("warning").contains("Não prova pagamento"))
+        val filtered = JSONObject(
+            tool.execute(JSONObject().put("supplier", "outro").toString())
+        )
+        assertEquals(0, filtered.getInt("count"))
+    }
+
+    @Test
     fun localToolsUseTheLatestSnapshotAfterEachChatTurn() {
         val firstSnapshot = StudioMesaAssistantSnapshot(
             isDemo = true,
