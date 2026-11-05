@@ -185,7 +185,7 @@ object SupabaseApi {
     fun listAssistantConversations(token: String, restaurantId: String): JSONArray {
         require(token.isNotBlank() && restaurantId.isNotBlank())
         val restaurant = URLEncoder.encode(restaurantId, "UTF-8")
-        return JSONArray(call("GET", "/rest/v1/restaurant_assistant_conversations?select=id,restaurant_id,title,created_by,created_at,updated_at&restaurant_id=eq.$restaurant&order=updated_at.asc&limit=50", token = token))
+        return JSONArray(call("GET", "/rest/v1/restaurant_assistant_conversations?select=id,restaurant_id,title,created_by,created_at,updated_at&restaurant_id=eq.$restaurant&order=updated_at.asc&limit=50", accessToken = token))
     }
 
     fun upsertAssistantConversations(token: String, rows: JSONArray) {
@@ -202,7 +202,7 @@ object SupabaseApi {
     fun listAssistantMessages(token: String, restaurantId: String): JSONArray {
         require(token.isNotBlank() && restaurantId.isNotBlank())
         val restaurant = URLEncoder.encode(restaurantId, "UTF-8")
-        return JSONArray(call("GET", "/rest/v1/restaurant_assistant_messages?select=id,restaurant_id,conversation_id,role,content,created_by,created_at&restaurant_id=eq.$restaurant&order=created_at.asc&limit=5000", token = token))
+        return JSONArray(call("GET", "/rest/v1/restaurant_assistant_messages?select=id,restaurant_id,conversation_id,role,content,created_by,created_at&restaurant_id=eq.$restaurant&order=created_at.asc&limit=5000", accessToken = token))
     }
 
     fun upsertAssistantMessages(token: String, rows: JSONArray) {
@@ -219,7 +219,7 @@ object SupabaseApi {
     fun getAssistantMemory(token: String, restaurantId: String): JSONObject? {
         require(token.isNotBlank() && restaurantId.isNotBlank())
         val restaurant = URLEncoder.encode(restaurantId, "UTF-8")
-        val result = JSONArray(call("GET", "/rest/v1/restaurant_assistant_memory?select=restaurant_id,content,updated_by,updated_at&restaurant_id=eq.$restaurant&limit=1", token = token))
+        val result = JSONArray(call("GET", "/rest/v1/restaurant_assistant_memory?select=restaurant_id,content,updated_by,updated_at&restaurant_id=eq.$restaurant&limit=1", accessToken = token))
         return result.optJSONObject(0)
     }
 
@@ -287,7 +287,7 @@ object SupabaseApi {
         return JSONArray(call(
             "GET",
             "/rest/v1/restaurant_supplier_invoices?select=id,restaurant_id,supplier_name,supplier_vat_number,invoice_number,issue_date,due_date,currency,net_amount,vat_amount,total_amount,review_status,source_type,mime_type,byte_size,document_sha256,document_path,warnings,created_by,reviewed_by,reviewed_at,created_at,updated_at&restaurant_id=eq.$restaurant&order=issue_date.desc&limit=200",
-            token = token
+            accessToken = token
         ))
     }
 
@@ -311,7 +311,7 @@ object SupabaseApi {
         val result = call(
             "DELETE",
             "/rest/v1/restaurant_supplier_invoices?id=eq.$id&restaurant_id=eq.$restaurant",
-            token = token,
+            accessToken = token,
             returnRepresentation = true
         )
         require(result.isNotBlank()) { "A fatura não foi removida do arquivo." }
