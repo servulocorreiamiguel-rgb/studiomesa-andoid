@@ -5,7 +5,7 @@ Plano de integração: [NON-AI-BUSINESS-READINESS-2026-11-05.md](docs/NON-AI-BUS
 
 - [x] Exportação operacional de pedidos em CSV integrada na `main`.
 - [x] Cinco APKs de demonstração/debug produzidos anteriormente; não são versões comerciais assinadas.
-- [x] Branch `integration/non-ai-core-2026-11-05` criada a partir da `main`, com loja/QR de fidelização, reservas de cliente, permissões granulares e respetivas migrações/testes.
+- [x] Branch `integration/non-ai-core-2026-11-05` criada a partir da `main`, com loja/QR de fidelização, reservas de cliente, permissões granulares, fichas técnicas e consumo automático de ingredientes por receita, com respetivas migrações/testes.
 - [ ] Executar e aprovar a CI completa da branch consolidada (cinco variantes, testes unitários, Lint, replay SQL/autorização e emuladores Android 8/16).
 - [ ] Resolver eventuais falhas de compilação/teste; não integrar na `main` enquanto a CI final não estiver verde.
 - [ ] Testes em Android físico e E2E com contas descartáveis, incluindo isolamento de clientes, permissões, QR, reservas concorrentes, rede e logout.
