@@ -5,7 +5,6 @@ import android.content.Intent
 import android.app.Dialog
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.content.Intent
 import android.content.res.ColorStateList
 import android.app.AlertDialog
 import android.graphics.Bitmap
