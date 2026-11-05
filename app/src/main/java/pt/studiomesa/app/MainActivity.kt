@@ -943,7 +943,8 @@ class MainActivity : Activity() {
         }
         scroll.addView(content)
         appRoot.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        renderAssistant(content)
+        sectionHeading(content, "Análises do restaurante", "Indicadores, alertas e recomendações a partir dos dados disponíveis.")
+        renderAssistant(content, showPageIntro = false)
 
         setContentView(appRoot)
         updateKitchenAutoRefresh()
@@ -5836,10 +5837,12 @@ class MainActivity : Activity() {
     private fun formatAdvicePercent(value: java.math.BigDecimal): String =
         value.stripTrailingZeros().toPlainString().replace('.', ',')
 
-    private fun renderAssistant(container: LinearLayout) {
+    private fun renderAssistant(container: LinearLayout, showPageIntro: Boolean = true) {
         val snapshot = assistantSnapshot()
-        pageIntro(container, "Assistente StudioMesa", "Apoio à operação com os dados que já estão disponíveis.")
-        addGap(container, 8)
+        if (showPageIntro) {
+            pageIntro(container, "Assistente StudioMesa", "Apoio à operação com os dados que já estão disponíveis.")
+            addGap(container, 8)
+        }
 
         assistantAnswer?.let { answer ->
             val answerCard = makeCard(16, copperPale)
