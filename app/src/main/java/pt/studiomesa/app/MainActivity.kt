@@ -97,7 +97,6 @@ class MainActivity : Activity() {
     private val assistantChatStore by lazy { AssistantChatStore(this) }
     private val supplierInvoiceStore by lazy { SupplierInvoiceStore(this) }
     private val assistantCloudSyncCoordinator by lazy { AssistantCloudSyncCoordinator() }
-    private var assistantDocumentsVisible = false
     private var assistantCloudSyncInFlight = false
     private var assistantCloudLastSyncAtMillis = 0L
     private var invoiceImportInFlight = false
