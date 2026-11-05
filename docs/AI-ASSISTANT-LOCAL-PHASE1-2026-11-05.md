@@ -11,6 +11,7 @@
 - Modelo LFM2.5-1.2B-Instruct INT4 executado no Android por LiteRT-LM 0.18.0 (CPU).
 - Transferência iniciada apenas após confirmação; cerca de 736 MB, verificação do tamanho e SHA-256.
 - Sem API generativa externa, chave de fornecedor ou custo por mensagem depois da transferência.
+- Pesquisa externa sem chave através da API pública da Wikipédia em português, com fallback para inglês. Só envia uma consulta curta e genérica; não envia o histórico nem os dados carregados do restaurante. É uma fonte limitada, pode estar desatualizada e pode impor limites de utilização.
 - O modelo é pequeno e limitado a um contexto aproximado de 4 096 tokens. Não é equivalente a modelos de grande dimensão, não deve ser apresentado como ChatGPT e pode produzir erros. O desempenho em português europeu e no OPPO A5m tem de ser medido fisicamente.
 - O modo **Pensar mais** acrescenta instruções de verificação, diminui a temperatura e aumenta o limite de saída de 1 024 para 1 400 tokens. Não revela raciocínio interno privado.
 
