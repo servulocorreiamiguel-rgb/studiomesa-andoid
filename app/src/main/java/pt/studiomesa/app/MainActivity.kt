@@ -22,6 +22,7 @@ import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.WindowInsets
+import android.view.WindowManager
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
@@ -90,6 +91,19 @@ class MainActivity : Activity() {
     }
     private var assistantQuestion = ""
     private var assistantAnswer: StudioMesaAssistantAnswer? = null
+
+    private data class AssistantChatMessage(
+        val fromUser: Boolean,
+        val text: String,
+        val actionPage: String? = null
+    )
+
+    private val assistantChatMessages = mutableListOf(
+        AssistantChatMessage(
+            fromUser = false,
+            text = "Olá! Sou o Assistente StudioMesa. Pergunta sobre preços, carta, pedidos, stock, reservas ou gestão do restaurante."
+        )
+    )
     private var selectedAnalysisPeriod = SalesAnalysisPeriod.ALL_TIME
 
     // Owner-controlled economic tools: session-only until persistent authorization is designed.
@@ -492,6 +506,10 @@ class MainActivity : Activity() {
             return
         }
         if (activePage !in availablePages()) activePage = "Início"
+        if (activePage == "Assistente") {
+            renderAssistantChatScreen()
+            return
+        }
 
         appRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -626,6 +644,232 @@ class MainActivity : Activity() {
         setContentView(appRoot)
         updateKitchenAutoRefresh()
         updateInventoryAutoRefresh()
+    }
+
+    private fun renderAssistantChatScreen() {
+        appRoot = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(paper)
+        }
+        applySystemBarInsets(appRoot)
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+
+        val toolbar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(7), dp(8), dp(7))
+            setBackgroundColor(white)
+            elevation = dp(2).toFloat()
+        }
+        val backButton = TextView(this).apply {
+            text = "‹"
+            textSize = 31f
+            gravity = Gravity.CENTER
+            setTextColor(forestDeep)
+            contentDescription = "Voltar ao painel principal"
+            background = rippleBackground(paper, 14)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                activePage = "Início"
+                renderApp()
+            }
+        }
+        toolbar.addView(backButton, LinearLayout.LayoutParams(dp(46), dp(48)))
+
+        val titleStack = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(8), 0, dp(4), 0)
+        }
+        titleStack.addView(label("Assistente StudioMesa", 16f, true, forestDeep))
+        titleStack.addView(label(displayRestaurantName(), 10f, false, muted).apply {
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        })
+        toolbar.addView(titleStack, LinearLayout.LayoutParams(0, -2, 1f))
+
+        val toolsButton = TextView(this).apply {
+            text = "⚙"
+            textSize = 20f
+            gravity = Gravity.CENTER
+            setTextColor(forestDeep)
+            contentDescription = "Abrir ferramentas do assistente"
+            background = rippleBackground(paper, 13)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener { showAssistantToolsDialog() }
+        }
+        toolbar.addView(toolsButton, LinearLayout.LayoutParams(dp(44), dp(46)))
+
+        val newChatButton = TextView(this).apply {
+            text = "＋"
+            textSize = 25f
+            gravity = Gravity.CENTER
+            setTextColor(forestDeep)
+            contentDescription = "Nova conversa"
+            background = rippleBackground(paper, 13)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                assistantChatMessages.clear()
+                assistantQuestion = ""
+                assistantAnswer = null
+                assistantChatMessages.add(
+                    AssistantChatMessage(
+                        fromUser = false,
+                        text = "Nova conversa iniciada. Em que posso ajudar com o restaurante?"
+                    )
+                )
+                renderAssistantChatScreen()
+            }
+        }
+        toolbar.addView(newChatButton, LinearLayout.LayoutParams(dp(44), dp(46)))
+        appRoot.addView(toolbar, LinearLayout.LayoutParams(-1, -2))
+
+        val conversationScroll = ScrollView(this).apply {
+            isFillViewport = true
+            clipToPadding = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            isVerticalScrollBarEnabled = false
+        }
+        val conversation = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(18), dp(14), dp(18))
+        }
+        assistantChatMessages.forEach { message ->
+            addAssistantChatBubble(conversation, message)
+        }
+        conversationScroll.addView(conversation)
+        appRoot.addView(conversationScroll, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        val composerArea = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+            setBackgroundColor(white)
+            elevation = dp(5).toFloat()
+        }
+        val composerRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.BOTTOM
+        }
+        val messageField = multilineInputField("Escreve uma mensagem...")
+        messageField.minLines = 1
+        messageField.maxLines = 4
+        messageField.setPadding(dp(14), dp(12), dp(14), dp(12))
+        composerRow.addView(messageField, LinearLayout.LayoutParams(0, -2, 1f).apply {
+            setMargins(0, 0, dp(8), 0)
+        })
+        composerRow.addView(primaryButton("Enviar") {
+            sendAssistantChatMessage(messageField)
+        }, LinearLayout.LayoutParams(dp(82), dp(50)))
+        composerArea.addView(composerRow, LinearLayout.LayoutParams(-1, -2))
+        composerArea.addView(label(
+            "Respostas locais nesta versão. A ligação à IA generativa será feita numa fase posterior.",
+            9f, false, muted
+        ).apply {
+            gravity = Gravity.CENTER
+            setPadding(dp(3), dp(5), dp(3), 0)
+        })
+        appRoot.addView(composerArea, LinearLayout.LayoutParams(-1, -2))
+
+        setContentView(appRoot)
+        conversationScroll.post { conversationScroll.fullScroll(View.FOCUS_DOWN) }
+        updateKitchenAutoRefresh()
+        updateInventoryAutoRefresh()
+    }
+
+    private fun addAssistantChatBubble(
+        container: LinearLayout,
+        message: AssistantChatMessage
+    ) {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = if (message.fromUser) Gravity.END else Gravity.START
+        }
+        val bubble = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(11), dp(14), dp(11))
+            background = rounded(if (message.fromUser) forestDeep else white, 18)
+            if (!message.fromUser) elevation = dp(1).toFloat()
+        }
+        if (!message.fromUser) {
+            bubble.addView(label("STUDIOMESA", 9f, true, forestSoft))
+            addGap(bubble, 5)
+        }
+        bubble.addView(label(
+            message.text,
+            13.5f,
+            false,
+            if (message.fromUser) white else ink
+        ).apply {
+            setTextIsSelectable(true)
+        })
+        assistantActionTarget(message.actionPage)?.let { target ->
+            addGap(bubble, 9)
+            bubble.addView(secondaryButton("Abrir " + target) {
+                activePage = target
+                renderApp()
+            }, LinearLayout.LayoutParams(-1, dp(42)))
+        }
+        val bubbleWidth = (resources.displayMetrics.widthPixels - dp(76)).coerceAtLeast(dp(220))
+        row.addView(bubble, LinearLayout.LayoutParams(bubbleWidth, -2))
+        container.addView(row, LinearLayout.LayoutParams(-1, -2).apply {
+            setMargins(
+                if (message.fromUser) dp(30) else 0,
+                0,
+                if (message.fromUser) 0 else dp(30),
+                dp(12)
+            )
+        })
+    }
+
+    private fun sendAssistantChatMessage(messageField: EditText) {
+        val question = messageField.text.toString().trim().take(1000)
+        if (question.isBlank()) {
+            messageField.error = "Escreve uma mensagem primeiro."
+            return
+        }
+        assistantQuestion = question
+        assistantChatMessages.add(AssistantChatMessage(fromUser = true, text = question))
+
+        val answer = runCatching {
+            StudioMesaAdvisor.answerQuestion(question, assistantSnapshot())
+        }.getOrElse {
+            StudioMesaAssistantAnswer(
+                "Não foi possível analisar a pergunta",
+                "Ocorreu um problema ao ler os dados disponíveis. Confirma a ligação e tenta novamente."
+            )
+        }
+        assistantAnswer = answer
+        assistantChatMessages.add(
+            AssistantChatMessage(
+                fromUser = false,
+                text = answer.title + "\n\n" + answer.response,
+                actionPage = answer.actionPage
+            )
+        )
+        renderAssistantChatScreen()
+    }
+
+    private fun showAssistantToolsDialog() {
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(8), dp(12), dp(8))
+        }
+        renderEconomicManager(content)
+        if (isPremium) {
+            addGap(content, 8)
+            renderRestaurantPriceAdvisor(content)
+        }
+        val scroll = ScrollView(this).apply {
+            isFillViewport = false
+            addView(content)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Ferramentas do assistente")
+            .setView(scroll)
+            .setPositiveButton("Fechar", null)
+            .show()
     }
 
     private fun renderPage(container: LinearLayout) {
