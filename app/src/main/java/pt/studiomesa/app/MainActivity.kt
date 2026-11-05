@@ -1050,7 +1050,7 @@ class MainActivity : Activity() {
             .setMessage(text)
             .setNegativeButton("Fechar", null)
             .setNeutralButton("Importar PDF / imagem", null)
-            .setPositiveButton("Atualizar arquivo", null)
+            .setPositiveButton("Sincronizar pendentes", null)
             .create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
@@ -1059,7 +1059,7 @@ class MainActivity : Activity() {
             }
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 dialog.dismiss()
-                refreshSupplierInvoicesFromCloud(showFeedback = true)
+                syncPendingSupplierInvoiceUploads()
             }
         }
         dialog.show()
@@ -1244,6 +1244,19 @@ class MainActivity : Activity() {
         dialog: AlertDialog
     ) {
         val scope = assistantChatScope()
+        val duplicate = supplierInvoiceStore.findDuplicate(scope, supplier, vatNumber, invoiceNumber, issueDate)
+        if (duplicate != null) {
+            AlertDialog.Builder(this)
+                .setTitle("Esta fatura já foi importada")
+                .setMessage("Já existe uma fatura com o mesmo fornecedor, número e data de emissão. Não criei um segundo registo.")
+                .setNegativeButton("Fechar", null)
+                .setPositiveButton("Ver fatura existente") { _, _ ->
+                    dialog.dismiss()
+                    showSupplierInvoiceDetails(duplicate)
+                }
+                .show()
+            return
+        }
         val now = System.currentTimeMillis()
         val id = java.util.UUID.randomUUID().toString()
         val warnings = pending.draft.warnings + listOfNotNull(warning)
@@ -1297,30 +1310,9 @@ class MainActivity : Activity() {
                 backendToken(), backendRestaurantId(), id, pending.document.mimeType, pending.document.sha256, bytes
             )
             try {
-                val row = JSONObject()
-                    .put("id", id)
-                    .put("restaurant_id", backendRestaurantId())
-                    .put("supplier_name", supplier)
-                    .put("supplier_vat_number", vatNumber)
-                    .put("invoice_number", invoiceNumber)
-                    .put("issue_date", issueDate)
-                    .put("due_date", if (dueDate.isBlank()) JSONObject.NULL else dueDate)
-                    .put("currency", "EUR")
-                    .put("net_amount", netAmount?.toPlainString() ?: JSONObject.NULL)
-                    .put("vat_amount", vatAmount?.toPlainString() ?: JSONObject.NULL)
-                    .put("total_amount", totalAmount.toPlainString())
-                    .put("review_status", status)
-                    .put("source_type", pending.draft.source)
-                    .put("mime_type", pending.document.mimeType)
-                    .put("byte_size", pending.document.byteSize)
-                    .put("document_sha256", pending.document.sha256)
-                    .put("document_path", objectPath)
-                    .put("warnings", JSONArray(warnings))
-                    .put("created_by", backendPrefs.getString("user_id", ""))
-                if (status == "approved") {
-                    row.put("reviewed_by", backendPrefs.getString("user_id", ""))
-                        .put("reviewed_at", java.time.Instant.now().toString())
-                }
+                val row = buildSupplierInvoiceMetadataRow(
+                    record, objectPath, backendRestaurantId(), backendPrefs.getString("user_id", "").orEmpty()
+                )
                 SupabaseApi.insertSupplierInvoice(backendToken(), row)
             } catch (error: Exception) {
                 runCatching { SupabaseApi.deleteSupplierInvoiceDocument(backendToken(), objectPath) }
@@ -1336,6 +1328,94 @@ class MainActivity : Activity() {
         }) { objectPath ->
             supplierInvoiceStore.save(scope, record.copy(documentPath = objectPath, documentUri = null, updatedAtMillis = System.currentTimeMillis()))
             Toast.makeText(this, "Fatura enviada para o arquivo privado do restaurante.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun buildSupplierInvoiceMetadataRow(
+        record: SupplierInvoiceRecord,
+        objectPath: String,
+        restaurantId: String,
+        userId: String
+    ): JSONObject {
+        require(restaurantId.isNotBlank() && userId.isNotBlank())
+        val row = JSONObject()
+            .put("id", record.id)
+            .put("restaurant_id", restaurantId)
+            .put("supplier_name", record.supplierName)
+            .put("supplier_vat_number", record.supplierVatNumber)
+            .put("invoice_number", record.invoiceNumber)
+            .put("issue_date", record.issueDate)
+            .put("due_date", if (record.dueDate.isBlank()) JSONObject.NULL else record.dueDate)
+            .put("currency", record.currency)
+            .put("net_amount", record.netAmount ?: JSONObject.NULL)
+            .put("vat_amount", record.vatAmount ?: JSONObject.NULL)
+            .put("total_amount", record.totalAmount)
+            .put("review_status", record.reviewStatus)
+            .put("source_type", record.sourceType)
+            .put("mime_type", record.mimeType)
+            .put("byte_size", record.byteSize)
+            .put("document_sha256", record.documentSha256)
+            .put("document_path", objectPath)
+            .put("warnings", JSONArray(record.warnings))
+            .put("created_by", userId)
+        if (record.reviewStatus != "pending_review") {
+            row.put("reviewed_by", userId)
+                .put("reviewed_at", java.time.Instant.ofEpochMilli(record.updatedAtMillis).toString())
+        }
+        return row
+    }
+
+    private fun syncPendingSupplierInvoiceUploads() {
+        if (!hasRemoteRestaurant() || backendToken().isBlank() ||
+            backendPrefs.getString("restaurant_role", "") != "owner") {
+            Toast.makeText(this, "Só o proprietário pode sincronizar faturas.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val scope = assistantChatScope()
+        val pending = runCatching { supplierInvoiceStore.list(scope) }
+            .getOrDefault(emptyList())
+            .filter { it.documentPath.isNullOrBlank() && !it.documentUri.isNullOrBlank() }
+        runBackend({
+            var uploaded = 0
+            val failures = mutableListOf<String>()
+            pending.forEach { invoice ->
+                try {
+                    val uri = android.net.Uri.parse(invoice.documentUri)
+                    val bytes = InvoiceDocumentProcessor(this).readVerifiedDocumentBytes(uri, invoice.documentSha256)
+                    val objectPath = SupabaseApi.uploadSupplierInvoiceDocument(
+                        backendToken(), backendRestaurantId(), invoice.id,
+                        invoice.mimeType, invoice.documentSha256, bytes
+                    )
+                    try {
+                        val row = buildSupplierInvoiceMetadataRow(
+                            invoice, objectPath, backendRestaurantId(),
+                            backendPrefs.getString("user_id", "").orEmpty()
+                        )
+                        SupabaseApi.insertSupplierInvoice(backendToken(), row)
+                    } catch (error: Exception) {
+                        runCatching { SupabaseApi.deleteSupplierInvoiceDocument(backendToken(), objectPath) }
+                        throw error
+                    }
+                    supplierInvoiceStore.save(
+                        scope,
+                        invoice.copy(
+                            documentPath = objectPath,
+                            documentUri = null,
+                            updatedAtMillis = System.currentTimeMillis()
+                        )
+                    )
+                    uploaded++
+                } catch (error: Exception) {
+                    failures += "${invoice.invoiceNumber}: ${error.message ?: "falha de envio"}"
+                }
+            }
+            "Enviadas: $uploaded. Com problemas: ${failures.size}." +
+                if (failures.isEmpty()) "" else "\\n" + failures.take(3).joinToString("\\n")
+        }, onError = { error ->
+            Toast.makeText(this, friendlyBackendError(error.message), Toast.LENGTH_LONG).show()
+        }) { summary ->
+            Toast.makeText(this, summary, Toast.LENGTH_LONG).show()
+            refreshSupplierInvoicesFromCloud(showFeedback = true)
         }
     }
 
