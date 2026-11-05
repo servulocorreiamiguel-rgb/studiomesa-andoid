@@ -54,6 +54,7 @@ import com.google.zxing.integration.android.IntentIntegrator
 class MainActivity : Activity() {
     companion object {
         private const val REQUEST_EXPORT_ORDERS_CSV = 7812
+        private const val REQUEST_IMPORT_SUPPLIER_INVOICE = 7813
     }
 
     private lateinit var store: RestaurantStore
@@ -94,6 +95,19 @@ class MainActivity : Activity() {
     private var assistantQuestion = ""
     private var assistantAnswer: StudioMesaAssistantAnswer? = null
     private val assistantChatStore by lazy { AssistantChatStore(this) }
+    private val supplierInvoiceStore by lazy { SupplierInvoiceStore(this) }
+    private val assistantCloudSyncCoordinator by lazy { AssistantCloudSyncCoordinator() }
+    private var assistantDocumentsVisible = false
+    private var assistantCloudSyncInFlight = false
+    private var assistantCloudLastSyncAtMillis = 0L
+    private var invoiceImportInFlight = false
+    private var pendingInvoiceImport: PendingInvoiceImport? = null
+
+    private data class PendingInvoiceImport(
+        val uri: android.net.Uri,
+        val document: ProcessedInvoiceDocument,
+        val draft: SupplierInvoiceDraft
+    )
     private var activeAssistantConversationId: String? = null
     private var assistantChatScopeKey: String? = null
     private var assistantComposerDraft = ""
@@ -176,6 +190,11 @@ class MainActivity : Activity() {
 
     @Deprecated("Deprecated in Android API 33; retained for compatibility with older devices.")
     override fun onBackPressed() {
+        if (activePage == "Assistente" && assistantDocumentsVisible) {
+            assistantDocumentsVisible = false
+            renderApp()
+            return
+        }
         if (activePage == "Assistente" && assistantToolsVisible) {
             assistantToolsVisible = false
             renderApp()
@@ -262,6 +281,19 @@ class MainActivity : Activity() {
         }
 
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_IMPORT_SUPPLIER_INVOICE) {
+            val uri = data?.data
+            if (resultCode == RESULT_OK && uri != null) {
+                runCatching {
+                    contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                }
+                processSupplierInvoiceDocument(uri)
+            }
+            return
+        }
         if (requestCode != REQUEST_EXPORT_ORDERS_CSV) return
         val csv = pendingCsvExport
         pendingCsvExport = null
@@ -559,7 +591,11 @@ class MainActivity : Activity() {
         }
         if (activePage !in availablePages()) activePage = "Início"
         if (activePage == "Assistente") {
-            if (assistantToolsVisible) renderAssistantToolsScreen() else renderAssistantChatScreen()
+            when {
+                assistantDocumentsVisible -> renderAssistantDocumentsScreen()
+                assistantToolsVisible -> renderAssistantToolsScreen()
+                else -> renderAssistantChatScreen()
+            }
             return
         }
 
