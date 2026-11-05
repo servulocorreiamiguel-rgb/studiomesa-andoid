@@ -259,7 +259,51 @@ if [ "$assistant_deleted_at" != "true" ] || [ "$assistant_deleted_title" != "Con
   echo "ERROR: assistant deletion did not retain only a content-free tombstone." >&2
   exit 1
 fi
-echo "PASS: assistant conversation deletion is owner-only, cross-tenant/staff requests are denied, and message content is removed."
+
+if psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+INSERT INTO public.restaurant_assistant_conversations (
+  id, restaurant_id, title, created_by
+) VALUES (
+  '$ASSISTANT_CONVERSATION_ID'::uuid, '$RESTAURANT_A'::uuid,
+  'Conversa restaurada por cópia antiga', '$USER_A'::uuid
+)
+ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, updated_at = now();
+COMMIT;
+SQL
+then
+  echo "ERROR: a stale client restored a deleted assistant conversation." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+INSERT INTO public.restaurant_assistant_messages (
+  id, restaurant_id, conversation_id, role, content, created_by
+) VALUES (
+  '99999999-9999-4999-8999-999999999999'::uuid,
+  '$RESTAURANT_A'::uuid, '$ASSISTANT_CONVERSATION_ID'::uuid,
+  'user', 'Mensagem tardia após eliminação.', '$USER_A'::uuid
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: a message was inserted into a deleted assistant conversation." >&2
+  exit 1
+fi
+
+assistant_messages_after_replay="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \\
+  -c "SELECT count(*)::text FROM public.restaurant_assistant_messages WHERE conversation_id = '$ASSISTANT_CONVERSATION_ID'::uuid;")"
+if [ "$assistant_messages_after_replay" != "0" ]; then
+  echo "ERROR: stale client activity restored assistant message content after deletion." >&2
+  exit 1
+fi
+
+echo "PASS: assistant deletion is owner-only, removes message content, and cannot be undone by stale clients."
 
 # Exercise the corrected staff-join RPC in PostgreSQL, not just migration replay.
 # Repeating the same join must be safe; attempting a second restaurant must fail.
