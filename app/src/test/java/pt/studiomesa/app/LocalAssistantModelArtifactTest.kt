@@ -23,10 +23,12 @@ class LocalAssistantModelArtifactTest {
     @Test
     fun localInferenceStaysInsideTheModelContextWindow() {
         assertEquals(4096, LocalAssistantModelManager.MAX_CONTEXT_TOKENS)
-        assertTrue(LocalAssistantModelManager.MAX_OUTPUT_TOKENS in 1..4096)
+        assertTrue(AssistantThinkingModePolicy.DEFAULT_MAX_OUTPUT_TOKENS in 1..4096)
+        assertTrue(AssistantThinkingModePolicy.DEEP_MAX_OUTPUT_TOKENS in 1..4096)
         assertTrue(LocalAssistantModelManager.MAX_HISTORY_MESSAGES in 1..16)
         assertTrue(LocalAssistantModelManager.MAX_HISTORY_MESSAGE_CHARS <= 1000)
-        assertEquals(1024, LocalAssistantModelManager.MAX_OUTPUT_TOKENS)
+        assertEquals(1024, AssistantThinkingModePolicy.DEFAULT_MAX_OUTPUT_TOKENS)
+        assertEquals(1400, AssistantThinkingModePolicy.DEEP_MAX_OUTPUT_TOKENS)
         assertEquals(2, LocalAssistantModelManager.MAX_SESSION_USER_TURNS)
     }
     @Test
