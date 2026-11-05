@@ -204,6 +204,9 @@ class AssistantChatStore(context: Context) {
         remoteUpdatedAtMillis: Long = 0L
     ): Int {
         require(conversationId.isNotBlank()) { "A conversa remota não tem identificador." }
+        // A local deletion must win over a stale cloud copy until its tombstone is synced.
+        val pendingDeletes = load(scope).optJSONArray("pending_conversation_deletions") ?: JSONArray()
+        if ((0 until pendingDeletes.length()).any { pendingDeletes.optString(it) == conversationId }) return 0
         val root = load(scope)
         val conversations = root.optJSONArray("conversations") ?: JSONArray()
         val now = System.currentTimeMillis()
@@ -259,6 +262,7 @@ class AssistantChatStore(context: Context) {
 
     @Synchronized
     fun deleteConversation(scope: String, conversationId: String) {
+        require(conversationId.isNotBlank()) { "A conversa não tem identificador." }
         val root = load(scope)
         val conversations = root.optJSONArray("conversations") ?: JSONArray()
         for (index in conversations.length() - 1 downTo 0) {
@@ -267,6 +271,33 @@ class AssistantChatStore(context: Context) {
             }
         }
         root.put("conversations", conversations)
+
+        // Keep an encrypted tombstone so a later cloud sync also deletes the remote copy.
+        val pendingDeletes = root.optJSONArray("pending_conversation_deletions") ?: JSONArray()
+        if ((0 until pendingDeletes.length()).none { pendingDeletes.optString(it) == conversationId }) {
+            pendingDeletes.put(conversationId)
+        }
+        root.put("pending_conversation_deletions", pendingDeletes)
+        save(scope, root)
+    }
+
+    @Synchronized
+    fun listPendingConversationDeletions(scope: String): List<String> {
+        val pending = load(scope).optJSONArray("pending_conversation_deletions") ?: JSONArray()
+        return (0 until pending.length()).mapNotNull { index ->
+            pending.optString(index).takeIf { it.isNotBlank() }
+        }.distinct()
+    }
+
+    @Synchronized
+    fun acknowledgeConversationDeletion(scope: String, conversationId: String) {
+        require(conversationId.isNotBlank())
+        val root = load(scope)
+        val pending = root.optJSONArray("pending_conversation_deletions") ?: JSONArray()
+        for (index in pending.length() - 1 downTo 0) {
+            if (pending.optString(index) == conversationId) pending.remove(index)
+        }
+        root.put("pending_conversation_deletions", pending)
         save(scope, root)
     }
 
