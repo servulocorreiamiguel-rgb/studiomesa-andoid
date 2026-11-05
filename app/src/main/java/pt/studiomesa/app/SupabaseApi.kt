@@ -185,7 +185,7 @@ object SupabaseApi {
     fun listAssistantConversations(token: String, restaurantId: String): JSONArray {
         require(token.isNotBlank() && restaurantId.isNotBlank())
         val restaurant = URLEncoder.encode(restaurantId, "UTF-8")
-        return JSONArray(call("GET", "/rest/v1/restaurant_assistant_conversations?select=id,restaurant_id,title,created_by,created_at,updated_at,deleted_at&restaurant_id=eq.$restaurant&order=updated_at.asc&limit=50", accessToken = token))
+        return JSONArray(call("GET", "/rest/v1/restaurant_assistant_conversations?select=id,restaurant_id,title,created_by,created_at,updated_at,deleted_at&restaurant_id=eq.$restaurant&order=updated_at.asc&limit=5000", accessToken = token))
     }
 
     fun upsertAssistantConversations(token: String, rows: JSONArray) {
