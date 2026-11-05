@@ -96,6 +96,233 @@ object SupabaseApi {
         return if (response.isBlank()) JSONObject() else JSONObject(response)
     }
 
+
+    /** Raw JSON request for PostgREST batch upserts. */
+    private fun rawJsonCall(
+        method: String,
+        path: String,
+        body: String? = null,
+        token: String? = null,
+        prefer: String? = null
+    ): String {
+        val connection = (URL(BASE_URL + path).openConnection() as HttpURLConnection).apply {
+            requestMethod = method
+            connectTimeout = 12000
+            readTimeout = 20000
+            instanceFollowRedirects = false
+            useCaches = false
+            setRequestProperty("apikey", API_KEY)
+            setRequestProperty("Accept", "application/json")
+            setRequestProperty("Content-Type", "application/json")
+            if (!prefer.isNullOrBlank()) setRequestProperty("Prefer", prefer)
+            if (!token.isNullOrBlank()) setRequestProperty("Authorization", "Bearer " + token)
+        }
+        try {
+            if (body != null) {
+                connection.doOutput = true
+                connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            }
+            val code = connection.responseCode
+            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+            val response = ResponseBodyReader.read(stream)
+            if (code !in 200..299) {
+                val message = runCatching {
+                    val error = JSONObject(response)
+                    sequenceOf("message", "msg", "error_description")
+                        .map { error.optString(it, "") }
+                        .firstOrNull { it.isNotBlank() }
+                }.getOrNull()
+                throw BackendHttpException(code, path, ApiErrorMessage.sanitize(message, code))
+            }
+            return response
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun binaryStorageRequest(
+        method: String,
+        path: String,
+        token: String,
+        payload: ByteArray? = null,
+        mimeType: String = "application/octet-stream"
+    ): ByteArray {
+        val connection = (URL(BASE_URL + path).openConnection() as HttpURLConnection).apply {
+            requestMethod = method
+            connectTimeout = 15000
+            readTimeout = 120000
+            instanceFollowRedirects = false
+            useCaches = false
+            setRequestProperty("apikey", API_KEY)
+            setRequestProperty("Authorization", "Bearer " + token)
+            setRequestProperty("Accept", "application/json, application/octet-stream")
+            setRequestProperty("Cache-Control", "no-store")
+            setRequestProperty("Content-Type", mimeType)
+        }
+        try {
+            if (payload != null) {
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Length", payload.size.toString())
+                connection.outputStream.use { it.write(payload) }
+            }
+            val code = connection.responseCode
+            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+            val bytes = stream?.use { it.readBytes() } ?: ByteArray(0)
+            if (code !in 200..299) {
+                val message = runCatching {
+                    val error = JSONObject(String(bytes, Charsets.UTF_8))
+                    sequenceOf("message", "msg", "error")
+                        .map { error.optString(it, "") }
+                        .firstOrNull { it.isNotBlank() }
+                }.getOrNull()
+                throw BackendHttpException(code, path, ApiErrorMessage.sanitize(message, code))
+            }
+            return bytes
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    fun listAssistantConversations(token: String, restaurantId: String): JSONArray {
+        require(token.isNotBlank() && restaurantId.isNotBlank())
+        val restaurant = URLEncoder.encode(restaurantId, "UTF-8")
+        return JSONArray(call("GET", "/rest/v1/restaurant_assistant_conversations?select=id,restaurant_id,title,created_by,created_at,updated_at&restaurant_id=eq.$restaurant&order=updated_at.asc&limit=50", token = token))
+    }
+
+    fun upsertAssistantConversations(token: String, rows: JSONArray) {
+        if (rows.length() == 0) return
+        rawJsonCall(
+            "POST",
+            "/rest/v1/restaurant_assistant_conversations?on_conflict=id",
+            rows.toString(),
+            token,
+            "resolution=merge-duplicates,return=minimal"
+        )
+    }
+
+    fun listAssistantMessages(token: String, restaurantId: String): JSONArray {
+        require(token.isNotBlank() && restaurantId.isNotBlank())
+        val restaurant = URLEncoder.encode(restaurantId, "UTF-8")
+        return JSONArray(call("GET", "/rest/v1/restaurant_assistant_messages?select=id,restaurant_id,conversation_id,role,content,created_by,created_at&restaurant_id=eq.$restaurant&order=created_at.asc&limit=5000", token = token))
+    }
+
+    fun upsertAssistantMessages(token: String, rows: JSONArray) {
+        if (rows.length() == 0) return
+        rawJsonCall(
+            "POST",
+            "/rest/v1/restaurant_assistant_messages?on_conflict=id",
+            rows.toString(),
+            token,
+            "resolution=ignore-duplicates,return=minimal"
+        )
+    }
+
+    fun getAssistantMemory(token: String, restaurantId: String): JSONObject? {
+        require(token.isNotBlank() && restaurantId.isNotBlank())
+        val restaurant = URLEncoder.encode(restaurantId, "UTF-8")
+        val result = JSONArray(call("GET", "/rest/v1/restaurant_assistant_memory?select=restaurant_id,content,updated_by,updated_at&restaurant_id=eq.$restaurant&limit=1", token = token))
+        return result.optJSONObject(0)
+    }
+
+    fun upsertAssistantMemory(token: String, row: JSONObject) {
+        rawJsonCall(
+            "POST",
+            "/rest/v1/restaurant_assistant_memory?on_conflict=restaurant_id",
+            JSONArray().put(row).toString(),
+            token,
+            "resolution=merge-duplicates,return=minimal"
+        )
+    }
+
+    fun uploadSupplierInvoiceDocument(
+        token: String,
+        restaurantId: String,
+        invoiceId: String,
+        mimeType: String,
+        sha256: String,
+        bytes: ByteArray
+    ): String {
+        require(token.isNotBlank() && restaurantId.isNotBlank() && invoiceId.isNotBlank())
+        require(restaurantId.matches(Regex("^[0-9a-fA-F-]{36}$")))
+        require(invoiceId.matches(Regex("^[0-9a-fA-F-]{36}$")))
+        require(mimeType in setOf("application/pdf", "image/jpeg", "image/png", "image/webp"))
+        require(bytes.size in 1..(25 * 1024 * 1024))
+        require(sha256.matches(Regex("^[a-f0-9]{64}$")))
+        val extension = when (mimeType) {
+            "application/pdf" -> "pdf"
+            "image/jpeg" -> "jpg"
+            "image/png" -> "png"
+            "image/webp" -> "webp"
+            else -> throw IllegalArgumentException("Formato de fatura inválido.")
+        }
+        val objectPath = "$restaurantId/$invoiceId/$sha256.$extension"
+        val encodedPath = objectPath.split("/").joinToString("/") { URLEncoder.encode(it, "UTF-8") }
+        binaryStorageRequest("POST", "/storage/v1/object/studiomesa-invoices/$encodedPath", token, bytes, mimeType)
+        return objectPath
+    }
+
+    fun deleteSupplierInvoiceDocument(token: String, objectPath: String) {
+        require(token.isNotBlank() && objectPath.isNotBlank())
+        require(!objectPath.contains("..") && objectPath.split("/").size == 3)
+        val encodedPath = objectPath.split("/").joinToString("/") { URLEncoder.encode(it, "UTF-8") }
+        binaryStorageRequest("DELETE", "/storage/v1/object/studiomesa-invoices/$encodedPath", token)
+    }
+
+    fun downloadSupplierInvoiceDocument(token: String, objectPath: String): ByteArray {
+        require(token.isNotBlank() && objectPath.isNotBlank())
+        require(!objectPath.contains("..") && objectPath.split("/").size == 3)
+        val encodedPath = objectPath.split("/").joinToString("/") { URLEncoder.encode(it, "UTF-8") }
+        return binaryStorageRequest("GET", "/storage/v1/object/authenticated/studiomesa-invoices/$encodedPath", token)
+            .also { require(it.size <= 25 * 1024 * 1024) { "O documento excede 25 MB." } }
+    }
+
+    fun insertSupplierInvoice(token: String, row: JSONObject): JSONObject {
+        val response = call("POST", "/rest/v1/restaurant_supplier_invoices", row, token, returnRepresentation = true)
+        return JSONArray(response).optJSONObject(0)
+            ?: throw IllegalStateException("O servidor não confirmou o registo da fatura.")
+    }
+
+    fun listSupplierInvoices(token: String, restaurantId: String): JSONArray {
+        require(token.isNotBlank() && restaurantId.isNotBlank())
+        val restaurant = URLEncoder.encode(restaurantId, "UTF-8")
+        return JSONArray(call(
+            "GET",
+            "/rest/v1/restaurant_supplier_invoices?select=id,restaurant_id,supplier_name,supplier_vat_number,invoice_number,issue_date,due_date,currency,net_amount,vat_amount,total_amount,review_status,source_type,mime_type,byte_size,document_sha256,document_path,warnings,created_by,reviewed_by,reviewed_at,created_at,updated_at&restaurant_id=eq.$restaurant&order=issue_date.desc&limit=200",
+            token = token
+        ))
+    }
+
+    fun updateSupplierInvoiceReview(
+        token: String,
+        restaurantId: String,
+        invoiceId: String,
+        status: String
+    ) {
+        require(status in setOf("approved", "rejected"))
+        val restaurant = URLEncoder.encode(restaurantId, "UTF-8")
+        val id = URLEncoder.encode(invoiceId, "UTF-8")
+        val body = JSONObject()
+            .put("review_status", status)
+            .put("reviewed_by", "auth.uid()")
+        // The server fills reviewed_at via a dedicated review RPC; the client cannot
+        // assert an approval identity through a literal value.
+        call("POST", "/rest/v1/rpc/review_supplier_invoice", JSONObject()
+            .put("p_invoice_id", invoiceId)
+            .put("p_review_status", status), token)
+    }
+
+    fun deleteSupplierInvoiceMetadata(token: String, restaurantId: String, invoiceId: String) {
+        val restaurant = URLEncoder.encode(restaurantId, "UTF-8")
+        val id = URLEncoder.encode(invoiceId, "UTF-8")
+        val result = call(
+            "DELETE",
+            "/rest/v1/restaurant_supplier_invoices?id=eq.$id&restaurant_id=eq.$restaurant",
+            token = token,
+            returnRepresentation = true
+        )
+        require(result.isNotBlank()) { "A fatura não foi removida do arquivo." }
+    }
+
     fun signIn(email: String, password: String): Session {
         val result = jsonCall("POST", "/auth/v1/token?grant_type=password",
             JSONObject().put("email", email.trim()).put("password", password))
