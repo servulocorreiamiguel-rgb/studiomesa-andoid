@@ -59,18 +59,19 @@ internal class AssistantCloudSyncCoordinator {
         var messagesToUpload = 0
         localConversations.forEach { conversation ->
             conversation.turns.forEach { turn ->
-                if (turn.id.isBlank() || turn.content.isBlank()) return@forEach
-                messageRows.put(
-                    JSONObject()
-                        .put("id", turn.id)
-                        .put("restaurant_id", restaurantId)
-                        .put("conversation_id", conversation.id)
-                        .put("role", turn.role)
-                        .put("content", turn.content.take(6000))
-                        .put("created_by", userId)
-                        .put("created_at", iso(turn.createdAtMillis))
-                )
-                messagesToUpload++
+                if (turn.id.isNotBlank() && turn.content.isNotBlank() && turn.role in setOf("user", "assistant")) {
+                    messageRows.put(
+                        JSONObject()
+                            .put("id", turn.id)
+                            .put("restaurant_id", restaurantId)
+                            .put("conversation_id", conversation.id)
+                            .put("role", turn.role)
+                            .put("content", turn.content.take(6000))
+                            .put("created_by", userId)
+                            .put("created_at", iso(turn.createdAtMillis))
+                    )
+                    messagesToUpload++
+                }
             }
         }
         for (start in 0 until messageRows.length() step MESSAGE_BATCH_SIZE) {
