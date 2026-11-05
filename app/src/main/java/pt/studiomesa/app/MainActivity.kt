@@ -831,7 +831,10 @@ class MainActivity : Activity() {
 
         if (turns.isEmpty()) {
             val welcome = makeCard(16, white)
-            welcome.addView(label("Olá. Em que posso ajudar com o restaurante?", 17f, true, forestDeep))
+            welcome.addView(label("Nova conversa iniciada. Em que posso ajudar com o restaurante?", 17f, true, forestDeep))
+            addGap(welcome, 6)
+            welcome.addView(label("EXPERIMENTA PERGUNTAR", 9f, true, forestSoft))
+            addGap(welcome, 5)
             addGap(welcome, 6)
             welcome.addView(label(
                 "Posso analisar preços, custos, stock, pedidos, reservas e desempenho da carta. Depois de instalar o modelo, a conversa generativa funciona no próprio telemóvel.",
@@ -886,7 +889,7 @@ class MainActivity : Activity() {
             setBackgroundColor(white)
             elevation = dp(5).toFloat()
         }
-        val messageField = multilineInputField("Escreve uma mensagem…")
+        val messageField = multilineInputField("Escreve uma mensagem...")
         messageField.minLines = 1
         messageField.maxLines = 4
         messageField.setPadding(dp(13), dp(10), dp(13), dp(10))
@@ -1082,14 +1085,13 @@ class MainActivity : Activity() {
         )
     }
 
-    private fun buildLocalAssistantSystemInstruction(scope: String, deepThinking: Boolean = false): String {
+    private fun buildLocalAssistantSystemInstruction(scope: String): String {
         val snapshot = assistantSnapshot()
         val restaurantName = backendPrefs.getString("restaurant_name", "").orEmpty().ifBlank { "Restaurante sem nome configurado" }
         val memory = runCatching { assistantChatStore.readMemory(scope) }.getOrDefault("")
         return buildString {
             appendLine("És a IA local da StudioMesa, uma assistente inteligente especializada em gestão de restaurantes.")
             appendLine("Responde sempre em português de Portugal, com clareza, rigor, naturalidade e espírito crítico.")
-            if (deepThinking) appendLine("MODO PENSAR MAIS: verifica cuidadosamente os dados, identifica pressupostos, refaz os cálculos, compara alternativas e riscos e procura contradições antes de responder. Apresenta apenas conclusões, fórmulas e justificações verificáveis; não reveles raciocínio interno privado.")
             appendLine("Ajuda em gestão económica, custos, margens, preços, stock, desperdício, receitas, pedidos, reservas, equipa, marketing, planeamento e utilização da aplicação.")
             appendLine("Compara alternativas, verifica contas, explica pressupostos e separa factos, estimativas e hipóteses. Não mostres raciocínio interno privado; apresenta conclusões, fórmulas e explicações verificáveis.")
             appendLine("Nunca inventes valores, vendas, faturas, documentos, fornecedores, integrações ou ações. Quando faltarem dados, diz exatamente o que falta.")
@@ -1219,7 +1221,7 @@ class MainActivity : Activity() {
 
                 localAssistantModelManager.generate(
                     conversationId = conversationId,
-                    systemInstruction = buildLocalAssistantSystemInstruction(scope, turnUsesDeepThinking),
+                    systemInstruction = buildLocalAssistantSystemInstruction(scope),
                     snapshot = assistantSnapshot(),
                     history = previousTurns,
                     userMessage = question,
