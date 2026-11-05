@@ -1650,7 +1650,7 @@ class MainActivity : Activity() {
     private fun formatInvoiceEuro(value: BigDecimal): String =
         NumberFormat.getCurrencyInstance(Locale("pt", "PT")).format(value)
 
-    private fun syncAssistantCloud(silent: Boolean) {
+    private fun syncAssistantCloud(silent: Boolean, force: Boolean = false) {
         val token = backendToken()
         val userId = backendPrefs.getString("user_id", "").orEmpty()
         val restaurantId = backendRestaurantId()
@@ -1661,7 +1661,7 @@ class MainActivity : Activity() {
             return
         }
         if (assistantCloudSyncInFlight) return
-        if (silent && System.currentTimeMillis() - assistantCloudLastSyncAtMillis < 60_000L) return
+        if (silent && !force && System.currentTimeMillis() - assistantCloudLastSyncAtMillis < 60_000L) return
         assistantCloudSyncInFlight = true
         assistantCloudLastSyncAtMillis = System.currentTimeMillis()
         Thread {
@@ -2145,11 +2145,12 @@ class MainActivity : Activity() {
                 card.setOnLongClickListener {
                     AlertDialog.Builder(this)
                         .setTitle("Eliminar conversa?")
-                        .setMessage("Esta conversa será removida do histórico deste dispositivo.")
+                        .setMessage("Esta conversa será removida deste dispositivo e, quando a sincronização estiver disponível, dos restantes dispositivos associados ao restaurante.")
                         .setNegativeButton("Cancelar", null)
                         .setPositiveButton("Eliminar") { _, _ ->
                             runCatching {
                                 assistantChatStore.deleteConversation(scope, conversation.id)
+                                syncAssistantCloud(silent = true, force = true)
                             }.onFailure {
                                 Toast.makeText(this, "Não foi possível eliminar a conversa.", Toast.LENGTH_SHORT).show()
                             }
