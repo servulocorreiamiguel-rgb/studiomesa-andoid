@@ -1,6 +1,6 @@
 package pt.studiomesa.app
 
-import android.app.Activity
+import androidx.activity.ComponentActivity
 import android.content.Intent
 import android.app.Dialog
 import android.content.ClipData
@@ -53,7 +53,7 @@ import com.google.zxing.EncodeHintType
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.integration.android.IntentIntegrator
 
-class MainActivity : Activity() {
+class MainActivity : ComponentActivity() {
     companion object {
         private const val REQUEST_EXPORT_ORDERS_CSV = 7812
         private const val REQUEST_IMPORT_SUPPLIER_INVOICE = 7813
