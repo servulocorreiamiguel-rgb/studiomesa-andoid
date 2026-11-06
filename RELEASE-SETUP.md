@@ -7,6 +7,12 @@
 >
 > **Requisitos Play consultados em 06/11/2026:** novas apps/updates desde 31/08/2026 exigem target Android 16/API 36; o projeto já define targetSdk 36. O titular da conta tem de ter pelo menos 18 anos; a taxa oficial de registo é US$25 uma vez. Para contas pessoais novas após 13/11/2023, há o requisito de 12 testers em closed test durante 14 dias contínuos. Confirmar sempre o tipo/data da conta nas páginas oficiais.
 
+## Toolchain Android
+
+A configuração atual usa Kotlin `2.3.0`, Android Gradle Plugin `8.13.2`, Gradle `8.13` e JDK 17. O AGP 8.13.2 incorpora R8 8.13.19, a versão indicada pela documentação Android para tratar metadados Kotlin 2.3. A CI completa tem de validar esta combinação em todas as variantes e no build de release antes de usar artefactos comerciais.
+
+Referências: [compatibilidade Kotlin/AGP/D8/R8](https://developer.android.com/build/kotlin-support) · [notas AGP 8.13.2](https://developer.android.com/build/releases/agp-8-13-0-release-notes) · [versões mínimas de Gradle por AGP](https://developer.android.com/build/releases/about-agp).
+
 ## Estado real
 
 O workflow `.github/workflows/commercial-release.yml` foi preparado para criar cinco Android App Bundles (AAB) e cinco APKs assinados para instalação direta. **Não publica automaticamente na Google Play**. Antes de correr esse workflow, é necessário definir o identificador de aplicação final e guardar a chave de assinatura nos GitHub Actions Secrets.
