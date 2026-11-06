@@ -17,7 +17,7 @@ Os APKs do workflow normal continuam a usar os identificadores `pt.studiomesa.pr
 
 A configuração de sabores atual produz aplicações separadas para Essencial/Profissional/Premium e Gestão/Cliente. O workflow comercial acrescenta os sufixos de sabor ao identificador base definido na variável `STUDIOMESA_RELEASE_APPLICATION_ID`.
 
-Antes de publicar, decide se queres realmente distribuir cinco aplicações separadas. Se pretendes uma única aplicação de gestão com funcionalidades diferentes conforme o plano, a configuração dos sabores e a forma de ativar as funcionalidades precisam de ser revistas antes de criar as fichas na loja.
+**Atenção à política de conteúdo repetitivo:** não assumas que podes publicar cinco fichas Play só porque o Gradle gera cinco variantes. A Google não permite múltiplas apps com funcionalidade, conteúdo e experiência altamente semelhantes e recomenda agregar apps com pouca diferenciação. Avalia primeiro duas apps com funções distintas (Gestão e Cliente), com os planos controlados por entitlement/licença segura no servidor, ou distribuição privada B2B. Os entitlements ainda não estão implementados e dependem da reconciliação do Supabase. Fontes: https://support.google.com/googleplay/android-developer/answer/18265346 e https://support.google.com/googleplay/android-developer/answer/15884185.
 
 O identificador de pacote é permanente depois da publicação. Cria primeiro a aplicação na Play Console e confirma o nome do pacote que fica registado. A Google Play regista o nome de pacote da nova aplicação na conta do programador; se o nome já estiver em uso, será necessário escolher outro. Referência: https://developer.android.com/developer-verification/guides/google-play-console
 
