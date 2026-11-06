@@ -1,4 +1,11 @@
 # StudioMesa — preparação para lançamento comercial
+> **Fotografia atual — 06/11/2026: NÃO LIBERADO PARA VENDA.** O workflow gera cinco AABs/APKs comerciais assinados quando houver package ID, keystore e secrets, mas não publica na Google Play. Os APKs debug normais são apenas demonstrações.
+>
+> **Bloqueio backend:** 53 ficheiros locais vs 54 versões remotas (48 comuns, cinco só locais e seis só remotas). Faltam no backend as tabelas de fichas técnicas, permissões granulares, sync do assistente, arquivo de faturas e bucket privado. Não aplicar migrations antes de reconciliar o histórico, testar backup/restauro e ensaiar o replay numa cópia descartável.
+>
+> **Privacidade/Auth:** os drafts estão em `PRIVACY-POLICY-TEMPLATE.md` e `DATA-SAFETY-DRAFT.md`. A página externa de eliminação usa `resetPasswordForEmail` + PKCE, mas o percurso completo ainda não foi testado com contas descartáveis. SMTP/OAuth não foram confirmados.
+>
+> **Requisitos Play consultados em 06/11/2026:** novas apps/updates desde 31/08/2026 exigem target Android 16/API 36; o projeto já define targetSdk 36. O titular da conta tem de ter pelo menos 18 anos; a taxa oficial de registo é US$25 uma vez. Para contas pessoais novas após 13/11/2023, há o requisito de 12 testers em closed test durante 14 dias contínuos. Confirmar sempre o tipo/data da conta nas páginas oficiais.
 
 ## Estado real
 
@@ -78,7 +85,7 @@ A página pública já está ativa em:
 
 A página envia uma ligação única ao email da conta; depois de a pessoa autenticar a sessão, permite pedir a eliminação. Não é seguro permitir eliminação apenas por introduzir um email.
 
-**Bloqueio de segurança adicional — enumeração de contas (29/10/2026):** a página usa `signInWithOtp` com `shouldCreateUser=false`. O projeto Supabase Auth tem um [problema público ainda aberto](https://github.com/supabase/auth/issues/1547) onde respostas HTTP e tempos de resposta podem revelar se um email existe. A mensagem neutra da interface reduz a diferença visível na página, mas **não oculta as respostas do endpoint Auth diretamente acessível**. O fluxo não deve ser considerado resistente à enumeração só por causa desta alteração. Antes da produção, reproduz o comportamento com contas descartáveis, revê as opções de proteção suportadas no projeto e documenta uma mitigação aceite. CAPTCHA/rate limiting podem reduzir abuso, mas não devem ser descritos como uma correção completa sem teste de eficácia.
+**Estado atual da página de eliminação:** a versão ativa usa `resetPasswordForEmail` com callback PKCE e mensagem neutra, não `signInWithOtp`. A eliminação efetiva é feita por `delete-account`, num endpoint separado que exige JWT. O envio por email, callback no mesmo navegador, troca PKCE e eliminação com contas descartáveis continuam sem teste E2E; por isso, não afirmar que a proteção contra enumeração ou a eliminação estão totalmente validadas. Ver `SUPABASE-SETUP.md` e `docs/SUPABASE-LIVE-RECONCILIATION-2026-11-06.md`.
 
 **Configuração obrigatória antes de testar o email:**
 
@@ -121,7 +128,7 @@ Regra para cada nova migração que crie uma tabela em `public`:
 
 Não aplicar um `GRANT` amplo para `anon` como solução rápida. Os privilégios da tabela controlam se o papel pode aceder ao objeto; o RLS controla as linhas que esse papel pode ver ou alterar. Ambos são necessários.
 
-**Estado observado no projeto alojado em 29/10/2026:** a migração `20261029133656_revoke_postgres_default_public_privileges.sql` já foi aplicada ao projeto ativo. Uma consulta posterior confirmou que as predefinições para novos objetos em `public` não concedem privilégios a `anon`, `authenticated` ou `service_role`, nem execução a `PUBLIC`. As 11 tabelas públicas existentes têm RLS e pelo menos uma política cada; a migração alterou apenas os privilégios predefinidos para objetos futuros, não os dados nem as concessões dos objetos existentes. O workflow de CI reproduz as 41 migrações numa base de dados descartável e testa, criando objetos temporários, que novas tabelas, sequências e funções não recebem permissões API por omissão. A comparação integral de todas as definições do esquema alojado com o esquema recriado continua a exigir uma revisão separada.
+[REGISTO HISTÓRICO — 29/10/2026, não usar como fotografia atual] Naquela data foram verificadas 41 versões aplicadas e privilégios por omissão fechados. Esta fotografia foi ultrapassada: em 06/11/2026 o histórico tem 54 versões remotas e 53 ficheiros locais, com cinco versões só locais e seis só remotas. O estado atual está em `docs/SUPABASE-LIVE-RECONCILIATION-2026-11-06.md`. A migração de privilégios por omissão foi aplicada historicamente, mas a divergência atual impede qualquer novo deployment.
 
 
 A verificação da compilação, por si só, não certifica que a aplicação esteja pronta para operação comercial.
