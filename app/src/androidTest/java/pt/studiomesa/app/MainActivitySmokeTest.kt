@@ -488,6 +488,34 @@ class MainActivitySmokeTest {
     }
 
     @Test
+    fun customerReservationsPageRequiresAccountBeforeBooking() {
+        assumeTrue("Restaurant variant has no customer navigation.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withContentDescription("Abrir secção Reservas")).perform(click())
+            onView(withText("As minhas reservas")).check(matches(isDisplayed()))
+            onView(withText("Inicia sessão para pedir e consultar reservas."))
+                .check(matches(isDisplayed()))
+            onView(withText("Criar conta / iniciar sessão"))
+                .check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
+    fun restaurantReservationsPageRequiresAuthenticatedRestaurant() {
+        assumeFalse("Customer variant has its own reservation request flow.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withContentDescription("Abrir menu de navegação")).perform(click())
+            onView(withContentDescription("Abrir secção Reservas")).perform(scrollTo(), click())
+            onView(withText("Reservas")).check(matches(isDisplayed()))
+            onView(withText(containsString("inicia sessão e configura o restaurante")))
+                .check(matches(isDisplayed()))
+            onView(withText("+  Nova reserva")).check(doesNotExist())
+        }
+    }
+
+    @Test
     fun restaurantAssistantShowsLocalAnalysisAndAnswersPricingQuestions() {
         assumeFalse("Customer variant has its own customer navigation.", isCustomerVariant())
 
