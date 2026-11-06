@@ -1,6 +1,6 @@
 package pt.studiomesa.app
 
-import android.app.Activity
+import androidx.activity.ComponentActivity
 import android.content.Intent
 import android.app.Dialog
 import android.content.ClipData
@@ -35,6 +35,7 @@ import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.core.content.FileProvider
 import org.json.JSONArray
 import org.json.JSONObject
@@ -52,7 +53,7 @@ import com.google.zxing.EncodeHintType
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.integration.android.IntentIntegrator
 
-class MainActivity : Activity() {
+class MainActivity : ComponentActivity() {
     companion object {
         private const val REQUEST_EXPORT_ORDERS_CSV = 7812
         private const val REQUEST_IMPORT_SUPPLIER_INVOICE = 7813
@@ -188,23 +189,23 @@ class MainActivity : Activity() {
             else -> "PROFISSIONAL"
         }
 
-    @Deprecated("Deprecated in Android API 33; retained for compatibility with older devices.")
-    override fun onBackPressed() {
-        if (activePage == "Assistente" && assistantToolsVisible) {
-            assistantToolsVisible = false
-            renderApp()
-            return
-        }
-        if (activePage == "Assistente") {
-            activePage = "Início"
-            renderApp()
-            return
-        }
-        super.onBackPressed()
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                when {
+                    activePage == "Assistente" && assistantToolsVisible -> {
+                        assistantToolsVisible = false
+                        renderApp()
+                    }
+                    activePage == "Assistente" -> {
+                        activePage = "Início"
+                        renderApp()
+                    }
+                    else -> finish()
+                }
+            }
+        })
         // Remove reservation contact data left by older demo builds which cached it on disk.
         backendPrefs.edit()
             .remove("remote_reservations_json")
@@ -509,6 +510,12 @@ class MainActivity : Activity() {
 
         drawerRoot.addView(View(this).apply { setBackgroundColor(line) },
             LinearLayout.LayoutParams(-1, dp(1)))
+        drawerRoot.addView(secondaryButton("Privacidade e dados") {
+            dialog.dismiss()
+            showPrivacyInformation()
+        }, LinearLayout.LayoutParams(-1, dp(46)).apply {
+            setMargins(dp(12), dp(8), dp(12), dp(2))
+        })
         drawerRoot.addView(label("StudioMesa · Gestão de sala", 10.5f, false, muted).apply {
             setPadding(dp(20), dp(12), dp(20), dp(16))
         }, LinearLayout.LayoutParams(-1, -2))
@@ -4395,6 +4402,65 @@ class MainActivity : Activity() {
         }, LinearLayout.LayoutParams(-1, dp(48)))
         addGap(container, 10)
         container.addView(label("As funções de gestão e os dados de cada restaurante são controlados por permissões no servidor.", 12f, false, muted))
+        addGap(container, 8)
+        container.addView(secondaryButton("Privacidade e dados") {
+            showPrivacyInformation()
+        }, LinearLayout.LayoutParams(-1, dp(48)))
+    }
+
+    private fun showPrivacyInformation() {
+        val notice = """
+            PRIVACIDADE E DADOS — VERSÃO DE DEMONSTRAÇÃO
+
+            Conta e utilização
+            Quando inicias sessão, a StudioMesa utiliza o teu email, identificador de conta e dados técnicos da sessão. Os dados operacionais que introduzes — como carta, mesas, pedidos, reservas, stock e fidelização — podem ser enviados para o backend Supabase e partilhados com os utilizadores autorizados do mesmo restaurante, de acordo com o respetivo papel.
+
+            Assistente de IA
+            O modelo generativo LFM2.5 é descarregado a pedido (cerca de 736 MB) e executado localmente. As perguntas e o histórico não são enviados ao fornecedor do modelo. Se usares a pesquisa da Wikipédia, é enviada uma consulta pública curta; não incluas dados privados nessa pesquisa.
+
+            Histórico e Memória
+            O histórico e as notas de Memória são cifrados neste dispositivo com uma chave do Android Keystore. O código da aplicação também suporta sincronização cloud para a conta proprietária. Quando essa função estiver ativa, a cópia no Supabase é protegida por autenticação e RLS, mas não é cifrada ponta a ponta. A disponibilidade da sincronização depende da configuração do backend.
+
+            Documentos e faturas
+            A leitura de PDFs e imagens e o OCR são processados localmente. O texto bruto extraído por OCR não é guardado pelo arquivo da aplicação. Os campos reconhecidos devem ser revistos antes de guardar. O envio de documentos e metadados para o arquivo cloud depende da configuração de uma tabela e de um bucket privado no backend.
+
+            Eliminação
+            Podes iniciar a eliminação em Conta → Eliminar conta permanentemente. Existe também uma página externa:
+            https://svwvkfsyevuyabelrtjk.supabase.co/functions/v1/account-deletion-web
+
+            A eliminação de uma conta de proprietário pode apagar permanentemente o restaurante e os dados associados, depois de confirmação e validação pelo servidor. A conta de um funcionário/cliente pode ser eliminada sem apagar os registos operacionais partilhados; a autoria pode ser anonimizada quando suportado.
+
+            Estado legal
+            ${if (BuildConfig.DEBUG) "Esta instalação é uma versão de demonstração. Não introduzas dados pessoais ou documentos reais." else "A política de privacidade pública final, a identidade e contacto do responsável pelo tratamento, os prazos de conservação e a declaração Data safety têm de estar aprovados e publicados antes da utilização comercial."}
+        """.trimIndent()
+
+        val textView = TextView(this).apply {
+            text = notice
+            textSize = 13.5f
+            setTextColor(ink)
+            setPadding(dp(18), dp(14), dp(18), dp(14))
+            autoLinkMask = android.text.util.Linkify.WEB_URLS
+            linksClickable = true
+            setMovementMethod(android.text.method.LinkMovementMethod.getInstance())
+        }
+        val scroll = ScrollView(this).apply {
+            isFillViewport = false
+            addView(textView)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Privacidade e dados")
+            .setView(scroll)
+            .setPositiveButton("Fechar", null)
+            .setNeutralButton("Abrir Conta") { _, _ ->
+                if (isCustomerApp) {
+                    activeCustomerPage = "Conta"
+                    renderCustomerApp()
+                } else {
+                    activePage = "Conta"
+                    renderApp()
+                }
+            }
+            .show()
     }
 
     private fun showDeleteAccountConfirmation() {
@@ -5646,6 +5712,10 @@ class MainActivity : Activity() {
                 renderCustomerApp()
             }, LinearLayout.LayoutParams(-1, dp(48)))
         }
+        addGap(container, 8)
+        container.addView(secondaryButton("Privacidade e dados") {
+            showPrivacyInformation()
+        }, LinearLayout.LayoutParams(-1, dp(48)))
     }
 
     private fun showCustomerProfileDialog() {

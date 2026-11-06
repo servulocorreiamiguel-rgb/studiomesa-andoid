@@ -1,3 +1,5 @@
+> **Nota de atualização — 06/11/2026:** este relatório é uma fotografia histórica de 04/11/2026 e está ultrapassado para o estado do código e do backend. Usa, para decisões atuais, `docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md`, `docs/SUPABASE-LIVE-RECONCILIATION-2026-11-06.md` e `docs/RELEASE-BLOCKERS-VERIFIED-2026-11-06.md`. Em particular, o histórico remoto/local de migrations divergiu para 53 ficheiros locais e 54 versões remotas; não aplicar migrations no projeto alojado. Os testes de reservas da PR #86 foram integrados e a CI #1332 passou nos quatro jobs.
+
 # StudioMesa — auditoria de prontidão comercial
 
 **Data de referência:** 4 de novembro de 2026  

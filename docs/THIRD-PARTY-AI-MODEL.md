@@ -20,7 +20,7 @@ O repositório `litert-community` é uma conversão comunitária e declara não 
 - Licença do runtime: Apache License 2.0, disponível no repositório do projeto.
 - O runtime executa o modelo no dispositivo Android.
 - A versão `0.18.0` é necessária para interpretar as chamadas às ferramentas do modelo LFM2 reempacotado em 13/10/2026. As versões `0.15` a `0.17` devolvem essas chamadas como texto e não executam as ferramentas automaticamente.
-- A biblioteca `0.18.0` requer Kotlin 2.3 ou superior; o projeto usa Kotlin `2.3.0` com Android Gradle Plugin `8.10.0` e Gradle `8.11.1`.
+- A biblioteca `0.18.0` requer Kotlin 2.3 ou superior; o projeto usa Kotlin `2.3.0` com Android Gradle Plugin `8.13.2` e Gradle `8.13`.
 - Cada sessão nativa usa um par próprio `Engine` + `Conversation`; a conversa é fechada antes do motor. A sessão é reconstruída periodicamente a partir do histórico local para respeitar a janela de contexto.
 
 ## Ficheiro transferido
@@ -37,6 +37,14 @@ O repositório `litert-community` é uma conversão comunitária e declara não 
 A geração do texto continua local. Quando a ferramenta de pesquisa é usada, a aplicação envia apenas uma consulta pública curta à API da Wikipédia em português (e só tenta inglês se não houver resultados). Não envia mensagens completas, histórico nem dados operacionais da StudioMesa. Os resultados incluem ligações à fonte; a disponibilidade e os limites são definidos pela Wikimedia. A pesquisa não é uma busca geral na Web e não deve ser usada como confirmação de notícias recentes ou decisões críticas.
 
 Depois da instalação, a inferência é executada localmente. As mensagens, o histórico e o contexto selecionado para o modelo não são enviados a um serviço externo de IA por esta funcionalidade. A transferência inicial do ficheiro requer Internet e consome cerca de 736 MB de dados.
+
+## Sincronização cloud separada da inferência
+
+O modelo generativo e o runtime processam as perguntas no próprio dispositivo. Existe, separadamente, um componente `AssistantCloudSyncCoordinator` que pode sincronizar conversas e Memória do proprietário com o Supabase quando a migration e as tabelas correspondentes estiverem instaladas. Essa sincronização não envia o conteúdo ao fornecedor do modelo nem a uma API externa de inferência, mas cria uma cópia cloud protegida por autenticação/RLS; **não é encriptação ponta a ponta**.
+
+Em 6 de novembro de 2026, as tabelas de sincronização ainda não existem no projeto Supabase alojado. Portanto, a sync cloud não está operacional nesse ambiente e não deve ser anunciada como ativa até reconciliação/deployment e teste E2E aprovados.
+
+Quando o utilizador aciona a ferramenta de pesquisa, a aplicação pode enviar uma consulta genérica à Wikipédia. Isto é uma chamada pública separada da geração local; não deve conter histórico, prompts completos, faturas, contactos ou dados internos.
 
 A execução local não garante que as respostas estejam corretas. O modelo pode falhar, inventar informação ou não compreender contextos complexos. Verificar os cálculos e decisões importantes. A IA não substitui um contabilista certificado nem executa alterações financeiras ou operacionais.
 
