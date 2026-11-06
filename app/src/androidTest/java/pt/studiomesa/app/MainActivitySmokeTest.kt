@@ -504,6 +504,7 @@ class MainActivitySmokeTest {
     @Test
     fun restaurantReservationsPageRequiresAuthenticatedRestaurant() {
         assumeFalse("Customer variant has its own reservation request flow.", isCustomerVariant())
+        assumeTrue("Reservations are included in the Professional and Premium plans.", isCalculatorAvailable())
 
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
