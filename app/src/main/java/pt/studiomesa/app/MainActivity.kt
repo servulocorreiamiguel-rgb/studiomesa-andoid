@@ -35,6 +35,7 @@ import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.core.content.FileProvider
 import org.json.JSONArray
 import org.json.JSONObject
@@ -188,23 +189,23 @@ class MainActivity : Activity() {
             else -> "PROFISSIONAL"
         }
 
-    @Deprecated("Deprecated in Android API 33; retained for compatibility with older devices.")
-    override fun onBackPressed() {
-        if (activePage == "Assistente" && assistantToolsVisible) {
-            assistantToolsVisible = false
-            renderApp()
-            return
-        }
-        if (activePage == "Assistente") {
-            activePage = "Início"
-            renderApp()
-            return
-        }
-        super.onBackPressed()
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                when {
+                    activePage == "Assistente" && assistantToolsVisible -> {
+                        assistantToolsVisible = false
+                        renderApp()
+                    }
+                    activePage == "Assistente" -> {
+                        activePage = "Início"
+                        renderApp()
+                    }
+                    else -> finish()
+                }
+            }
+        })
         // Remove reservation contact data left by older demo builds which cached it on disk.
         backendPrefs.edit()
             .remove("remote_reservations_json")
