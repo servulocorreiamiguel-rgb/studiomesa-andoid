@@ -1,6 +1,4 @@
-# StudioMesa — demonstração de gestão de restaurante
-
-Protótipo Android de gestão de restaurante com identidade visual própria e dados de demonstração. Não é uma solução certificada para operação comercial. Antes de um restaurante o usar em serviço real, é obrigatório testar os fluxos, configurar as regras do restaurante e confirmar os requisitos legais e operacionais.
+> **Atualização de 06/11/2026:** a primeira fase da IA local está integrada no código principal e passou a CI automatizada no commit candidato `4d8fa858`. A sincronização cloud do histórico e o arquivo remoto de faturas ainda não estão ativos no Supabase alojado: a migração de IA, as tabelas e o bucket privado ainda não foram aplicados. Não aplicar migrações até reconciliar o histórico remoto. Ver [bloqueios de lançamento verificados](docs/RELEASE-BLOCKERS-VERIFIED-2026-11-06.md) e [auditoria de prontidão comercial](docs/COMMERCIAL-READINESS-2026-11-04.md).
 
 > **Atualização de 04/11/2026:** continua a ser uma versão de demonstração, não pronta para operação comercial real. A fotografia técnica, os bloqueios de produção e a sequência de lançamento estão em [docs/COMMERCIAL-READINESS-2026-11-04.md](docs/COMMERCIAL-READINESS-2026-11-04.md). A exportação operacional de pedidos em CSV foi integrada; a integração de receitas, loja/QR e permissões granulares continua em revisão. Não aplicar migrações ao Supabase alojado enquanto o histórico não estiver reconciliado.
 
