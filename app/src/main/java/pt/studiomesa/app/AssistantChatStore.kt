@@ -19,7 +19,9 @@ import javax.crypto.spec.GCMParameterSpec
  *
  * Data is partitioned by the caller-provided account/restaurant scope. The key is
  * kept in Android Keystore and the encrypted payload in private app preferences.
- * It is deliberately not presented as cloud-synchronised history.
+ * AssistantCloudSyncCoordinator can synchronise the owner's history and memory to
+ * Supabase when the required backend migration is deployed. The cloud copy is protected
+ * by server-side authorization/RLS; it is not end-to-end encrypted.
  */
 class AssistantChatStore(context: Context) {
     data class Conversation(
