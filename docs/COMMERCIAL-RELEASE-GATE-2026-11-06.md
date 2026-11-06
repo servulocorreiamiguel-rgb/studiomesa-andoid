@@ -48,7 +48,8 @@ Este documento é a lista única de saída para as cinco variantes. Um checkbox 
 - [ ] Identificar o responsável legal/controlador, morada, NIF e email profissional de privacidade.
 - [ ] Definir papéis de responsável/subcontratante por finalidade, DPA e lista de subcontratantes/regiões.
 - [ ] Definir bases jurídicas, retenção e eliminação por categoria, exportação, pedidos de titulares e resposta a incidentes.
-- [ ] Publicar uma política de privacidade real numa URL estável e integrá-la na app/ficha Play; substituir todos os placeholders do rascunho.
+- [x] Adicionada à app uma área «Privacidade e dados» na Gestão e na Conta da app Cliente; é um resumo técnico, não a política completa.
+- [ ] Identificar o responsável legal, completar a política, publicá-la numa URL estável e ligar o URL na app/ficha Play; substituir todos os placeholders do rascunho.
 - [ ] Rever e submeter Data Safety com base no AAB exato, no código final, SDKs e configuração cloud ativa.
 - [ ] Revisão jurídica dos termos B2B, licença de utilização, contrato/DPA, IVA, preços, suporte e limitações.
 - [ ] Gerar SBOM e notices das dependências transitivas; rever licenças do modelo LFM Open v1.0, LiteRT-LM, ML Kit e todas as bibliotecas/ativos.
@@ -72,14 +73,16 @@ Fontes oficiais consultadas em 06/11/2026:
 - [Boas práticas para programadores de apps white-label](https://support.google.com/googleplay/android-developer/answer/15884185).
 ## Gate D — identidade, assinatura e Google Play
 
-- [ ] Definir a entidade que vende/contrata e o titular da conta de programador.
-- [ ] Decidir a estratégia Play. Não assumir cinco listagens semelhantes; avaliar duas apps (Gestão/Cliente) e entitlements de plano no servidor ou distribuição privada B2B. Rever a política de conteúdo repetitivo antes de definir package IDs.
+- [ ] Definir a entidade que vende/contrata e o titular adulto da conta de programador; o titular tem de ter pelo menos 18 anos.
+- [ ] Decidir a estratégia Play. Não assumir cinco listagens semelhantes; avaliar duas apps (Gestão/Cliente) e entitlements de plano no servidor ou distribuição white-label descentralizada por cliente. Rever a política de conteúdo repetitivo antes de definir package IDs.
 - [ ] Criar keystore de release fora do repositório; guardar duas cópias offline seguras e passwords num gestor de segredos.
 - [ ] Configurar os GitHub Actions secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` e a variable `STUDIOMESA_RELEASE_APPLICATION_ID` sem expor os valores em commits/conversas.
 - [ ] Executar o workflow comercial a partir de `main` com CI completa verde, validar cinco AABs e cinco APKs com assinatura e conservar checksums.
 - [ ] Criar apenas as fichas compatíveis com a arquitetura e políticas aprovadas; usar listagens, ícones, imagens e descrições próprios que correspondam à funcionalidade real.
-- [ ] Preparar ícone, screenshots reais, descrição, classificação de conteúdo, público-alvo, contactos, página de privacidade, URL de eliminação, Data Safety e credenciais de revisão.
-- [ ] Para uma nova app, target Android 16/API 36 ou superior desde 31/08/2026; o projeto usa targetSdk 36 no código atual. Confirmar no AAB final.
+- [ ] Preparar ícones e screenshots reais, descrição individual, classificação de conteúdo, público-alvo, contactos, página de privacidade, URL de eliminação, Data Safety e credenciais de revisão.
+- [x] targetSdk 36 no código atual (mínimo Play para novas apps/updates desde 31/08/2026); confirmar no AAB final.
+- [ ] Se a conta for pessoal criada após 13/11/2023, cumprir 12 testers em teste fechado por 14 dias contínuos e verificação de dispositivo físico pelo Play Console.
+- [ ] Se publicar em nome de uma organização/atividade empresarial, usar o tipo de conta correto e validar o requisito D-U-N-S.
 - [ ] O titular de uma conta Play Console tem de ter pelo menos 18 anos. A taxa de registo oficial é 25 USD, uma única vez. Se a conta for pessoal e tiver sido criada após 13/11/2023, aplicar o requisito de teste fechado de pelo menos 12 testers inscritos continuamente durante 14 dias antes de pedir acesso à produção.
 - [ ] Passar pela revisão de políticas e publicação Play; o workflow interno apenas gera artefactos e não publica.
 
@@ -93,6 +96,16 @@ Fontes oficiais consultadas em 06/11/2026:
 - [ ] SMTP, OAuth e configuração do serviço de backend aprovados.
 - [ ] Keystore e credenciais de assinatura criadas e guardadas fora do repositório.
 - [ ] Identificação do primeiro POS/ERP se a proposta incluir integração.
+
+## Documentos comerciais preparados nesta branch
+
+- [x] Planos e matriz de funcionalidades: `SALES-PLANS-DRAFT.md`.
+- [x] Proposta/orçamento: `COMMERCIAL-QUOTATION-TEMPLATE.md`.
+- [x] Onboarding e aceitação: `COMMERCIAL-ONBOARDING-CHECKLIST.md`.
+- [x] Termos B2B, licença de software e DPA: `TERMS-OF-SERVICE-TEMPLATE.md`, `B2B-SOFTWARE-LICENSE-TEMPLATE.md` e `DATA-PROCESSING-AGREEMENT-TEMPLATE.md`.
+- [x] Avisos preliminares de terceiros: `THIRD-PARTY-NOTICES.md`; SBOM transitivo e revisão legal ainda pendentes.
+- [x] Estratégia de distribuição Play: `docs/PLAY-DISTRIBUTION-STRATEGY-2026-11-06.md`.
+- [x] PR draft #87 criada; aguardando CI do head final antes de marcar pronta ou integrar.
 
 ## Decisão de saída
 
