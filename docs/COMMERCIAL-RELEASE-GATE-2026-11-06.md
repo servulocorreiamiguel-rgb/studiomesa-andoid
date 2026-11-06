@@ -10,7 +10,7 @@ Este documento é a lista única de saída para as cinco variantes. Um checkbox 
 | Área | Estado |
 |---|---|
 | Android | Kotlin nativo; cinco variantes; minSdk 24; targetSdk 36; versionName 1.5.0. |
-| CI | Replay PostgreSQL/autorização, build das variantes, unit tests e Lint já passaram na CI da PR #86; smoke em Android 8/16 aguarda resultado final. |
+| CI | Workflow #1332 totalmente verde: replay PostgreSQL/autorização, build das variantes, unit tests, Lint e smoke tests Android 8/16. PR #86 integrada na main no commit `0770ad7`. Os skips de teste ocorrem nas variantes sem a página correspondente. |
 | Reservas | Regressões de idempotência, acesso por restaurante, capacidade, mesa inexistente, horários sobrepostos e retry após atribuição/confirmada passaram no PostgreSQL descartável da CI #1332. |
 | IA | LFM2.5 local; histórico/Memória locais cifrados. Sync cloud está no código, mas falta deploy das tabelas no Supabase alojado. |
 | Faturas | OCR local; metadados locais cifrados. Tabela e bucket cloud ainda ausentes no Supabase alojado. |
@@ -22,7 +22,7 @@ Este documento é a lista única de saída para as cinco variantes. Um checkbox 
 
 ## Gate A — produto e funcionalidades
 
-- [ ] Smoke tests de CI Android 8/API 26 e Android 16 terminam com sucesso no head final da branch/main.
+- [x] Smoke tests de CI Android 8/API 26 e Android 16 terminaram com sucesso na CI #1332 da PR #86, agora integrada na main.
 - [ ] Testes E2E com contas descartáveis: cliente, proprietário, funcionário e dois restaurantes; login, recuperação, logout, revogação, reservas, pedidos, mesas, carta, stock, fidelização, permissões, exportação e eliminação.
 - [ ] Fichas técnicas e consumo automático de ingredientes validados após a migration aprovada estar alojada.
 - [ ] Sincronização do assistente validada em dois dispositivos e conflitos/tombstones/eliminação validados após migration aprovada.
