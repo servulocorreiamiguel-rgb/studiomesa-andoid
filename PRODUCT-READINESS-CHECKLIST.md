@@ -7,8 +7,8 @@ Esta secção é a fotografia atual e sobrepõe-se aos registos históricos mais
 - [x] Cinco variantes Android no código; compileSdk/targetSdk 36, minSdk 24, Java 17 e versão 1.5.0.
 - [x] APKs debug de demonstração e workflow manual para cinco AABs/APKs assinados preparado; não publica automaticamente na Google Play.
 - [x] IA local LFM2.5-1.2B, histórico/Memória local cifrada, OCR local e ferramentas de leitura implementadas no código.
-- [x] Fluxo de reservas de cliente e restaurante presente no código. PR #86 acrescenta testes de regressão para sobreposição, capacidade, mesa inexistente, idempotência e ecrãs sem autenticação.
-- [x] CI #1332: replay PostgreSQL/autorização, compilação, unit tests e Lint já passaram no head da PR #86. Smoke Android 8/16 ainda devem ser confirmados no resultado final.
+- [x] Fluxo de reservas de cliente e restaurante presente no código. PR #86 foi integrada na main (commit `0770ad7`), com testes de regressão para sobreposição, capacidade, mesa inexistente, idempotência e ecrãs sem autenticação.
+- [x] CI #1332 terminou com os quatro jobs em sucesso: replay PostgreSQL/autorização, compilação, unit tests, Lint e smoke tests em Android 8 e Android 16. Os skips de interface são condicionados à variante/plano; as páginas de reservas executaram nas variantes que as incluem.
 - [ ] Reconciliar as 53 migrations locais com as 54 versões do Supabase alojado (48 comuns, cinco só locais e seis só remotas); backup/restauro e replay descartável antes de deployment.
 - [ ] Aplicar de forma aprovada as tabelas de receitas, permissões granulares, sync do assistente, faturas e bucket privado — atualmente ausentes no backend alojado.
 - [ ] Resolver o aviso Leaked Password Protection Disabled, com decisão consciente sobre upgrade Pro, SMTP, URLs Auth, OAuth e teste E2E.
@@ -27,7 +27,7 @@ Esta secção é a fotografia atual e sobrepõe-se aos registos históricos mais
 
 Os registos e checkboxes abaixo foram escritos em 29/10 e 05/11/2026. Alguns referem estados do código e do Supabase que mudaram desde então. Servem apenas para histórico; em caso de conflito, prevalece a fotografia atual acima e o gate de lançamento de 06/11/2026.
 
-**Nota:** os registos abaixo incluem verificações históricas de 29/10/2026; quando diferirem do relatório de 04/11/2026, prevalece a fotografia mais recente documentada em `docs/COMMERCIAL-READINESS-2026-11-04.md`.
+**Nota:** os registos abaixo são históricos (29/10 e 05/11/2026). Quando diferirem da fotografia atual, prevalece o topo deste ficheiro e `docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md`, não o relatório de 04/11.
 
 
 **Estado de lançamento nesta revisão: não pronto para operação comercial real.**  
