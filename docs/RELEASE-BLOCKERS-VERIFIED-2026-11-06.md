@@ -97,3 +97,15 @@ Detalhes e plano seguro: [docs/SUPABASE-LIVE-RECONCILIATION-2026-11-06.md](SUPAB
 Não executar `db push`, `migration repair`, `apply_migration`, deploy de Edge Functions, alteração de Auth/Storage ou upgrade do plano enquanto a divergência não estiver reconciliada e não existir backup/restauro verificável e aprovação explícita. Todas as consultas desta auditoria foram read-only; nenhuma alteração foi aplicada ao projeto Supabase alojado.
 
 **Conclusão:** o código e a CI estão num estado avançado e as reservas passaram a regressão automatizada. O backend alojado, segurança Auth, assinatura comercial, documentação legal, licenças, configuração de operação e testes físicos impedem ainda declarar o StudioMesa pronto para vender.
+## Atualização da preparação comercial — 06/11/2026
+
+- A PR #86 (regressões de reservas) foi integrada na `main` no commit `0770ad772f6abb2a44027a462187908a085011cf`. A CI #1332 terminou com sucesso nos quatro jobs: migrations/autorização PostgreSQL, build/testes unitários/Lint, smoke Android 8 e smoke Android 16.
+- A PR #87 (`feat: complete StudioMesa commercial readiness pack`) está aberta em draft. Inclui o aviso de privacidade dentro da app Gestão e da Conta Cliente, documentação comercial, DPA e estratégia de distribuição. A CI completa desta PR tem de terminar com sucesso antes de marcar a PR como pronta.
+- O aviso dentro da app é um resumo técnico, não substitui a política pública completa exigida pela Google Play. O responsável legal, email de privacidade, retenção, subprocessadores, URL pública e Data Safety final continuam por preencher e aprovar.
+- Foram criados modelos de proposta/orçamento, planos de referência, onboarding, termos B2B, licença de software, DPA e avisos de terceiros. Os valores de 890 €, 1 490 € e 1 690 € permanecem referências comerciais, não ofertas aprovadas.
+- A estratégia de publicação recomenda avaliar duas apps com propósitos distintos (Gestão e Cliente) e entitlements no servidor, ou distribuição white-label descentralizada por cliente. Os cinco flavors continuam úteis para QA; não publicar cinco listagens parecidas sem revisão da política de conteúdo repetitivo.
+- O código da app continua a ser uma demonstração avançada. A sincronização cloud da IA/faturas, fichas técnicas/consumo automático e permissões granulares não estão ativas no Supabase alojado. A divergência do histórico permanece sem alteração.
+- Nenhuma migration, configuração Auth/Storage, Edge Function ou dado foi alterado no projeto Supabase alojado durante esta preparação. Não foi criado keystore, segredo de assinatura, AAB comercial definitivo nem submissão Play.
+- Os testes físicos no OPPO A5m não foram executados; estão reservados para a fase seguinte com Artemis.
+
+**Estado permanece: NÃO LIBERADO PARA VENDA/PRODUÇÃO.**
