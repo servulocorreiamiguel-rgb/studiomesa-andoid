@@ -51,7 +51,7 @@
 
 - [x] Descrever contas, restaurante/equipa, clientes, mesas, carta, pedidos, reservas, stock, pontos, sessões e auditoria.
 - [x] Descrever o LFM2.5 local; transferências públicas genéricas à Wikipédia quando a ferramenta é usada; não confundir estas chamadas com envio de prompts ao modelo cloud.
-- [ ] Descrever histórico/memória cifrados localmente e sync cloud opcional com RLS, sem E2E.
+- [x] Descrever histórico/memória cifrados localmente e sync cloud opcional com RLS, sem E2E.
 - [x] Descrever OCR local, limites PDF/imagem e que o texto OCR não é guardado; faturas e documentos para Supabase só após configuração de tabela/bucket privado e autenticação de proprietário.
 - [x] Incluir eliminação de conta, limitações de teste e placeholders para controlador, email, morada, bases legais, retenção, subprocessadores e transferências.
 - [x] Criar matriz de categorias de dados/recolha/partilha/segurança/eliminação a validar no formulário Google Play; não marcar respostas como finais.
@@ -64,8 +64,10 @@
 **Ficheiros:**
 - Criar TERMS-OF-SERVICE-TEMPLATE.md.
 - Criar B2B-SOFTWARE-LICENSE-TEMPLATE.md.
+- Criar DATA-PROCESSING-AGREEMENT-TEMPLATE.md.
 
 - [x] Criar modelos B2B com campos para entidade/cliente, plano e módulos incluídos, pagamento, configuração, suporte, atualizações, alojamento, disponibilidade, dados, exportação, backups, fim do contrato, incidentes e responsabilidades.
+- [x] Criar DPA modelo com subprocessadores, segurança, incidentes, direitos dos titulares e eliminação.
 - [x] Distinguir licença de utilização da app da titularidade dos dados do restaurante.
 - [x] Explicar limites: não é contabilidade/faturação certificada, não garante previsão, não processa pagamentos nem substitui POS/ERP.
 - [x] Identificar como pendentes as condições legais, preços, IVA, prazos e SLA, com revisão profissional obrigatória.
@@ -94,11 +96,11 @@
 
 - [x] Marcar as cinco aplicações como variantes de demonstração até geração comercial assinada; documentar targetSdk 36 e minSdk 24.
 - [x] Documentar os cinco outputs do workflow e os quatro secrets + uma variable necessárias, sem incluir valores.
-- [x] Identificar a exigência de titularidade/idade Google Play e que a conta de programador precisa de ser detida pelo adulto/entidade legal responsável.
+- [x] Identificar a exigência de titularidade/idade Google Play e que a conta de programador precisa de ser detida pelo adulto/entidade legal responsável; documentar D-U-N-S e verificações de conta pessoal.
 - [x] Explicar que o workflow produz AAB/APK assinados mas não publica na loja.
 - [x] Registar que não existe atribuição automática de planos/pagamentos nem integração POS/contabilidade.
 - [x] Separar os bloqueios cloud/segurança/Auth/email/OAuth/backup/restore/legal/physical device.
-- [ ] Atualizar o estado da PR #86 e da CI somente depois de confirmar o resultado final.
+- [x] Atualizar o estado da PR #86 (integrada em `main`, commit `0770ad7`) e abrir PR #87 para o pacote comercial; CI completa do head `714df52` em execução.
 
 **Verificação:** revisão textual dos documentos, procura de informações antigas, testes estáticos do workflow comercial, CI completa da branch.
 
@@ -107,5 +109,23 @@
 - [ ] Executar o workflow completo da branch depois de todas as alterações.
 - [ ] Confirmar os quatro jobs, resultados de testes, Lint, replay/autorização e emuladores Android 8/16.
 - [ ] Verificar diff completo e confirmar que não existem secrets, chaves ou dados reais.
-- [ ] Abrir PR para main apenas com evidência verde e relatório final.
+- [x] Abrir PR draft #87 para `main`; aguardar CI verde antes de marcar como pronta ou integrar.
 - [ ] Não fazer merge se a CI falhar; não executar release comercial nem deploy cloud.
+### Tarefa 7 — Pacote comercial e entrega B2B
+
+**Ficheiros:** `SALES-PLANS-DRAFT.md`, `COMMERCIAL-QUOTATION-TEMPLATE.md`, `COMMERCIAL-ONBOARDING-CHECKLIST.md`, `docs/PLAY-DISTRIBUTION-STRATEGY-2026-11-06.md`.
+
+- [x] Registar preços de referência 890 €, 1 490 € e 1 690 € como rascunho não vinculativo.
+- [x] Separar funcionalidades operacionais das que dependem de deployment Supabase.
+- [x] Criar modelo de proposta/orçamento e checklist de onboarding/aceitação.
+- [x] Documentar risco de conteúdo repetitivo e opções de distribuição (duas apps com entitlements ou white-label descentralizado).
+- [ ] Aprovar modalidade de pagamento, IVA, suporte, manutenção, alojamento e package IDs.
+
+### Tarefa 8 — Transparência de privacidade dentro da app
+
+**Ficheiro:** `app/src/main/java/pt/studiomesa/app/MainActivity.kt`.
+
+- [x] Adicionar acesso a «Privacidade e dados» na Gestão e na Conta da app Cliente.
+- [x] Explicar IA local, consulta pública da Wikipédia, histórico/Memória, OCR, sincronização opcional e eliminação.
+- [ ] Testar a apresentação do aviso no emulador Android 8/16 e no OPPO A5m.
+- [ ] Substituir o aviso de demonstração pela política aprovada, adicionar URL pública final e contacto do responsável antes de produção.
