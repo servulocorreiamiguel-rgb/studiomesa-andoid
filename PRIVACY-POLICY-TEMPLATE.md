@@ -1,86 +1,133 @@
-# StudioMesa — rascunho de política de privacidade
+# StudioMesa — modelo de política de privacidade
 
-> **ESTADO: RASCUNHO — NÃO PUBLICAR AINDA.** Antes de usar esta política na Google Play, o responsável legal pela aplicação tem de preencher todos os campos `[A PREENCHER]`, confirmar os períodos de conservação e os fornecedores reais, e verificar que cada declaração corresponde ao comportamento publicado da aplicação. Não inventar identidade legal, morada, email de contacto, retenções ou certificações.
+<strong>ESTADO: RASCUNHO — NÃO PUBLICAR.</strong> Este documento é um modelo técnico, não um parecer jurídico. O responsável legal pela aplicação tem de preencher os campos em falta, confirmar os fornecedores e os períodos de conservação, validar o comportamento da versão que será distribuída e obter revisão jurídica adequada.
 
-**Última revisão técnica do código:** 29 de outubro de 2026.  
-**Nome da aplicação:** StudioMesa.
+**Versão do modelo:** 6 de novembro de 2026  
+**Aplicação:** StudioMesa — Gestão e Cliente
 
 ## 1. Responsável pelo tratamento
 
-Responsável legal: **[A PREENCHER — nome legal ou entidade que opera o StudioMesa]**.  
-Contacto para privacidade e exercício de direitos: **[A PREENCHER — endereço de email profissional controlado pelo responsável]**.  
-Morada ou outro contacto legal exigível: **[A PREENCHER após confirmação dos requisitos aplicáveis]**.
+Responsável legal / entidade: **[A PREENCHER — nome jurídico exato]**.  
+Morada: **[A PREENCHER]**.  
+Contacto para privacidade e exercício de direitos: **[A PREENCHER — email profissional controlado pelo responsável]**.  
+Representante ou contacto na UE, se aplicável: **[A PREENCHER]**.
 
-## 2. Dados tratados
+Não publicar enquanto estes campos não estiverem preenchidos e confirmados.
 
-Conforme as funcionalidades utilizadas, o StudioMesa pode tratar:
+## 2. Âmbito
 
-- **Conta e autenticação:** endereço de email, identificador de conta e dados técnicos da sessão geridos pelo serviço de autenticação. A aplicação Android não recebe nem guarda uma chave administrativa do Supabase; a palavra-passe é submetida ao fornecedor de autenticação e não é apresentada pelo StudioMesa.
-- **Dados do restaurante e da equipa:** nome do restaurante, contas e papéis de proprietários/funcionários, códigos de adesão e dados de configuração.
-- **Operação:** mesas e zonas, artigos e categorias da carta, preços e custos internos, pedidos, quantidades, estados, notas de cozinha, reservas, números de pessoas, datas e horas, contactos fornecidos para reservas, inventário e movimentos de stock.
-- **Fidelização:** nome apresentado, código de cliente, associação ao restaurante, pontos e respetivo histórico.
-- **Dados locais de demonstração:** a versão local de demonstração guarda dados de exemplo no armazenamento do dispositivo. Os testes de produção devem confirmar que nenhuma cache de uma conta anterior é mostrada a outra conta.
-- **Assistente StudioMesa:** a implementação atual é determinística e funciona localmente; não usa um modelo generativo alojado nem envia perguntas ou dados para uma API externa de IA. Pode analisar, a partir dos dados já carregados na aplicação, artigos/preços/custos atuais, pedidos, stock e reservas. Os rascunhos de marketing usam os campos existentes dos artigos e as sugestões não alteram automaticamente os registos.
-- **Gestor económico opcional:** os valores financeiros introduzidos manualmente para estimativas, cenários de tesouraria, custos por receita ou comparações ficam apenas em memória durante a sessão; não são guardados nas preferências locais nem sincronizados com o Supabase. As conclusões dependem dos dados introduzidos pelo utilizador e são estimativas, não contabilidade certificada.
-- **Dados técnicos de segurança:** metadados da sessão e referências de auditoria de operações necessárias ao funcionamento e à prevenção de duplicações. Não foram identificadas integrações de publicidade, pagamentos ou analytics no código revisto.
+A StudioMesa é uma aplicação Android de gestão de restaurante e uma aplicação associada para clientes. As funcionalidades e os dados disponíveis dependem do plano contratado, da variante instalada e da configuração do backend. Esta política deve ser revista sempre que o código, os fornecedores, os endpoints ou a configuração de produção mudarem.
 
-O proprietário do restaurante deve introduzir apenas os dados necessários à operação e informar os clientes/funcionários sobre o tratamento de dados que lhes diz respeito.
+## 3. Categorias de dados que podem ser tratados
 
-## Nota técnica importante sobre assistente e dados financeiros
+Consoante a funcionalidade e o papel da pessoa, podem ser tratados:
 
-A descrição acima foi atualizada em 29/10/2026 com base no código e na documentação do projeto. As operações de restaurante autenticado — por exemplo, artigos da carta, pedidos, reservas, stock e fidelização — são sincronizadas com o backend Supabase quando essa funcionalidade está configurada. A aplicação também mantém dados locais de demonstração. O assistente StudioMesa atual faz análise determinística local e não usa um modelo generativo externo. O Gestor económico opcional trabalha com valores introduzidos manualmente e não os persiste; se esta funcionalidade vier a guardar dados, sincronizá-los ou usar um fornecedor externo, esta política e a declaração Data safety terão de ser revistas antes da versão correspondente ser distribuída.
+- **Conta e autenticação:** email, identificador de utilizador, tokens/sessão técnica e dados necessários ao registo, login, confirmação de email, recuperação de palavra-passe, OAuth (se ativado) e eliminação da conta.
+- **Restaurante e equipa:** nome do restaurante, identificadores de restaurante, associação e papel de proprietário/funcionário, códigos de adesão, permissões, dados de configuração e histórico de ações suportado pela versão.
+- **Operação do restaurante:** mesas, zonas e capacidade; artigos e categorias da carta; preços e custos internos; pedidos, quantidades, notas, estados e tempos; reservas, nome, contacto opcional, data/hora, número de pessoas, duração, mesa atribuída e notas; artigos de stock, quantidades, unidades, custos unitários e movimentos.
+- **Clientes e fidelização:** nome de apresentação, identificadores/códigos de cartão, associação ao restaurante, saldo e histórico de pontos, QR temporários e histórico de recompensas quando essas funcionalidades estiverem ativadas.
+- **Conteúdo do assistente:** perguntas e respostas, títulos de conversas e notas da Memória. O histórico e a Memória são cifrados localmente com uma chave do Android Keystore. O código inclui uma sincronização cloud opcional para a conta proprietária; quando essa migração está implantada, o conteúdo é guardado no Supabase e protegido por autenticação/RLS. Essa cópia cloud **não é cifrada ponta a ponta**.
+- **Documentos e faturas de fornecedores:** PDFs/imagens escolhidos pelo utilizador; texto extraído por OCR local; nome e NIF/VAT do fornecedor, número e datas da fatura, base, IVA, total, avisos, estado de revisão, tamanho, tipo MIME e hash do documento. O texto bruto de OCR não é guardado pelo arquivo. A cópia local dos metadados é cifrada; a cópia cloud do documento/metadados só funciona depois de aplicar e validar a migração e o bucket privado.
+- **Modelo local de IA:** o modelo LFM2.5-1.2B-Instruct INT4 é descarregado a pedido de um repositório público para armazenamento privado da aplicação, com verificação do tamanho e SHA-256. A inferência ocorre no dispositivo; esta função não envia o prompt, histórico ou dados do restaurante ao fornecedor do modelo.
+- **Pesquisa pública opcional:** quando o utilizador aciona a ferramenta de pesquisa da Wikipédia, é enviada uma consulta pública curta à Wikimedia. A aplicação não deve incluir nessa consulta nomes de clientes/funcionários, contactos, faturas, valores privados ou dados operacionais.
+- **Ficheiros e permissões:** uma referência Android Storage Access Framework ao documento escolhido e a autorização concedida pelo utilizador para voltar a aceder ao ficheiro. A disponibilidade de uma referência local pode depender da persistência da permissão concedida pelo fornecedor de ficheiros.
+- **Dados técnicos e segurança:** informação necessária para manter sessões, prevenir duplicações, registar operações, proteger o serviço, diagnosticar falhas e processar pedidos de eliminação, conforme a configuração real dos fornecedores.
 
-## 3. Finalidades e fundamento
+Não são recolhidos dados de cartão bancário nem processados pagamentos pela implementação atualmente verificada. Não existe integração direta verificada com POS, faturação, contabilidade, impressoras ou gateways de pagamento.
 
-Os dados são usados para autenticar contas, permitir acesso por papel ao restaurante correto, sincronizar operações, gerir pedidos/reservas/inventário/fidelização, evitar gravações duplicadas, proteger sessões e processar pedidos de eliminação. O assistente local pode fazer cálculos e preparar rascunhos a partir dos dados operacionais já disponíveis no dispositivo; não toma decisões automaticamente nem envia esses dados para um fornecedor externo de IA na implementação atual.
+## 4. Onde os dados são tratados
 
-**[A PREENCHER — o responsável deve confirmar os fundamentos jurídicos aplicáveis a cada finalidade, incluindo execução contratual, obrigação legal, interesse legítimo ou consentimento quando necessário.]**
+**No dispositivo Android:** o modelo generativo, OCR, leitura de PDFs/imagens, algumas análises e os arquivos locais são processados no dispositivo. As sessões, o histórico do assistente e os metadados locais de faturas usam armazenamento privado/cifrado nos componentes correspondentes. Os dados de demonstração locais não devem ser confundidos com registos de um restaurante real.
 
-## 4. Fornecedores e localização
+**No backend:** a aplicação utiliza Supabase Auth e PostgreSQL na região `eu-west-1` do projeto atualmente ligado. As operações de restaurante configuradas sincronizam dados para o backend e usam RLS/RPCs para limitar o acesso por conta/restaurante. A localização e os subprocessadores têm de ser confirmados na configuração e nos contratos vigentes no momento da publicação.
 
-O backend atual usa Supabase, com o projeto configurado na região EU West 1. O envio de mensagens de autenticação depende da configuração do serviço de email do projeto.
+**Estado técnico que importa antes de publicar:** em 6 de novembro de 2026, o projeto Supabase alojado ainda não contém as tabelas de sincronização de histórico/Memória, a tabela de faturas nem o bucket privado `studiomesa-invoices`. Também lhe faltam a matriz granular de permissões e as tabelas de receitas. Assim, não anunciar estas funcionalidades cloud como ativas até reconciliar o histórico de migrations e fazer um deployment aprovado. A política final tem de descrever exatamente a configuração que estiver ativa na release, não apenas o código da branch.
 
-**[A PREENCHER — confirmar região real de todos os componentes, SMTP/provedor de email, subprocessadores aplicáveis, retenção de cópias de segurança e eventuais transferências internacionais. Rever os termos e anexos de tratamento de dados do fornecedor.]**
+## 5. Finalidades e fundamentos
 
-## 5. Acesso e segurança
+Os dados podem ser usados para:
 
-A aplicação utiliza uma chave publicável do Supabase no cliente móvel. Essa chave não é uma credencial administrativa; o acesso a dados é condicionado por autenticação, Row Level Security e funções do servidor. As funções privilegiadas são mantidas no backend, não na aplicação Android.
+- criar e gerir contas e sessões;
+- disponibilizar as funcionalidades de restaurante e de cliente contratadas;
+- partilhar dados operacionais com os membros autorizados do restaurante;
+- gerir reservas, pedidos, mesas, carta, stock e fidelização;
+- executar cálculos e sugestões locais, sem alterar operações automaticamente;
+- importar, rever, arquivar e consultar documentos de fornecedores;
+- sincronizar histórico/Memória quando a funcionalidade cloud estiver ativa e autorizada;
+- prevenir duplicações, abuso, acessos indevidos e recuperar falhas;
+- responder a pedidos de acesso, retificação, exportação ou eliminação.
 
-Foram implementadas verificações de sessão e autorização nas operações analisadas, bem como separação de dados de restaurante e uma função de eliminação de conta. Isto não substitui a auditoria independente nem os testes funcionais de segurança antes do lançamento.
+**Fundamento jurídico por finalidade:** [A PREENCHER pelo responsável pelo tratamento, após análise jurídica, por exemplo execução contratual, obrigação legal, interesse legítimo ou consentimento quando aplicável].
 
-## 6. Conservação e eliminação
+## 6. Partilha e destinatários
 
-Os períodos de conservação de cada tipo de registo devem ser definidos pelo responsável:
+Os dados podem ser disponibilizados:
 
-- Conta e perfil: **[A PREENCHER]**.
-- Dados operacionais do restaurante, pedidos e reservas: **[A PREENCHER]**.
-- Histórico de inventário, auditoria e fidelização: **[A PREENCHER — considerar obrigações legais e necessidades legítimas de auditoria]**.
-- Cópias de segurança e logs do fornecedor: **[A PREENCHER após confirmar as definições e o plano de alojamento]**.
+- ao restaurante a que o utilizador está associado, de acordo com o papel e as permissões aplicáveis;
+- ao fornecedor de alojamento/autenticação Supabase e respetivos subcontratantes, conforme os termos e o DPA contratados;
+- à Wikimedia apenas quando é acionada a ferramenta pública de pesquisa;
+- ao alojamento público do modelo apenas para descarregar o ficheiro do modelo, não para receber prompts;
+- a outros fornecedores apenas se vierem a ser integrados e devidamente declarados.
 
-A app inclui uma opção para iniciar a eliminação da conta e existe um recurso web externo:  
+**Subcontratantes, países, transferências internacionais e contratos:** [A PREENCHER após confirmar todos os fornecedores, regiões, DPA e mecanismos de transferência].
+
+## 7. Segurança
+
+A aplicação usa autenticação, armazenamento privado, cifragem local em componentes relevantes, Android Keystore, RLS e verificações do lado do servidor. A sincronização cloud do assistente, quando ativada, é protegida por RLS, mas não é cifrada ponta a ponta. O modelo local verifica o hash do ficheiro descarregado. Nenhuma destas medidas constitui garantia absoluta de segurança ou substitui auditoria independente, testes e configuração segura do serviço.
+
+Antes de recolher dados reais, devem ser validados os privilégios das RPCs, isolamento entre restaurantes, sessões, permissões, backups/restauro, eliminação e configuração de email/Auth.
+
+## 8. Conservação
+
+Períodos de conservação por categoria:
+
+- Conta e dados de autenticação: **[A PREENCHER]**.
+- Dados operacionais do restaurante, pedidos, reservas, carta e stock: **[A PREENCHER; considerar contrato e obrigações legais aplicáveis]**.
+- Fidelização e auditoria: **[A PREENCHER]**.
+- Histórico e Memória do assistente: **[A PREENCHER]**.
+- Documentos e metadados de faturas: **[A PREENCHER; confirmar obrigações legais e necessidade do restaurante]**.
+- Logs, backups e cópias dos fornecedores: **[A PREENCHER após confirmar plano, configuração e DPA]**.
+
+Não publicar períodos de conservação presumidos.
+
+## 9. Direitos e eliminação de conta
+
+Os titulares podem exercer os direitos que lhes assistam ao abrigo da legislação aplicável, incluindo acesso, retificação, apagamento, limitação, portabilidade e oposição quando aplicável, através de **[EMAIL DE PRIVACIDADE A PREENCHER]**.
+
+A aplicação inclui um fluxo de eliminação da conta e existe uma página web pública em:
+
 https://svwvkfsyevuyabelrtjk.supabase.co/functions/v1/account-deletion-web
 
-A eliminação da conta de um proprietário pode apagar permanentemente os dados do restaurante associado, depois de confirmação explícita e apenas quando não existirem outros membros da equipa. Para utilizadores não proprietários, os registos operacionais partilhados podem ter de ser preservados; quando suportado, a autoria é anonimizada. Estas regras devem ser confirmadas por testes com contas descartáveis e refletidas com precisão na declaração Data safety. Não tratar o fluxo como validado até que os testes de ponta a ponta passem.
+A página solicita uma ligação de recuperação por email e usa PKCE no navegador. A eliminação efetiva é feita por um endpoint autenticado que valida a sessão e as permissões. A eliminação dos dados partilhados de um restaurante pode ter consequências irreversíveis e depende do papel do utilizador e da existência de outros membros.
 
-## 7. Direitos das pessoas
+**O percurso completo de email, confirmação e eliminação ainda não foi validado de ponta a ponta com contas descartáveis.** A URL tem de estar autorizada em Supabase Auth e o serviço de email tem de estar configurado antes da publicação. A política e a declaração Data Safety devem ser revistas após esses testes.
 
-Sujeito à legislação aplicável, os titulares podem solicitar acesso, correção, eliminação, limitação, portabilidade e apresentar oposição ao tratamento quando aplicável. Para pedidos de privacidade ou dúvidas sobre dados, contactar **[A PREENCHER — email profissional]**. O responsável deve definir e cumprir os prazos de resposta e explicar como apresentar reclamação à autoridade de controlo competente.
+## 10. Crianças e público-alvo
 
-## 8. Crianças e contas
+Público-alvo pretendido: **[A PREENCHER — confirmar que o produto é dirigido a profissionais/empresas e aos seus clientes, e definir tratamento de contas de menores quando aplicável]**.
 
-**[A PREENCHER — indicar o público-alvo real, as restrições etárias e como são tratadas contas de menores, caso possam existir.]** O titular da conta de programador Google Play tem de cumprir os requisitos de idade e verificação da Google.
+## 11. Contactos e reclamações
 
-## 9. Alterações
+Contacto de privacidade: **[A PREENCHER]**.  
+Autoridade de controlo competente e instruções para reclamação: **[A PREENCHER após validação jurídica no país de estabelecimento do responsável]**.
 
-Esta política será atualizada quando as funcionalidades, fornecedores, finalidades ou obrigações legais mudarem. Data efetiva: **[A PREENCHER após aprovação]**.
+## 12. Alterações
+
+Data efetiva: **[A PREENCHER após aprovação]**.  
+Versão: **[A PREENCHER]**.
 
 ---
 
-## Lista de bloqueios antes de publicar
+## Lista de validação — não publicar enquanto houver itens em falta
 
-- [ ] Identidade legal do responsável pela app confirmada.
-- [ ] Email de privacidade/contacto profissional sob controlo do responsável.
-- [ ] Fundamentos jurídicos, conservação e subprocessadores confirmados.
-- [ ] Testes de eliminação de conta e de dados concluídos com contas descartáveis.
-- [ ] Declarações da Play Console Data safety alinhadas com o código e com esta política.
-- [ ] Revisão final pelo responsável e, quando necessário, por profissional qualificado.
+- [ ] Identidade legal e contacto do responsável confirmados.
+- [ ] Fundamentos jurídicos, finalidades e papéis de responsável/subcontratante definidos.
+- [ ] Lista de fornecedores, subprocessadores, regiões e DPA confirmados.
+- [ ] Períodos de conservação definidos por categoria e refletidos nos sistemas.
+- [ ] Configuração cloud efetivamente implantada comparada com esta política.
+- [ ] Testes de acesso, exportação e eliminação concluídos com contas descartáveis.
+- [ ] Política publicada numa URL pública estável e ligada na aplicação e Play Console.
+- [ ] Data Safety respondida de acordo com a versão binária e SDKs efetivamente publicados.
+- [ ] Revisão jurídica concluída.
+
+**Este ficheiro é um modelo interno. Não é a política de privacidade final da StudioMesa.**
