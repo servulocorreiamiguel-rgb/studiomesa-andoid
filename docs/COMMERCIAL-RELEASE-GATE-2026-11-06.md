@@ -54,14 +54,30 @@ Este documento é a lista única de saída para as cinco variantes. Um checkbox 
 - [ ] Gerar SBOM e notices das dependências transitivas; rever licenças do modelo LFM Open v1.0, LiteRT-LM, ML Kit e todas as bibliotecas/ativos.
 - [ ] Confirmar titularidade dos direitos de código, marca, logótipo, fontes, ícones e materiais.
 
+## Decisão de distribuição na Google Play
+
+**Não assumir que os cinco artefactos Gradle correspondem a cinco fichas Play.** A política atual da Google proíbe publicar múltiplas aplicações com funcionalidade, conteúdo e experiência altamente semelhantes; para apps white-label recomenda fichas distintas e valor/identidade real por app, mas isso não substitui a política de conteúdo repetitivo.
+
+A recomendação técnica inicial é avaliar **duas aplicações com propósitos realmente distintos** (Gestão para proprietários/equipa e Cliente para consumidores), e controlar os planos Essencial/Profissional/Premium através de direitos/entitlements validados no backend, não apenas através de uma variante APK que o utilizador pode instalar. Isto exige implementação e testes adicionais no Supabase, que não devem ser feitos antes da reconciliação de migrations e do modelo de licenciamento. Não é uma decisão comercial final.
+
+As três variantes de Gestão e duas de Cliente podem continuar a existir como artefactos de demonstração/QA enquanto a estratégia não estiver fechada. Não criar cinco listagens Play com diferenças apenas de plano/limite sem uma revisão de elegibilidade.
+
+Alternativas a avaliar:
+- Duas listagens com entitlement/licença do restaurante validada no servidor.
+- Distribuição privada/gerida ou entrega B2B de builds dedicadas, após assinatura e suporte.
+- Builds dedicadas por cliente apenas quando exista valor, identidade, conteúdo e experiência realmente próprios e compatíveis com as políticas da Play.
+
+Fontes oficiais consultadas em 06/11/2026:
+- [Política de conteúdo repetitivo e funcionalidade](https://support.google.com/googleplay/android-developer/answer/18265346).
+- [Boas práticas para programadores de apps white-label](https://support.google.com/googleplay/android-developer/answer/15884185).
 ## Gate D — identidade, assinatura e Google Play
 
 - [ ] Definir a entidade que vende/contrata e o titular da conta de programador.
-- [ ] Escolher os cinco package IDs finais e confirmar que ainda não estão registados; os IDs não podem ser mudados após publicação.
+- [ ] Decidir a estratégia Play. Não assumir cinco listagens semelhantes; avaliar duas apps (Gestão/Cliente) e entitlements de plano no servidor ou distribuição privada B2B. Rever a política de conteúdo repetitivo antes de definir package IDs.
 - [ ] Criar keystore de release fora do repositório; guardar duas cópias offline seguras e passwords num gestor de segredos.
 - [ ] Configurar os GitHub Actions secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` e a variable `STUDIOMESA_RELEASE_APPLICATION_ID` sem expor os valores em commits/conversas.
 - [ ] Executar o workflow comercial a partir de `main` com CI completa verde, validar cinco AABs e cinco APKs com assinatura e conservar checksums.
-- [ ] Criar as fichas das cinco aplicações ou decidir formalmente uma arquitetura diferente antes de publicar.
+- [ ] Criar apenas as fichas compatíveis com a arquitetura e políticas aprovadas; usar listagens, ícones, imagens e descrições próprios que correspondam à funcionalidade real.
 - [ ] Preparar ícone, screenshots reais, descrição, classificação de conteúdo, público-alvo, contactos, página de privacidade, URL de eliminação, Data Safety e credenciais de revisão.
 - [ ] Para uma nova app, target Android 16/API 36 ou superior desde 31/08/2026; o projeto usa targetSdk 36 no código atual. Confirmar no AAB final.
 - [ ] O titular de uma conta Play Console tem de ter pelo menos 18 anos. A taxa de registo oficial é 25 USD, uma única vez. Se a conta for pessoal e tiver sido criada após 13/11/2023, aplicar o requisito de teste fechado de pelo menos 12 testers inscritos continuamente durante 14 dias antes de pedir acesso à produção.
