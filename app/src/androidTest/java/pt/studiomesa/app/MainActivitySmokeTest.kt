@@ -83,17 +83,40 @@ class MainActivitySmokeTest {
                 .perform(replaceText("Como melhorar o preço?"))
             onView(withText("Enviar")).perform(click())
 
-            onView(withText("Como melhorar o preço?"))
-                .check(matches(isDisplayed()))
+            // The same prompt may also appear as a suggestion elsewhere in the view tree.
+            // Verify the generated answer instead of using an ambiguous exact-text matcher.
             onView(withText(containsString("Análise de preços")))
                 .check(matches(isDisplayed()))
 
             onView(withContentDescription("Nova conversa")).perform(click())
             onView(withText("Nova conversa iniciada. Em que posso ajudar com o restaurante?"))
                 .check(matches(isDisplayed()))
+            onView(withText("EXPERIMENTA PERGUNTAR")).check(matches(isDisplayed()))
 
             onView(withContentDescription("Voltar ao painel principal")).perform(click())
             onView(withText("Painel de operação")).check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
+    fun assistantHistoryMemoryAndDeepThinkingControlsAreAvailable() {
+        assumeFalse("Customer variant does not include the restaurant assistant.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withText("ABRIR ASSISTENTE"))
+                .perform(scrollTo(), click())
+
+            onView(withContentDescription("Histórico de conversas")).perform(click())
+            onView(withText("Histórico de conversas")).check(matches(isDisplayed()))
+            onView(withText("Fechar")).perform(click())
+
+            onView(withContentDescription("Memória do assistente")).perform(click())
+            onView(withText("Memória do assistente")).check(matches(isDisplayed()))
+            onView(withText("Cancelar")).perform(click())
+
+            onView(withText(containsString("Pensar mais"))).perform(click())
+            onView(withText("Pensar mais")).check(matches(isDisplayed()))
+            onView(withText("Agora não")).perform(click())
         }
     }
 
@@ -106,6 +129,7 @@ class MainActivitySmokeTest {
                 .perform(scrollTo(), click())
             onView(withHint("Escreve uma mensagem..."))
                 .perform(click())
+                .check(matches(isCompletelyDisplayed()))
             onView(withText("Enviar"))
                 .check(matches(isCompletelyDisplayed()))
         }

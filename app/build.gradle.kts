@@ -106,14 +106,23 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // java.time is used by assistant history synchronization and must work on minSdk 24.
+        isCoreLibraryDesugaringEnabled = true
     }
+}
 
-    kotlinOptions {
-        jvmTarget = "17"
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
     }
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+    implementation("com.google.ai.edge.litertlm:litertlm-android:0.18.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+    // Bundled on-device OCR; no paid API and no Play Services model download.
+    implementation("com.google.mlkit:text-recognition:16.0.1")
     // QR scanning/generation for one-time loyalty tokens.
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 
