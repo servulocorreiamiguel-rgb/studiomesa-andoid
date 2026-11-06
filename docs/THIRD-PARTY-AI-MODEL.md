@@ -38,6 +38,14 @@ A geração do texto continua local. Quando a ferramenta de pesquisa é usada, a
 
 Depois da instalação, a inferência é executada localmente. As mensagens, o histórico e o contexto selecionado para o modelo não são enviados a um serviço externo de IA por esta funcionalidade. A transferência inicial do ficheiro requer Internet e consome cerca de 736 MB de dados.
 
+## Sincronização cloud separada da inferência
+
+O modelo generativo e o runtime processam as perguntas no próprio dispositivo. Existe, separadamente, um componente `AssistantCloudSyncCoordinator` que pode sincronizar conversas e Memória do proprietário com o Supabase quando a migration e as tabelas correspondentes estiverem instaladas. Essa sincronização não envia o conteúdo ao fornecedor do modelo nem a uma API externa de inferência, mas cria uma cópia cloud protegida por autenticação/RLS; **não é encriptação ponta a ponta**.
+
+Em 6 de novembro de 2026, as tabelas de sincronização ainda não existem no projeto Supabase alojado. Portanto, a sync cloud não está operacional nesse ambiente e não deve ser anunciada como ativa até reconciliação/deployment e teste E2E aprovados.
+
+Quando o utilizador aciona a ferramenta de pesquisa, a aplicação pode enviar uma consulta genérica à Wikipédia. Isto é uma chamada pública separada da geração local; não deve conter histórico, prompts completos, faturas, contactos ou dados internos.
+
 A execução local não garante que as respostas estejam corretas. O modelo pode falhar, inventar informação ou não compreender contextos complexos. Verificar os cálculos e decisões importantes. A IA não substitui um contabilista certificado nem executa alterações financeiras ou operacionais.
 
 ## Condições antes de comercializar
