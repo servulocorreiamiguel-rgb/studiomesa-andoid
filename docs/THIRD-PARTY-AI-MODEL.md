@@ -20,7 +20,7 @@ O repositório `litert-community` é uma conversão comunitária e declara não 
 - Licença do runtime: Apache License 2.0, disponível no repositório do projeto.
 - O runtime executa o modelo no dispositivo Android.
 - A versão `0.18.0` é necessária para interpretar as chamadas às ferramentas do modelo LFM2 reempacotado em 13/10/2026. As versões `0.15` a `0.17` devolvem essas chamadas como texto e não executam as ferramentas automaticamente.
-- A biblioteca `0.18.0` requer Kotlin 2.3 ou superior; o projeto usa Kotlin `2.3.0` com Android Gradle Plugin `8.10.0` e Gradle `8.11.1`.
+- A biblioteca `0.18.0` requer Kotlin 2.3 ou superior; o projeto usa Kotlin `2.3.0` com Android Gradle Plugin `8.13.2` e Gradle `8.13`.
 - Cada sessão nativa usa um par próprio `Engine` + `Conversation`; a conversa é fechada antes do motor. A sessão é reconstruída periodicamente a partir do histórico local para respeitar a janela de contexto.
 
 ## Ficheiro transferido
