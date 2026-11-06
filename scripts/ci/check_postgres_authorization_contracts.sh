@@ -1717,7 +1717,9 @@ SELECT public.update_restaurant_reservation_status('$CUSTOMER_BOOKING_C_ID'::uui
 COMMIT;
 SQL
 CUSTOMER_BOOKING_C_RETRY="$(create_customer_booking "$USER_E" "$CUSTOMER_BOOKING_REQUEST_C" "CI Customer A" "$CUSTOMER_BOOKING_LATER")"
-if [ "$CUSTOMER_BOOKING_C" != "$CUSTOMER_BOOKING_C_RETRY" ] || [[ "$CUSTOMER_BOOKING_C_RETRY" != *"|Confirmada" ]]; then
+CUSTOMER_BOOKING_C_RETRY_ID="$(cut -d '|' -f 1 <<<"$CUSTOMER_BOOKING_C_RETRY")"
+if [ "$(cut -d '|' -f 1 <<<"$CUSTOMER_BOOKING_C")" != "$CUSTOMER_BOOKING_C_RETRY_ID" ] ||
+   [[ "$CUSTOMER_BOOKING_C_RETRY" != *"|Confirmada" ]]; then
   echo "ERROR: customer retry did not return the same confirmed reservation after table assignment." >&2
   exit 1
 fi
