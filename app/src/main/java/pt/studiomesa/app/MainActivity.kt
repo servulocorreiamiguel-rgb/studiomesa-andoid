@@ -4430,7 +4430,7 @@ class MainActivity : Activity() {
             A eliminação de uma conta de proprietário pode apagar permanentemente o restaurante e os dados associados, depois de confirmação e validação pelo servidor. A conta de um funcionário/cliente pode ser eliminada sem apagar os registos operacionais partilhados; a autoria pode ser anonimizada quando suportado.
 
             Estado legal
-            Esta instalação é uma versão de demonstração. A política de privacidade pública final, a identidade e contacto do responsável pelo tratamento, os prazos de conservação e a declaração Data safety têm de ser aprovados e publicados antes da utilização comercial. Não introduzas dados pessoais ou documentos reais nesta versão de demonstração.
+            ${if (BuildConfig.DEBUG) "Esta instalação é uma versão de demonstração. Não introduzas dados pessoais ou documentos reais." else "A política de privacidade pública final, a identidade e contacto do responsável pelo tratamento, os prazos de conservação e a declaração Data safety têm de estar aprovados e publicados antes da utilização comercial."}
         """.trimIndent()
 
         val textView = TextView(this).apply {
