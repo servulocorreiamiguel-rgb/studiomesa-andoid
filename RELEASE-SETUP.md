@@ -67,16 +67,20 @@ Se a variável de identificador ou qualquer segredo estiver em falta, a execuç�
 
 ## Requisitos da Google Play e conta do programador
 
-Antes de submeter a aplicação, confirma os requisitos oficiais atuais:
+Verifica sempre a documentação oficial antes da submissão, porque os requisitos e os fluxos de verificação podem mudar.
 
-- A aplicação já usa `targetSdk = 36`, o nível de API exigido pela política de destino da Google Play para novas aplicações/atualizações desde 31 de agosto de 2026: https://support.google.com/googleplay/android-developer/answer/11926878?hl=pt
-- É obrigatória uma política de privacidade pública, com ligação na Play Console e dentro da aplicação, e o formulário **Data safety** tem de refletir a recolha, partilha, segurança e eliminação reais dos dados: https://support.google.com/googleplay/android-developer/answer/10144311
-- A eliminação de conta está implementada, mas tem de ser testada de ponta a ponta com contas descartáveis antes do lançamento. A ligação/ação de eliminação deve permanecer acessível ao utilizador.
-- As contas pessoais de programador criadas depois de 13 de novembro de 2023 têm de cumprir o requisito de teste fechado com pelo menos 12 participantes inscritos continuamente durante 14 dias consecutivos antes de pedir acesso à produção; confirma se esse requisito se aplica ao tipo de conta que vai publicar: https://support.google.com/googleplay/android-developer/answer/14151465?hl=pt
-- O titular de uma conta de programador da Google Play tem de ter pelo menos 18 anos e concluir os passos de registo/verificação aplicáveis; a taxa de registo é cobrada pela Google e deve ser confirmada no fluxo oficial: https://support.google.com/googleplay/android-developer/answer/6112435?hl=pt
+- **Target API:** desde 31 de agosto de 2026, novas apps Android móveis e atualizações têm de usar Android 16 / API 36 ou superior. O StudioMesa está atualmente com `targetSdk = 36`; confirma o valor no AAB final. Fonte: https://support.google.com/googleplay/android-developer/answer/11926878?hl=pt
+- **Idade e titularidade:** o titular que cria a conta Play Console tem de ter pelo menos 18 anos. A conta deve pertencer à pessoa ou entidade que realmente publica e responde pela aplicação; não utilizar identidade ou dados de terceiros como se fossem teus. Fonte: https://support.google.com/googleplay/android-developer/answer/6112435
+- **Tipo de conta:** a Google distingue conta pessoal e conta de organização. A documentação recomenda conta de organização quando a publicação é feita em nome de uma empresa/atividade comercial; requer número D‑U‑N‑S e verificação da organização. A conta pessoal é descrita para uso individual/estudante/hobby e tem requisitos adicionais de testes e dispositivo. Fonte: https://support.google.com/googleplay/android-developer/answer/13634885
+- **Taxa:** a inscrição custa atualmente US$25, paga uma única vez. A Google indica cartões de crédito/débito aceites por localização e não aceita cartões pré-pagos; confirmar o método disponível em Portugal no momento do registo. Fonte: https://support.google.com/googleplay/android-developer/answer/6112435
+- **Contas pessoais novas:** as contas pessoais criadas depois de 13 de novembro de 2023 precisam de um teste fechado com pelo menos 12 participantes inscritos continuamente durante 14 dias antes de pedir acesso à produção. Fonte: https://support.google.com/googleplay/android-developer/answer/14151465
+- **Verificação de dispositivo pessoal:** novas contas pessoais também têm de demonstrar acesso a um dispositivo Android físico, não root, com Android 10 ou superior, através da aplicação Play Console. Fonte: https://support.google.com/googleplay/android-developer/answer/14316361
+- **Privacidade:** cada aplicação precisa de política de privacidade pública, não editável e acessível globalmente, além de ligação/texto dentro da app. A secção Data safety tem de ser respondida para cada app e corresponder ao binário, aos SDKs e à configuração cloud efetivamente publicada. Fontes: https://support.google.com/googleplay/android-developer/answer/10144311 e https://support.google.com/googleplay/android-developer/answer/10144311?hl=pt
+- **Eliminação de conta:** como o StudioMesa permite criar conta, tem de haver um caminho facilmente acessível dentro da app e um recurso web externo para solicitar a eliminação da conta e dos dados associados. A retenção excecional tem de ter fundamento legítimo e ser claramente explicada. O fluxo atual está implementado, mas ainda precisa de teste E2E com contas descartáveis. Fonte: https://support.google.com/googleplay/android-developer/answer/13327111
 
-Não publiques ainda: continuam pendentes os testes ponta a ponta de login/recuperação, separação entre restaurantes, criação/repetição de operações e eliminação de conta, bem como a política de privacidade e o formulário Data safety.
+**Situação do projeto:** os cinco AAB/APKs comerciais ainda não foram gerados com uma chave definitiva; não existe ficha Play Console aprovada; a política pública e Data safety continuam em rascunho. A versão atual não está liberada para submissão.
 
+Não publiques ainda: permanecem pendentes a reconciliação e deployment seguro do Supabase, autenticação/SMTP, E2E com contas descartáveis, política de privacidade, Data safety, licença do modelo, assinatura comercial, package IDs e testes de aceitação.
 ## Recurso web externo para eliminação de conta
 
 A página pública já está ativa em:
