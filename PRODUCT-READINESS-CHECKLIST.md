@@ -1,18 +1,31 @@
 # StudioMesa — lista de preparação para uso profissional
 
-**Estado atual em 05/11/2026: CANDIDATO NÃO-IA EM VALIDAÇÃO; NÃO PRONTO para operação comercial real.**  
-Plano de integração: [NON-AI-BUSINESS-READINESS-2026-11-05.md](docs/NON-AI-BUSINESS-READINESS-2026-11-05.md).
+**Estado atual em 06/11/2026: CÓDIGO AVANÇADO, NÃO PRONTO PARA PILOTO/VENDA.**
 
-- [x] Exportação operacional de pedidos em CSV integrada na `main`.
-- [x] Cinco APKs de demonstração/debug produzidos anteriormente; não são versões comerciais assinadas.
-- [x] Branch `integration/non-ai-core-2026-11-05` criada a partir da `main`, com loja/QR de fidelização, reservas de cliente, permissões granulares, fichas técnicas e consumo automático de ingredientes por receita, com respetivas migrações/testes.
-- [ ] Executar e aprovar a CI completa da branch consolidada (cinco variantes, testes unitários, Lint, replay SQL/autorização e emuladores Android 8/16).
-- [ ] Resolver eventuais falhas de compilação/teste; não integrar na `main` enquanto a CI final não estiver verde.
-- [ ] Testes em Android físico e E2E com contas descartáveis, incluindo isolamento de clientes, permissões, QR, reservas concorrentes, rede e logout.
-- [ ] Reconciliar as versões de migração remotas e locais; não executar migrações no Supabase alojado antes de backup/restauro e plano de reversão.
-- [ ] Configurar Auth/SMTP/OAuth, assinatura comercial, política de privacidade, Data safety, contrato, suporte e piloto.
-- [ ] IA generativa, OCR de faturas e sincronização de memória/faturas permanecem fora desta branch; fase posterior com Codex.
-- [ ] Site institucional StudioMesa e páginas comerciais só depois de fechar a validação funcional e os materiais legais.
+Esta secção é a fotografia atual e sobrepõe-se aos registos históricos mais abaixo. A lista de bloqueios única e atualizada é [docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md](docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md).
+
+- [x] Cinco variantes Android no código; compileSdk/targetSdk 36, minSdk 24, Java 17 e versão 1.5.0.
+- [x] APKs debug de demonstração e workflow manual para cinco AABs/APKs assinados preparado; não publica automaticamente na Google Play.
+- [x] IA local LFM2.5-1.2B, histórico/Memória local cifrada, OCR local e ferramentas de leitura implementadas no código.
+- [x] Fluxo de reservas de cliente e restaurante presente no código. PR #86 acrescenta testes de regressão para sobreposição, capacidade, mesa inexistente, idempotência e ecrãs sem autenticação.
+- [x] CI #1332: replay PostgreSQL/autorização, compilação, unit tests e Lint já passaram no head da PR #86. Smoke Android 8/16 ainda devem ser confirmados no resultado final.
+- [ ] Reconciliar as 53 migrations locais com as 54 versões do Supabase alojado (48 comuns, cinco só locais e seis só remotas); backup/restauro e replay descartável antes de deployment.
+- [ ] Aplicar de forma aprovada as tabelas de receitas, permissões granulares, sync do assistente, faturas e bucket privado — atualmente ausentes no backend alojado.
+- [ ] Resolver o aviso Leaked Password Protection Disabled, com decisão consciente sobre upgrade Pro, SMTP, URLs Auth, OAuth e teste E2E.
+- [ ] Concluir política de privacidade, Data Safety, termos, DPA, retenção, licenças/avisos e suporte; os novos documentos desta branch continuam drafts.
+- [ ] Escolher package IDs, criar keystore fora do repositório e configurar os quatro secrets e a variável do release workflow.
+- [ ] Testes E2E no backend com contas descartáveis, restauro, eliminação, concorrência e isolamento entre restaurantes.
+- [ ] Teste físico no OPPO A5m fica deliberadamente para o utilizador; ainda não foi executado.
+
+**Funcionalidades que não devem ser anunciadas como ativas no Supabase alojado:** fichas técnicas/consumo automático, matriz granular de permissões, sync cloud de histórico/Memória e arquivo cloud de faturas. As tabelas necessárias e o bucket privado ainda não existem.
+
+**Regra:** um botão na interface ou um replay limpo na CI não prova que a funcionalidade esteja operacional no backend alojado. Não fazer deployment enquanto o histórico não estiver reconciliado e não existir backup/restauro verificado.
+
+---
+
+## Registos históricos — não usar como estado atual
+
+Os registos e checkboxes abaixo foram escritos em 29/10 e 05/11/2026. Alguns referem estados do código e do Supabase que mudaram desde então. Servem apenas para histórico; em caso de conflito, prevalece a fotografia atual acima e o gate de lançamento de 06/11/2026.
 
 **Nota:** os registos abaixo incluem verificações históricas de 29/10/2026; quando diferirem do relatório de 04/11/2026, prevalece a fotografia mais recente documentada em `docs/COMMERCIAL-READINESS-2026-11-04.md`.
 
