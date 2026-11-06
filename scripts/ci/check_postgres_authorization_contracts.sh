@@ -1625,6 +1625,123 @@ if [ "$reservation_status_ok" != "t" ]; then
 fi
 echo "PASS: reservation status changes are idempotent and cross-restaurant updates are rejected."
 
+# Regression coverage for table assignment, exact time boundaries and customer retries.
+# All records remain in this disposable PostgreSQL CI database.
+create_restaurant_booking_on_table() {
+  local request_id="$1" guest_name="$2" booking_at="$3"
+  local party_size="$4" table_number="$5"
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.create_restaurant_reservation_idempotent(
+  '$request_id'::uuid, '$RESTAURANT_A'::uuid, '$guest_name', '',
+  '$party_size'::integer, '$booking_at'::timestamptz, 60,
+  '$table_number'::integer, 'CI table allocation regression'
+);
+COMMIT;
+SQL
+}
+
+# The first booking ends at RESERVATION_AT + 60 minutes. A booking beginning
+# exactly then must be accepted; an overlapping booking must be rejected.
+BOUNDARY_BOOKING_REQUEST="f1111111-1111-4111-8111-111111111111"
+BOUNDARY_BOOKING_AT="$(date -u -d "$RESERVATION_AT + 60 minutes" '+%Y-%m-%d %H:%M:%S+00:00')"
+BOUNDARY_BOOKING_FIRST="$(create_restaurant_booking_on_table "$BOUNDARY_BOOKING_REQUEST" "CI Adjacent Booking" "$BOUNDARY_BOOKING_AT" 2 99)"
+BOUNDARY_BOOKING_RETRY="$(create_restaurant_booking_on_table "$BOUNDARY_BOOKING_REQUEST" "CI Adjacent Booking" "$BOUNDARY_BOOKING_AT" 2 99)"
+if [ -z "$BOUNDARY_BOOKING_FIRST" ] || [ "$BOUNDARY_BOOKING_FIRST" != "$BOUNDARY_BOOKING_RETRY" ]; then
+  echo "ERROR: an adjacent table reservation was rejected or its retry created a duplicate." >&2
+  exit 1
+fi
+echo "PASS: a reservation starting exactly when the previous one ends is accepted and idempotent."
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.create_restaurant_reservation_idempotent(
+  'f2222222-2222-4222-8222-222222222222'::uuid, '$RESTAURANT_A'::uuid,
+  'CI Overlapping Booking', '', 2, ('$RESERVATION_AT'::timestamptz + interval '30 minutes'),
+  60, 99, 'Expected overlap rejection'
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: the server accepted two overlapping active reservations on table 99." >&2
+  exit 1
+fi
+echo "PASS: overlapping reservations for the same table are rejected."
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.create_restaurant_reservation_idempotent(
+  'f3333333-3333-4333-8333-333333333333'::uuid, '$RESTAURANT_A'::uuid,
+  'CI Too Many Guests', '', 3, ('$RESERVATION_AT'::timestamptz + interval '3 hours'),
+  60, 99, 'Expected capacity rejection'
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: the server assigned a two-seat table to three guests." >&2
+  exit 1
+fi
+echo "PASS: table capacity is enforced by the database."
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.create_restaurant_reservation_idempotent(
+  'f4444444-4444-4444-8444-444444444444'::uuid, '$RESTAURANT_A'::uuid,
+  'CI Missing Table', '', 2, ('$RESERVATION_AT'::timestamptz + interval '4 hours'),
+  60, 98, 'Expected missing table rejection'
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: the server accepted a reservation on a table that does not exist." >&2
+  exit 1
+fi
+echo "PASS: reservations cannot reference a table outside the restaurant."
+
+# Customer retry must still return the original booking after the restaurant
+# assigns a table and confirms it.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.assign_restaurant_reservation_table('$CUSTOMER_BOOKING_C_ID'::uuid, 99);
+SELECT public.update_restaurant_reservation_status('$CUSTOMER_BOOKING_C_ID'::uuid, 'Confirmada');
+COMMIT;
+SQL
+CUSTOMER_BOOKING_C_RETRY="$(create_customer_booking "$USER_E" "$CUSTOMER_BOOKING_REQUEST_C" "CI Customer A" "$CUSTOMER_BOOKING_LATER")"
+if [ "$CUSTOMER_BOOKING_C" != "$CUSTOMER_BOOKING_C_RETRY" ] || [[ "$CUSTOMER_BOOKING_C_RETRY" != *"|Confirmada" ]]; then
+  echo "ERROR: customer retry did not return the same confirmed reservation after table assignment." >&2
+  exit 1
+fi
+echo "PASS: customer retries remain idempotent after table assignment and confirmation."
+
+# The restaurant must also reject assigning an unallocated customer request
+# to a table already occupied during that time window.
+CUSTOMER_BOOKING_D_AT="$(date -u -d "$RESERVATION_AT + 30 minutes" '+%Y-%m-%d %H:%M:%S+00:00')"
+CUSTOMER_BOOKING_D="$(create_customer_booking "$USER_E" "$CUSTOMER_BOOKING_REQUEST_D" "CI Customer A" "$CUSTOMER_BOOKING_D_AT")"
+CUSTOMER_BOOKING_D_ID="$(cut -d '|' -f 1 <<<"$CUSTOMER_BOOKING_D")"
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.assign_restaurant_reservation_table('$CUSTOMER_BOOKING_D_ID'::uuid, 99);
+COMMIT;
+SQL
+then
+  echo "ERROR: the server assigned an overlapping customer request to table 99." >&2
+  exit 1
+fi
+echo "PASS: assigning a table to an existing customer request rechecks schedule conflicts."
+
+
 
 expect_prepare_account_deletion_rejection() {
   local user_id="$1"
