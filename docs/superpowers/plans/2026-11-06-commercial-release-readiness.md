@@ -36,10 +36,10 @@
 - Modificar app/src/main/java/pt/studiomesa/app/AssistantChatStore.kt (comentário de classe).
 - Criar docs/SUPABASE-LIVE-RECONCILIATION-2026-11-06.md.
 
-- [ ] Confirmar a versão ativa da Edge Function no Supabase e guardar o mesmo conteúdo que está implantado.
-- [ ] Corrigir o comentário desatualizado: armazenamento local cifrado + sincronização cloud opcional, sendo a cópia cloud protegida por RLS e não E2E.
-- [ ] Registar: 53 migrações locais, 54 remotas, 48 comuns, cinco local-only, seis remote-only; tabelas de receitas, permissões granulares, chat/memória/faturas e bucket ausentes; colunas de custo unitário existentes.
-- [ ] Verificar por SQL read-only que nenhuma alteração foi aplicada ao projeto alojado.
+- [x] Confirmar a versão ativa da Edge Function no Supabase e guardar o mesmo conteúdo que está implantado.
+- [x] Corrigir o comentário desatualizado: armazenamento local cifrado + sincronização cloud opcional, sendo a cópia cloud protegida por RLS e não E2E.
+- [x] Registar: 53 migrações locais, 54 remotas, 48 comuns, cinco local-only, seis remote-only; tabelas de receitas, permissões granulares, chat/memória/faturas e bucket ausentes; colunas de custo unitário existentes.
+- [x] Verificar por SQL read-only que nenhuma alteração foi aplicada ao projeto alojado.
 
 **Verificação:** ler os blobs da branch, comparar o ficheiro da Edge Function com a versão remota e repetir queries read-only de catálogo. Não divulgar segredos.
 
@@ -49,13 +49,13 @@
 - Atualizar PRIVACY-POLICY-TEMPLATE.md.
 - Criar DATA-SAFETY-DRAFT.md.
 
-- [ ] Descrever contas, restaurante/equipa, clientes, mesas, carta, pedidos, reservas, stock, pontos, sessões e auditoria.
-- [ ] Descrever o LFM2.5 local; transferências públicas genéricas à Wikipédia quando a ferramenta é usada; não confundir estas chamadas com envio de prompts ao modelo cloud.
+- [x] Descrever contas, restaurante/equipa, clientes, mesas, carta, pedidos, reservas, stock, pontos, sessões e auditoria.
+- [x] Descrever o LFM2.5 local; transferências públicas genéricas à Wikipédia quando a ferramenta é usada; não confundir estas chamadas com envio de prompts ao modelo cloud.
 - [ ] Descrever histórico/memória cifrados localmente e sync cloud opcional com RLS, sem E2E.
-- [ ] Descrever OCR local, limites PDF/imagem e que o texto OCR não é guardado; faturas e documentos para Supabase só após configuração de tabela/bucket privado e autenticação de proprietário.
-- [ ] Incluir eliminação de conta, limitações de teste e placeholders para controlador, email, morada, bases legais, retenção, subprocessadores e transferências.
-- [ ] Criar matriz de categorias de dados/recolha/partilha/segurança/eliminação a validar no formulário Google Play; não marcar respostas como finais.
-- [ ] Corrigir datas e referências obsoletas.
+- [x] Descrever OCR local, limites PDF/imagem e que o texto OCR não é guardado; faturas e documentos para Supabase só após configuração de tabela/bucket privado e autenticação de proprietário.
+- [x] Incluir eliminação de conta, limitações de teste e placeholders para controlador, email, morada, bases legais, retenção, subprocessadores e transferências.
+- [x] Criar matriz de categorias de dados/recolha/partilha/segurança/eliminação a validar no formulário Google Play; não marcar respostas como finais.
+- [x] Corrigir datas e referências obsoletas.
 
 **Verificação:** procurar afirmações absolutas contraditórias e todos os placeholders legais; garantir que a política permanece marcada como rascunho/não publicar.
 
@@ -65,10 +65,10 @@
 - Criar TERMS-OF-SERVICE-TEMPLATE.md.
 - Criar B2B-SOFTWARE-LICENSE-TEMPLATE.md.
 
-- [ ] Criar modelos B2B com campos para entidade/cliente, plano e módulos incluídos, pagamento, configuração, suporte, atualizações, alojamento, disponibilidade, dados, exportação, backups, fim do contrato, incidentes e responsabilidades.
-- [ ] Distinguir licença de utilização da app da titularidade dos dados do restaurante.
-- [ ] Explicar limites: não é contabilidade/faturação certificada, não garante previsão, não processa pagamentos nem substitui POS/ERP.
-- [ ] Identificar como pendentes as condições legais, preços, IVA, prazos e SLA, com revisão profissional obrigatória.
+- [x] Criar modelos B2B com campos para entidade/cliente, plano e módulos incluídos, pagamento, configuração, suporte, atualizações, alojamento, disponibilidade, dados, exportação, backups, fim do contrato, incidentes e responsabilidades.
+- [x] Distinguir licença de utilização da app da titularidade dos dados do restaurante.
+- [x] Explicar limites: não é contabilidade/faturação certificada, não garante previsão, não processa pagamentos nem substitui POS/ERP.
+- [x] Identificar como pendentes as condições legais, preços, IVA, prazos e SLA, com revisão profissional obrigatória.
 
 **Verificação:** não afirmar certificações, conformidade, garantias, preços ou prazos sem aprovação do responsável.
 
@@ -78,11 +78,11 @@
 - Criar THIRD-PARTY-NOTICES.md.
 - Atualizar docs/THIRD-PARTY-AI-MODEL.md se a revisão encontrar factos incorretos.
 
-- [ ] Inventariar o LFM Open License v1.0, LiteRT-LM 0.18.0/Apache 2.0 e dependências Android diretas já declaradas.
-- [ ] Marcar licenças e avisos ainda não confirmados para revisão, em vez de presumir licenças.
-- [ ] Registar URL, versão, hash e origem do modelo INT4.
+- [x] Inventariar o LFM Open License v1.0, LiteRT-LM 0.18.0/Apache 2.0 e dependências Android diretas já declaradas.
+- [x] Marcar licenças e avisos ainda não confirmados para revisão, em vez de presumir licenças.
+- [x] Registar URL, versão, hash e origem do modelo INT4.
 - [ ] Confirmar que a licença do modelo autoriza o uso da entidade que o vai comercializar; não concluir elegibilidade sem conhecer a entidade/receita.
-- [ ] Documentar que não existe ainda uma licença global do repositório escolhida.
+- [x] Documentar que não existe ainda uma licença global do repositório escolhida.
 
 **Verificação:** comparar a lista com app/build.gradle.kts e os ficheiros de versão; nenhuma alegação legal sem fonte.
 
@@ -92,12 +92,12 @@
 - Atualizar README.md, RELEASE-SETUP.md, SUPABASE-SETUP.md, PRODUCT-READINESS-CHECKLIST.md, docs/RELEASE-BLOCKERS-VERIFIED-2026-11-06.md.
 - Criar docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md.
 
-- [ ] Marcar as cinco aplicações como variantes de demonstração até geração comercial assinada; documentar targetSdk 36 e minSdk 24.
-- [ ] Documentar os cinco outputs do workflow e os quatro secrets + uma variable necessárias, sem incluir valores.
-- [ ] Identificar a exigência de titularidade/idade Google Play e que a conta de programador precisa de ser detida pelo adulto/entidade legal responsável.
-- [ ] Explicar que o workflow produz AAB/APK assinados mas não publica na loja.
-- [ ] Registar que não existe atribuição automática de planos/pagamentos nem integração POS/contabilidade.
-- [ ] Separar os bloqueios cloud/segurança/Auth/email/OAuth/backup/restore/legal/physical device.
+- [x] Marcar as cinco aplicações como variantes de demonstração até geração comercial assinada; documentar targetSdk 36 e minSdk 24.
+- [x] Documentar os cinco outputs do workflow e os quatro secrets + uma variable necessárias, sem incluir valores.
+- [x] Identificar a exigência de titularidade/idade Google Play e que a conta de programador precisa de ser detida pelo adulto/entidade legal responsável.
+- [x] Explicar que o workflow produz AAB/APK assinados mas não publica na loja.
+- [x] Registar que não existe atribuição automática de planos/pagamentos nem integração POS/contabilidade.
+- [x] Separar os bloqueios cloud/segurança/Auth/email/OAuth/backup/restore/legal/physical device.
 - [ ] Atualizar o estado da PR #86 e da CI somente depois de confirmar o resultado final.
 
 **Verificação:** revisão textual dos documentos, procura de informações antigas, testes estáticos do workflow comercial, CI completa da branch.
