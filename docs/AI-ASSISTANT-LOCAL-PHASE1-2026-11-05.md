@@ -1,9 +1,10 @@
 # StudioMesa — IA local, documentos e sincronização
 
-**Data:** 5 de novembro de 2026  
-**Branch:** `feature/assistant-local-ai-phase1-2026-11-05`  
-**Base:** `integration/non-ai-core-2026-11-05`  
-**Estado:** implementação em validação; não integrada na branch de operação e não aprovada para produção.
+**Data:** 6 de novembro de 2026  
+**Branch:** `main`  
+**Integração:** commit `6ac9c783f6d623fedf42af840b4eb235065e1536`.  
+**Validação CI:** commit candidato `4d8fa85878c6c20f1ad81138fb69ffd961921083` — compilação Android, testes unitários de todas as variantes, Android Lint, configuração de release, replay das migrações/testes PostgreSQL e testes de interface em Android 8/API 26 e Android 16 passaram.  
+**Estado:** integrado no repositório; ainda não aprovado para distribuição comercial. O APK disponível é uma compilação de demonstração/debug.
 
 ## IA generativa local
 
