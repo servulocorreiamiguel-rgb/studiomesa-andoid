@@ -1006,6 +1006,101 @@ object SupabaseApi {
         return JSONArray(response)
     }
 
+    fun getRestaurantLoyaltyEntitlements(token: String, restaurantId: String): JSONObject {
+        require(token.isNotBlank() && restaurantId.matches(Regex("^[0-9a-fA-F-]{36}$")))
+        val rows = JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/get_restaurant_loyalty_entitlements",
+            JSONObject().put("p_restaurant_id", restaurantId),
+            token
+        ))
+        val result = rows.optJSONObject(0)
+            ?: throw IllegalStateException("O servidor não devolveu os limites do plano.")
+        val plan = result.optString("plan_code")
+        val limit = result.optInt("reward_limit", 0)
+        val active = result.optInt("active_rewards", -1)
+        require(plan in setOf("essencial", "profissional", "premium") && limit > 0 && active >= 0) {
+            "Os limites da loja de pontos devolvidos pelo servidor são inválidos."
+        }
+        return result
+    }
+
+    fun setLoyaltyRewardImagePath(
+        token: String,
+        restaurantId: String,
+        rewardId: String,
+        imagePath: String?
+    ) {
+        require(token.isNotBlank())
+        require(restaurantId.matches(Regex("^[0-9a-fA-F-]{36}$")))
+        require(rewardId.matches(Regex("^[0-9a-fA-F-]{36}$")))
+        if (imagePath != null) {
+            require(imagePath.matches(
+                Regex("^[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}\\.jpg$")
+            ))
+            require(imagePath.startsWith("$restaurantId/$rewardId/")) {
+                "A fotografia não pertence a esta recompensa."
+            }
+        }
+        call(
+            "POST",
+            "/rest/v1/rpc/set_loyalty_reward_image_path",
+            JSONObject()
+                .put("p_restaurant_id", restaurantId)
+                .put("p_reward_id", rewardId)
+                .put("p_image_path", imagePath ?: JSONObject.NULL),
+            token
+        )
+    }
+
+    fun uploadLoyaltyRewardPhoto(
+        token: String,
+        restaurantId: String,
+        rewardId: String,
+        photoId: String,
+        bytes: ByteArray
+    ): String {
+        require(token.isNotBlank())
+        require(restaurantId.matches(Regex("^[0-9a-fA-F-]{36}$")))
+        require(rewardId.matches(Regex("^[0-9a-fA-F-]{36}$")))
+        require(photoId.matches(Regex("^[0-9a-fA-F-]{36}$")))
+        require(bytes.size in 1..(1536 * 1024)) { "A fotografia tem de ter até 1,5 MB." }
+        val objectPath = "$restaurantId/$rewardId/$photoId.jpg"
+        val encodedPath = objectPath.split("/").joinToString("/") { URLEncoder.encode(it, "UTF-8") }
+        binaryStorageRequest(
+            "POST",
+            "/storage/v1/object/loyalty-reward-images/$encodedPath",
+            token,
+            bytes,
+            "image/jpeg"
+        )
+        return objectPath
+    }
+
+    fun deleteLoyaltyRewardPhoto(token: String, objectPath: String) {
+        require(token.isNotBlank())
+        require(objectPath.matches(
+            Regex("^[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}\\.jpg$")
+        ))
+        val encodedPath = objectPath.split("/").joinToString("/") { URLEncoder.encode(it, "UTF-8") }
+        binaryStorageRequest("DELETE", "/storage/v1/object/loyalty-reward-images/$encodedPath", token)
+    }
+
+    fun downloadLoyaltyRewardPhoto(token: String, objectPath: String): ByteArray {
+        require(token.isNotBlank())
+        require(objectPath.matches(
+            Regex("^[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}\\.jpg$")
+        ))
+        val encodedPath = objectPath.split("/").joinToString("/") { URLEncoder.encode(it, "UTF-8") }
+        return binaryStorageRequest(
+            "GET",
+            "/storage/v1/object/public/loyalty-reward-images/$encodedPath",
+            token
+        ).also {
+            require(it.size in 1..(1536 * 1024)) { "A fotografia da recompensa é inválida ou demasiado grande." }
+        }
+    }
+
     fun saveLoyaltyReward(
         token: String,
         restaurantId: String,
