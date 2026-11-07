@@ -2392,11 +2392,7 @@ class MainActivity : ComponentActivity() {
         sectionHeading(content, "Ferramentas económicas", "Analisa indicadores, custos e faturas importadas. Os cálculos são indicativos e as operações continuam sob controlo do proprietário.")
         renderEconomicInvoiceSummary(content)
         addGap(content, 8)
-        renderEconomicManager(content)
-        if (isPremium) {
-            addGap(content, 8)
-            renderRestaurantPriceAdvisor(content)
-        }
+        renderAssistant(content, showPageIntro = false)
 
         setContentView(appRoot)
         updateKitchenAutoRefresh()
@@ -7392,7 +7388,7 @@ class MainActivity : ComponentActivity() {
         privacyCard.addView(label("ASSISTENTE LOCAL · SEM API PAGA", 10f, true, copper))
         addGap(privacyCard, 5)
         privacyCard.addView(label(
-            "As análises são calculadas neste dispositivo. As perguntas não são enviadas nem guardadas como histórico. Esta versão usa regras e cálculos locais, não um modelo generativo; não altera registos por ti.",
+            "Os indicadores e cálculos desta área são locais e não usam API paga. A conversa com o modelo generativo está no ecrã principal do Assistente económico; estes controlos apenas analisam e não alteram registos.",
             12.5f, false, white
         ))
         container.addView(privacyCard, cardParams())
