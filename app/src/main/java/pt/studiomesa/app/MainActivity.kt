@@ -112,6 +112,9 @@ class MainActivity : ComponentActivity() {
     private var activeAssistantConversationId: String? = null
     private var assistantChatScopeKey: String? = null
     private var assistantComposerDraft = ""
+    // Preserve the chat reading position when progress updates rebuild the screen.
+    private var assistantChatScrollY = 0
+    private var assistantChatAutoFollow = true
     private var assistantChatError: String? = null
     private var assistantSending = false
     private var assistantStreamingTextView: TextView? = null
@@ -738,6 +741,8 @@ class MainActivity : ComponentActivity() {
             assistantChatScopeKey = scope
             activeAssistantConversationId = null
             assistantComposerDraft = ""
+            assistantChatScrollY = 0
+            assistantChatAutoFollow = true
             assistantChatError = null
         }
 
@@ -862,6 +867,8 @@ class MainActivity : ComponentActivity() {
             setOnClickListener {
                 activeAssistantConversationId = null
                 assistantComposerDraft = ""
+                assistantChatScrollY = 0
+                assistantChatAutoFollow = true
                 assistantChatError = null
                 assistantDeepThinkingEnabled = false
                 renderAssistantChatScreen()
@@ -875,6 +882,13 @@ class MainActivity : ComponentActivity() {
             clipToPadding = false
             overScrollMode = View.OVER_SCROLL_NEVER
             isVerticalScrollBarEnabled = false
+            setOnScrollChangeListener { _, _, scrollY, _, _ ->
+                assistantChatScrollY = scrollY
+                val contentHeight = getChildAt(0)?.height ?: 0
+                // Follow new messages only while the reader is already at the bottom.
+                assistantChatAutoFollow = contentHeight <= height ||
+                    scrollY + height >= contentHeight - dp(12)
+            }
         }
         val conversation = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -1017,7 +1031,15 @@ class MainActivity : ComponentActivity() {
         appRoot.addView(composerArea, LinearLayout.LayoutParams(-1, -2))
 
         setContentView(appRoot)
-        conversationScroll.post { conversationScroll.fullScroll(View.FOCUS_DOWN) }
+        val savedScrollY = assistantChatScrollY
+        val shouldFollowLatestMessage = assistantChatAutoFollow
+        conversationScroll.post {
+            if (shouldFollowLatestMessage) {
+                conversationScroll.fullScroll(View.FOCUS_DOWN)
+            } else {
+                conversationScroll.scrollTo(0, savedScrollY.coerceAtLeast(0))
+            }
+        }
         updateKitchenAutoRefresh()
         updateInventoryAutoRefresh()
     }
@@ -1946,6 +1968,7 @@ class MainActivity : ComponentActivity() {
             )
             activeAssistantConversationId = conversationId
             assistantComposerDraft = ""
+            assistantChatAutoFollow = true
             assistantChatError = null
 
             if (localAssistantModelManager.isModelInstalled()) {
@@ -2145,6 +2168,8 @@ class MainActivity : ComponentActivity() {
                 ))
                 card.setOnClickListener {
                     activeAssistantConversationId = conversation.id
+                    assistantChatAutoFollow = true
+                    assistantChatScrollY = 0
                     assistantChatError = null
                     dialog.dismiss()
                     renderApp()
