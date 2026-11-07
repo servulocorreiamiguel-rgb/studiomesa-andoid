@@ -1,7 +1,8 @@
 # StudioMesa — Supabase hidden keepalive
 
-A quiet, read-only maintenance request for the Supabase Free project. It runs in
-GitHub Actions, independently of Supabase, four times a day.
+The silent keepalive RPC is already deployed on the live Supabase project
+`svwvkfsyevuyabelrtjk`. It is called by a GitHub Actions workflow in the default
+branch, independently of Supabase, four times per day.
 
 ## Behaviour and privacy
 
@@ -9,21 +10,22 @@ GitHub Actions, independently of Supabase, four times a day.
 - The function is `SECURITY INVOKER` and only executes `SELECT true`.
 - It does not read or write restaurant, customer, invoice, order, staff, assistant,
   memory, or authentication data.
-- No visible message, notification, or app activity is created.
+- No notification or visible message is shown in the Android app.
 - The workflow uses only the project's public legacy `anon` key, never
   `service_role`.
+
+## Deployment and validation
+
+- Live migration version: `20261107144901_studiomesa_hidden_keepalive`.
+- Workflow file: `.github/workflows/supabase-keepalive.yml`.
+- The actual production RPC was tested as role `anon` and returned `true`.
+- Supabase project status was `ACTIVE_HEALTHY` at last verification.
 
 ## Limits
 
 Supabase says a few real database requests per day are typically sufficient to
 avoid inactivity pausing on the Free plan, but does not promise this threshold.
 This workflow improves the chance that the project remains active; it cannot
-guarantee uptime. GitHub scheduled jobs may be delayed or disabled by repository
-settings or repository inactivity. A paused project may still need manual restore
-from the Supabase Dashboard.
-
-## Deployment order
-
-1. Apply the additive migration `20261107120000_hidden_supabase_keepalive.sql`.
-2. Merge this workflow into the repository's default branch.
-3. Confirm the first workflow run succeeds in GitHub → Actions.
+guarantee uptime. GitHub scheduled jobs may be delayed or disabled, and an
+inactive repository may have schedules disabled. A paused project may still need
+manual restoration in the Supabase Dashboard.
