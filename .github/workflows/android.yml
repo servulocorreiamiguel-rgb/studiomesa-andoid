@@ -45,6 +45,7 @@ jobs:
       - name: Type-check StudioMesa Edge Functions
         run: |
           python3 -m unittest scripts/test_check_studiomesa_assistant_edge_function.py scripts/test_check_studiomesa_web_search_edge_function.py
+          python3 -m unittest scripts/test_check_studiomesa_edge_function_config.py
           npm exec --yes --package=typescript@5.9.3 -- tsc --noEmit --target ES2022 --module ESNext --moduleResolution bundler --lib ES2022,DOM --strict --skipLibCheck scripts/ci/edge-runtime-shim.d.ts supabase/functions/studiomesa-assistant/index.ts supabase/functions/studiomesa-web-search/index.ts
 
       - name: Audit Android HTTP transport safety
