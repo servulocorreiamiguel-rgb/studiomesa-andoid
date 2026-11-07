@@ -15,34 +15,23 @@ concurrency:
 
 jobs:
   keepalive:
+    # Keep disabled until the additive database migration is safely deployed.
+    if: vars.SUPABASE_KEEPALIVE_ENABLED == 'true'
     name: Execute private heartbeat RPC
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
-      - name: Validate configuration
-        shell: bash
-        env:
-          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
-        run: |
-          set -euo pipefail
-          test -n "${SUPABASE_URL}" || { echo "Missing repository variable SUPABASE_URL"; exit 1; }
-          test -n "${SUPABASE_ANON_KEY}" || { echo "Missing repository variable SUPABASE_ANON_KEY"; exit 1; }
-          case "${SUPABASE_URL}" in
-            https://*.supabase.co) ;;
-            *) echo "SUPABASE_URL must be an HTTPS Supabase project URL"; exit 1 ;;
-          esac
-
       - name: Send silent database heartbeat
         shell: bash
         env:
-          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+          SUPABASE_URL: https://svwvkfsyevuyabelrtjk.supabase.co
+          # Supabase legacy anon key: public client key, never service_role.
+          SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2d2t mfsyevuyabelrtjkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkxNjQ0NzIsImV4cCI6MjEwNDc0MDQ3Mn0.J90m-5tpxk5vOG62B_pv0ds8q8lsMGu4mdCJO7H13TA
         run: |
           set -euo pipefail
           response="$(curl --fail --silent --show-error \
             --retry 3 --retry-all-errors --retry-delay 2 --max-time 20 \
-            "${SUPABASE_URL%/}/rest/v1/rpc/studiomesa_keepalive" \
+            "${SUPABASE_URL}/rest/v1/rpc/studiomesa_keepalive" \
             -H "apikey: ${SUPABASE_ANON_KEY}" \
             -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
             -H "Content-Type: application/json" \
