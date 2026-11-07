@@ -14,7 +14,7 @@
 ## O que ainda falta antes da venda ou utilização em serviço real
 
 - Testes ponta a ponta em telemóveis reais, incluindo vários dispositivos, utilizadores, perda de internet, sessões expiradas e erros de servidor. A compilação de um APK não substitui esses testes.
-- Regras comerciais da fidelização: acumulação automática, recompensas configuráveis, resgates, limites e prevenção de fraude. Neste momento, o saldo é ajustado manualmente pelo restaurante.
+- Fidelização: QR temporário de utilização única para atribuição pelo restaurante, loja de prémios configurável, desconto transacional de pontos no servidor, stock e confirmação de entrega. A pontuação por compra continua a ser atribuída por funcionário; não existe integração POS que calcule automaticamente pontos a partir do valor da venda. O fluxo de cancelamento de um resgate pendente com reposição de pontos/stock ainda não existe.
 - Reservas: o fluxo inicial de criação, estados e bloqueio de conflitos por mesa está implementado no código e na migração; ainda falta teste ponta a ponta, edição de reservas, vista de calendário/turnos, lembretes automáticos, depósitos e regras de cancelamento.
 - Stock: o inventário partilhado, entradas/saídas, histórico de movimentos, custo unitário e fotografia de custos estão implementados no código/backend. As fichas técnicas e o consumo automático de ingredientes existem no código/migration, mas as tabelas correspondentes ainda não existem no Supabase alojado; não anunciar essa automação até à reconciliação e deployment aprovados. Ainda faltam testes ponta a ponta, avisos automáticos, fornecedores/encomendas, inventário por armazém e conversões de unidades.
 - Gestão avançada de equipas ainda incompleta: a matriz granular por função está no código/migration, mas a tabela privada necessária ainda não existe no Supabase alojado. A remoção de funcionários e a renovação automática do código de adesão estão implementadas; a revogação não é propagada em tempo real a um ecrã já aberto.
@@ -38,6 +38,14 @@
 - [Termos B2B](TERMS-OF-SERVICE-TEMPLATE.md), [licença de software](B2B-SOFTWARE-LICENSE-TEMPLATE.md) e [DPA](DATA-PROCESSING-AGREEMENT-TEMPLATE.md) — rascunhos para revisão jurídica.
 - [Inventário de licenças de terceiros](THIRD-PARTY-NOTICES.md).
 - [Gate de lançamento](docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md) — a versão continua não liberada para piloto/venda.
+
+## Fidelização e loja de pontos
+
+A versão principal já tem QR temporário, saldo partilhado, catálogo de recompensas, custo em pontos, stock, resgates transacionais, confirmação de entrega e histórico. O QR é de utilização única e o servidor valida a conta e o restaurante; o cliente não pode editar o saldo nem o custo do prémio.
+
+A branch `feature/loyalty-shop-photos-tier-limits` prepara também limites server-side de prémios ativos (Essencial 5, Profissional 15, Premium 50), uma fotografia JPEG por prémio nos dois planos superiores e a variante Cliente Essencial (cartão, carta e loja de pontos, sem reservas). A migration não foi aplicada ao Supabase alojado e a branch ainda precisa de CI, revisão e integração. Não anunciar estes limites/fotografias como ativos na versão principal antes disso.
+
+O sistema não calcula pontos automaticamente a partir de compras porque não existe integração POS. Os pontos são atribuídos por funcionário através do QR. Um resgate pendente reserva pontos e stock; ainda falta uma operação de cancelamento com devolução automática.
 
 ## Configuração técnica
 
