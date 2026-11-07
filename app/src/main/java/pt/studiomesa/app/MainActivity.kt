@@ -62,6 +62,7 @@ class MainActivity : ComponentActivity() {
         private const val REQUEST_EXPORT_ORDERS_CSV = 7812
         private const val REQUEST_IMPORT_SUPPLIER_INVOICE = 7813
         private const val REQUEST_PICK_LOYALTY_REWARD_IMAGE = 7815
+        const val EXTRA_ACTIVITY_NOTIFICATION_KEY = "studiomesa_activity_notification_key"
     }
 
     private lateinit var store: RestaurantStore
@@ -253,6 +254,7 @@ class MainActivity : ComponentActivity() {
         window.navigationBarColor = forestDeep
         renderApp()
         handleAuthCallback(intent)
+        handleActivityNotificationIntent(intent)
 
         // Refresh shared data when an already-authenticated user opens the app,
         // but do not start a second request while processing an OAuth callback.
@@ -389,6 +391,37 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleAuthCallback(intent)
+        handleActivityNotificationIntent(intent)
+    }
+
+    private fun handleActivityNotificationIntent(notificationIntent: Intent?) {
+        val eventKey = notificationIntent
+            ?.getStringExtra(EXTRA_ACTIVITY_NOTIFICATION_KEY)
+            ?.trim()
+            .orEmpty()
+        if (eventKey.isBlank()) return
+        notificationIntent?.removeExtra(EXTRA_ACTIVITY_NOTIFICATION_KEY)
+
+        if (isCustomerApp) {
+            activeCustomerPage = when {
+                eventKey.startsWith("customer:reservation:") -> "Reservas"
+                eventKey.startsWith("customer:reward:") -> "Cartão"
+                else -> return
+            }
+            renderCustomerApp()
+            return
+        }
+
+        val targetPage = when {
+            eventKey.startsWith("restaurant:order:") -> "Cozinha"
+            eventKey.startsWith("restaurant:reservation:") -> "Reservas"
+            eventKey.startsWith("restaurant:redemption:") -> "Pontos"
+            else -> return
+        }
+        if (targetPage !in availablePages()) return
+        activePage = targetPage
+        assistantToolsVisible = false
+        renderApp()
     }
 
     private fun parseAuthParams(raw: String?): Map<String, String> =
