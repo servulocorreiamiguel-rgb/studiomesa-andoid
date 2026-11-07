@@ -3340,7 +3340,13 @@ class MainActivity : ComponentActivity() {
             runOnUiThread {
                 activityNotificationRefreshInFlight = false
                 val events = loadedEvents ?: return@runOnUiThread
-                if (activityResumed) persistActivityNotificationSnapshot(accountId, events)
+                if (
+                    activityResumed &&
+                    backendToken().isNotBlank() &&
+                    backendPrefs.getString("user_id", "").orEmpty() == accountId
+                ) {
+                    persistActivityNotificationSnapshot(accountId, events)
+                }
             }
         }.start()
     }
