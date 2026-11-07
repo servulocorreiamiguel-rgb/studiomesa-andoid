@@ -39,4 +39,13 @@ class AssistantGeneralConversationPolicyTest {
         assertTrue(AssistantGeneralConversationPolicy.MAX_HISTORY_MESSAGES *
             AssistantGeneralConversationPolicy.MAX_HISTORY_MESSAGE_CHARS <= 4000)
     }
+
+    @Test
+    fun instructionDescribesTheOwnerOnlyReadOnlyEconomicBridge() {
+        val instruction = AssistantGeneralConversationPolicy.SYSTEM_INSTRUCTION.lowercase()
+        assertTrue(instruction.contains("consult_economic_assistant"))
+        assertTrue(instruction.contains("apenas para o proprietário autenticado"))
+        assertTrue(instruction.contains("nunca tentes aprovar"))
+    }
+
 }
