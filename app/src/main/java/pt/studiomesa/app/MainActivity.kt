@@ -4764,11 +4764,13 @@ class MainActivity : ComponentActivity() {
             backendPrefs.edit()
                 .putString("remote_members_json", members.toString())
                 .putString("restaurant_rewards_json", rewards.toString())
-                .apply()
-            if (entitlements != null) backendPrefs.edit()
-                .putString("loyalty_entitlements_json", entitlements.toString())
                 .putString("remote_reward_redemptions_json", redemptions.toString())
                 .apply()
+            if (entitlements != null) {
+                backendPrefs.edit()
+                    .putString("loyalty_entitlements_json", entitlements.toString())
+                    .apply()
+            }
             members.length().toString()
         }) { count ->
             if (activePage == "Pontos") renderApp()
