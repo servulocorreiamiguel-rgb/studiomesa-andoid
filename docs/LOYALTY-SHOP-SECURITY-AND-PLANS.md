@@ -47,6 +47,12 @@ O caminho fixo permite uma única imagem por prémio, mesmo que alguém tente ch
 
 Não colocar fotografias de clientes, faturas, documentos pessoais ou qualquer conteúdo confidencial neste bucket.
 
+## Aplicação Cliente por plano
+
+A variante Essencial Cliente passa a disponibilizar o cartão, a carta, os pontos e o resgate dos cinco prémios. Não mostra o separador de reservas. Profissional e Premium mantêm reservas na aplicação Cliente.
+
+A função do Supabase que cria um pedido de reserva foi também atualizada para consultar o plano atribuído ao restaurante. No Essencial, uma chamada direta à RPC é recusada; não basta esconder o botão no Android. A variante Essencial Cliente e o bloqueio de reservas precisam de passar a CI e ser testados com uma conta de cliente antes de se venderem.
+
 ## Atribuição do plano
 
 O plano é mantido em `private.restaurant_loyalty_entitlements`, uma tabela sem acesso direto pela aplicação. Se não existir uma atribuição, o restaurante fica no Essencial. O APK não pode escolher o plano nem aumentar o próprio limite.
