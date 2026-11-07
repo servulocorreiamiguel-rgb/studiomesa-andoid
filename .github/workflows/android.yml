@@ -42,6 +42,11 @@ jobs:
           python3 scripts/test_audit_supabase_security.py
           python3 scripts/audit_supabase_security.py
 
+      - name: Type-check online assistant Edge Function
+        run: |
+          python3 -m unittest scripts/test_check_studiomesa_assistant_edge_function.py
+          npm exec --yes --package=typescript@5.9.3 -- tsc --noEmit --target ES2022 --module ESNext --moduleResolution bundler --lib ES2022,DOM --strict --skipLibCheck scripts/ci/edge-runtime-shim.d.ts supabase/functions/studiomesa-assistant/index.ts
+
       - name: Audit Android HTTP transport safety
         run: |
           python3 scripts/test_check_android_http_safety.py
