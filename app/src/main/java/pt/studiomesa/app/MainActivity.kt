@@ -2482,9 +2482,11 @@ class MainActivity : ComponentActivity() {
                 activePage = "Análise"; renderApp()
             }
         }
-        actionCard(container, "IA", "IA StudioMesa", "Conversa geral para aprender, escrever, programar e resolver problemas.", "ABRIR IA") {
-            assistantToolsVisible = false
-            activePage = "IA"; renderApp()
+        if ("IA" in availablePages()) {
+            actionCard(container, "IA", "IA StudioMesa", "Conversa geral para aprender, escrever, programar e resolver problemas.", "ABRIR IA") {
+                assistantToolsVisible = false
+                activePage = "IA"; renderApp()
+            }
         }
         if (!hasRemoteRestaurant() || backendPrefs.getString("restaurant_role", "").orEmpty() == "owner") {
             actionCard(container, "€", "Assistente económico", "Analisa custos, tesouraria e faturas importadas do restaurante.", "ABRIR ASSISTENTE ECONÓMICO") {
