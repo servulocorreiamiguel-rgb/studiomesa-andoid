@@ -82,13 +82,14 @@ def audit_workflow(text: str) -> list[str]:
         errors.append("The commercial workflow must explicitly reject AABs without the 'jar verified.' result.")
     release_apk_tasks = (
         "assembleEssencialRestauranteRelease",
+        "assembleEssencialClienteRelease",
         "assembleProfissionalRestauranteRelease",
         "assembleProfissionalClienteRelease",
         "assemblePremiumRestauranteRelease",
         "assemblePremiumClienteRelease",
     )
     if not all(task in text for task in release_apk_tasks):
-        errors.append("The commercial workflow must build all five signed release APK variants.")
+        errors.append("The commercial workflow must build all six signed release APK variants.")
     if "mapfile -d '' apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' -print0)" not in text:
         errors.append("The commercial workflow must enumerate the release APKs before uploading them.")
     if '"$APKSIGNER" verify --verbose "$apk"' not in text:
