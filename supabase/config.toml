@@ -7,3 +7,7 @@ verify_jwt = true
 [functions.account-deletion-web]
 enabled = true
 verify_jwt = false
+
+[functions.studiomesa-web-search]
+enabled = true
+verify_jwt = true
