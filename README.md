@@ -1,11 +1,16 @@
-> **Estado em 06/11/2026 — NÃO PRONTO PARA VENDA/PRODUÇÃO.** O código Android inclui cinco variantes, mas os APKs habituais são builds debug de demonstração e ainda não existe assinatura comercial definitiva.
+> **Estado em 07/11/2026 — NÃO PRONTO PARA VENDA/PRODUÇÃO.** A aplicação tem cinco variantes Android. Os APKs de demonstração continuam a ser builds debug; a assinatura comercial e a validação em dispositivos físicos continuam por concluir.
 >
-> **CI de reservas #1332:** os quatro jobs passaram: replay PostgreSQL/autorização, compilação/unit tests/Lint, smoke Android 8 e smoke Android 16. A PR #86 foi integrada na `main` no commit `0770ad772f6abb2a44027a462187908a085011cf`. Os testes de interface são condicionados ao plano/tipo da variante; os skips nas variantes sem a respetiva secção são esperados.
+> **CI da integração IA/gestor (PR #88):** compilação das cinco variantes, testes unitários, Android Lint e validação da configuração comercial passaram. Os testes de interface Android 8 e Android 16 ainda estavam em execução na última verificação.
 >
-> **Backend em produção:** o Supabase alojado tem 54 versões de migrations e o repositório tem 53 ficheiros, com cinco versões só locais e seis só remotas. Faltam no backend as tabelas de receitas, permissões granulares, sincronização cloud do assistente e arquivo de faturas, além do bucket privado de documentos. Não executar migrations/deploy antes de reconciliação, backup/restauro e replay descartável.
+> **Backend Supabase:** projeto ativo. Existem 57 versões de migrations no Supabase e 55 ficheiros na `main`; continuam quatro versões apenas no repositório e seis apenas no projeto alojado. As três migrations recentes estão alinhadas com as versões remotas. Consultar [reconciliação da história de migrations](docs/SUPABASE-LIVE-MIGRATION-HISTORY-2026-11-07.md).
 >
-> **Fora de âmbito desta revisão:** testes físicos no OPPO A5m, assinatura comercial, credenciais Auth/SMTP/OAuth, publicação Google Play e integração POS/contabilidade. Consultar [gate de lançamento](docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md), [reconciliação Supabase](docs/SUPABASE-LIVE-RECONCILIATION-2026-11-06.md) e [bloqueios verificados](docs/RELEASE-BLOCKERS-VERIFIED-2026-11-06.md).
-
+> **Assistente e faturas:** histórico, memória, arquivo de faturas de fornecedores e bucket privado de documentos estão agora implementados no Supabase. As quatro tabelas têm RLS e políticas restritas ao proprietário. A IA geral tem uma ligação de leitura ao Assistente económico; recebe metadados e totais, não o PDF integral nem o texto OCR.
+>
+> **Manutenção silenciosa:** a função `studiomesa_keepalive()` está ativa e só executa `SELECT true`. O GitHub Actions está agendado para a chamar quatro vezes por dia; o agendamento não garante disponibilidade permanente e o primeiro ciclo automático ainda não foi validado.
+>
+> **Pesquisa na Internet:** a função `studiomesa-web-search` foi substituída em produção por SearXNG e mantém JWT obrigatório. Ainda falta configurar um endpoint SearXNG HTTPS estável; por isso, a pesquisa geral na Web não está ativa. A pesquisa Wikipedia continua disponível. Ver [configuração SearXNG](docs/SEARXNG-SETUP.md).
+>
+> **Ainda fora de âmbito:** testes físicos no OPPO A5m, assinatura comercial definitiva, credenciais Auth/SMTP/OAuth, publicação Google Play e integração POS/contabilidade. Consultar [gate de lançamento](docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md), [bloqueios verificados](docs/RELEASE-BLOCKERS-VERIFIED-2026-11-06.md) e os documentos de reconciliação acima.
 ## O que ainda falta antes da venda ou utilização em serviço real
 
 - Testes ponta a ponta em telemóveis reais, incluindo vários dispositivos, utilizadores, perda de internet, sessões expiradas e erros de servidor. A compilação de um APK não substitui esses testes.
