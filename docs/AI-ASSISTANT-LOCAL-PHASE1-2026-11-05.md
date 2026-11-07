@@ -16,6 +16,22 @@
 - O modelo é pequeno e limitado a um contexto aproximado de 4 096 tokens. Não é equivalente a modelos de grande dimensão, não deve ser apresentado como ChatGPT e pode produzir erros. O desempenho em português europeu e no OPPO A5m tem de ser medido fisicamente.
 - O modo **Pensar mais** acrescenta instruções de verificação, diminui a temperatura e aumenta o limite de saída de 1 024 para 1 400 tokens. Não revela raciocínio interno privado.
 
+## Ligação entre a IA geral e o Assistente económico
+
+- A IA geral pode chamar a ferramenta interna `consult_economic_assistant`, mas apenas quando a sessão pertence ao proprietário autenticado de um restaurante remoto.
+- A ferramenta encaminha a consulta para o mesmo leitor de metadados usado pelo Assistente económico. Não cria um segundo acesso às tabelas nem duplica a lógica de leitura.
+- A ponte só devolve fornecedor, número, datas, valores e estado de revisão das faturas já carregadas no arquivo local cifrado. Não devolve PDFs, texto OCR, caminhos privados ou dados bancários.
+- É só de leitura. Não aprova, rejeita, altera, paga nem elimina documentos. A equipa e as contas não proprietárias não recebem esta ferramenta.
+- Se o arquivo remoto não estiver disponível ou não tiver sido atualizado, a IA deve indicar essa limitação e não inventar resultados.
+
+## Pesquisa pública na Internet
+
+- A ferramenta `search_public_web` usa SearXNG através da Edge Function autenticada `studiomesa-web-search`.
+- A função só funciona depois de ser configurado `SEARXNG_BASE_URL` para um servidor HTTPS SearXNG que tenha a API JSON ativa. Não usa Tavily nem exige chave API de pesquisa.
+- A aplicação envia apenas uma consulta pública curta; nunca envia histórico, memória, faturas, clientes, equipa ou identificadores.
+- Foram testadas instâncias SearXNG públicas em 7 de novembro de 2026, mas as instâncias verificadas bloquearam pedidos automatizados ou devolveram zero resultados/motores bloqueados. A função está preparada, mas a pesquisa Web permanece desativada até existir um endpoint fiável configurado.
+- Ver [docs/SEARXNG-SETUP.md](SEARXNG-SETUP.md).
+
 ## Histórico, memória e sincronização
 
 - Histórico pesquisável, reabertura e eliminação; memória editável por conta/restaurante.

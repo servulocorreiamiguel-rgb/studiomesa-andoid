@@ -17,17 +17,32 @@ object SupabaseApi {
 
     data class Session(val accessToken: String, val userId: String, val email: String, val refreshToken: String)
 
+    /** Public web search via an authenticated Edge Function; provider keys stay server-side. */
+    fun searchPublicWeb(token: String, query: String): JSONObject {
+        require(token.isNotBlank()) { "Inicia sessão para pesquisar na Web." }
+        require(query.length in 3..200) { "A pesquisa tem de ter entre 3 e 200 caracteres." }
+        return JSONObject(call(
+            "POST",
+            "/functions/v1/studiomesa-web-search",
+            JSONObject().put("query", query),
+            token,
+            readTimeoutMillis = 20_000
+        ))
+    }
+
     private fun call(
         method: String,
         path: String,
         body: JSONObject? = null,
         accessToken: String? = null,
-        returnRepresentation: Boolean = false
+        returnRepresentation: Boolean = false,
+        connectTimeoutMillis: Int = 12_000,
+        readTimeoutMillis: Int = 12_000
     ): String {
         val connection = (URL(BASE_URL + path).openConnection() as HttpURLConnection).apply {
             requestMethod = method
-            connectTimeout = 12000
-            readTimeout = 12000
+            connectTimeout = connectTimeoutMillis
+            readTimeout = readTimeoutMillis
             // Supabase REST/Auth endpoints should return API responses, not redirects.
             // Fail closed instead of following a redirect with session headers.
             instanceFollowRedirects = false

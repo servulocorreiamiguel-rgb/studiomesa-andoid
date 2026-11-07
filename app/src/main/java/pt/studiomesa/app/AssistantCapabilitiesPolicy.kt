@@ -11,7 +11,8 @@ internal object AssistantCapabilitiesPolicy {
     data class Features(
         val hasReservationsAndPricing: Boolean,
         val isPremium: Boolean,
-        val localModelInstalled: Boolean
+        val localModelInstalled: Boolean,
+        val canAccessInvoices: Boolean = false
     )
 
     private val capabilityPhrases = listOf(
@@ -64,7 +65,9 @@ internal object AssistantCapabilitiesPolicy {
             if (features.isPremium) {
                 appendLine("• Analisar stock, movimentos, custos e indicadores de desempenho.")
             }
-            appendLine("• Consultar o arquivo de faturas importadas e distinguir documentos confirmados dos que ainda precisam de revisão.")
+            if (features.canAccessInvoices) {
+                appendLine("• Consultar o arquivo de faturas importadas através do Assistente económico e distinguir documentos pendentes, confirmados e rejeitados. A consulta é apenas de leitura.")
+            }
             appendLine("• Usar o histórico e a memória para manter contexto entre conversas neste restaurante.")
             if (features.localModelInstalled) {
                 appendLine()
@@ -74,7 +77,7 @@ internal object AssistantCapabilitiesPolicy {
                 appendLine("O modelo generativo local ainda não está instalado. Sem ele, algumas respostas ficam limitadas às funções e regras já disponíveis na aplicação.")
             }
             appendLine()
-            append("Limites importantes: analiso e recomendo, mas não altero preços, stock, pedidos, reservas, pagamentos ou documentos por iniciativa própria. As operações exigem confirmação nos controlos da aplicação. Não substituo um contabilista nem tenho navegação livre pela Internet.")
+            append("Limites importantes: posso pesquisar informação pública na Web quando a conta tem sessão iniciada e o serviço está configurado. Comparo fontes e assinalo contradições ou falta de provas, mas não consigo garantir a verdade absoluta. Não envio dados privados do restaurante para pesquisas públicas. Analiso e recomendo, mas não altero preços, stock, pedidos, reservas, pagamentos ou documentos por iniciativa própria; as operações exigem confirmação. Não substituo um contabilista.")
         }.trim()
     }
 

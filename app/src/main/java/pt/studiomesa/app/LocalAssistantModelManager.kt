@@ -68,6 +68,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
     private var restaurantDataTool: StudioMesaRestaurantDataTool? = null
     private var priceReferenceTool: StudioMesaPriceReferenceTool? = null
     private var supplierInvoiceTool: StudioMesaSupplierInvoiceTool? = null
+    private var economicAssistantBridgeTool: StudioMesaEconomicAssistantBridgeTool? = null
     @Volatile private var downloading = false
     @Volatile private var closed = false
     private var verifiedThisProcess = false
@@ -185,6 +186,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         userMessage: String,
         deepThinking: Boolean = false,
         economicMode: Boolean = false,
+        economicBridgeEnabled: Boolean = false,
         onToken: (String) -> Unit,
         onComplete: (Result<String>) -> Unit
     ) {
@@ -238,10 +240,20 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
 
                     val dataTool = StudioMesaRestaurantDataTool(snapshot)
                     val priceTool = StudioMesaPriceReferenceTool(snapshot)
-                    val invoiceTool = if (economicMode) StudioMesaSupplierInvoiceTool(snapshot) else null
+                    val invoiceTool = if (economicMode || economicBridgeEnabled) {
+                        StudioMesaSupplierInvoiceTool(snapshot)
+                    } else null
+                    val bridgeTool = if (!economicMode && economicBridgeEnabled) {
+                        invoiceTool?.let(::StudioMesaEconomicAssistantBridgeTool)
+                    } else null
                     val enabledTools = mutableListOf(tool(dataTool), tool(priceTool))
-                    if (invoiceTool != null) enabledTools.add(tool(invoiceTool))
+                    if (economicMode && invoiceTool != null) {
+                        enabledTools.add(tool(invoiceTool))
+                    } else if (bridgeTool != null) {
+                        enabledTools.add(tool(bridgeTool))
+                    }
                     enabledTools.add(tool(StudioMesaWikipediaSearchTool()))
+                    enabledTools.add(tool(StudioMesaWebSearchTool(appContext)))
                     val initialMessages = history
                         .takeLast(MAX_HISTORY_MESSAGES)
                         .mapNotNull { turn ->
@@ -284,6 +296,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     restaurantDataTool = dataTool
                     priceReferenceTool = priceTool
                     supplierInvoiceTool = invoiceTool
+                    economicAssistantBridgeTool = bridgeTool
                 }
 
                 // Keep the conversation's native history, but refresh the read-only tool
@@ -296,6 +309,9 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                 if (economicMode) {
                     supplierInvoiceTool?.updateSnapshot(snapshot)
                         ?: throw IllegalStateException("A ferramenta de faturas não está disponível no modo económico.")
+                } else if (economicBridgeEnabled) {
+                    economicAssistantBridgeTool?.updateSnapshot(snapshot)
+                        ?: throw IllegalStateException("A ligação ao Assistente económico não está disponível.")
                 }
 
                 val activeConversation = conversation
@@ -339,6 +355,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         restaurantDataTool = null
         priceReferenceTool = null
         supplierInvoiceTool = null
+        economicAssistantBridgeTool = null
 
         try {
             currentConversation?.close()

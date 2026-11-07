@@ -24,10 +24,28 @@ class AssistantGeneralConversationPolicyTest {
     }
 
     @Test
+    fun instructionRequiresCrossCheckingAndCarefulFactLabels() {
+        val instruction = AssistantGeneralConversationPolicy.SYSTEM_INSTRUCTION.lowercase()
+        assertTrue(instruction.contains("duas fontes independentes"))
+        assertTrue(instruction.contains("não verificado"))
+        assertTrue(instruction.contains("não prova que algo é falso"))
+        assertTrue(instruction.contains("documentos primários"))
+    }
+
+    @Test
     fun conversationHistoryIsExpandedWithoutExceedingTheCurrentContextBudget() {
         assertTrue(AssistantGeneralConversationPolicy.MAX_HISTORY_MESSAGES > 4)
         assertTrue(AssistantGeneralConversationPolicy.MAX_HISTORY_MESSAGE_CHARS > 300)
         assertTrue(AssistantGeneralConversationPolicy.MAX_HISTORY_MESSAGES *
             AssistantGeneralConversationPolicy.MAX_HISTORY_MESSAGE_CHARS <= 4000)
     }
+
+    @Test
+    fun instructionDescribesTheOwnerOnlyReadOnlyEconomicBridge() {
+        val instruction = AssistantGeneralConversationPolicy.SYSTEM_INSTRUCTION.lowercase()
+        assertTrue(instruction.contains("consult_economic_assistant"))
+        assertTrue(instruction.contains("apenas para o proprietário autenticado"))
+        assertTrue(instruction.contains("nunca tentes aprovar"))
+    }
+
 }
