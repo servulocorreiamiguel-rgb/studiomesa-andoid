@@ -346,17 +346,17 @@ class StudioMesaAdvisorTest {
         assertFalse(answer.response.contains("o artigo selecionado"))
     }
 
-    @Test fun unknownQuestionsReceiveAnHonestClarificationInsteadOfUnrelatedAdvice() {
+    @Test fun unknownGeneralQuestionsExplainThatTheGenerativeModelIsNeeded() {
         val answer = StudioMesaAdvisor.answerQuestion(
             "Que nome artístico devo dar ao robô mascote?",
             snapshot()
         )
-        assertEquals("Preciso de uma pergunta mais específica", answer.title)
-        assertTrue(answer.response.contains("não consegui identificar com segurança"))
+        assertEquals("Modelo generativo necessário", answer.title)
+        assertTrue(answer.response.contains("instala primeiro o modelo generativo local"))
         assertNull(answer.actionPage)
 
         val blank = StudioMesaAdvisor.answerQuestion("   ", snapshot())
-        assertTrue(blank.response.contains("Escreve uma pergunta concreta"))
+        assertTrue(blank.response.contains("Escreve a tua pergunta"))
     }
 
     @Test fun problemResponseDoesNotPretendToTestConnectivity() {
