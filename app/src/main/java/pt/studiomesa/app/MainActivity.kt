@@ -70,6 +70,17 @@ class MainActivity : ComponentActivity() {
     private var activeCustomerPage = "Cartão"
 
     private var activityResumed = false
+    private var activityNotificationRefreshScheduled = false
+    private var activityNotificationRefreshInFlight = false
+    private val activityNotificationRefreshHandler = Handler(Looper.getMainLooper())
+    private val activityNotificationRefreshRunnable = object : Runnable {
+        override fun run() {
+            activityNotificationRefreshScheduled = false
+            if (!shouldRunActivityNotificationRefresh()) return
+            refreshActivityNotificationsSilently()
+            scheduleNextActivityNotificationRefresh()
+        }
+    }
     private var kitchenAutoRefreshScheduled = false
     private var kitchenRefreshInFlight = false
     private var kitchenOrdersCache: JSONArray? = null
@@ -257,14 +268,27 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         activityResumed = true
+        StudioMesaNotificationCenter.ensureChannel(this)
+        if (backendToken().isNotBlank()) {
+            StudioMesaNotificationCenter.requestPermissionIfNeeded(
+                this,
+                backendPrefs.getBoolean("activity_notification_permission_asked_v1", false)
+            ) {
+                backendPrefs.edit()
+                    .putBoolean("activity_notification_permission_asked_v1", true)
+                    .apply()
+            }
+        }
         updateKitchenAutoRefresh()
         updateInventoryAutoRefresh()
+        updateActivityNotificationRefresh()
     }
 
     override fun onPause() {
         activityResumed = false
         stopKitchenAutoRefresh()
         stopInventoryAutoRefresh()
+        stopActivityNotificationRefresh()
         super.onPause()
     }
 
@@ -279,6 +303,7 @@ class MainActivity : ComponentActivity() {
         if (localAssistantModelManagerDelegate.isInitialized()) {
             localAssistantModelManager.close()
         }
+        stopActivityNotificationRefresh()
         loyaltyRewardImageExecutor.shutdownNow()
         super.onDestroy()
     }
@@ -780,6 +805,7 @@ class MainActivity : ComponentActivity() {
         setContentView(appRoot)
         updateKitchenAutoRefresh()
         updateInventoryAutoRefresh()
+        updateActivityNotificationRefresh()
     }
 
     private fun renderAssistantChatScreen(
@@ -3292,6 +3318,218 @@ class MainActivity : ComponentActivity() {
                 " · atualização automática a cada 15 segundos."
         } else {
             "Atualização automática a cada 15 segundos enquanto esta secção estiver aberta."
+        }
+    }
+
+    private fun shouldRunActivityNotificationRefresh(): Boolean {
+        if (!activityResumed || backendToken().isBlank()) return false
+        return if (isCustomerApp) {
+            backendMemberId().isNotBlank()
+        } else {
+            hasRemoteRestaurant() && backendRestaurantId().isNotBlank()
+        }
+    }
+
+    private fun updateActivityNotificationRefresh() {
+        if (!shouldRunActivityNotificationRefresh()) {
+            stopActivityNotificationRefresh()
+            return
+        }
+        if (!activityNotificationRefreshScheduled && !activityNotificationRefreshInFlight) {
+            refreshActivityNotificationsSilently()
+            scheduleNextActivityNotificationRefresh()
+        }
+    }
+
+    private fun scheduleNextActivityNotificationRefresh() {
+        if (!shouldRunActivityNotificationRefresh()) {
+            stopActivityNotificationRefresh()
+            return
+        }
+        if (!activityNotificationRefreshScheduled) {
+            activityNotificationRefreshScheduled = true
+            activityNotificationRefreshHandler.postDelayed(
+                activityNotificationRefreshRunnable,
+                60_000L
+            )
+        }
+    }
+
+    private fun stopActivityNotificationRefresh() {
+        activityNotificationRefreshHandler.removeCallbacks(activityNotificationRefreshRunnable)
+        activityNotificationRefreshScheduled = false
+    }
+
+    /**
+     * Checks existing server records while the app is in the foreground.
+     * It deliberately does not run in the background; proper remote push delivery
+     * still requires Firebase credentials and a configured FCM sender.
+     */
+    private fun refreshActivityNotificationsSilently() {
+        if (activityNotificationRefreshInFlight || !shouldRunActivityNotificationRefresh()) return
+
+        val token = backendToken()
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        val restaurantId = backendRestaurantId()
+        val role = backendPrefs.getString("restaurant_role", "").orEmpty()
+        val permissions = currentStaffPermissions.orEmpty()
+
+        if (accountId.isBlank()) return
+        if (!isCustomerApp && role == "staff" && currentStaffPermissions == null) return
+
+        activityNotificationRefreshInFlight = true
+        Thread {
+            var loadedEvents: List<StudioMesaNotificationEvent>? = null
+            try {
+                val events = mutableListOf<StudioMesaNotificationEvent>()
+                if (isCustomerApp) {
+                    val reservations = SupabaseApi.listMyRestaurantReservations(token)
+                    for (index in 0 until reservations.length()) {
+                        val item = reservations.optJSONObject(index) ?: continue
+                        val id = item.optString("reservation_id").trim()
+                        val state = item.optString("status").trim()
+                        if (id.isBlank() || state.isBlank()) continue
+                        events.add(
+                            StudioMesaNotificationEvent(
+                                key = "customer:reservation:$id",
+                                state = state,
+                                title = "Atualização da reserva",
+                                message = "O estado da tua reserva foi atualizado.",
+                                notifyWhenStateIs = setOf(
+                                    "confirmada", "confirmed", "cancelada", "cancelled",
+                                    "rejeitada", "rejected"
+                                )
+                            )
+                        )
+                    }
+
+                    val redemptions = SupabaseApi.listMyLoyaltyRewardRedemptions(token)
+                    for (index in 0 until redemptions.length()) {
+                        val item = redemptions.optJSONObject(index) ?: continue
+                        val id = item.optString("redemption_id").trim()
+                        val state = item.optString("status").trim()
+                        if (id.isBlank() || state.isBlank()) continue
+                        events.add(
+                            StudioMesaNotificationEvent(
+                                key = "customer:reward:$id",
+                                state = state,
+                                title = "A tua recompensa está pronta",
+                                message = "Podes levantar a recompensa no restaurante.",
+                                notifyWhenStateIs = setOf("fulfilled", "entregue")
+                            )
+                        )
+                    }
+                } else {
+                    if (restaurantId.isBlank()) throw IllegalStateException("Restaurante não configurado.")
+
+                    if (role != "staff" || "orders" in permissions) {
+                        val orders = SupabaseApi.listActiveKitchenOrders(token, restaurantId)
+                        for (index in 0 until orders.length()) {
+                            val item = orders.optJSONObject(index) ?: continue
+                            val id = item.optString("id").trim()
+                            if (id.isBlank()) continue
+                            events.add(
+                                StudioMesaNotificationEvent(
+                                    key = "restaurant:order:$id",
+                                    state = item.optString("status").ifBlank { "ativo" },
+                                    title = "Novo pedido recebido",
+                                    message = "Foi recebido um novo pedido para a cozinha.",
+                                    notifyOnNew = true
+                                )
+                            )
+                        }
+                    }
+
+                    if (role != "staff" || "reservations" in permissions) {
+                        val reservations = SupabaseApi.listReservations(token, restaurantId)
+                        for (index in 0 until reservations.length()) {
+                            val item = reservations.optJSONObject(index) ?: continue
+                            val id = item.optString("id").trim()
+                            if (id.isBlank()) continue
+                            events.add(
+                                StudioMesaNotificationEvent(
+                                    key = "restaurant:reservation:$id",
+                                    state = item.optString("status").ifBlank { "pendente" },
+                                    title = "Novo pedido de reserva",
+                                    message = "Foi recebido um novo pedido de reserva.",
+                                    notifyOnNew = true
+                                )
+                            )
+                        }
+                    }
+
+                    // The owner-scoped management RPC must not be polled for staff.
+                    if (role == "owner") {
+                        val redemptions = SupabaseApi.listRestaurantRewardRedemptions(token, restaurantId)
+                        for (index in 0 until redemptions.length()) {
+                            val item = redemptions.optJSONObject(index) ?: continue
+                            val id = item.optString("redemption_id").trim()
+                            if (id.isBlank()) continue
+                            events.add(
+                                StudioMesaNotificationEvent(
+                                    key = "restaurant:redemption:$id",
+                                    state = item.optString("status").ifBlank { "pending" },
+                                    title = "Novo resgate na loja de pontos",
+                                    message = "Um cliente reservou uma recompensa para levantar.",
+                                    notifyOnNew = true
+                                )
+                            )
+                        }
+                    }
+                }
+                loadedEvents = events
+            } catch (_: Exception) {
+                // A failed or expired session must not advance the saved event snapshot.
+            }
+
+            runOnUiThread {
+                activityNotificationRefreshInFlight = false
+                val events = loadedEvents
+                if (
+                    events != null &&
+                    activityResumed &&
+                    backendToken().isNotBlank() &&
+                    backendPrefs.getString("user_id", "").orEmpty() == accountId
+                ) {
+                    persistActivityNotificationSnapshot(accountId, events)
+                }
+                // A pause/resume can happen while the HTTP request is in flight.
+                scheduleNextActivityNotificationRefresh()
+            }
+        }.start()
+    }
+
+    private fun persistActivityNotificationSnapshot(
+        accountId: String,
+        events: List<StudioMesaNotificationEvent>
+    ) {
+        val scope = if (isCustomerApp) "customer" else "restaurant"
+        val preferenceKey = "activity_notification_snapshot_v1_\${scope}_\${accountId}"
+        val previousJson = try {
+            JSONObject(backendPrefs.getString(preferenceKey, "{}") ?: "{}")
+        } catch (_: Exception) {
+            JSONObject()
+        }
+        val previous = LinkedHashMap<String, String>()
+        val previousKeys = previousJson.keys()
+        while (previousKeys.hasNext()) {
+            val key = previousKeys.next()
+            previous[key] = previousJson.optString(key)
+        }
+
+        val initializedKey = "\${preferenceKey}_initialized"
+        val initialized = backendPrefs.getBoolean(initializedKey, false)
+        val result = StudioMesaNotificationSnapshot.compare(previous, events, initialized)
+        val snapshotJson = JSONObject()
+        result.snapshot.forEach { (key, state) -> snapshotJson.put(key, state) }
+
+        backendPrefs.edit()
+            .putString(preferenceKey, snapshotJson.toString())
+            .putBoolean(initializedKey, true)
+            .apply()
+
+        result.notifications.forEach { event ->
+            StudioMesaNotificationCenter.show(this, event.key, event.title, event.message)
         }
     }
 
