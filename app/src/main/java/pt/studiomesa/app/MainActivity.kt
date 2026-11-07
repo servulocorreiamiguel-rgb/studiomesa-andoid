@@ -3504,7 +3504,7 @@ class MainActivity : ComponentActivity() {
         events: List<StudioMesaNotificationEvent>
     ) {
         val scope = if (isCustomerApp) "customer" else "restaurant"
-        val preferenceKey = "activity_notification_snapshot_v1_\${scope}_\${accountId}"
+        val preferenceKey = "activity_notification_snapshot_v1_${scope}_${accountId}"
         val previousJson = try {
             JSONObject(backendPrefs.getString(preferenceKey, "{}") ?: "{}")
         } catch (_: Exception) {
@@ -3517,7 +3517,7 @@ class MainActivity : ComponentActivity() {
             previous[key] = previousJson.optString(key)
         }
 
-        val initializedKey = "\${preferenceKey}_initialized"
+        val initializedKey = "${preferenceKey}_initialized"
         val initialized = backendPrefs.getBoolean(initializedKey, false)
         val result = StudioMesaNotificationSnapshot.compare(previous, events, initialized)
         val snapshotJson = JSONObject()
