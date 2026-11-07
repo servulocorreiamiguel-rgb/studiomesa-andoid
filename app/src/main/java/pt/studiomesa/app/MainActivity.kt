@@ -1730,11 +1730,12 @@ class MainActivity : ComponentActivity() {
         }
         if (assistantCloudSyncInFlight) return
         if (silent && !force && System.currentTimeMillis() - assistantCloudLastSyncAtMillis < 60_000L) return
+        val conversationScope = assistantConversationScope()
         assistantCloudSyncInFlight = true
         assistantCloudLastSyncAtMillis = System.currentTimeMillis()
         Thread {
             val result = runCatching {
-                assistantCloudSyncCoordinator.sync(token, userId, restaurantId, assistantConversationScope(), assistantChatStore)
+                assistantCloudSyncCoordinator.sync(token, userId, restaurantId, conversationScope, assistantChatStore)
             }
             runOnUiThread {
                 assistantCloudSyncInFlight = false
