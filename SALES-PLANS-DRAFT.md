@@ -104,6 +104,11 @@ Inclui o Profissional, mais:
 - Gestão de vários armazéns, compras automáticas e encomendas a fornecedores.
 - Garantia de disponibilidade, backups/restauro ou SLA enquanto estes serviços não estiverem contratados e testados.
 
+## Guias técnicos
+
+- [Ativar pesquisa Web com Tavily/SearXNG](docs/WEB-SEARCH-SETUP.md).
+- [Notificações locais e requisitos para push Firebase](docs/NOTIFICATIONS-STATUS.md).
+
 ## Condições comerciais por fechar
 
 - [ ] Confirmar se os preços incluem IVA ou se o IVA acresce.
