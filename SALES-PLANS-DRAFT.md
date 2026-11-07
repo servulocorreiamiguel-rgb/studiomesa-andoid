@@ -82,6 +82,7 @@ Inclui o Profissional, mais:
 
 ## Estado técnico e condições a comunicar
 
+- **Modelo de IA:** o assistente principal corre localmente no Android com um modelo compacto. O download inicial ronda 736 MB; velocidade e qualidade dependem do telemóvel. Não é o mesmo que usar diretamente um modelo de topo alojado como ChatGPT ou Gemini.
 A linha «Notificações locais» só passa a incluída depois de a PR #91 ser aprovada, integrada e testada. A pesquisa Web geral depende da configuração de uma chave/endpoint no Supabase.
 
 - **IA e pesquisa Web:** a IA usa um modelo local no dispositivo. A pesquisa geral está preparada no código, mas só fica ativa depois de configurar uma chave Tavily (ou um endpoint SearXNG estável) nos secrets do Supabase. A pesquisa Wikipedia é separada. Não prometer pesquisa Web geral até ser testada com uma chave válida.
