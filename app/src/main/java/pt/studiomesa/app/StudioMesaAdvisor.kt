@@ -934,11 +934,11 @@ internal object StudioMesaAdvisor {
 
     private fun answerGeneral(rawQuestion: String): StudioMesaAssistantAnswer {
         val response = if (rawQuestion.isBlank()) {
-            "Escreve uma pergunta concreta sobre o restaurante para eu analisar os dados disponíveis."
+            "Escreve a tua pergunta."
         } else {
-            "Ainda não consegui identificar com segurança o tema desta pergunta. Experimenta perguntar sobre preços e margens, vendas e artigos da carta, marketing, stock, reservas, pedidos/cozinha, acesso ou gestão económica. Não alterei dados do restaurante."
+            "Para conversar livremente sobre assuntos gerais, instala primeiro o modelo generativo local em Ferramentas do assistente. Sem esse modelo, esta versão só consegue responder a um conjunto limitado de perguntas e análises sobre o restaurante. Não alterei dados."
         }
-        return StudioMesaAssistantAnswer("Preciso de uma pergunta mais específica", response)
+        return StudioMesaAssistantAnswer("Modelo generativo necessário", response)
     }
 
     private fun normalize(value: String): String =
