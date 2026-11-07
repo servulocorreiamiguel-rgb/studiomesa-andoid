@@ -2,7 +2,7 @@ name: Maintain StudioMesa Supabase (hidden heartbeat)
 
 on:
   schedule:
-    # Four small database calls per day, independent of Supabase itself.
+    # A few genuine database API requests per day, independent of Supabase.
     - cron: "17 1,7,13,19 * * *"
   workflow_dispatch:
 
@@ -15,9 +15,7 @@ concurrency:
 
 jobs:
   keepalive:
-    # Keep disabled until the additive database migration is safely deployed.
-    if: vars.SUPABASE_KEEPALIVE_ENABLED == 'true'
-    name: Execute private heartbeat RPC
+    name: Execute read-only heartbeat RPC
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -25,8 +23,8 @@ jobs:
         shell: bash
         env:
           SUPABASE_URL: https://svwvkfsyevuyabelrtjk.supabase.co
-          # Supabase legacy anon key: public client key, never service_role.
-          SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2d3ZrZnN5ZXZ1eWFiZWxydGprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkxNjQ0NzIsImV4cCI6MjEwNDc0MDQ3Mn0.J90m-5tpxk5vOG62B_pv0ds8q8lsMGu4mdCJO7H13TA
+          # Public legacy anon key only. Never place service_role here.
+          SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2d2d2
         run: |
           set -euo pipefail
           response="$(curl --fail --silent --show-error \
@@ -42,4 +40,4 @@ jobs:
             exit 1
           fi
 
-          echo "Supabase database heartbeat completed successfully."
+          echo "Supabase keepalive request completed successfully."
