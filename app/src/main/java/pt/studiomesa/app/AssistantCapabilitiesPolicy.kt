@@ -74,7 +74,7 @@ internal object AssistantCapabilitiesPolicy {
                 appendLine("O modelo generativo local ainda não está instalado. Sem ele, algumas respostas ficam limitadas às funções e regras já disponíveis na aplicação.")
             }
             appendLine()
-            append("Limites importantes: analiso e recomendo, mas não altero preços, stock, pedidos, reservas, pagamentos ou documentos por iniciativa própria. As operações exigem confirmação nos controlos da aplicação. Não substituo um contabilista nem tenho navegação livre pela Internet.")
+            append("Limites importantes: posso pesquisar informação pública na Web quando a conta tem sessão iniciada e o serviço está configurado. Comparo fontes e assinalo contradições ou falta de provas, mas não consigo garantir a verdade absoluta. Não envio dados privados do restaurante para pesquisas públicas. Analiso e recomendo, mas não altero preços, stock, pedidos, reservas, pagamentos ou documentos por iniciativa própria; as operações exigem confirmação. Não substituo um contabilista.")
         }.trim()
     }
 
