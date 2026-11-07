@@ -121,6 +121,9 @@ class MainActivity : ComponentActivity() {
     private var assistantModelDownloading = false
     private var assistantModelProgressBytes = 0L
     private var assistantModelError: String? = null
+    // Update download progress in place; rebuilding the chat for every percent causes flicker.
+    private var assistantModelStatusTextView: TextView? = null
+    private var assistantModelProgressTextView: TextView? = null
     private val localAssistantModelManagerDelegate = lazy { LocalAssistantModelManager(this) }
     private val localAssistantModelManager by localAssistantModelManagerDelegate
     private var assistantDeepThinkingEnabled = false
@@ -1775,6 +1778,8 @@ class MainActivity : ComponentActivity() {
         assistantChatScope() + if (economicAssistant) ":economic" else ""
 
     private fun renderLocalAssistantModelCard(container: LinearLayout) {
+        assistantModelStatusTextView = null
+        assistantModelProgressTextView = null
         val modelInstalled = localAssistantModelManager.isModelInstalled()
         val card = makeCard(13, if (modelInstalled) paleGreen else copperPale)
         card.addView(label("MODELO DE IA NO DISPOSITIVO", 9.5f, true, forestDeep))
@@ -1787,14 +1792,18 @@ class MainActivity : ComponentActivity() {
             else ->
                 "O motor generativo local ainda não foi instalado. O assistente de regras continua disponível; transfere o modelo uma única vez para ativar a conversa generativa offline."
         }
-        card.addView(label(status, 12f, false, ink))
+        val statusView = label(status, 12f, false, ink)
+        assistantModelStatusTextView = statusView
+        card.addView(statusView)
         addGap(card, 8)
 
         if (assistantModelDownloading || localAssistantModelManager.isDownloading()) {
-            card.addView(label(
+            val progressView = label(
                 "Transferido: ${formatModelBytes(assistantModelProgressBytes)} de aproximadamente 736 MB",
                 10.5f, true, forest
-            ))
+            )
+            assistantModelProgressTextView = progressView
+            card.addView(progressView)
         } else if (!modelInstalled) {
             card.addView(secondaryButton("Transferir IA local · 736 MB") {
                 AlertDialog.Builder(this)
@@ -1862,7 +1871,9 @@ class MainActivity : ComponentActivity() {
                     val percent = if (total > 0L) ((downloaded * 100) / total).toInt() else 0
                     if (percent != lastShownPercent) {
                         lastShownPercent = percent
-                        renderApp()
+                        assistantModelStatusTextView?.text = "A transferir o modelo: $percent%."
+                        assistantModelProgressTextView?.text =
+                            "Transferido: ${formatModelBytes(downloaded)} de ${formatModelBytes(total)}"
                     }
                 }
             },
