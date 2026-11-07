@@ -71,6 +71,7 @@ class MainActivity : ComponentActivity() {
     private var activeCustomerPage = "Cartão"
 
     private var activityResumed = false
+    private var pendingActivityNotificationKey: String? = null
     private var activityNotificationRefreshScheduled = false
     private var activityNotificationRefreshInFlight = false
     private val activityNotificationRefreshHandler = Handler(Looper.getMainLooper())
@@ -402,6 +403,24 @@ class MainActivity : ComponentActivity() {
         if (eventKey.isBlank()) return
         notificationIntent?.removeExtra(EXTRA_ACTIVITY_NOTIFICATION_KEY)
 
+        if (!isCustomerApp &&
+            backendPrefs.getString("restaurant_role", "").orEmpty() == "staff" &&
+            currentStaffPermissions == null
+        ) {
+            // A cold start must first restore the server-authoritative permission matrix.
+            pendingActivityNotificationKey = eventKey
+            return
+        }
+        navigateToActivityNotificationKey(eventKey)
+    }
+
+    private fun applyPendingActivityNotificationNavigation() {
+        val eventKey = pendingActivityNotificationKey ?: return
+        pendingActivityNotificationKey = null
+        navigateToActivityNotificationKey(eventKey)
+    }
+
+    private fun navigateToActivityNotificationKey(eventKey: String) {
         if (isCustomerApp) {
             activeCustomerPage = when {
                 eventKey.startsWith("customer:reservation:") -> "Reservas"
@@ -4128,7 +4147,11 @@ class MainActivity : ComponentActivity() {
             kitchenOrdersCache = null
             kitchenQueueUpdatedAtMillis = System.currentTimeMillis()
             kitchenQueueRefreshFailed = false
-            renderApp()
+            if (pendingActivityNotificationKey != null) {
+                applyPendingActivityNotificationNavigation()
+            } else {
+                renderApp()
+            }
         }
     }
 
