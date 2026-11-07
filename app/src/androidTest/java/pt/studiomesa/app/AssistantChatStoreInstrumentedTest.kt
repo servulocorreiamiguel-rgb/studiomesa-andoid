@@ -83,6 +83,38 @@ class AssistantChatStoreInstrumentedTest {
     }
 
     @Test
+    fun clearStableFactsAreAutomaticallySavedWithUserMessagesAndRemainAccountScoped() {
+        val store = AssistantChatStore(context)
+        val scope = "test:${UUID.randomUUID()}"
+        val otherScope = "test:${UUID.randomUUID()}"
+        try {
+            val conversationId = store.appendTurn(
+                scope,
+                null,
+                "user",
+                "Prefiro respostas diretas e em português de Portugal."
+            )
+
+            assertEquals(
+                "• respostas diretas e em português de Portugal",
+                store.readMemory(scope)
+            )
+            assertTrue(store.readMemoryUpdatedAtMillis(scope) > 0L)
+
+            // An ordinary question is kept in history but does not become a memory note.
+            store.appendTurn(scope, conversationId, "user", "Quanto custa produzir uma sopa?")
+            assertEquals(
+                "• respostas diretas e em português de Portugal",
+                store.readMemory(scope)
+            )
+            assertEquals("", store.readMemory(otherScope))
+        } finally {
+            runCatching { store.clearScope(scope) }
+            runCatching { store.clearScope(otherScope) }
+        }
+    }
+
+    @Test
     fun remoteDeletionRemovesLocalConversationAndAcknowledgesPendingDelete() {
         val store = AssistantChatStore(context)
         val scope = "test:" + UUID.randomUUID()
