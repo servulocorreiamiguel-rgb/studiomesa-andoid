@@ -1466,6 +1466,32 @@ if [ "$loyalty_redemption_state" != "fulfilled|$USER_C" ] ||
 fi
 echo "PASS: reward redemption is one-time, stock-limited, customer-scoped and staff-fulfilled."
 
+# The booking regression fixture uses a Professional restaurant. Plan entitlements
+# are server-owned; a restaurant with no entitlement row defaults to Essential.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO private.restaurant_loyalty_entitlements (restaurant_id, plan_code)
+VALUES ('$RESTAURANT_A'::uuid, 'profissional')
+ON CONFLICT (restaurant_id) DO UPDATE SET plan_code = EXCLUDED.plan_code;
+SQL
+
+# The separate customer B belongs to restaurant B, which has no entitlement row.
+# A direct RPC attempt must therefore be rejected by the Essential server gate.
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_F', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.create_customer_reservation_request(
+  'e1111111-1111-4111-8111-111111111111'::uuid,
+  'Essential plan bypass test', '', 2,
+  now() + interval '40 days', 90, 'Must be rejected'
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: an Essential customer bypassed the server-side reservation entitlement." >&2
+  exit 1
+fi
+
 # Customer booking requests are account-scoped and idempotent; the restaurant assigns
 # a suitable table and must do so before confirming the request.
 CUSTOMER_BOOKING_AT="$(date -u -d '+40 days' '+%Y-%m-%d %H:%M:%S+00:00')"
