@@ -179,4 +179,56 @@ class StudioMesaLocalAssistantToolsInstrumentedTest {
         assertEquals("12.00", menu.getString("selling_price_eur"))
     }
 
+
+    @Test
+    fun economicAssistantBridgeDelegatesInvoiceQueriesReadOnly() {
+        val invoice = SupplierInvoiceRecord(
+            id = "00000000-0000-0000-0000-000000000002",
+            supplierName = "Distribuidor Norte",
+            supplierVatNumber = "501234560",
+            invoiceNumber = "FT-2026-020",
+            issueDate = "2026-11-06",
+            dueDate = "",
+            netAmount = "80.00",
+            vatAmount = "18.40",
+            totalAmount = "98.40",
+            currency = "EUR",
+            mimeType = "application/pdf",
+            byteSize = 2048,
+            documentSha256 = "b".repeat(64),
+            documentUri = null,
+            documentPath = "private/path/never-exposed.pdf",
+            sourceType = "pdf_ocr",
+            reviewStatus = "pending_review",
+            warnings = emptyList(),
+            createdAtMillis = 1_700_000_000_000L,
+            updatedAtMillis = 1_700_000_000_000L
+        )
+        val firstSnapshot = StudioMesaAssistantSnapshot(
+            isDemo = false,
+            restaurantConfigured = true,
+            menuItems = emptyList()
+        )
+        val refreshedSnapshot = firstSnapshot.copy(supplierInvoices = listOf(invoice))
+        val invoiceTool = StudioMesaSupplierInvoiceTool(firstSnapshot)
+        val bridge = StudioMesaEconomicAssistantBridgeTool(invoiceTool)
+
+        val definition = JSONObject(bridge.getToolDescriptionJsonString())
+        assertEquals("consult_economic_assistant", definition.getString("name"))
+        assertTrue(definition.getString("description").contains("só de leitura"))
+
+        bridge.updateSnapshot(refreshedSnapshot)
+        val result = JSONObject(
+            bridge.execute(JSONObject().put("status", "pending_review").toString())
+        )
+
+        assertEquals("Assistente económico", result.getString("delegated_to"))
+        assertEquals("read_only", result.getString("delegation_mode"))
+        assertEquals(1, result.getInt("count"))
+        assertEquals("98.40", result.getString("gross_total_eur"))
+        assertTrue(result.getBoolean("read_only"))
+        assertFalse(result.toString().contains("private/path"))
+        assertFalse(result.toString().contains("texto OCR"))
+    }
+
 }
