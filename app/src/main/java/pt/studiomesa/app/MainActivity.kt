@@ -888,6 +888,23 @@ class MainActivity : ComponentActivity() {
         }
         toolbar.addView(syncButton, LinearLayout.LayoutParams(dp(34), dp(44)))
 
+        if (!isEconomicAssistant) {
+            val cloudButton = TextView(this).apply {
+                text = if (cloudGeneralAssistantEnabled()) "☁✓" else "☁"
+                textSize = 17f
+                gravity = Gravity.CENTER
+                setTextColor(if (cloudGeneralAssistantEnabled()) forest else forestDeep)
+                contentDescription = if (cloudGeneralAssistantEnabled())
+                    "Desativar ou configurar IA online"
+                else "Ativar IA online para perguntas gerais"
+                background = rippleBackground(paper, 12)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { showCloudGeneralAssistantDialog() }
+            }
+            toolbar.addView(cloudButton, LinearLayout.LayoutParams(dp(38), dp(44)))
+        }
+
         if (isEconomicAssistant) {
             val documentsButton = TextView(this).apply {
                 text = "▤"
@@ -1024,7 +1041,14 @@ class MainActivity : ComponentActivity() {
                 9f, true, forestSoft
             ))
             addGap(thinkingCard, 5)
-            assistantStreamingTextView = label("A analisar no dispositivo…", 13f, false, ink)
+            assistantStreamingTextView = label(
+                when {
+                    isEconomicAssistant -> "A analisar os dados financeiros autorizados…"
+                    cloudGeneralAssistantEnabled() -> "A consultar a IA online e, quando necessário, fontes atuais…"
+                    else -> "A analisar no dispositivo…"
+                },
+                13f, false, ink
+            )
             thinkingCard.addView(assistantStreamingTextView)
             conversation.addView(thinkingCard, cardParams())
         } else {
@@ -1821,6 +1845,52 @@ class MainActivity : ComponentActivity() {
     private fun assistantConversationScope(economicAssistant: Boolean = activePage == "Assistente económico"): String =
         assistantChatScope() + if (economicAssistant) ":economic" else ""
 
+    private fun cloudGeneralAssistantEnabled(): Boolean =
+        getSharedPreferences("studiomesa_assistant_settings", MODE_PRIVATE)
+            .getBoolean("cloud_general_assistant_enabled", false)
+
+    private fun showCloudGeneralAssistantDialog() {
+        val settings = getSharedPreferences("studiomesa_assistant_settings", MODE_PRIVATE)
+        val enabled = settings.getBoolean("cloud_general_assistant_enabled", false)
+        if (enabled) {
+            AlertDialog.Builder(this)
+                .setTitle("IA online")
+                .setMessage("A IA online está ativa apenas na conversa geral. A conversa económica continua local e privada. Podes desligar o modo online a qualquer momento.")
+                .setNegativeButton("Manter ativa", null)
+                .setPositiveButton("Desativar") { _, _ ->
+                    settings.edit().putBoolean("cloud_general_assistant_enabled", false).apply()
+                    renderAssistantChatScreen(isEconomicAssistant = false)
+                }
+                .show()
+            return
+        }
+        if (backendToken().isBlank()) {
+            AlertDialog.Builder(this)
+                .setTitle("Inicia sessão primeiro")
+                .setMessage("A IA online exige uma sessão autenticada. A IA local continua disponível sem conta online.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Ativar IA online")
+            .setMessage(
+                "Este modo usa Gemini para responder a perguntas gerais e Tavily para pesquisar informação atual, quando necessário. " +
+                    "É uma opção separada da IA local e está desligada por defeito.\n\n" +
+                    "Só é enviada a mensagem atual. Não são enviados histórico, Memória, dados do restaurante, faturas, clientes ou equipa. " +
+                    "Não escrevas dados pessoais, comerciais confidenciais, palavras-passe, NIF, IBAN ou conteúdo de faturas. " +
+                    "O plano gratuito de alguns fornecedores pode usar pedidos para melhorar os seus serviços. " +
+                    "A IA económica permanece no dispositivo e não usa este modo.\n\n" +
+                    "A ativação na aplicação não substitui a configuração das chaves GEMINI_API_KEY e TAVILY_API_KEY no servidor."
+            )
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Ativar") { _, _ ->
+                settings.edit().putBoolean("cloud_general_assistant_enabled", true).apply()
+                renderAssistantChatScreen(isEconomicAssistant = false)
+            }
+            .show()
+    }
+
     private fun renderLocalAssistantModelCard(container: LinearLayout) {
         assistantModelStatusTextView = null
         assistantModelProgressTextView = null
@@ -2072,7 +2142,7 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "Escreve uma mensagem primeiro.", Toast.LENGTH_SHORT).show()
             return
         }
-        if (localAssistantModelManager.isModelInstalled() &&
+        if (!cloudGeneralAssistantEnabled() && localAssistantModelManager.isModelInstalled() &&
             question.length > LocalAssistantModelManager.MAX_USER_MESSAGE_CHARS) {
             Toast.makeText(
                 this,
@@ -2097,6 +2167,48 @@ class MainActivity : ComponentActivity() {
             assistantComposerDraft = ""
             assistantChatAutoFollow = true
             assistantChatError = null
+
+            if (!economicAssistant && cloudGeneralAssistantEnabled()) {
+                val token = backendToken()
+                if (token.isBlank()) {
+                    assistantChatError = "A IA online exige uma sessão autenticada. Desativa o modo online para continuar localmente."
+                    renderApp()
+                    return
+                }
+                val searchWeb = AssistantQuestionRouter.requiresWebSearch(question)
+                assistantSending = true
+                renderApp()
+                Thread {
+                    val result = runCatching {
+                        SupabaseApi.generateCloudGeneralAssistant(token, question, searchWeb)
+                    }
+                    runOnUiThread {
+                        assistantSending = false
+                        assistantStreamingTextView = null
+                        result.fold(
+                            onSuccess = { payload ->
+                                val answer = payload.optString("answer").trim()
+                                if (answer.isBlank()) {
+                                    assistantChatError = "O serviço online não devolveu uma resposta. Tenta novamente ou usa a IA local."
+                                } else {
+                                    runCatching {
+                                        assistantChatStore.appendTurn(scope, conversationId, "assistant", answer)
+                                        syncAssistantCloud(silent = true)
+                                    }.onFailure { error ->
+                                        assistantChatError = error.message ?: "A resposta chegou, mas não foi possível guardar o histórico."
+                                    }
+                                }
+                            },
+                            onFailure = { error ->
+                                assistantChatError = error.message
+                                    ?: "O serviço online não está disponível. Desativa o modo online para usar a IA local."
+                            }
+                        )
+                        renderApp()
+                    }
+                }.apply { name = "studiomesa-online-assistant" }.start()
+                return
+            }
 
             if (localAssistantModelManager.isModelInstalled()) {
                 assistantSending = true
