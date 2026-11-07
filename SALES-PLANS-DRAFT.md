@@ -34,8 +34,8 @@ Os preços abaixo são os valores de referência que já estavam definidos para 
 | Calculadora e consultor de preço | — | ✓ | ✓ |
 | Inventário, entradas/saídas e custos unitários | — | — | ✓ |
 | Análise operacional avançada | — | — | ✓ |
-| OCR local de faturas de fornecedores | — | — | ✓ |
-| Assistente económico com consulta de faturas | — | — | ✓ |
+| OCR local de faturas de fornecedores | ✓ | ✓ | ✓ |
+| Assistente económico (proprietário) com consulta de faturas | ✓ | ✓ | ✓ |
 | Histórico/memória cloud e arquivo privado de faturas | — | — | ✓ |
 | Notificações locais em primeiro plano | ✓ | ✓ | ✓ |
 
