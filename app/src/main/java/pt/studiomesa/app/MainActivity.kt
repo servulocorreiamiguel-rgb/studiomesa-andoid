@@ -1711,6 +1711,7 @@ class MainActivity : ComponentActivity() {
                 renderApp()
             }
         }
+    }
 
     private fun parseServerTimestamp(value: String): Long =
         runCatching { java.time.Instant.parse(value).toEpochMilli() }.getOrDefault(0L)
