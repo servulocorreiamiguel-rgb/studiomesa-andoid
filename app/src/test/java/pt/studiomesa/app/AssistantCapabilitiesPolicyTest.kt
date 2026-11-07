@@ -42,6 +42,16 @@ class AssistantCapabilitiesPolicyTest {
     }
 
     @Test
+    fun recognisesQuestionsAboutWhatTheUserCanAsk() {
+        val answer = AssistantCapabilitiesPolicy.answer(
+            "Que tipo de perguntas posso fazer?",
+            standardFeatures
+        )
+        assertNotNull(answer)
+        assertTrue(answer.orEmpty().contains("Sou o Assistente StudioMesa"))
+    }
+
+    @Test
     fun doesNotInterceptNormalRestaurantQuestions() {
         assertNull(AssistantCapabilitiesPolicy.answer("Como posso melhorar a margem dos pratos?", standardFeatures))
         assertNull(AssistantCapabilitiesPolicy.answer("Quantas reservas tenho hoje?", standardFeatures))
