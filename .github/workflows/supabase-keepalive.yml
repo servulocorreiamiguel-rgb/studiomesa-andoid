@@ -24,7 +24,7 @@ jobs:
         env:
           SUPABASE_URL: https://svwvkfsyevuyabelrtjk.supabase.co
           # Public legacy anon key only. Never place service_role here.
-          SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2d2d2
+          SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN2d3ZrZnN5ZXZ1eWFiZWxydGprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkxNjQ0NzIsImV4cCI6MjEwNDc0MDQ3Mn0.J90m-5tpxk5vOG62B_pv0ds8q8lsMGu4mdCJO7H13TA
         run: |
           set -euo pipefail
           response="$(curl --fail --silent --show-error \
