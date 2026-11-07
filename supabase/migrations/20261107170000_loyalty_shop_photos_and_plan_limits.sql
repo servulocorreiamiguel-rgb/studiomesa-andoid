@@ -186,6 +186,42 @@ WITH CHECK (
     )
 );
 
+DROP POLICY IF EXISTS loyalty_reward_images_owner_select ON storage.objects;
+CREATE POLICY loyalty_reward_images_owner_select
+ON storage.objects
+FOR SELECT
+TO authenticated
+USING (
+    bucket_id = 'loyalty-reward-images'
+    AND name ~ '^[0-9a-f-]{36}/[0-9a-f-]{36}/photo[.]jpg$'
+    AND private.can_upload_loyalty_reward_image(
+        split_part(name, '/', 1)::uuid,
+        split_part(name, '/', 2)::uuid
+    )
+);
+
+DROP POLICY IF EXISTS loyalty_reward_images_owner_update ON storage.objects;
+CREATE POLICY loyalty_reward_images_owner_update
+ON storage.objects
+FOR UPDATE
+TO authenticated
+USING (
+    bucket_id = 'loyalty-reward-images'
+    AND name ~ '^[0-9a-f-]{36}/[0-9a-f-]{36}/photo[.]jpg$'
+    AND private.can_upload_loyalty_reward_image(
+        split_part(name, '/', 1)::uuid,
+        split_part(name, '/', 2)::uuid
+    )
+)
+WITH CHECK (
+    bucket_id = 'loyalty-reward-images'
+    AND name ~ '^[0-9a-f-]{36}/[0-9a-f-]{36}/photo[.]jpg$'
+    AND private.can_upload_loyalty_reward_image(
+        split_part(name, '/', 1)::uuid,
+        split_part(name, '/', 2)::uuid
+    )
+);
+
 DROP POLICY IF EXISTS loyalty_reward_images_owner_delete ON storage.objects;
 CREATE POLICY loyalty_reward_images_owner_delete
 ON storage.objects
