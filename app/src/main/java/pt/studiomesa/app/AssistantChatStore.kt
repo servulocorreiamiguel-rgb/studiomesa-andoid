@@ -147,6 +147,15 @@ class AssistantChatStore(context: Context) {
         )
         while (messages.length() > MAX_TURNS) messages.remove(0)
         item.put("updated_at", now)
+        if (role == "user") {
+            AssistantAutomaticMemoryPolicy.merge(
+                root.optString("memory", ""),
+                cleanContent
+            )?.let { updatedMemory ->
+                root.put("memory", updatedMemory)
+                root.put("memory_updated_at", now)
+            }
+        }
         root.put("conversations", conversations)
 
         while (conversations.length() > MAX_CONVERSATIONS) {
