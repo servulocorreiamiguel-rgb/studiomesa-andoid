@@ -1,22 +1,34 @@
 # StudioMesa — lista de preparação para uso profissional
 
-**Estado em 07/11/2026: código avançado, ainda não liberado para piloto/venda com dados reais.**
+**Estado em 07/11/2026: código avançado em validação; ainda não liberado para piloto/venda com dados reais.**
 
-Esta fotografia descreve a branch `feature/loyalty-shop-photos-tier-limits`. A sexta variante Cliente Essencial, os limites da loja e as fotografias ainda precisam de CI, revisão, integração na `main` e deployment controlado.
+Esta fotografia descreve a branch `feature/loyalty-shop-photos-tier-limits`. A integração da loja por plano, fichas técnicas, consumo de stock, permissões granulares, IA online opcional e alertas locais de atividade ainda exige validação final, revisão e deployment controlado das migrations.
 
-- [x] Cinco variantes Android na `main`; esta branch acrescenta a sexta variante Cliente Essencial. TargetSdk 36, minSdk 24 e Java 17.
-- [x] Loja de pontos base na `main`: proprietário cria/edita/desativa recompensas; cliente resgata; o servidor consulta saldo e custo reais, valida stock, desconta pontos e regista a operação numa transação idempotente; o restaurante confirma a entrega.
-- [x] QR temporário de utilização única para atribuição de pontos por funcionário autorizado; o QR é validado no servidor e pertence ao cartão autenticado do cliente.
-- [ ] CI da branch atual: seis variantes, testes unitários, replay da migration, autorização entre restaurantes e smoke tests Android 8/16.
-- [ ] Loja por plano: Essencial 5 prémios ativos sem fotos; Profissional 15 com uma foto; Premium 50 com uma foto. O limite é aplicado numa RPC server-side com bloqueio por restaurante; o plano reside numa tabela privada e não é aceite do APK.
-- [ ] Fotografias: JPEG, uma imagem por prémio, até 1,5 MB e 1280 px; upload/substituição/remoção apenas pelo proprietário do restaurante e com Pro/Premium. Bucket público apenas para leitura das fotos dos produtos.
-- [ ] Cliente Essencial: cartão, carta, pontos e resgates; sem reservas. A RPC de reservas deve recusar o plano Essencial mesmo que alguém chame diretamente o endpoint.
-- [ ] Atribuição dos planos existentes: a tabela privada começa sem atribuições e usa Essencial como fallback. Antes de ativar, atribuir Pro/Premium apenas depois de confirmar o plano contratado de cada restaurante; não inferir do APK instalado.
-- [ ] Resolver cancelamento de resgate pendente com reposição de pontos/stock; atualmente um resgate pendente reserva pontos e stock até ser entregue.
-- [ ] A pontuação por compra continua a ser atribuída por funcionário; não existe POS que prove automaticamente o valor da venda. Um funcionário autorizado pode abusar dos pontos, pelo que continuam necessários controlo e auditoria.
-- [ ] Histórico de migrations continua divergente: 57 versões no Supabase alojado e 55 ficheiros na `main` (quatro só locais e seis só remotas). Não aplicar a nova migration antes de backup, reconciliação e ensaio num ambiente descartável.
-- [ ] Testes E2E com contas de proprietário, funcionário, cliente e dois restaurantes; perda de rede, concorrência, resgates, fotografias, downgrade de plano, reservas e eliminação.
-- [ ] Backup/restauro, monitorização, política de privacidade, Data Safety, DPA, termos, Auth/SMTP/OAuth, keystore comercial e testes físicos ainda pendentes.
+- [x] Seis variantes Android definidas: Essencial/Profissional/Premium para Gestão e Cliente.
+- [x] Fichas técnicas por artigo e ingredientes por dose no código/migration.
+- [x] Consumo automático de ingredientes ao passar pedido de `Aberto` para `Em preparação`, com movimentos transacionais, bloqueio de stock insuficiente e proteção contra dupla dedução.
+- [x] Matriz de permissões por pedidos, mesas, reservas, carta, stock e fidelização; perfis rápidos Gerente, Empregado de mesa, Cozinha e Caixa. As receitas exigem permissão de inventário também nas RPCs e políticas do servidor.
+- [x] Loja de pontos por plano: Essencial até 5 prémios sem foto; Profissional até 15 com foto; Premium até 50 com foto; Cliente Essencial sem reservas.
+- [x] Notificações locais em primeiro plano para pedidos, reservas e resgates/entregas, com deduplicação e abertura da secção certa. Não é push FCM e não funciona com a app fechada.
+- [x] IA online geral opcional no código, separada da IA local/económica; pesquisa atual através de Tavily/SearXNG. Os segredos e a publicação do serviço ainda não foram configurados.
+- [x] Testes de migração PostgreSQL isolada e autorização; testes TypeScript das Edge Functions incluídos no workflow.
+- [ ] CI final da branch: compilação das seis variantes, testes unitários, Android Lint, validação de release e smoke tests Android 8/16.
+- [ ] Testes físicos no OPPO A5m com conta de proprietário, funcionário e cliente, rede móvel, Wi-Fi, perda de ligação, sessão expirada e permissões.
+- [ ] Deployment das migrations de receitas, permissões e loja por plano no Supabase alojado só depois de reconciliar a história, fazer backup e ensaiar restauração.
+- [ ] Atribuir planos Pro/Premium existentes com base nos contratos reais. Sem entitlement atribuído, o servidor assume Essencial.
+- [ ] Configurar e publicar IA cloud: secrets `GEMINI_API_KEY` e `TAVILY_API_KEY`, JWT obrigatório e ensaios de privacidade, pesquisa, timeouts, erros 429 e ausência de resultados.
+- [ ] FCM em segundo plano: criar projeto Firebase, registar IDs finais das apps, guardar configuração e credenciais HTTP v1 em ambiente seguro, implementar tokens e sender server-side e testar isolamento. Até lá, só há alertas locais em primeiro plano.
+- [ ] Resolver cancelamento de resgate pendente com reposição automática dos pontos e stock.
+- [ ] Testes E2E com contas descartáveis de proprietário, funcionário, cliente e dois restaurantes; concorrência de pedidos, quotas, fotos, downgrade, receitas, reservas e eliminação.
+- [ ] Backup/restauro, monitorização, política de privacidade, Data Safety, DPA, termos, Auth/SMTP/OAuth, keystore comercial e assinatura definitiva.
+- [ ] Escolher e validar integração POS/contabilidade do primeiro cliente; os pontos por compra continuam atribuídos por funcionário autorizado.
+- [ ] Verificar dados fiscais, faturação, suporte, manutenção e contrato antes de aceitar o primeiro pagamento.
+
+**Não vender nem instalar para serviço real até as migrations estarem aplicadas de forma controlada, a CI final passar, os testes físicos relevantes passarem e a build comercial estar assinada.** Ver [checklist OPPO A5m e primeira venda](docs/OPPO-A5M-ACCEPTANCE-TEST.md), [gate comercial](docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md) e [reconciliação de migrations](docs/SUPABASE-LIVE-MIGRATION-HISTORY-2026-11-07.md).
+
+---
+
+## Registo da segurança da base ativa (consulta read-only)
 
 **Segurança validada na fotografia do Supabase atual:** o cliente não pode escrever diretamente o saldo, custo, stock, resgates ou catálogo; as operações passam por RPCs autenticadas e as tabelas têm RLS. Isto não substitui os testes ponta a ponta e não protege contra abuso interno de um funcionário autorizado.
 
