@@ -5211,8 +5211,8 @@ class MainActivity : ComponentActivity() {
         val cost = inputField("Pontos necessários", InputType.TYPE_CLASS_NUMBER)
         val stock = inputField("Quantidade disponível (vazio = sem limite)", InputType.TYPE_CLASS_NUMBER)
         val photoStatus = label(
-            if (!photosEnabled) "Fotografias disponíveis nos planos Profissional e Premium."
-            else if (existing?.optString("image_path").orEmpty().isNotBlank()) "A recompensa já tem uma fotografia."
+            if (existing?.optString("image_path").orEmpty().isNotBlank()) "A recompensa já tem uma fotografia."
+            else if (!photosEnabled) "Fotografias disponíveis nos planos Profissional e Premium."
             else "Sem fotografia selecionada.",
             11f, false, muted
         )
@@ -5242,8 +5242,24 @@ class MainActivity : ComponentActivity() {
         form.addView(label("FOTOGRAFIA DO PRÉMIO", 10f, true, forestSoft))
         form.addView(photoStatus)
         val existingImagePath = existing?.optString("image_path").orEmpty()
-        if (photosEnabled && existingImagePath.isNotBlank()) {
+        if (existingImagePath.isNotBlank()) {
             addLoyaltyRewardPhotoImage(form, existingImagePath, 112)
+            addGap(form, 5)
+            form.addView(secondaryButton("Remover fotografia") {
+                runBackend({
+                    val token = backendToken()
+                    val restaurantId = backendRestaurantId()
+                    SupabaseApi.setLoyaltyRewardImagePath(token, restaurantId, rewardId, null)
+                    SupabaseApi.deleteLoyaltyRewardPhoto(token, existingImagePath)
+                    val rewards = SupabaseApi.listRestaurantRewards(token, restaurantId)
+                    backendPrefs.edit().putString("restaurant_rewards_json", rewards.toString()).apply()
+                    "OK"
+                }) {
+                    loyaltyRewardPhotoCache.remove(existingImagePath)
+                    dialog.dismiss()
+                    renderApp()
+                }
+            }, LinearLayout.LayoutParams(-1, dp(40)))
         }
         if (photosEnabled) {
             addGap(form, 5)
@@ -5292,8 +5308,7 @@ class MainActivity : ComponentActivity() {
                             if (selectedPhoto != null) {
                                 val bytes = readCompressedLoyaltyRewardPhoto(selectedPhoto)
                                 val newPath = SupabaseApi.uploadLoyaltyRewardPhoto(
-                                    token, restaurantId, rewardId,
-                                    java.util.UUID.randomUUID().toString(), bytes
+                                    token, restaurantId, rewardId, bytes
                                 )
                                 try {
                                     SupabaseApi.setLoyaltyRewardImagePath(token, restaurantId, rewardId, newPath)
@@ -5301,6 +5316,7 @@ class MainActivity : ComponentActivity() {
                                     runCatching { SupabaseApi.deleteLoyaltyRewardPhoto(token, newPath) }
                                     throw error
                                 }
+                                loyaltyRewardPhotoCache.remove(newPath)
                                 if (previousImagePath.isNotBlank() && previousImagePath != newPath) {
                                     runCatching { SupabaseApi.deleteLoyaltyRewardPhoto(token, previousImagePath) }
                                     loyaltyRewardPhotoCache.remove(previousImagePath)
