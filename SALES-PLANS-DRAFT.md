@@ -144,6 +144,8 @@ O proprietário poderá configurar o acesso de cada funcionário por área:
 
 O proprietário conserva sempre o acesso total. Gestão da equipa, códigos, catálogo de recompensas, consultor económico, definições e eliminação do restaurante continuam reservados ao proprietário.
 
+**Limite atual dos cargos:** ainda não existem perfis predefinidos completos de gerente, empregado de mesa, cozinha e caixa. A versão atual usa permissões por área. Algumas áreas ainda não separam consultar de alterar, pelo que não se deve prometer que cada cargo já tem um conjunto perfeito de ações próprias. Também não existe módulo de caixa para cobrar pagamentos.
+
 **Estado:** a interface Android e a migração com validação no servidor já existem no repositório, mas a tabela privada de permissões ainda não existe no Supabase alojado. Não apresentar esta função como ativa até à migração, testes negativos de autorização e validação ponta a ponta.
 
 ## 6. Limitações comuns a comunicar
