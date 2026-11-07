@@ -11,7 +11,7 @@ class AssistantGeneralConversationPolicyTest {
         assertTrue(instruction.contains("assistente conversacional de uso geral"))
         assertTrue(instruction.contains("não te limites a restauração"))
         assertTrue(instruction.contains("programação"))
-        assertTrue(instruction.contains("matemática e ciências"))
+        assertTrue(instruction.contains("matemática, ciências"))
         assertTrue(instruction.contains("traduções"))
     }
 
