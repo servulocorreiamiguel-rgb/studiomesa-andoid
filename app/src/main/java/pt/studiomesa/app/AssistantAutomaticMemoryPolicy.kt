@@ -80,8 +80,8 @@ internal object AssistantAutomaticMemoryPolicy {
         val normalized = normalize(value)
         if (sensitiveMarkers.any { normalize(it) in normalized }) return true
         if (Regex("""[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}""", RegexOption.IGNORE_CASE).containsMatchIn(value)) return true
-        if (Regex("""\bPT\d{2}[\s-]?(?:\d[\s-]?){19}\b""", RegexOption.IGNORE_CASE).containsMatchIn(value)) return true
-        if (Regex("""\b(?:9[1236]\d{7})\b""").containsMatchIn(value)) return true
+        if (Regex("""\bPT\d{2}[\s-]?(?:\d[\s-]?){21}\b""", RegexOption.IGNORE_CASE).containsMatchIn(value)) return true
+        if (Regex("""\b\d{9}\b""").containsMatchIn(value)) return true
         return false
     }
 
