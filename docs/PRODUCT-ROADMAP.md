@@ -19,7 +19,9 @@
 - Matriz de permissões operacionais para pedidos, mesas, reservas, carta, stock e fidelização.
 - Perfis rápidos de permissões: Gerente, Empregado de mesa, Cozinha e Caixa. São modelos para as permissões armazenadas; o servidor valida as permissões, não confia no nome do perfil.
 - Limites e fotografias da loja de pontos (5/15/50 prémios ativos; fotos nos dois planos superiores) e variante Cliente Essencial.
-- Permissão de inventário necessária para consultar/editar receitas.
+- Permissão de inventário necessária para consultar/editar receitas, incluindo bloqueio server-side das RPCs e teste de chamadas sem permissão.
+- Notificações locais de atividade no Android, com primeira linha de base sem alertas antigos, deduplicação e navegação por evento. Só verificam a cada 60 segundos enquanto a app está aberta.
+- IA geral online opcional com envio apenas da pergunta atual; Gemini para conversa e Tavily/SearXNG para pesquisa pública atual. A IA económica permanece separada. Exige segredos no servidor e publicação da Edge Function.
 
 ## Funcionalidades recomendadas para uma fase seguinte
 
