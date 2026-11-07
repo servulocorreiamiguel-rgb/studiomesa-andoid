@@ -1170,4 +1170,64 @@ begin
 end;
 $function$;
 
+
+-- Recipe details expose stock quantities and their modification affects inventory.
+-- Only owners or staff with the inventory permission may read or change recipe lines.
+ALTER POLICY restaurant_recipes_staff_read
+    ON public.restaurant_recipes
+    USING (private.has_restaurant_permission(restaurant_id, 'inventory'));
+
+ALTER POLICY restaurant_recipe_ingredients_staff_read
+    ON public.restaurant_recipe_ingredients
+    USING (private.has_restaurant_permission(restaurant_id, 'inventory'));
+
+-- SECURITY DEFINER recipe RPCs must not bypass the granular inventory permission.
+-- The trigger checks auth.uid() from the original request and also protects direct
+-- SQL/API writes if privileges are ever intentionally expanded in the future.
+CREATE OR REPLACE FUNCTION private.guard_restaurant_recipe_inventory_permission()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $function$
+DECLARE
+    v_restaurant_id uuid;
+BEGIN
+    -- Let a parent-row cascade complete after its parent operation has already
+    -- passed the appropriate permission check (e.g. archiving/deleting a menu item).
+    IF pg_trigger_depth() > 1 THEN
+        IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+        RETURN NEW;
+    END IF;
+
+    IF (SELECT auth.uid()) IS NULL THEN
+        RAISE EXCEPTION 'É necessário iniciar sessão.';
+    END IF;
+
+    v_restaurant_id := CASE WHEN TG_OP = 'DELETE' THEN OLD.restaurant_id ELSE NEW.restaurant_id END;
+    IF v_restaurant_id IS NULL
+       OR NOT private.has_restaurant_permission(v_restaurant_id, 'inventory') THEN
+        RAISE EXCEPTION 'Sem autorização para consultar ou alterar fichas técnicas e ingredientes.';
+    END IF;
+
+    IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+    RETURN NEW;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION private.guard_restaurant_recipe_inventory_permission()
+    FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS restaurant_recipes_inventory_permission_guard
+    ON public.restaurant_recipes;
+CREATE TRIGGER restaurant_recipes_inventory_permission_guard
+    BEFORE INSERT OR UPDATE OR DELETE ON public.restaurant_recipes
+    FOR EACH ROW EXECUTE FUNCTION private.guard_restaurant_recipe_inventory_permission();
+
+DROP TRIGGER IF EXISTS restaurant_recipe_ingredients_inventory_permission_guard
+    ON public.restaurant_recipe_ingredients;
+CREATE TRIGGER restaurant_recipe_ingredients_inventory_permission_guard
+    BEFORE INSERT OR UPDATE OR DELETE ON public.restaurant_recipe_ingredients
+    FOR EACH ROW EXECUTE FUNCTION private.guard_restaurant_recipe_inventory_permission();
+
 commit;
