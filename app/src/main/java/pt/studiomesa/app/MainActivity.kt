@@ -8,6 +8,8 @@ import android.content.ClipboardManager
 import android.content.res.ColorStateList
 import android.app.AlertDialog
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
@@ -48,6 +50,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.ConcurrentHashMap
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.MultiFormatWriter
@@ -57,6 +60,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val REQUEST_EXPORT_ORDERS_CSV = 7812
         private const val REQUEST_IMPORT_SUPPLIER_INVOICE = 7813
+        private const val REQUEST_PICK_LOYALTY_REWARD_IMAGE = 7815
     }
 
     private lateinit var store: RestaurantStore
@@ -103,6 +107,10 @@ class MainActivity : ComponentActivity() {
     private var assistantCloudLastSyncAtMillis = 0L
     private var invoiceImportInFlight = false
     private var pendingInvoiceImport: PendingInvoiceImport? = null
+    private var pendingLoyaltyRewardPhotoUri: android.net.Uri? = null
+    private var pendingLoyaltyRewardPhotoId: String? = null
+    private var loyaltyRewardPhotoStatusView: TextView? = null
+    private val loyaltyRewardPhotoCache = ConcurrentHashMap<String, Bitmap>()
 
     private data class PendingInvoiceImport(
         val uri: android.net.Uri,
@@ -284,6 +292,25 @@ class MainActivity : ComponentActivity() {
         }
 
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_PICK_LOYALTY_REWARD_IMAGE) {
+            val uri = data?.data
+            if (resultCode == RESULT_OK && uri != null) {
+                val selectedRewardId = pendingLoyaltyRewardPhotoId
+                if (selectedRewardId.isNullOrBlank()) {
+                    Toast.makeText(this, "O formulário da recompensa já não está aberto. Escolhe a fotografia novamente.", Toast.LENGTH_LONG).show()
+                } else {
+                    runCatching {
+                        contentResolver.takePersistableUriPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        )
+                    }
+                    pendingLoyaltyRewardPhotoUri = uri
+                    loyaltyRewardPhotoStatusView?.text = "Nova fotografia selecionada. Será comprimida antes do envio."
+                }
+            }
+            return
+        }
         if (requestCode == REQUEST_IMPORT_SUPPLIER_INVOICE) {
             val uri = data?.data
             if (resultCode == RESULT_OK && uri != null) {
@@ -4731,9 +4758,15 @@ class MainActivity : ComponentActivity() {
             val members = SupabaseApi.listMembers(token, restaurantId)
             val rewards = SupabaseApi.listRestaurantRewards(token, restaurantId)
             val redemptions = SupabaseApi.listRestaurantRewardRedemptions(token, restaurantId)
+            val entitlements = if (backendPrefs.getString("restaurant_role", "") == "owner") {
+                SupabaseApi.getRestaurantLoyaltyEntitlements(token, restaurantId)
+            } else null
             backendPrefs.edit()
                 .putString("remote_members_json", members.toString())
                 .putString("restaurant_rewards_json", rewards.toString())
+                .apply()
+            if (entitlements != null) backendPrefs.edit()
+                .putString("loyalty_entitlements_json", entitlements.toString())
                 .putString("remote_reward_redemptions_json", redemptions.toString())
                 .apply()
             members.length().toString()
@@ -4783,9 +4816,28 @@ class MainActivity : ComponentActivity() {
             container.addView(label("LOJA DE PONTOS", 10f, true, forestSoft))
             addGap(container, 5)
             container.addView(label("Recompensas do restaurante", 20f, true, forestDeep))
+            val entitlements = runCatching {
+                JSONObject(backendPrefs.getString("loyalty_entitlements_json", "{}") ?: "{}")
+            }.getOrDefault(JSONObject())
+            val planCode = entitlements.optString("plan_code", "")
+            val rewardLimit = entitlements.optInt("reward_limit", 0)
+            val activeRewardCount = entitlements.optInt("active_rewards", 0)
+            if (isOwner && rewardLimit > 0) {
+                addGap(container, 5)
+                container.addView(label(
+                    "Plano " + planCode.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() } +
+                        " · " + activeRewardCount + " / " + rewardLimit + " prémios ativos" +
+                        if (entitlements.optBoolean("photos_enabled", false)) " · fotografias incluídas" else " · sem fotografias",
+                    11f, true, forestSoft
+                ))
+            }
             if (isOwner) {
                 addGap(container, 7)
-                container.addView(primaryButton("+ Criar recompensa") { showLoyaltyRewardEditor(null) }, LinearLayout.LayoutParams(-1, dp(44)))
+                if (rewardLimit > 0 && activeRewardCount >= rewardLimit) {
+                    container.addView(label("Atingiste o limite do teu plano. Desativa um prémio ou altera o plano para criar outro.", 11.5f, true, muted))
+                } else {
+                    container.addView(primaryButton("+ Criar recompensa") { showLoyaltyRewardEditor(null) }, LinearLayout.LayoutParams(-1, dp(44)))
+                }
             }
             val rewards = try { JSONArray(backendPrefs.getString("restaurant_rewards_json", "[]") ?: "[]") }
                 catch (_: Exception) { JSONArray() }
@@ -4797,6 +4849,8 @@ class MainActivity : ComponentActivity() {
                     val reward = rewards.optJSONObject(i) ?: continue
                     val card = makeCard(13)
                     val isActive = reward.optBoolean("is_active", false)
+                    val imagePath = reward.optString("image_path").trim()
+                    if (imagePath.isNotBlank()) addLoyaltyRewardPhotoImage(card, imagePath, 104)
                     card.addView(label(reward.optString("name"), 15f, true, forestDeep))
                     addGap(card, 3)
                     card.addView(label(reward.optInt("points_cost").toString() + " pontos", 11f, true, forestSoft))
@@ -5023,10 +5077,137 @@ class MainActivity : ComponentActivity() {
                 .setPositiveButton("OK", null).show()
             return
         }
+        runBackend({
+            val entitlements = SupabaseApi.getRestaurantLoyaltyEntitlements(backendToken(), backendRestaurantId())
+            backendPrefs.edit().putString("loyalty_entitlements_json", entitlements.toString()).apply()
+            "OK"
+        }) {
+            showLoyaltyRewardEditorForm(existing)
+        }
+    }
+
+    private fun readCompressedLoyaltyRewardPhoto(uri: android.net.Uri): ByteArray {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            ?: throw IllegalStateException("Não foi possível abrir a fotografia escolhida.")
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+            throw IllegalArgumentException("O ficheiro escolhido não é uma imagem válida.")
+        }
+
+        var sample = 1
+        val largest = maxOf(bounds.outWidth, bounds.outHeight)
+        while (largest / sample > 2048) sample *= 2
+        val options = BitmapFactory.Options().apply {
+            inJustDecodeBounds = false
+            inSampleSize = sample
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+        }
+        val decoded = contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, options)
+        } ?: throw IllegalStateException("Não foi possível descodificar a fotografia.")
+
+        val maxDimension = 1280
+        val scale = minOf(1f, maxDimension.toFloat() / maxOf(decoded.width, decoded.height))
+        val width = (decoded.width * scale).toInt().coerceAtLeast(1)
+        val height = (decoded.height * scale).toInt().coerceAtLeast(1)
+        val scaled = if (width != decoded.width || height != decoded.height) {
+            Bitmap.createScaledBitmap(decoded, width, height, true).also { decoded.recycle() }
+        } else decoded
+
+        // Flatten transparency onto white so transparent PNGs do not become black JPEGs.
+        val flattened = Bitmap.createBitmap(scaled.width, scaled.height, Bitmap.Config.ARGB_8888)
+        Canvas(flattened).apply {
+            drawColor(Color.WHITE)
+            drawBitmap(scaled, 0f, 0f, null)
+        }
+        if (flattened !== scaled) scaled.recycle()
+
+        try {
+            for (quality in listOf(88, 82, 76, 70, 64, 58)) {
+                val output = java.io.ByteArrayOutputStream()
+                if (!flattened.compress(Bitmap.CompressFormat.JPEG, quality, output)) {
+                    throw IllegalStateException("Não foi possível preparar a fotografia.")
+                }
+                val bytes = output.toByteArray()
+                if (bytes.size in 1..(1536 * 1024)) return bytes
+            }
+        } finally {
+            flattened.recycle()
+        }
+        throw IllegalArgumentException("A fotografia continua demasiado grande. Escolhe outra imagem mais simples.")
+    }
+
+    private fun addLoyaltyRewardPhotoImage(
+        container: LinearLayout,
+        imagePath: String,
+        heightDp: Int = 150
+    ) {
+        if (imagePath.isBlank()) return
+        val image = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(paleGreen)
+            }
+            contentDescription = "Fotografia da recompensa"
+            tag = imagePath
+        }
+        container.addView(image, LinearLayout.LayoutParams(-1, dp(heightDp)).apply {
+            bottomMargin = dp(8)
+        })
+
+        val cached = loyaltyRewardPhotoCache[imagePath]
+        if (cached != null) {
+            image.setImageBitmap(cached)
+            return
+        }
+
+        Thread {
+            val bitmap = runCatching {
+                val bytes = SupabaseApi.downloadLoyaltyRewardPhoto(backendToken(), imagePath)
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@runCatching null
+                var sample = 1
+                while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 1200) sample *= 2
+                val options = BitmapFactory.Options().apply {
+                    inSampleSize = sample
+                    inPreferredConfig = Bitmap.Config.RGB_565
+                }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+            }.getOrNull()
+
+            if (bitmap != null) {
+                loyaltyRewardPhotoCache.putIfAbsent(imagePath, bitmap)
+                runOnUiThread {
+                    if (image.tag == imagePath && !isFinishing && !isDestroyed) {
+                        image.setImageBitmap(loyaltyRewardPhotoCache[imagePath] ?: bitmap)
+                    }
+                }
+            }
+        }.start()
+    }
+
+    private fun showLoyaltyRewardEditorForm(existing: JSONObject?) {
+        val entitlement = runCatching {
+            JSONObject(backendPrefs.getString("loyalty_entitlements_json", "{}") ?: "{}")
+        }.getOrDefault(JSONObject())
+        val photosEnabled = entitlement.optBoolean("photos_enabled", false)
+        val rewardId = existing?.optString("id")?.takeIf { it.isNotBlank() }
+            ?: java.util.UUID.randomUUID().toString()
+        pendingLoyaltyRewardPhotoUri = null
+        pendingLoyaltyRewardPhotoId = rewardId
         val name = inputField("Nome da recompensa", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
         val description = inputField("Descrição (opcional)", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
         val cost = inputField("Pontos necessários", InputType.TYPE_CLASS_NUMBER)
         val stock = inputField("Quantidade disponível (vazio = sem limite)", InputType.TYPE_CLASS_NUMBER)
+        val photoStatus = label(
+            if (!photosEnabled) "Fotografias disponíveis nos planos Profissional e Premium."
+            else if (existing?.optString("image_path").orEmpty().isNotBlank()) "A recompensa já tem uma fotografia."
+            else "Sem fotografia selecionada.",
+            11f, false, muted
+        )
+        loyaltyRewardPhotoStatusView = photoStatus
         if (existing != null) {
             name.setText(existing.optString("name"))
             description.setText(existing.optString("description"))
@@ -5048,6 +5229,28 @@ class MainActivity : ComponentActivity() {
         addGap(form, 5)
         form.addView(label("STOCK", 10f, true, forestSoft))
         form.addView(stock, fieldParams())
+        addGap(form, 6)
+        form.addView(label("FOTOGRAFIA DO PRÉMIO", 10f, true, forestSoft))
+        form.addView(photoStatus)
+        val existingImagePath = existing?.optString("image_path").orEmpty()
+        if (photosEnabled && existingImagePath.isNotBlank()) {
+            addLoyaltyRewardPhotoImage(form, existingImagePath, 112)
+        }
+        if (photosEnabled) {
+            addGap(form, 5)
+            form.addView(secondaryButton("Escolher / substituir fotografia") {
+                val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "image/*"
+                    putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/jpeg", "image/png", "image/webp"))
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                }
+                runCatching { startActivityForResult(picker, REQUEST_PICK_LOYALTY_REWARD_IMAGE) }
+                    .onFailure {
+                        Toast.makeText(this, "Não foi possível abrir a galeria.", Toast.LENGTH_LONG).show()
+                    }
+            }, LinearLayout.LayoutParams(-1, dp(42)))
+        }
         val dialog = AlertDialog.Builder(this)
             .setTitle(if (existing == null) "Nova recompensa" else "Editar recompensa")
             .setView(form)
@@ -5067,22 +5270,57 @@ class MainActivity : ComponentActivity() {
                     points == null || points !in 1..1000000 -> cost.error = "Indica um custo entre 1 e 1000000 pontos."
                     limitText.isNotBlank() && (stockLimit == null || stockLimit < 0) -> stock.error = "Indica uma quantidade válida ou deixa vazio."
                     else -> {
-                        val rewardId = existing?.optString("id")?.takeIf { it.isNotBlank() }
-                            ?: java.util.UUID.randomUUID().toString()
+                        val selectedPhoto = pendingLoyaltyRewardPhotoUri
+                            .takeIf { pendingLoyaltyRewardPhotoId == rewardId }
+                        val previousImagePath = existing?.optString("image_path").orEmpty()
                         runBackend({
+                            val token = backendToken()
+                            val restaurantId = backendRestaurantId()
                             SupabaseApi.saveLoyaltyReward(
-                                backendToken(), backendRestaurantId(), rewardId, rewardName,
+                                token, restaurantId, rewardId, rewardName,
                                 rewardDescription, points, stockLimit, true
                             )
-                            val rewards = SupabaseApi.listRestaurantRewards(backendToken(), backendRestaurantId())
-                            backendPrefs.edit().putString("restaurant_rewards_json", rewards.toString()).apply()
+                            if (selectedPhoto != null) {
+                                val bytes = readCompressedLoyaltyRewardPhoto(selectedPhoto)
+                                val newPath = SupabaseApi.uploadLoyaltyRewardPhoto(
+                                    token, restaurantId, rewardId,
+                                    java.util.UUID.randomUUID().toString(), bytes
+                                )
+                                try {
+                                    SupabaseApi.setLoyaltyRewardImagePath(token, restaurantId, rewardId, newPath)
+                                } catch (error: Exception) {
+                                    runCatching { SupabaseApi.deleteLoyaltyRewardPhoto(token, newPath) }
+                                    throw error
+                                }
+                                if (previousImagePath.isNotBlank() && previousImagePath != newPath) {
+                                    runCatching { SupabaseApi.deleteLoyaltyRewardPhoto(token, previousImagePath) }
+                                    loyaltyRewardPhotoCache.remove(previousImagePath)
+                                }
+                                pendingLoyaltyRewardPhotoUri = null
+                            }
+                            val rewards = SupabaseApi.listRestaurantRewards(token, restaurantId)
+                            val entitlements = SupabaseApi.getRestaurantLoyaltyEntitlements(token, restaurantId)
+                            backendPrefs.edit()
+                                .putString("restaurant_rewards_json", rewards.toString())
+                                .putString("loyalty_entitlements_json", entitlements.toString())
+                                .apply()
                             "OK"
                         }) {
+                            pendingLoyaltyRewardPhotoUri = null
+                            pendingLoyaltyRewardPhotoId = null
+                            loyaltyRewardPhotoStatusView = null
                             dialog.dismiss()
                             renderApp()
                         }
                     }
                 }
+            }
+        }
+        dialog.setOnDismissListener {
+            if (pendingLoyaltyRewardPhotoId == rewardId) {
+                pendingLoyaltyRewardPhotoUri = null
+                pendingLoyaltyRewardPhotoId = null
+                loyaltyRewardPhotoStatusView = null
             }
         }
         dialog.show()
@@ -5098,7 +5336,11 @@ class MainActivity : ComponentActivity() {
                 reward.optInt("points_cost"), stock, active
             )
             val rewards = SupabaseApi.listRestaurantRewards(backendToken(), backendRestaurantId())
-            backendPrefs.edit().putString("restaurant_rewards_json", rewards.toString()).apply()
+            val entitlements = SupabaseApi.getRestaurantLoyaltyEntitlements(backendToken(), backendRestaurantId())
+            backendPrefs.edit()
+                .putString("restaurant_rewards_json", rewards.toString())
+                .putString("loyalty_entitlements_json", entitlements.toString())
+                .apply()
             "OK"
         }) { renderApp() }
     }
@@ -5396,6 +5638,8 @@ class MainActivity : ComponentActivity() {
             val redeemed = reward.optInt("redeemed_count", 0)
             val remaining = if (stockLimit < 0) -1 else (stockLimit - redeemed).coerceAtLeast(0)
             val card = makeCard(14)
+            val imagePath = reward.optString("image_path").trim()
+            if (imagePath.isNotBlank()) addLoyaltyRewardPhotoImage(card, imagePath, 160)
             card.addView(label(reward.optString("name"), 16f, true, forestDeep))
             val description = reward.optString("description").trim()
             if (description.isNotBlank()) {
