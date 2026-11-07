@@ -5511,7 +5511,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun renderCustomerApp() {
-        if (activeCustomerPage !in setOf("Cartão", "Carta", "Reservas", "Conta")) activeCustomerPage = "Cartão"
+        val customerPages = if (hasCalculator) {
+            listOf("Cartão", "Carta", "Reservas", "Conta")
+        } else {
+            listOf("Cartão", "Carta", "Conta")
+        }
+        if (activeCustomerPage !in customerPages) activeCustomerPage = "Cartão"
         appRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(paper)
@@ -5568,7 +5573,7 @@ class MainActivity : ComponentActivity() {
             setBackgroundColor(white)
             elevation = dp(6).toFloat()
         }
-        listOf("Cartão", "Carta", "Reservas", "Conta").forEach { page ->
+        customerPages.forEach { page ->
             val selected = activeCustomerPage == page
             val item = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
