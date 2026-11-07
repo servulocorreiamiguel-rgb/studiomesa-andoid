@@ -30,6 +30,30 @@ object SupabaseApi {
         ))
     }
 
+    /**
+     * Online general assistant. Sends only this message; no conversation history,
+     * memory, restaurant snapshot, invoices, customer or staff records are attached.
+     */
+    fun generateCloudGeneralAssistant(
+        token: String,
+        message: String,
+        searchWeb: Boolean
+    ): JSONObject {
+        require(token.isNotBlank()) { "Inicia sessão para usar a IA online." }
+        require(message.isNotBlank() && message.length <= 4000) {
+            "A mensagem tem de ter entre 1 e 4000 caracteres."
+        }
+        return JSONObject(call(
+            "POST",
+            "/functions/v1/studiomesa-assistant",
+            JSONObject()
+                .put("message", message)
+                .put("search_web", searchWeb),
+            token,
+            readTimeoutMillis = 60_000
+        ))
+    }
+
     private fun call(
         method: String,
         path: String,
