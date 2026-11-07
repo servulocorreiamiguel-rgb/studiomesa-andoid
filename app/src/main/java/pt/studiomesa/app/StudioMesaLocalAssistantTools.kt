@@ -398,3 +398,46 @@ internal class StudioMesaSupplierInvoiceTool(
         JSONObject().put("error", "Não foi possível consultar as faturas importadas.").toString()
     }
 }
+
+
+/**
+ * A narrow bridge from the general assistant to the economic assistant.
+ * It delegates only to the existing read-only invoice summary tool. No invoice
+ * document bytes, OCR text, or mutation operations are exposed.
+ */
+internal class StudioMesaEconomicAssistantBridgeTool(
+    private val invoiceTool: StudioMesaSupplierInvoiceTool
+) : OpenApiTool {
+
+    fun updateSnapshot(snapshot: StudioMesaAssistantSnapshot) {
+        invoiceTool.updateSnapshot(snapshot)
+    }
+
+    override fun getToolDescriptionJsonString(): String {
+        val definition = JSONObject(invoiceTool.getToolDescriptionJsonString())
+        definition.put("name", "consult_economic_assistant")
+        definition.put(
+            "description",
+            "Encaminha uma pergunta financeira ao Assistente económico através de uma ligação interna e só de leitura. Consulta apenas metadados das faturas já importadas e disponíveis nesta sessão, podendo filtrar por fornecedor ou estado. Não consulta PDFs, texto OCR, contas bancárias ou pagamentos e não pode aprovar, rejeitar, alterar, eliminar ou pagar documentos. Usa apenas quando o utilizador pede informação sobre faturas, despesas ou fornecedores."
+        )
+        return definition.toString()
+    }
+
+    override fun execute(paramsJsonString: String): String = runCatching {
+        val result = JSONObject(invoiceTool.execute(paramsJsonString))
+        result.put("delegated_to", "Assistente económico")
+            .put("delegation_mode", "read_only")
+            .put("read_only", true)
+            .put(
+                "delegation_warning",
+                "A resposta veio do arquivo local de metadados de faturas. Não constitui prova de pagamento, reconciliação bancária ou lançamento contabilístico."
+            )
+            .toString()
+    }.getOrElse {
+        JSONObject()
+            .put("error", "O Assistente económico não conseguiu consultar o arquivo local de faturas.")
+            .put("delegated_to", "Assistente económico")
+            .put("read_only", true)
+            .toString()
+    }
+}
