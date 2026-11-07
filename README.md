@@ -16,7 +16,7 @@
 
 - Testes ponta a ponta em telemóveis reais, incluindo vários dispositivos e utilizadores, perda de Internet, sessões expiradas, notificações e erros do servidor.
 - Configurar e testar `TAVILY_API_KEY` no Supabase para ativar pesquisa geral na Internet. Nunca colocar a chave no APK, no GitHub ou em código Android.
-- Para notificações com a app fechada: criar/configurar o projeto Firebase, associar a aplicação Android, guardar as credenciais de servidor apenas em secrets e implementar o envio/renovação dos tokens FCM. A implementação desta branch é apenas local e em primeiro plano.
+- Para notificações com a app fechada: criar/configurar o projeto Firebase, associar a aplicação Android, guardar as credenciais de servidor apenas em secrets e implementar o envio/renovação dos tokens FCM. A implementação desta branch é apenas local e em primeiro plano; ver [estado e requisitos FCM](docs/NOTIFICATIONS-STATUS.md).
 - Fidelização: loja configurável já implementada; falta ensaio E2E de criação/edição, stock concorrente, resgate, entrega, saldos e isolamento entre dois restaurantes.
 - Reservas: criação, estados e prevenção de conflitos por mesa estão implementados; ainda faltam edição/reagendamento, calendário/turnos, lembretes, depósitos e regras de cancelamento.
 - Stock: inventário, entradas/saídas, histórico de movimentos, custo unitário e fotografia histórica estão implementados. Fichas técnicas e consumo automático de ingredientes continuam bloqueados até deployment aprovado das tabelas em falta; ainda faltam avisos automáticos, fornecedores/encomendas, armazéns e conversões de unidades.
