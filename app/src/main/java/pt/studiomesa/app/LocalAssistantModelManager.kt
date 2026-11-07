@@ -184,6 +184,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         history: List<Turn>,
         userMessage: String,
         deepThinking: Boolean = false,
+        economicMode: Boolean = false,
         onToken: (String) -> Unit,
         onComplete: (Result<String>) -> Unit
     ) {
@@ -237,7 +238,10 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
 
                     val dataTool = StudioMesaRestaurantDataTool(snapshot)
                     val priceTool = StudioMesaPriceReferenceTool(snapshot)
-                    val invoiceTool = StudioMesaSupplierInvoiceTool(snapshot)
+                    val invoiceTool = if (economicMode) StudioMesaSupplierInvoiceTool(snapshot) else null
+                    val enabledTools = mutableListOf(tool(dataTool), tool(priceTool))
+                    if (invoiceTool != null) enabledTools.add(tool(invoiceTool))
+                    enabledTools.add(tool(StudioMesaWikipediaSearchTool()))
                     val initialMessages = history
                         .takeLast(MAX_HISTORY_MESSAGES)
                         .mapNotNull { turn ->
@@ -255,7 +259,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                             ConversationConfig(
                                 systemInstruction = Contents.of(effectiveSystemInstruction),
                                 initialMessages = initialMessages,
-                                tools = listOf(tool(dataTool), tool(priceTool), tool(invoiceTool), tool(StudioMesaWikipediaSearchTool())),
+                                tools = enabledTools,
                                 automaticToolCalling = true,
                                 samplerConfig = SamplerConfig(
                                     topK = 40,
@@ -289,8 +293,10 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     ?: throw IllegalStateException("As ferramentas de consulta não estão disponíveis.")
                 priceReferenceTool?.updateSnapshot(snapshot)
                     ?: throw IllegalStateException("A ferramenta de preços não está disponível.")
-                supplierInvoiceTool?.updateSnapshot(snapshot)
-                    ?: throw IllegalStateException("A ferramenta de faturas não está disponível.")
+                if (economicMode) {
+                    supplierInvoiceTool?.updateSnapshot(snapshot)
+                        ?: throw IllegalStateException("A ferramenta de faturas não está disponível no modo económico.")
+                }
 
                 val activeConversation = conversation
                     ?: throw IllegalStateException("Não foi possível iniciar a conversa local.")
