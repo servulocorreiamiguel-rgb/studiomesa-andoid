@@ -160,7 +160,8 @@ object SupabaseApi {
         path: String,
         token: String,
         payload: ByteArray? = null,
-        mimeType: String = "application/octet-stream"
+        mimeType: String = "application/octet-stream",
+        upsert: Boolean = false
     ): ByteArray {
         val connection = (URL(BASE_URL + path).openConnection() as HttpURLConnection).apply {
             requestMethod = method
@@ -173,6 +174,7 @@ object SupabaseApi {
             setRequestProperty("Accept", "application/json, application/octet-stream")
             setRequestProperty("Cache-Control", "no-store")
             setRequestProperty("Content-Type", mimeType)
+            if (upsert) setRequestProperty("x-upsert", "true")
         }
         try {
             if (payload != null) {
@@ -1035,11 +1037,8 @@ object SupabaseApi {
         require(restaurantId.matches(Regex("^[0-9a-fA-F-]{36}$")))
         require(rewardId.matches(Regex("^[0-9a-fA-F-]{36}$")))
         if (imagePath != null) {
-            require(imagePath.matches(
-                Regex("^[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}\\.jpg$")
-            ))
-            require(imagePath.startsWith("$restaurantId/$rewardId/")) {
-                "A fotografia não pertence a esta recompensa."
+            require(imagePath == "$restaurantId/$rewardId/photo.jpg") {
+                "O caminho da fotografia não corresponde à recompensa."
             }
         }
         call(
@@ -1057,41 +1056,40 @@ object SupabaseApi {
         token: String,
         restaurantId: String,
         rewardId: String,
-        photoId: String,
         bytes: ByteArray
     ): String {
         require(token.isNotBlank())
         require(restaurantId.matches(Regex("^[0-9a-fA-F-]{36}$")))
         require(rewardId.matches(Regex("^[0-9a-fA-F-]{36}$")))
-        require(photoId.matches(Regex("^[0-9a-fA-F-]{36}$")))
         require(bytes.size in 1..(1536 * 1024)) { "A fotografia tem de ter até 1,5 MB." }
-        val objectPath = "$restaurantId/$rewardId/$photoId.jpg"
+        val objectPath = "$restaurantId/$rewardId/photo.jpg"
         val encodedPath = objectPath.split("/").joinToString("/") { URLEncoder.encode(it, "UTF-8") }
         binaryStorageRequest(
             "POST",
             "/storage/v1/object/loyalty-reward-images/$encodedPath",
             token,
             bytes,
-            "image/jpeg"
+            "image/jpeg",
+            upsert = true
         )
         return objectPath
     }
 
     fun deleteLoyaltyRewardPhoto(token: String, objectPath: String) {
         require(token.isNotBlank())
-        require(objectPath.matches(
-            Regex("^[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}\\.jpg$")
-        ))
-        val encodedPath = objectPath.split("/").joinToString("/") { URLEncoder.encode(it, "UTF-8") }
+        val parts = objectPath.split("/")
+        require(parts.size == 3 && parts[0].matches(Regex("^[0-9a-fA-F-]{36}$")) &&
+            parts[1].matches(Regex("^[0-9a-fA-F-]{36}$")) && parts[2] == "photo.jpg")
+        val encodedPath = parts.joinToString("/") { URLEncoder.encode(it, "UTF-8") }
         binaryStorageRequest("DELETE", "/storage/v1/object/loyalty-reward-images/$encodedPath", token)
     }
 
     fun downloadLoyaltyRewardPhoto(token: String, objectPath: String): ByteArray {
         require(token.isNotBlank())
-        require(objectPath.matches(
-            Regex("^[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}/[0-9a-fA-F-]{36}\\.jpg$")
-        ))
-        val encodedPath = objectPath.split("/").joinToString("/") { URLEncoder.encode(it, "UTF-8") }
+        val parts = objectPath.split("/")
+        require(parts.size == 3 && parts[0].matches(Regex("^[0-9a-fA-F-]{36}$")) &&
+            parts[1].matches(Regex("^[0-9a-fA-F-]{36}$")) && parts[2] == "photo.jpg")
+        val encodedPath = parts.joinToString("/") { URLEncoder.encode(it, "UTF-8") }
         return binaryStorageRequest(
             "GET",
             "/storage/v1/object/public/loyalty-reward-images/$encodedPath",
