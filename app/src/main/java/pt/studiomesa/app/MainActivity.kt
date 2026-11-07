@@ -754,7 +754,12 @@ class MainActivity : ComponentActivity() {
         isEconomicAssistant: Boolean = activePage == "Assistente económico"
     ) {
         val scope = assistantConversationScope(isEconomicAssistant)
-        if (isEconomicAssistant) refreshSupplierInvoicesFromCloud(showFeedback = false)
+        val ownerInvoiceAccess = hasRemoteRestaurant() &&
+            backendToken().isNotBlank() &&
+            backendPrefs.getString("restaurant_role", "") == "owner"
+        if (isEconomicAssistant || ownerInvoiceAccess) {
+            refreshSupplierInvoicesFromCloud(showFeedback = false)
+        }
         if (assistantChatScopeKey != scope) {
             assistantChatScopeKey = scope
             activeAssistantConversationId = null
@@ -943,8 +948,10 @@ class MainActivity : ComponentActivity() {
             welcome.addView(label(
                 if (isEconomicAssistant)
                     "Posso analisar custos, tesouraria, fornecedores e metadados das faturas importadas. A leitura é limitada aos campos guardados no arquivo; não prova pagamentos nem substitui a contabilidade."
+                else if (ownerInvoiceAccess)
+                    "Com o modelo instalado, podes conversar sobre qualquer tema e pedir à IA para consultar o Assistente económico sobre as faturas do restaurante. Esta ligação só lê metadados do arquivo; não altera documentos nem comprova pagamentos."
                 else
-                    "Com o modelo instalado, podes conversar sobre assuntos gerais, aprender, escrever, traduzir, programar e resolver problemas. A IA geral não consulta faturas nem dados financeiros privados.",
+                    "Com o modelo instalado, podes conversar sobre assuntos gerais, aprender, escrever, traduzir, programar e resolver problemas. Os dados financeiros privados continuam reservados ao proprietário."
                 12f, false, muted
             ))
             conversation.addView(welcome, cardParams())
@@ -952,6 +959,10 @@ class MainActivity : ComponentActivity() {
                 "Resume as faturas pendentes e confirmadas.",
                 "Agrupa as despesas por fornecedor.",
                 "Que dados preciso para analisar a tesouraria?"
+            ) else if (ownerInvoiceAccess) listOf(
+                "Consulta as faturas pendentes através do Assistente económico.",
+                "Quanto foi gasto por fornecedor?",
+                "Resume as despesas registadas."
             ) else listOf(
                 "Explica-me um conceito de programação.",
                 "Ajuda-me a escrever um texto profissional.",
@@ -1710,7 +1721,8 @@ class MainActivity : ComponentActivity() {
                 )
             }
             if (showFeedback) Toast.makeText(this, "${rows.length()} fatura(s) no arquivo privado.", Toast.LENGTH_SHORT).show()
-            if (activePage == "Assistente económico" && !assistantSending && !isFinishing && !isDestroyed) {
+            if (activePage in setOf("Assistente económico", "IA") &&
+                !assistantSending && !isFinishing && !isDestroyed) {
                 renderApp()
             }
         }
@@ -1902,6 +1914,9 @@ class MainActivity : ComponentActivity() {
         economicAssistant: Boolean = activePage == "Assistente económico"
     ): String {
         val snapshot = assistantSnapshot()
+        val ownerInvoiceAccess = hasRemoteRestaurant() &&
+            backendToken().isNotBlank() &&
+            backendPrefs.getString("restaurant_role", "") == "owner"
         val restaurantName = backendPrefs.getString("restaurant_name", "").orEmpty().ifBlank { "Restaurante sem nome configurado" }
         val memory = runCatching { assistantChatStore.readMemory(scope) }.getOrDefault("")
         return buildString {
@@ -1914,7 +1929,11 @@ class MainActivity : ComponentActivity() {
                 appendLine("Nunca aproves, rejeites, alteres, elimines ou pagues faturas. Não alteres dados contabilísticos. Só lês e recomendas.")
             } else {
                 appendLine("FUNÇÃO: és a IA geral da StudioMesa. Responde a perguntas abertas sobre temas gerais e ajuda com aprendizagem, escrita, programação, tradução, planeamento e resolução de problemas.")
-                appendLine("Esta área não tem acesso a faturas nem a metadados financeiros privados do restaurante. Para essas consultas, encaminha o utilizador para Assistente económico.")
+                if (ownerInvoiceAccess) {
+                    appendLine("Tens a ligação consult_economic_assistant ao Assistente económico. Usa-a para encaminhar perguntas sobre faturas, despesas, fornecedores, totais e IVA. Só devolve metadados de leitura do arquivo local disponível nesta sessão; não abre PDFs nem texto OCR e não executa alterações.")
+                } else {
+                    appendLine("Esta conta não tem acesso às faturas nem a metadados financeiros privados do restaurante. Não tentes consultar nem inferir esses dados.")
+                }
             }
             appendLine("CAPACIDADES DESTA INSTALAÇÃO")
             appendLine("Reservas e referências de preço: ${if (hasCalculator) "disponíveis" else "não incluídas nesta variante"}. Stock e análise avançada: ${if (isPremium) "disponíveis" else "dependem do plano Premium"}. Modelo generativo local: ${if (localAssistantModelManager.isModelInstalled()) "instalado" else "ainda não instalado"}.")
@@ -1928,8 +1947,10 @@ class MainActivity : ComponentActivity() {
             appendLine(
                 if (economicAssistant)
                     "Usa ferramentas de leitura apenas quando forem relevantes: get_restaurant_data para dados operacionais, calculate_menu_price_reference para referências de preço e get_supplier_invoice_summary para metadados de faturas."
+                else if (ownerInvoiceAccess)
+                    "Usa get_restaurant_data para dados operacionais, calculate_menu_price_reference para referências de preço e consult_economic_assistant para pedir ao Assistente económico uma consulta de faturas, quando forem relevantes."
                 else
-                    "Usa apenas get_restaurant_data para dados operacionais e calculate_menu_price_reference para referências de preço, quando forem relevantes. A ferramenta de faturas não está disponível nesta área."
+                    "Usa apenas get_restaurant_data para dados operacionais e calculate_menu_price_reference para referências de preço, quando forem relevantes. A ligação ao Assistente económico não está disponível nesta conta."
             )
             appendLine()
             appendLine("CONTEXTO ATUAL DO STUDIO MESA")
@@ -2061,6 +2082,9 @@ class MainActivity : ComponentActivity() {
                     userMessage = question,
                     deepThinking = turnUsesDeepThinking,
                     economicMode = economicAssistant,
+                    economicBridgeEnabled = !economicAssistant && hasRemoteRestaurant() &&
+                        backendToken().isNotBlank() &&
+                        backendPrefs.getString("restaurant_role", "") == "owner",
                     onToken = { token ->
                         runOnUiThread {
                             assistantStreamingTextView?.append(token)
@@ -2123,7 +2147,11 @@ class MainActivity : ComponentActivity() {
             AssistantCapabilitiesPolicy.Features(
                 hasReservationsAndPricing = hasCalculator,
                 isPremium = isPremium,
-                localModelInstalled = localAssistantModelManager.isModelInstalled()
+                localModelInstalled = localAssistantModelManager.isModelInstalled(),
+                canAccessInvoices = economicAssistant || (
+                    hasRemoteRestaurant() && backendToken().isNotBlank() &&
+                        backendPrefs.getString("restaurant_role", "") == "owner"
+                )
             )
         )?.let { return it }
 
