@@ -17,6 +17,18 @@ object SupabaseApi {
 
     data class Session(val accessToken: String, val userId: String, val email: String, val refreshToken: String)
 
+    /** Public web search via an authenticated Edge Function; provider keys stay server-side. */
+    fun searchPublicWeb(token: String, query: String): JSONObject {
+        require(token.isNotBlank()) { "Inicia sessão para pesquisar na Web." }
+        require(query.length in 3..200) { "A pesquisa tem de ter entre 3 e 200 caracteres." }
+        return JSONObject(call(
+            "POST",
+            "/functions/v1/studiomesa-assistant",
+            JSONObject().put("query", query),
+            token
+        ))
+    }
+
     private fun call(
         method: String,
         path: String,
