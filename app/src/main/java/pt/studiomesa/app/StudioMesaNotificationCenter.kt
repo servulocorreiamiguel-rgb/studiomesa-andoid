@@ -6,6 +6,8 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
+import android.app.PendingIntent
 import android.content.pm.PackageManager
 import android.os.Build
 
@@ -58,7 +60,19 @@ object StudioMesaNotificationCenter {
         } else {
             Notification.Builder(context)
         }
+        val notificationId = stableKey.hashCode() and 0x7fffffff
+        val openIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(MainActivity.EXTRA_ACTIVITY_NOTIFICATION_KEY, stableKey)
+        }
+        val contentIntent = PendingIntent.getActivity(
+            context,
+            notificationId,
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         val notification = builder
+            .setContentIntent(contentIntent)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(message)
@@ -68,7 +82,6 @@ object StudioMesaNotificationCenter {
             .setCategory(Notification.CATEGORY_STATUS)
             .build()
 
-        val notificationId = stableKey.hashCode() and 0x7fffffff
         runCatching { manager.notify(notificationId, notification) }
     }
 }
