@@ -1037,7 +1037,11 @@ class MainActivity : ComponentActivity() {
         if (assistantSending) {
             val thinkingCard = makeCard(12)
             thinkingCard.addView(label(
-                if (isEconomicAssistant) "STUDIOMESA · ASSISTENTE ECONÓMICO" else "STUDIOMESA · IA LOCAL",
+                when {
+                    isEconomicAssistant -> "STUDIOMESA · ASSISTENTE ECONÓMICO"
+                    cloudGeneralAssistantEnabled() -> "STUDIOMESA · IA ONLINE"
+                    else -> "STUDIOMESA · IA LOCAL"
+                },
                 9f, true, forestSoft
             ))
             addGap(thinkingCard, 5)
