@@ -1,25 +1,29 @@
 # StudioMesa — lista de preparação para uso profissional
 
-**Estado atual em 06/11/2026: CÓDIGO AVANÇADO, NÃO PRONTO PARA PILOTO/VENDA.**
+**Estado em 07/11/2026: código avançado, ainda não liberado para piloto/venda com dados reais.**
 
-Esta secção é a fotografia atual e sobrepõe-se aos registos históricos mais abaixo. A lista de bloqueios única e atualizada é [docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md](docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md).
+Esta fotografia descreve a branch `feature/loyalty-shop-photos-tier-limits`. A sexta variante Cliente Essencial, os limites da loja e as fotografias ainda precisam de CI, revisão, integração na `main` e deployment controlado.
 
-- [x] Cinco variantes Android no código; compileSdk/targetSdk 36, minSdk 24, Java 17 e versão 1.5.0.
-- [x] APKs debug de demonstração e workflow manual para cinco AABs/APKs assinados preparado; não publica automaticamente na Google Play.
-- [x] IA local LFM2.5-1.2B, histórico/Memória local cifrada, OCR local e ferramentas de leitura implementadas no código.
-- [x] Fluxo de reservas de cliente e restaurante presente no código. PR #86 foi integrada na main (commit `0770ad7`), com testes de regressão para sobreposição, capacidade, mesa inexistente, idempotência e ecrãs sem autenticação.
-- [x] CI #1332 terminou com os quatro jobs em sucesso: replay PostgreSQL/autorização, compilação, unit tests, Lint e smoke tests em Android 8 e Android 16. Os skips de interface são condicionados à variante/plano; as páginas de reservas executaram nas variantes que as incluem.
-- [ ] Reconciliar as 53 migrations locais com as 54 versões do Supabase alojado (48 comuns, cinco só locais e seis só remotas); backup/restauro e replay descartável antes de deployment.
-- [ ] Aplicar de forma aprovada as tabelas de receitas, permissões granulares, sync do assistente, faturas e bucket privado — atualmente ausentes no backend alojado.
-- [ ] Resolver o aviso Leaked Password Protection Disabled, com decisão consciente sobre upgrade Pro, SMTP, URLs Auth, OAuth e teste E2E.
-- [ ] Concluir política de privacidade, Data Safety, termos, DPA, retenção, licenças/avisos e suporte; os novos documentos desta branch continuam drafts.
-- [ ] Escolher package IDs, criar keystore fora do repositório e configurar os quatro secrets e a variável do release workflow.
-- [ ] Testes E2E no backend com contas descartáveis, restauro, eliminação, concorrência e isolamento entre restaurantes.
-- [ ] Teste físico no OPPO A5m fica deliberadamente para o utilizador; ainda não foi executado.
+- [x] Cinco variantes Android na `main`; esta branch acrescenta a sexta variante Cliente Essencial. TargetSdk 36, minSdk 24 e Java 17.
+- [x] Loja de pontos base na `main`: proprietário cria/edita/desativa recompensas; cliente resgata; o servidor consulta saldo e custo reais, valida stock, desconta pontos e regista a operação numa transação idempotente; o restaurante confirma a entrega.
+- [x] QR temporário de utilização única para atribuição de pontos por funcionário autorizado; o QR é validado no servidor e pertence ao cartão autenticado do cliente.
+- [ ] CI da branch atual: seis variantes, testes unitários, replay da migration, autorização entre restaurantes e smoke tests Android 8/16.
+- [ ] Loja por plano: Essencial 5 prémios ativos sem fotos; Profissional 15 com uma foto; Premium 50 com uma foto. O limite é aplicado numa RPC server-side com bloqueio por restaurante; o plano reside numa tabela privada e não é aceite do APK.
+- [ ] Fotografias: JPEG, uma imagem por prémio, até 1,5 MB e 1280 px; upload/substituição/remoção apenas pelo proprietário do restaurante e com Pro/Premium. Bucket público apenas para leitura das fotos dos produtos.
+- [ ] Cliente Essencial: cartão, carta, pontos e resgates; sem reservas. A RPC de reservas deve recusar o plano Essencial mesmo que alguém chame diretamente o endpoint.
+- [ ] Atribuição dos planos existentes: a tabela privada começa sem atribuições e usa Essencial como fallback. Antes de ativar, atribuir Pro/Premium apenas depois de confirmar o plano contratado de cada restaurante; não inferir do APK instalado.
+- [ ] Resolver cancelamento de resgate pendente com reposição de pontos/stock; atualmente um resgate pendente reserva pontos e stock até ser entregue.
+- [ ] A pontuação por compra continua a ser atribuída por funcionário; não existe POS que prove automaticamente o valor da venda. Um funcionário autorizado pode abusar dos pontos, pelo que continuam necessários controlo e auditoria.
+- [ ] Histórico de migrations continua divergente: 57 versões no Supabase alojado e 55 ficheiros na `main` (quatro só locais e seis só remotas). Não aplicar a nova migration antes de backup, reconciliação e ensaio num ambiente descartável.
+- [ ] Testes E2E com contas de proprietário, funcionário, cliente e dois restaurantes; perda de rede, concorrência, resgates, fotografias, downgrade de plano, reservas e eliminação.
+- [ ] Backup/restauro, monitorização, política de privacidade, Data Safety, DPA, termos, Auth/SMTP/OAuth, keystore comercial e testes físicos ainda pendentes.
 
-**Funcionalidades que não devem ser anunciadas como ativas no Supabase alojado:** fichas técnicas/consumo automático, matriz granular de permissões, sync cloud de histórico/Memória e arquivo cloud de faturas. As tabelas necessárias e o bucket privado ainda não existem.
+**Segurança validada na fotografia do Supabase atual:** o cliente não pode escrever diretamente o saldo, custo, stock, resgates ou catálogo; as operações passam por RPCs autenticadas e as tabelas têm RLS. Isto não substitui os testes ponta a ponta e não protege contra abuso interno de um funcionário autorizado.
 
-**Regra:** um botão na interface ou um replay limpo na CI não prova que a funcionalidade esteja operacional no backend alojado. Não fazer deployment enquanto o histórico não estiver reconciliado e não existir backup/restauro verificado.
+**Não anunciar como concluído:** novas quotas por plano, fotos, variante Cliente Essencial e bloqueio de reservas por plano até a PR passar CI, ser integrada e a migration ser aplicada de forma controlada. Não fazer deployment em bloco enquanto a história de migrations e o backup/restauro não estiverem resolvidos.
+
+Ver [auditoria da loja de pontos](docs/LOYALTY-SHOP-SECURITY-AND-PLANS.md), [gate comercial](docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md) e [reconciliação de migrations](docs/SUPABASE-LIVE-MIGRATION-HISTORY-2026-11-07.md).
+
 
 ---
 
