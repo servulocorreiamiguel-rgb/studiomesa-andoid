@@ -628,5 +628,133 @@ GRANT EXECUTE ON FUNCTION public.get_restaurant_loyalty_entitlements(uuid) TO au
 GRANT EXECUTE ON FUNCTION public.save_loyalty_reward(uuid, uuid, text, text, integer, integer, boolean) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.set_loyalty_reward_image_path(uuid, uuid, text) TO authenticated;
 
+
+-- The Essencial customer app supports membership, points and reward redemption,
+-- but restaurant reservations are available only on Professional/Premium.
+CREATE OR REPLACE FUNCTION public.create_customer_reservation_request(
+    p_client_request_id uuid,
+    p_guest_name text,
+    p_guest_phone text,
+    p_party_size integer,
+    p_reservation_at timestamp with time zone,
+    p_duration_minutes integer DEFAULT 90,
+    p_notes text DEFAULT NULL::text
+)
+RETURNS TABLE(reservation_id uuid, status text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+DECLARE
+    v_user_id uuid := (SELECT auth.uid());
+    v_restaurant_id uuid;
+    v_name text := pg_catalog.trim(coalesce(p_guest_name, ''));
+    v_phone text := pg_catalog.trim(coalesce(p_guest_phone, ''));
+    v_notes text := pg_catalog.trim(coalesce(p_notes, ''));
+    v_existing public.restaurant_reservations%rowtype;
+    v_reservation_id uuid;
+BEGIN
+    IF v_user_id IS NULL THEN
+        RAISE EXCEPTION 'É necessário iniciar sessão.';
+    END IF;
+    IF p_client_request_id IS NULL THEN
+        RAISE EXCEPTION 'O identificador seguro do pedido está em falta.';
+    END IF;
+
+    SELECT lm.restaurant_id INTO v_restaurant_id
+    FROM public.loyalty_members lm
+    WHERE lm.auth_user_id = v_user_id
+    ORDER BY lm.created_at ASC
+    LIMIT 1;
+
+    IF v_restaurant_id IS NULL THEN
+        RAISE EXCEPTION 'Associa primeiro a tua conta ao restaurante.';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM private.restaurant_loyalty_entitlements e
+        WHERE e.restaurant_id = v_restaurant_id
+          AND e.plan_code IN ('profissional', 'premium')
+    ) THEN
+        RAISE EXCEPTION 'Os pedidos de reserva na aplicação Cliente estão disponíveis nos planos Profissional e Premium.';
+    END IF;
+
+    -- Idempotent retry: a reservation may already have been assigned a table by the restaurant.
+    SELECT r.* INTO v_existing
+    FROM public.restaurant_reservations r
+    WHERE r.restaurant_id = v_restaurant_id
+      AND r.created_by = v_user_id
+      AND r.client_request_id = p_client_request_id
+    FOR UPDATE;
+
+    IF FOUND THEN
+        IF v_existing.guest_name = v_name
+           AND v_existing.guest_phone = v_phone
+           AND v_existing.party_size = p_party_size
+           AND v_existing.reservation_at = p_reservation_at
+           AND v_existing.duration_minutes = p_duration_minutes
+           AND v_existing.notes = v_notes THEN
+            RETURN QUERY SELECT v_existing.id, v_existing.status;
+            RETURN;
+        END IF;
+        RAISE EXCEPTION 'Esta tentativa já foi utilizada com dados diferentes.';
+    END IF;
+
+    IF pg_catalog.char_length(v_name) NOT BETWEEN 1 AND 100 THEN
+        RAISE EXCEPTION 'O nome deve ter entre 1 e 100 caracteres.';
+    END IF;
+    IF pg_catalog.char_length(v_phone) > 40 OR pg_catalog.char_length(v_notes) > 1000 THEN
+        RAISE EXCEPTION 'O contacto ou as notas excedem o limite permitido.';
+    END IF;
+    IF p_party_size IS NULL OR p_party_size NOT BETWEEN 1 AND 60 THEN
+        RAISE EXCEPTION 'O número de pessoas deve estar entre 1 e 60.';
+    END IF;
+    IF p_reservation_at IS NULL OR p_reservation_at < now() THEN
+        RAISE EXCEPTION 'A data da reserva tem de ser futura.';
+    END IF;
+    IF p_reservation_at > now() + interval '1 year' THEN
+        RAISE EXCEPTION 'A reserva não pode estar a mais de um ano de distância.';
+    END IF;
+    IF p_duration_minutes IS NULL OR p_duration_minutes NOT BETWEEN 30 AND 480 THEN
+        RAISE EXCEPTION 'A duração deve estar entre 30 e 480 minutos.';
+    END IF;
+
+    INSERT INTO public.restaurant_reservations (
+        restaurant_id, guest_name, guest_phone, party_size, reservation_at,
+        duration_minutes, table_number, status, notes, created_by, client_request_id, updated_at
+    ) VALUES (
+        v_restaurant_id, v_name, v_phone, p_party_size, p_reservation_at,
+        p_duration_minutes, NULL, 'Pendente', v_notes, v_user_id, p_client_request_id, now()
+    )
+    ON CONFLICT (restaurant_id, created_by, client_request_id)
+        WHERE client_request_id IS NOT NULL
+    DO NOTHING
+    RETURNING id INTO v_reservation_id;
+
+    IF v_reservation_id IS NULL THEN
+        SELECT r.* INTO v_existing
+        FROM public.restaurant_reservations r
+        WHERE r.restaurant_id = v_restaurant_id
+          AND r.created_by = v_user_id
+          AND r.client_request_id = p_client_request_id
+        FOR UPDATE;
+        IF FOUND
+           AND v_existing.guest_name = v_name
+           AND v_existing.guest_phone = v_phone
+           AND v_existing.party_size = p_party_size
+           AND v_existing.reservation_at = p_reservation_at
+           AND v_existing.duration_minutes = p_duration_minutes
+           AND v_existing.notes = v_notes THEN
+            RETURN QUERY SELECT v_existing.id, v_existing.status;
+            RETURN;
+        END IF;
+        RAISE EXCEPTION 'Não foi possível confirmar o pedido de reserva. Atualiza a lista antes de voltar a tentar.';
+    END IF;
+
+    RETURN QUERY SELECT v_reservation_id, 'Pendente'::text;
+END;
+$function$;
+
 NOTIFY pgrst, 'reload schema';
 COMMIT;
