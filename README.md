@@ -1,6 +1,6 @@
-> **Estado em 07/11/2026 — NÃO PRONTO PARA VENDA/PRODUÇÃO.** A aplicação tem cinco variantes Android. Os APKs de demonstração continuam a ser builds debug; a assinatura comercial e a validação em dispositivos físicos continuam por concluir.
+> **Estado em 07/11/2026 — NÃO PRONTO PARA VENDA/PRODUÇÃO.** A versão principal tem cinco variantes Android; a branch atual prepara uma sexta variante, Cliente Essencial, ainda pendente de CI e integração. Os APKs de demonstração continuam a ser builds debug; a assinatura comercial e a validação em dispositivos físicos continuam por concluir.
 >
-> **CI da integração IA/gestor (PR #88):** compilação das cinco variantes, testes unitários, Android Lint e validação da configuração comercial passaram. Os testes de interface Android 8 e Android 16 ainda estavam em execução na última verificação.
+> **CI da integração IA/gestor (PR #88):** compilação das variantes da versão principal, testes unitários, Android Lint e validação da configuração comercial passaram. Os testes de interface Android 8 e Android 16 ainda estavam em execução na última verificação.
 >
 > **Backend Supabase:** projeto ativo. Existem 57 versões de migrations no Supabase e 55 ficheiros na `main`; continuam quatro versões apenas no repositório e seis apenas no projeto alojado. As três migrations recentes estão alinhadas com as versões remotas. Consultar [reconciliação da história de migrations](docs/SUPABASE-LIVE-MIGRATION-HISTORY-2026-11-07.md).
 >
@@ -28,7 +28,7 @@
 - Testes de privacidade, segurança e proteção de dados; revisão independente da configuração de produção. A proteção de palavras-passe comprometidas no Supabase ainda não está ativada.
 - Credenciais próprias de OAuth para Google/Microsoft, caso se queira disponibilizar esses métodos de login. O código Android usa PKCE para OAuth, registo e recuperação e guarda o verificador cifrado no Android Keystore; estes fluxos ainda precisam de testes ponta a ponta num dispositivo real. É necessário autorizar o URL de retorno e configurar um fornecedor SMTP para o envio real dos emails.
 - Configuração de release comercial assinada e workflow manual para gerar AABs com uma chave privada guardada em GitHub Actions Secrets. Ainda é necessário escolher o identificador de pacote definitivo, configurar a chave, executar o workflow e validar as variantes em dispositivos reais; o workflow não publica automaticamente na Google Play.
-- A configuração de compilação usa compileSdk/targetSdk 36, Android Gradle Plugin 8.13.2 e Gradle 8.13. O workflow compila os cinco APKs de demonstração/debug, executa testes unitários nas cinco variantes de distribuição e Android Lint. Mesmo com CI aprovado, a app continua a exigir testes ponta a ponta; os APKs atuais não são versões comerciais assinadas.
+- A configuração de compilação usa compileSdk/targetSdk 36, Android Gradle Plugin 8.13.2 e Gradle 8.13. O workflow na branch atual compila seis APKs de demonstração/debug e executa testes unitários nas seis variantes de distribuição e Android Lint. Mesmo com CI aprovado, a app continua a exigir testes ponta a ponta; os APKs atuais não são versões comerciais assinadas.
 
 ## Preparação comercial
 
@@ -43,11 +43,12 @@
 
 O backend usa Supabase Auth e PostgreSQL com Row Level Security. Os códigos de adesão dos clientes ficam num esquema privado, separados das tabelas expostas à aplicação. As tabelas de mesas, carta e pedidos usam políticas de segurança por restaurante. Algumas funções protegidas usam SECURITY DEFINER para executar operações verificadas do lado da base de dados; as regras devem continuar a ser auditadas.
 
-### Compilar os cinco APKs de demonstração
+### Compilar os APKs de demonstração (seis variantes na branch em preparação)
 
 O workflow **Actions → Build StudioMesa Android APK** gera:
 
 - `app-essencial-restaurante-debug.apk`
+- `app-essencial-cliente-debug.apk` (nova variante da branch em preparação)
 - `app-profissional-restaurante-debug.apk`
 - `app-profissional-cliente-debug.apk`
 - `app-premium-restaurante-debug.apk`
@@ -56,7 +57,7 @@ O workflow **Actions → Build StudioMesa Android APK** gera:
 Com Java 17, Android Gradle Plugin 8.10.0, Gradle 8.11.1 e Android SDK 36:
 
 ```bash
-gradle --no-daemon assembleEssencialRestauranteDebug assembleProfissionalRestauranteDebug assembleProfissionalClienteDebug assemblePremiumRestauranteDebug assemblePremiumClienteDebug
+gradle --no-daemon assembleEssencialRestauranteDebug assembleEssencialClienteDebug assembleProfissionalRestauranteDebug assembleProfissionalClienteDebug assemblePremiumRestauranteDebug assemblePremiumClienteDebug
 ```
 
 Os APKs de demonstração não devem ser tratados como versão comercial final nem apresentados como testados em produção. Para preparar bundles comerciais assinados, segue [`RELEASE-SETUP.md`](RELEASE-SETUP.md). O workflow manual cria cinco AABs assinados para a Google Play e cinco APKs assinados para instalação direta; não publica automaticamente na Google Play. Os identificadores de pacote finais têm de ser escolhidos antes da publicação.
