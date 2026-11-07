@@ -197,12 +197,13 @@ class MainActivity : ComponentActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 when {
-                    activePage == "Assistente" && assistantToolsVisible -> {
+                    activePage == "Assistente económico" && assistantToolsVisible -> {
                         assistantToolsVisible = false
                         renderApp()
                     }
-                    activePage == "Assistente" -> {
+                    activePage == "IA" || activePage == "Assistente económico" -> {
                         activePage = "Início"
+                        assistantToolsVisible = false
                         renderApp()
                     }
                     else -> finish()
@@ -401,7 +402,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun availablePages(): List<String> {
-        val pages = mutableListOf("Início", "Mesas", "Pedidos", "Cozinha", "Carta", "Pontos", "Assistente", "Conta")
+        val pages = mutableListOf("Início", "Mesas", "Pedidos", "Cozinha", "Carta", "Pontos", "IA", "Assistente económico", "Conta")
         if (hasCalculator) {
             pages.add("Reservas")
             pages.add("Preço Justo")
@@ -409,6 +410,10 @@ class MainActivity : ComponentActivity() {
         if (isPremium) {
             pages.add("Stock")
             pages.add("Análise")
+        }
+
+        if (hasRemoteRestaurant() && backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") {
+            pages.remove("Assistente económico")
         }
 
         val isStaff = hasRemoteRestaurant() &&
@@ -468,7 +473,7 @@ class MainActivity : ComponentActivity() {
         val pageGroups = listOf(
             "OPERAÇÃO" to listOf("Início", "Mesas", "Pedidos", "Cozinha"),
             "GESTÃO DO RESTAURANTE" to listOf("Carta", "Pontos", "Reservas", "Preço Justo", "Stock", "Análise"),
-            "ASSISTÊNCIA" to listOf("Assistente"),
+            "ASSISTÊNCIA" to listOf("IA", "Assistente económico"),
             "CONTA" to listOf("Conta")
         )
         pageGroups.forEach { (groupTitle, groupPages) ->
@@ -490,6 +495,7 @@ class MainActivity : ComponentActivity() {
                         isFocusable = true
                         setOnClickListener {
                             dialog.dismiss()
+                            assistantToolsVisible = false
                             activePage = page
                             renderApp()
                         }
@@ -547,7 +553,8 @@ class MainActivity : ComponentActivity() {
         "Preço Justo" -> "€"
         "Stock" -> "▣"
         "Análise" -> "↗"
-        "Assistente" -> "✦"
+        "IA" -> "✦"
+        "Assistente económico" -> "€"
         else -> "•"
     }
     /**
@@ -595,8 +602,13 @@ class MainActivity : ComponentActivity() {
             return
         }
         if (activePage !in availablePages()) activePage = "Início"
-        if (activePage == "Assistente") {
-            if (assistantToolsVisible) renderAssistantToolsScreen() else renderAssistantChatScreen()
+        if (activePage == "IA" || activePage == "Assistente económico") {
+            val economicAssistant = activePage == "Assistente económico"
+            if (economicAssistant && assistantToolsVisible) {
+                renderAssistantToolsScreen()
+            } else {
+                renderAssistantChatScreen(isEconomicAssistant = economicAssistant)
+            }
             return
         }
 
@@ -735,8 +747,10 @@ class MainActivity : ComponentActivity() {
         updateInventoryAutoRefresh()
     }
 
-    private fun renderAssistantChatScreen() {
-        val scope = assistantChatScope()
+    private fun renderAssistantChatScreen(
+        isEconomicAssistant: Boolean = activePage == "Assistente económico"
+    ) {
+        val scope = assistantConversationScope(isEconomicAssistant)
         if (assistantChatScopeKey != scope) {
             assistantChatScopeKey = scope
             activeAssistantConversationId = null
@@ -780,8 +794,15 @@ class MainActivity : ComponentActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(6), 0, dp(2), 0)
         }
-        titleStack.addView(label("Assistente StudioMesa", 15f, true, forestDeep))
-        titleStack.addView(label(displayRestaurantName(), 9.5f, false, muted).apply {
+        titleStack.addView(label(
+            if (isEconomicAssistant) "Assistente económico" else "IA StudioMesa",
+            15f, true, forestDeep
+        ))
+        titleStack.addView(label(
+            (if (isEconomicAssistant) "Faturas e gestão financeira" else "Conversa geral") +
+                " · " + displayRestaurantName(),
+            9.5f, false, muted
+        ).apply {
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
         })
@@ -826,34 +847,36 @@ class MainActivity : ComponentActivity() {
         }
         toolbar.addView(syncButton, LinearLayout.LayoutParams(dp(34), dp(44)))
 
-        val documentsButton = TextView(this).apply {
-            text = "▤"
-            textSize = 19f
-            gravity = Gravity.CENTER
-            setTextColor(forestDeep)
-            contentDescription = "Abrir documentos e faturas"
-            background = rippleBackground(paper, 12)
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { showSupplierInvoiceArchiveDialog() }
-        }
-        toolbar.addView(documentsButton, LinearLayout.LayoutParams(dp(34), dp(44)))
-
-        val toolsButton = TextView(this).apply {
-            text = "⚙"
-            textSize = 19f
-            gravity = Gravity.CENTER
-            setTextColor(forestDeep)
-            contentDescription = "Abrir ferramentas do assistente"
-            background = rippleBackground(paper, 12)
-            isClickable = true
-            isFocusable = true
-            setOnClickListener {
-                assistantToolsVisible = true
-                renderApp()
+        if (isEconomicAssistant) {
+            val documentsButton = TextView(this).apply {
+                text = "▤"
+                textSize = 19f
+                gravity = Gravity.CENTER
+                setTextColor(forestDeep)
+                contentDescription = "Abrir documentos e faturas"
+                background = rippleBackground(paper, 12)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { showSupplierInvoiceArchiveDialog() }
             }
+            toolbar.addView(documentsButton, LinearLayout.LayoutParams(dp(34), dp(44)))
+
+            val toolsButton = TextView(this).apply {
+                text = "€"
+                textSize = 19f
+                gravity = Gravity.CENTER
+                setTextColor(forestDeep)
+                contentDescription = "Abrir ferramentas económicas"
+                background = rippleBackground(paper, 12)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    assistantToolsVisible = true
+                    renderApp()
+                }
+            }
+            toolbar.addView(toolsButton, LinearLayout.LayoutParams(dp(36), dp(44)))
         }
-        toolbar.addView(toolsButton, LinearLayout.LayoutParams(dp(36), dp(44)))
 
         val newChatButton = TextView(this).apply {
             text = "＋"
@@ -905,21 +928,31 @@ class MainActivity : ComponentActivity() {
 
         if (turns.isEmpty()) {
             val welcome = makeCard(16, white)
-            welcome.addView(label("Nova conversa iniciada. Em que posso ajudar?", 17f, true, forestDeep))
+            welcome.addView(label(
+                if (isEconomicAssistant) "Vamos analisar as finanças do restaurante." else "Nova conversa. Em que posso ajudar?",
+                17f, true, forestDeep
+            ))
             addGap(welcome, 6)
             welcome.addView(label("EXPERIMENTA PERGUNTAR", 9f, true, forestSoft))
             addGap(welcome, 5)
             addGap(welcome, 6)
             welcome.addView(label(
-                "Com o modelo instalado, podes conversar sobre assuntos gerais, aprender, escrever, traduzir, programar e resolver problemas, além de analisar a gestão do restaurante. Sem o modelo, as respostas ficam limitadas às funções locais.",
+                if (isEconomicAssistant)
+                    "Posso analisar custos, tesouraria, fornecedores e metadados das faturas importadas. A leitura é limitada aos campos guardados no arquivo; não prova pagamentos nem substitui a contabilidade."
+                else
+                    "Com o modelo instalado, podes conversar sobre assuntos gerais, aprender, escrever, traduzir, programar e resolver problemas. A IA geral não consulta faturas nem dados financeiros privados.",
                 12f, false, muted
             ))
             conversation.addView(welcome, cardParams())
-            listOf(
-                "Como posso melhorar a margem dos pratos?",
-                "Que custos devo rever?",
-                "Faz um resumo da operação"
-            ).forEach { prompt ->
+            (if (isEconomicAssistant) listOf(
+                "Resume as faturas pendentes e confirmadas.",
+                "Agrupa as despesas por fornecedor.",
+                "Que dados preciso para analisar a tesouraria?"
+            ) else listOf(
+                "Explica-me um conceito de programação.",
+                "Ajuda-me a escrever um texto profissional.",
+                "Como posso aprender um tema novo?"
+            )).forEach { prompt ->
                 conversation.addView(secondaryButton(prompt) {
                     sendAssistantMessage(prompt)
                 }, LinearLayout.LayoutParams(-1, dp(42)).apply {
@@ -939,7 +972,10 @@ class MainActivity : ComponentActivity() {
 
         if (assistantSending) {
             val thinkingCard = makeCard(12)
-            thinkingCard.addView(label("STUDIOMESA · IA LOCAL", 9f, true, forestSoft))
+            thinkingCard.addView(label(
+                if (isEconomicAssistant) "STUDIOMESA · ASSISTENTE ECONÓMICO" else "STUDIOMESA · IA LOCAL",
+                9f, true, forestSoft
+            ))
             addGap(thinkingCard, 5)
             assistantStreamingTextView = label("A analisar no dispositivo…", 13f, false, ink)
             thinkingCard.addView(assistantStreamingTextView)
@@ -1695,7 +1731,7 @@ class MainActivity : ComponentActivity() {
         assistantCloudLastSyncAtMillis = System.currentTimeMillis()
         Thread {
             val result = runCatching {
-                assistantCloudSyncCoordinator.sync(token, userId, restaurantId, assistantChatScope(), assistantChatStore)
+                assistantCloudSyncCoordinator.sync(token, userId, restaurantId, assistantConversationScope(), assistantChatStore)
             }
             runOnUiThread {
                 assistantCloudSyncInFlight = false
@@ -1729,6 +1765,9 @@ class MainActivity : ComponentActivity() {
             "demo:${BuildConfig.FLAVOR}"
         }
     }
+
+    private fun assistantConversationScope(economicAssistant: Boolean = activePage == "Assistente económico"): String =
+        assistantChatScope() + if (economicAssistant) ":economic" else ":general"
 
     private fun renderLocalAssistantModelCard(container: LinearLayout) {
         val modelInstalled = localAssistantModelManager.isModelInstalled()
@@ -1842,12 +1881,25 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    private fun buildLocalAssistantSystemInstruction(scope: String): String {
+    private fun buildLocalAssistantSystemInstruction(
+        scope: String,
+        economicAssistant: Boolean = activePage == "Assistente económico"
+    ): String {
         val snapshot = assistantSnapshot()
         val restaurantName = backendPrefs.getString("restaurant_name", "").orEmpty().ifBlank { "Restaurante sem nome configurado" }
         val memory = runCatching { assistantChatStore.readMemory(scope) }.getOrDefault("")
         return buildString {
             appendLine(AssistantGeneralConversationPolicy.SYSTEM_INSTRUCTION)
+            if (economicAssistant) {
+                appendLine("FUNÇÃO: és o Assistente económico do restaurante. Ajuda a interpretar receitas, custos, tesouraria, compras, fornecedores e documentos financeiros.")
+                appendLine("Podes consultar get_supplier_invoice_summary apenas para ler metadados de faturas guardadas. Usa a ferramenta quando a pergunta envolver faturas, fornecedores, totais, IVA, datas ou estados.")
+                appendLine("Os metadados disponíveis incluem fornecedor, número, datas, base tributável, IVA, total e estado de revisão. Não tens acesso ao texto integral do PDF, linhas de artigos nem comprovativos bancários.")
+                appendLine("Distingue sempre documentos pendentes, confirmados e rejeitados. Uma fatura confirmada pelo proprietário não significa que foi paga, reconciliada ou aceite fiscalmente.")
+                appendLine("Nunca aproves, rejeites, alteres, elimines ou pagues faturas. Não alteres dados contabilísticos. Só lês e recomendas.")
+            } else {
+                appendLine("FUNÇÃO: és a IA geral da StudioMesa. Responde a perguntas abertas sobre temas gerais e ajuda com aprendizagem, escrita, programação, tradução, planeamento e resolução de problemas.")
+                appendLine("Esta área não tem acesso a faturas nem a metadados financeiros privados do restaurante. Para essas consultas, encaminha o utilizador para Assistente económico.")
+            }
             appendLine("CAPACIDADES DESTA INSTALAÇÃO")
             appendLine("Reservas e referências de preço: ${if (hasCalculator) "disponíveis" else "não incluídas nesta variante"}. Stock e análise avançada: ${if (isPremium) "disponíveis" else "dependem do plano Premium"}. Modelo generativo local: ${if (localAssistantModelManager.isModelInstalled()) "instalado" else "ainda não instalado"}.")
             appendLine("A memória cifrada guarda automaticamente preferências, objetivos e contexto estável expressos claramente. Usa-a apenas quando for relevante; não afirmes que guardaste algo se não foi registado.")
@@ -1855,7 +1907,12 @@ class MainActivity : ComponentActivity() {
             appendLine("Não és contabilista certificado nem substituis aconselhamento fiscal, jurídico ou contabilístico. Distingue valores com IVA e sem IVA.")
             appendLine("Não podes alterar preços, stock, pedidos, reservas, pagamentos, permissões ou documentos. Apenas analisa e recomenda; qualquer operação exige confirmação humana através dos controlos da aplicação.")
             appendLine("A ferramenta search_public_wikipedia consulta apenas a Wikipédia em português ou inglês; não é navegação geral na Web nem fornece notícias em direto. Para informação de alto risco ou recente, pede confirmação numa fonte oficial atual.")
-            appendLine("Usa as ferramentas de leitura da StudioMesa apenas quando forem relevantes: get_restaurant_data para dados operacionais, calculate_menu_price_reference para referências de preço e get_supplier_invoice_summary para metadados de faturas.")
+            appendLine(
+                if (economicAssistant)
+                    "Usa ferramentas de leitura apenas quando forem relevantes: get_restaurant_data para dados operacionais, calculate_menu_price_reference para referências de preço e get_supplier_invoice_summary para metadados de faturas."
+                else
+                    "Usa apenas get_restaurant_data para dados operacionais e calculate_menu_price_reference para referências de preço, quando forem relevantes. A ferramenta de faturas não está disponível nesta área."
+            )
             appendLine()
             appendLine("CONTEXTO ATUAL DO STUDIO MESA")
             appendLine("Restaurante: $restaurantName")
@@ -1880,7 +1937,9 @@ class MainActivity : ComponentActivity() {
             }
             appendLine("Reservas disponíveis no contexto: ${if (snapshot.reservationsLoaded) "sim" else "não carregadas"}.")
             if (snapshot.reservationsLoaded) appendLine("Reservas pendentes: ${snapshot.pendingReservations}.")
-            appendLine("Quando existirem faturas importadas, usa get_supplier_invoice_summary para consultar apenas os metadados guardados. Não assumes que uma fatura foi paga nem que está contabilisticamente validada.")
+            if (economicAssistant) {
+                appendLine("Quando existirem faturas importadas, usa get_supplier_invoice_summary para consultar apenas os metadados guardados. Não assumes que uma fatura foi paga nem que está contabilisticamente validada.")
+            }
             if (memory.isNotBlank()) {
                 appendLine()
                 appendLine("MEMÓRIA DO UTILIZADOR PARA ESTE RESTAURANTE")
@@ -1953,7 +2012,8 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        val scope = assistantChatScope()
+        val economicAssistant = activePage == "Assistente económico"
+        val scope = assistantConversationScope(economicAssistant)
         val turnUsesDeepThinking = assistantDeepThinkingEnabled && localAssistantModelManager.isModelInstalled()
         try {
             val conversationId = assistantChatStore.appendTurn(
@@ -1977,11 +2037,12 @@ class MainActivity : ComponentActivity() {
 
                 localAssistantModelManager.generate(
                     conversationId = conversationId,
-                    systemInstruction = buildLocalAssistantSystemInstruction(scope),
+                    systemInstruction = buildLocalAssistantSystemInstruction(scope, economicAssistant),
                     snapshot = assistantSnapshot(),
                     history = previousTurns,
                     userMessage = question,
                     deepThinking = turnUsesDeepThinking,
+                    economicMode = economicAssistant,
                     onToken = { token ->
                         runOnUiThread {
                             assistantStreamingTextView?.append(token)
@@ -2011,7 +2072,7 @@ class MainActivity : ComponentActivity() {
                 return
             }
 
-            val reply = answerAssistantChatMessage(question, scope, conversationId)
+            val reply = answerAssistantChatMessage(question, scope, conversationId, economicAssistant)
             assistantChatStore.appendTurn(scope, conversationId, "assistant", reply)
             syncAssistantCloud(silent = true)
         } catch (error: Exception) {
@@ -2027,7 +2088,8 @@ class MainActivity : ComponentActivity() {
     private fun answerAssistantChatMessage(
         question: String,
         scope: String,
-        conversationId: String
+        conversationId: String,
+        economicAssistant: Boolean = activePage == "Assistente económico"
     ): String {
         val normalized = java.text.Normalizer.normalize(
             question.lowercase(Locale.ROOT),
@@ -2063,8 +2125,11 @@ class MainActivity : ComponentActivity() {
             "fatura", "faturas", "factura", "facturas", "saft", "documento contabilistico",
             "fatura de fornecedor", "despesa de fornecedor"
         ).any { normalized.contains(it) }
-        if (asksAboutInvoices) {
-            val invoices = runCatching { supplierInvoiceStore.list(scope) }.getOrDefault(emptyList())
+        if (asksAboutInvoices && !economicAssistant) {
+            return "Para consultar faturas, fornecedores e indicadores financeiros do restaurante, abre a secção «Assistente económico»."
+        }
+        if (asksAboutInvoices && economicAssistant) {
+            val invoices = runCatching { supplierInvoiceStore.list(assistantChatScope()) }.getOrDefault(emptyList())
             if (invoices.isEmpty()) {
                 return "O arquivo ainda não tem faturas importadas. Abre Documentos e faturas para importar um PDF ou uma fotografia. A leitura é feita localmente e os campos ficam pendentes até os confirmares."
             }
@@ -2123,7 +2188,7 @@ class MainActivity : ComponentActivity() {
 
 
     private fun showAssistantHistoryDialog() {
-        val scope = assistantChatScope()
+        val scope = assistantConversationScope()
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(8), dp(18), dp(4))
@@ -2217,7 +2282,7 @@ class MainActivity : ComponentActivity() {
 
 
     private fun showAssistantMemoryDialog() {
-        val scope = assistantChatScope()
+        val scope = assistantConversationScope()
         val memory = runCatching { assistantChatStore.readMemory(scope) }.getOrDefault("")
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -2308,8 +2373,8 @@ class MainActivity : ComponentActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(8), 0, 0, 0)
         }
-        titleStack.addView(label("Assistente StudioMesa", 16f, true, forestDeep))
-        titleStack.addView(label("Ferramentas e análises", 10f, false, muted))
+        titleStack.addView(label("Assistente económico", 16f, true, forestDeep))
+        titleStack.addView(label("Indicadores e documentos", 10f, false, muted))
         toolbar.addView(titleStack, LinearLayout.LayoutParams(0, -2, 1f))
         appRoot.addView(toolbar, LinearLayout.LayoutParams(-1, -2))
 
@@ -2324,8 +2389,14 @@ class MainActivity : ComponentActivity() {
         }
         scroll.addView(content)
         appRoot.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        sectionHeading(content, "Análises do restaurante", "Indicadores, alertas e recomendações a partir dos dados disponíveis.")
-        renderAssistant(content, showPageIntro = false)
+        sectionHeading(content, "Ferramentas económicas", "Analisa indicadores, custos e faturas importadas. Os cálculos são indicativos e as operações continuam sob controlo do proprietário.")
+        renderEconomicInvoiceSummary(content)
+        addGap(content, 8)
+        renderEconomicManager(content)
+        if (isPremium) {
+            addGap(content, 8)
+            renderRestaurantPriceAdvisor(content)
+        }
 
         setContentView(appRoot)
         updateKitchenAutoRefresh()
@@ -2346,7 +2417,10 @@ class MainActivity : ComponentActivity() {
             "Reservas" -> renderReservations(container)
             "Stock" -> renderStock(container)
             "Análise" -> renderAnalysis(container)
-            "Assistente" -> renderAssistant(container)
+            "Assistente económico" -> {
+                renderEconomicInvoiceSummary(container)
+                renderEconomicManager(container)
+            }
             else -> renderHome(container)
         }
     }
@@ -2412,8 +2486,15 @@ class MainActivity : ComponentActivity() {
                 activePage = "Análise"; renderApp()
             }
         }
-        actionCard(container, "IA", "Assistente StudioMesa", "Sugestões de operação e preços com os dados disponíveis.", "ABRIR ASSISTENTE") {
-            activePage = "Assistente"; renderApp()
+        actionCard(container, "IA", "IA StudioMesa", "Conversa geral para aprender, escrever, programar e resolver problemas.", "ABRIR IA") {
+            assistantToolsVisible = false
+            activePage = "IA"; renderApp()
+        }
+        if (!hasRemoteRestaurant() || backendPrefs.getString("restaurant_role", "").orEmpty() == "owner") {
+            actionCard(container, "€", "Assistente económico", "Analisa custos, tesouraria e faturas importadas do restaurante.", "ABRIR ASSISTENTE ECONÓMICO") {
+                assistantToolsVisible = false
+                activePage = "Assistente económico"; renderApp()
+            }
         }
 
         addGap(container, 6)
@@ -7438,6 +7519,39 @@ class MainActivity : ComponentActivity() {
             else "Fonte atual: dados guardados em cache pela aplicação. Confirma a última atualização antes de decidir; esta análise não verifica a conectividade em tempo real.",
             11f, false, muted
         ))
+    }
+
+
+    private fun renderEconomicInvoiceSummary(container: LinearLayout) {
+        val invoices = runCatching { supplierInvoiceStore.list(assistantChatScope()) }.getOrDefault(emptyList())
+        val approved = invoices.filter { it.reviewStatus == "approved" }
+        val pending = invoices.filter { it.reviewStatus == "pending_review" }
+        val rejected = invoices.filter { it.reviewStatus == "rejected" }
+        fun total(records: List<SupplierInvoiceRecord>): BigDecimal =
+            records.fold(BigDecimal.ZERO) { sum, invoice ->
+                sum.add(invoice.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO)
+            }
+
+        sectionHeading(container, "Faturas de fornecedores", "A IA económica pode consultar estes metadados depois de importares e reveres os documentos.")
+        val card = makeCard(14)
+        card.addView(label("${invoices.size} documentos arquivados", 16f, true, forestDeep))
+        addGap(card, 5)
+        card.addView(label(
+            "Confirmados: ${approved.size} · ${formatInvoiceEuro(total(approved))}\n" +
+                "Pendentes de revisão: ${pending.size} · ${formatInvoiceEuro(total(pending))}\n" +
+                "Rejeitados: ${rejected.size} · ${formatInvoiceEuro(total(rejected))}",
+            12f, false, ink
+        ))
+        addGap(card, 6)
+        card.addView(label(
+            "A IA lê fornecedor, número, datas, valores base/IVA/total e estado. Não lê o PDF completo nem as linhas de artigos. Uma fatura confirmada não prova pagamento nem validação contabilística.",
+            10.5f, false, muted
+        ))
+        addGap(card, 8)
+        card.addView(secondaryButton("Abrir arquivo de faturas") {
+            showSupplierInvoiceArchiveDialog()
+        }, LinearLayout.LayoutParams(-1, dp(44)))
+        container.addView(card, cardParams())
     }
 
 
