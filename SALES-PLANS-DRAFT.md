@@ -50,6 +50,7 @@ Os preços abaixo são os valores de referência que já estavam definidos para 
 - Ecrã de cozinha com atualização periódica enquanto está aberto.
 - Exportação CSV de dados operacionais.
 - IA local para perguntas e apoio geral.
+- Assistente económico para o proprietário, OCR local de faturas e arquivo/histórico cloud, com revisão humana dos campos extraídos.
 - Loja de fidelização configurável pelo proprietário: recompensas, custo em pontos, stock e ativação/desativação.
 
 **Limite:** não inclui a aplicação Cliente independente nem o fluxo completo de reservas do cliente. A pesquisa geral na Internet depende da configuração de um fornecedor externo; não deve ser prometida como ativa antes disso.
@@ -75,9 +76,6 @@ Inclui o Profissional, mais:
 - Inventário e movimentos de stock.
 - Custos unitários e histórico de custo.
 - Análise operacional avançada.
-- OCR local de faturas de fornecedores.
-- Assistente económico com ferramentas de leitura de dados do restaurante e de metadados das faturas.
-- Histórico e memória cloud do assistente e arquivo privado cloud de faturas, sujeitos a testes de sincronização e recuperação.
 
 **Limites:** as fichas técnicas e o consumo automático de ingredientes ainda não estão ativos no Supabase alojado. O OCR exige revisão humana antes de qualquer utilização contabilística. A IA não aprova, altera nem paga faturas e não substitui um contabilista certificado.
 
