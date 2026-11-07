@@ -95,19 +95,20 @@ class AssistantChatStoreInstrumentedTest {
                 "Prefiro respostas diretas e em português de Portugal."
             )
 
+            val reopenedStore = AssistantChatStore(context)
             assertEquals(
                 "• respostas diretas e em português de Portugal",
-                store.readMemory(scope)
+                reopenedStore.readMemory(scope)
             )
-            assertTrue(store.readMemoryUpdatedAtMillis(scope) > 0L)
+            assertTrue(reopenedStore.readMemoryUpdatedAtMillis(scope) > 0L)
 
             // An ordinary question is kept in history but does not become a memory note.
-            store.appendTurn(scope, conversationId, "user", "Quanto custa produzir uma sopa?")
+            reopenedStore.appendTurn(scope, conversationId, "user", "Quanto custa produzir uma sopa?")
             assertEquals(
                 "• respostas diretas e em português de Portugal",
-                store.readMemory(scope)
+                reopenedStore.readMemory(scope)
             )
-            assertEquals("", store.readMemory(otherScope))
+            assertEquals("", reopenedStore.readMemory(otherScope))
         } finally {
             runCatching { store.clearScope(scope) }
             runCatching { store.clearScope(otherScope) }
