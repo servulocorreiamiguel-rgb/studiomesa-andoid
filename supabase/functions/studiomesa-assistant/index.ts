@@ -115,6 +115,10 @@ ${sourceText}
         "Accept": "application/json",
         "x-goog-api-key": apiKey,
       },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.45, maxOutputTokens: 2048 },
+      }),
       signal: AbortSignal.timeout(45_000),
     },
   );
