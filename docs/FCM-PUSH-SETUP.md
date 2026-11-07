@@ -2,7 +2,7 @@
 
 ## Estado
 
-A aplicação tem um monitor de atividade e a proposta PR #91 inclui notificações locais em primeiro plano. Isso não é push remoto e não garante avisos depois de fechar a app.
+A branch atual já integra notificações locais de atividade em primeiro plano: novos pedidos, novas reservas e novos resgates para a gestão; alterações de reservas e entrega de recompensas para o cliente. O snapshot evita duplicados e o primeiro carregamento cria apenas uma linha de base. A app consulta o servidor de 60 em 60 segundos enquanto a Activity está retomada e abre a secção certa ao tocar no aviso. Isto não é push remoto e não garante avisos depois de fechar a app.
 
 As notificações push requerem um projeto Firebase e credenciais de servidor controladas pelo responsável pela StudioMesa. Não se deve inventar nem incluir credenciais no repositório.
 
