@@ -34,7 +34,7 @@ O repositório `litert-community` é uma conversão comunitária e declara não 
 
 ## Privacidade e utilização
 
-A geração do texto continua local. Quando a ferramenta de pesquisa é usada, a aplicação envia apenas uma consulta pública curta à API da Wikipédia em português (e só tenta inglês se não houver resultados). Não envia mensagens completas, histórico nem dados operacionais da StudioMesa. Os resultados incluem ligações à fonte; a disponibilidade e os limites são definidos pela Wikimedia. A pesquisa não é uma busca geral na Web e não deve ser usada como confirmação de notícias recentes ou decisões críticas.
+A geração do texto continua local. A pesquisa enciclopédica pode consultar a Wikipédia. A integração de pesquisa geral na Web usa uma Edge Function autenticada do Supabase e o fornecedor Tavily. A aplicação envia apenas uma pergunta pública curta; não envia o histórico completo nem o contexto operacional da StudioMesa. A chave Tavily fica guardada nos Secrets do servidor e nunca é incluída no APK. A pesquisa geral requer sessão iniciada e configuração de TAVILY_API_KEY no Supabase. O plano gratuito anunciado pelo Tavily tem um limite mensal; não é utilização ilimitada. Os resultados incluem excertos, ligações e, quando disponível, a data de publicação. São pistas para verificação, não uma garantia de verdade. A IA deve comparar fontes independentes, preferir fontes primárias e admitir quando não consegue confirmar uma afirmação.
 
 Depois da instalação, a inferência é executada localmente. As mensagens, o histórico e o contexto selecionado para o modelo não são enviados a um serviço externo de IA por esta funcionalidade. A transferência inicial do ficheiro requer Internet e consome cerca de 736 MB de dados.
 
