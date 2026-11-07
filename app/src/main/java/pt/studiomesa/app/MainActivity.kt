@@ -751,6 +751,7 @@ class MainActivity : ComponentActivity() {
         isEconomicAssistant: Boolean = activePage == "Assistente económico"
     ) {
         val scope = assistantConversationScope(isEconomicAssistant)
+        if (isEconomicAssistant) refreshSupplierInvoicesFromCloud(showFeedback = false)
         if (assistantChatScopeKey != scope) {
             assistantChatScopeKey = scope
             activeAssistantConversationId = null
@@ -1706,8 +1707,10 @@ class MainActivity : ComponentActivity() {
                 )
             }
             if (showFeedback) Toast.makeText(this, "${rows.length()} fatura(s) no arquivo privado.", Toast.LENGTH_SHORT).show()
+            if (activePage == "Assistente económico" && !assistantSending && !isFinishing && !isDestroyed) {
+                renderApp()
+            }
         }
-    }
 
     private fun parseServerTimestamp(value: String): Long =
         runCatching { java.time.Instant.parse(value).toEpochMilli() }.getOrDefault(0L)
