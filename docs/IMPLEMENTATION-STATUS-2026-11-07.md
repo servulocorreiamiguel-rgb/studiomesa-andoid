@@ -31,6 +31,11 @@ Uma consulta de catálogo ao PostgreSQL confirmou:
 
 O workflow silencioso do GitHub Actions está configurado para chamar o keepalive quatro vezes por dia. A função apenas devolve `true`, não consulta nem altera dados do restaurante e não apresenta mensagens na aplicação. O agendamento não garante que o Supabase nunca seja pausado.
 
+
+### Limite atual dos cargos
+
+A app tem uma interface para o proprietário ativar/desativar seis áreas por funcionário: pedidos, mesas, reservas, carta, stock e fidelização. O modelo de dados atual continua a distinguir apenas proprietário e funcionário; não existem perfis prontos de gerente, empregado de mesa, cozinha e caixa. Algumas áreas ainda não separam leitura de alteração. Para criar cargos verdadeiramente seguros, será necessário distinguir ações de consulta e edição, testar cada fluxo e não conceder, por exemplo, edição da carta a alguém que só precisa de a consultar. Também não existe um módulo de caixa ou processamento de pagamentos.
+
 ## Próximo trabalho técnico
 
 ### 1. Reconciliar as migrações
