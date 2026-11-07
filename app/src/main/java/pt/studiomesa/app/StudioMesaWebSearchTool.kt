@@ -55,6 +55,6 @@ internal class StudioMesaWebSearchTool(context: Context) : OpenApiTool {
         const val MAX_ERROR_CHARS = 300
         val EMAIL_PATTERN = Regex("""[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}""", RegexOption.IGNORE_CASE)
         val LONG_NUMBER_PATTERN = Regex("""(?<!\d)(?:\d[ -]?){9,}(?!\d)""")
-        val PRIVATE_ID_PATTERN = Regex("""(?i)\b(?:NIF|NIPC|IBAN)\s*[:#]?\s*[A-Z0-9 -]{8,}""")
+        val PRIVATE_ID_PATTERN = Regex("""(?i)\b(?:NIF|NIPC)\s*[:#]?\s*\d(?:[ -]?\d){8}\b|\bIBAN\s*[:#]?\s*[A-Z]{2}\d{2}[A-Z0-9 ]{10,30}\b""")
     }
 }
