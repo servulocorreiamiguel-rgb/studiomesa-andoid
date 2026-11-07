@@ -81,14 +81,14 @@ async function searchPublicWeb(query: string, apiKey: string): Promise<SearchSou
   });
 }
 
-async function generateAnswer(message: string, sources: SearchSource[], apiKey: string): Promise<string> {
+async function generateAnswer(message: string, sources: SearchSource[], searchWasRequested: boolean, apiKey: string): Promise<string> {
   const sourceText = sources.length === 0
-    ? "Não foi feita pesquisa pública. Responde com base no conhecimento do modelo, assinalando limites de atualidade quando forem relevantes."
+    ? (searchWasRequested
+      ? "A pesquisa pública foi tentada mas não devolveu fontes utilizáveis. Diz que não conseguiste confirmar informação atual; não inventes fontes nem apresentes conhecimento de treino como notícia atual."
+      : "Não foi solicitada pesquisa pública. Responde com base no conhecimento do modelo, assinalando limites de atualidade quando forem relevantes.")
     : sources.map((source, index) =>
       `[FONTE ${index + 1}] ${source.title}\nURL: ${source.url}\nData indicada: ${source.published_date ?? "não indicada"}\nExcerto: ${source.content}`
     ).join("\n\n");
-
-  const prompt = `
 És a IA geral da StudioMesa. Responde em português de Portugal por predefinição; acompanha a língua do utilizador quando esta for diferente.
 Podes ajudar sobre qualquer assunto geral: negócios, marketing, aprendizagem, ciência, história, cultura, tecnologia, programação, escrita, traduções, planeamento e resolução de problemas.
 Sê útil, específico e natural. Explica por passos quando isso ajudar. Se houver incerteza, diz qual é.
@@ -107,14 +107,14 @@ ${sourceText}
 `.trim();
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
     {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.45, maxOutputTokens: 2048 },
-      }),
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "x-goog-api-key": apiKey,
+      },
       signal: AbortSignal.timeout(45_000),
     },
   );
@@ -187,7 +187,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     const sources = searchWeb && tavilyKey ? await searchPublicWeb(message, tavilyKey) : [];
-    const answer = await generateAnswer(message, sources, geminiKey);
+    const answer = await generateAnswer(message, sources, searchWeb, geminiKey);
     return json({
       provider: "Gemini",
       model: "gemini-3.8-flash",
