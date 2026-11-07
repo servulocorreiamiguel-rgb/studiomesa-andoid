@@ -44,7 +44,7 @@ Deno.serve(async (req: Request) => {
   const containsPrivateData =
     /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(query) ||
     /(?<!\d)(?:\d[ -]?){9,}(?!\d)/.test(query) ||
-    /\b(?:NIF|NIPC|IBAN)\s*[:#]?\s*[A-Z0-9 -]{8,}/i.test(query);
+    /(?:\b(?:NIF|NIPC)\s*[:#]?\s*\d(?:[ -]?\d){8}\b|\bIBAN\s*[:#]?\s*[A-Z]{2}\d{2}[A-Z0-9 ]{10,30}\b)/i.test(query);
 
   if (query.length < 3 || query.length > 200 || containsPrivateData) {
     return json({
