@@ -1,25 +1,31 @@
 # StudioMesa — lista de preparação para uso profissional
 
-**Estado atual em 06/11/2026: CÓDIGO AVANÇADO, NÃO PRONTO PARA PILOTO/VENDA.**
+**Estado em 07/11/2026: código e backend avançados; ainda não liberado para piloto/venda com dados reais.**
 
-Esta secção é a fotografia atual e sobrepõe-se aos registos históricos mais abaixo. A lista de bloqueios única e atualizada é [docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md](docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md).
+Esta fotografia substitui os estados antigos registados mais abaixo. A história de migrations continua divergente: 57 versões no Supabase alojado e 55 ficheiros na `main` (quatro apenas no repositório e seis apenas no projeto alojado). Não aplicar migrations em bloco. Ver [reconciliação de 07/11/2026](docs/SUPABASE-LIVE-MIGRATION-HISTORY-2026-11-07.md).
 
-- [x] Cinco variantes Android no código; compileSdk/targetSdk 36, minSdk 24, Java 17 e versão 1.5.0.
-- [x] APKs debug de demonstração e workflow manual para cinco AABs/APKs assinados preparado; não publica automaticamente na Google Play.
-- [x] IA local LFM2.5-1.2B, histórico/Memória local cifrada, OCR local e ferramentas de leitura implementadas no código.
-- [x] Fluxo de reservas de cliente e restaurante presente no código. PR #86 foi integrada na main (commit `0770ad7`), com testes de regressão para sobreposição, capacidade, mesa inexistente, idempotência e ecrãs sem autenticação.
-- [x] CI #1332 terminou com os quatro jobs em sucesso: replay PostgreSQL/autorização, compilação, unit tests, Lint e smoke tests em Android 8 e Android 16. Os skips de interface são condicionados à variante/plano; as páginas de reservas executaram nas variantes que as incluem.
-- [ ] Reconciliar as 53 migrations locais com as 54 versões do Supabase alojado (48 comuns, cinco só locais e seis só remotas); backup/restauro e replay descartável antes de deployment.
-- [ ] Aplicar de forma aprovada as tabelas de receitas, permissões granulares, sync do assistente, faturas e bucket privado — atualmente ausentes no backend alojado.
-- [ ] Resolver o aviso Leaked Password Protection Disabled, com decisão consciente sobre upgrade Pro, SMTP, URLs Auth, OAuth e teste E2E.
-- [ ] Concluir política de privacidade, Data Safety, termos, DPA, retenção, licenças/avisos e suporte; os novos documentos desta branch continuam drafts.
-- [ ] Escolher package IDs, criar keystore fora do repositório e configurar os quatro secrets e a variável do release workflow.
-- [ ] Testes E2E no backend com contas descartáveis, restauro, eliminação, concorrência e isolamento entre restaurantes.
-- [ ] Teste físico no OPPO A5m fica deliberadamente para o utilizador; ainda não foi executado.
+- [x] Cinco variantes Android, targetSdk 36, minSdk 24 e Java 17.
+- [x] Build Android, testes unitários, Lint e smoke tests Android 8/16 passaram na CI #1332 da revisão de reservas PR #86 integrada na main.
+- [x] IA local LFM2.5, histórico/memória local cifrados, OCR local e ferramentas de leitura.
+- [x] Supabase alojado com quatro tabelas cloud de conversas, mensagens, memória e arquivo de faturas, RLS/políticas de proprietário e bucket privado `studiomesa-invoices`; aplicação através das migrations de 07/11/2026.
+- [x] Ponte de leitura da IA geral ao Assistente económico, limitada ao proprietário e sem envio de PDFs/texto OCR integral.
+- [x] Loja de pontos na main e no Supabase: gestão de recompensas, custo em pontos, stock, resgates transacionais, deduplicação e confirmação de entrega.
+- [x] Reservas, QR temporário de fidelização e operações principais protegidas por RPC/RLS.
+- [x] Manutenção silenciosa configurada através de heartbeat `SELECT true`; o agendamento não garante disponibilidade permanente.
+- [ ] Configurar uma chave Tavily ou um servidor SearXNG estável. A pesquisa geral Web ainda não está ativa sem segredo; Wikipedia está disponível.
+- [ ] Concluir a CI da branch atual, que acrescenta notificações locais de primeiro plano. Estas não são push em segundo plano nem funcionam com a app fechada.
+- [ ] Para push real, configurar Firebase/FCM, tokens, secrets e autorização por conta/restaurante.
+- [ ] Reconciliação completa do Supabase, backup/restauro comprovado e plano seguro de deployment.
+- [ ] As tabelas de fichas técnicas/consumo automático e a tabela privada de permissões granulares por funcionário ainda não estão presentes no Supabase alojado.
+- [ ] Testes E2E com contas descartáveis e dispositivos reais: proprietário, funcionário, cliente, dois restaurantes, concorrência, perda de rede, sincronização, resgates, reservas, faturas e eliminação de conta.
+- [ ] Resolver e validar Auth/SMTP/OAuth, proteção de palavras-passe comprometidas e URLs de retorno.
+- [ ] Política de privacidade pública, Data Safety, DPA, termos, retenção, licenças e suporte.
+- [ ] Package IDs definitivos, keystore segura, release assinada e decisão compatível com políticas Google Play.
+- [ ] Teste físico no OPPO A5m ainda não executado.
 
-**Funcionalidades que não devem ser anunciadas como ativas no Supabase alojado:** fichas técnicas/consumo automático, matriz granular de permissões, sync cloud de histórico/Memória e arquivo cloud de faturas. As tabelas necessárias e o bucket privado ainda não existem.
+**Não anunciar como ativo:** consumo automático de ingredientes por receita; permissões granulares por funcionário; notificações push com a app fechada; pesquisa Web geral sem chave/endpoint; integração POS/caixa/faturação/contabilidade. A loja de pontos, o histórico/memória cloud e o arquivo cloud de faturas já existem no backend, mas continuam sujeitos a testes E2E.
 
-**Regra:** um botão na interface ou um replay limpo na CI não prova que a funcionalidade esteja operacional no backend alojado. Não fazer deployment enquanto o histórico não estiver reconciliado e não existir backup/restauro verificado.
+**Regra:** presença de um botão, tabela ou função não substitui teste ponta a ponta nem prova disponibilidade comercial. Não fazer deployment de migrations em bloco enquanto a divergência, backup e restauro não estiverem resolvidos.
 
 ---
 
