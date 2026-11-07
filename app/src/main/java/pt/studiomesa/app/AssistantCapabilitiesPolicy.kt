@@ -11,7 +11,8 @@ internal object AssistantCapabilitiesPolicy {
     data class Features(
         val hasReservationsAndPricing: Boolean,
         val isPremium: Boolean,
-        val localModelInstalled: Boolean
+        val localModelInstalled: Boolean,
+        val canAccessInvoices: Boolean = false
     )
 
     private val capabilityPhrases = listOf(
@@ -64,7 +65,9 @@ internal object AssistantCapabilitiesPolicy {
             if (features.isPremium) {
                 appendLine("• Analisar stock, movimentos, custos e indicadores de desempenho.")
             }
-            appendLine("• Consultar o arquivo de faturas importadas e distinguir documentos confirmados dos que ainda precisam de revisão.")
+            if (features.canAccessInvoices) {
+                appendLine("• Consultar o arquivo de faturas importadas através do Assistente económico e distinguir documentos pendentes, confirmados e rejeitados. A consulta é apenas de leitura.")
+            }
             appendLine("• Usar o histórico e a memória para manter contexto entre conversas neste restaurante.")
             if (features.localModelInstalled) {
                 appendLine()
