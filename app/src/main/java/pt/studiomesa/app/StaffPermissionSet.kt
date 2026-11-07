@@ -40,7 +40,9 @@ internal object StaffPermissionSet {
         if ("reservations" !in permissions) visible.remove("Reservas")
         if ("inventory" !in permissions) visible.remove("Stock")
 
-        // These screens can expose internal costs or business indicators.
+        // Assistants can read private restaurant information and financial indicators.
+        visible.remove("IA")
+        visible.remove("Assistente económico")
         visible.remove("Assistente")
         visible.remove("Preço Justo")
         visible.remove("Análise")
