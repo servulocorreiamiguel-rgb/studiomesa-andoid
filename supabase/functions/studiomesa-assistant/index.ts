@@ -15,12 +15,13 @@ function json(body: Record<string, unknown>, status = 200): Response {
 
 function containsPersonalIdentifiers(value: string): boolean {
   return (
-    /[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/i.test(value) ||
-    /(?<!\\d)(?:\\d[ -]?){9,}(?!\\d)/.test(value) ||
-    /\\b(?:NIF|NIPC)\\s*[:#]?\\s*\\d(?:[ -]?\\d){8}\\b/i.test(value) ||
-    /\\bIBAN\\s*[:#]?\\s*[A-Z]{2}\\d{2}[A-Z0-9 ]{10,30}\\b/i.test(value)
+    /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(value) ||
+    /(?<!\d)(?:\d[ -]?){9,}(?!\d)/.test(value) ||
+    /\b(?:NIF|NIPC)\s*[:#]?\s*\d(?:[ -]?\d){8}\b/i.test(value) ||
+    /\bIBAN\s*[:#]?\s*[A-Z]{2}\d{2}[A-Z0-9 ]{10,30}\b/i.test(value)
   );
 }
+
 
 type SearchSource = {
   title: string;
