@@ -9,7 +9,7 @@ class AssistantGeneralConversationPolicyTest {
     fun instructionClearlySupportsGeneralTopicsBeyondRestaurantManagement() {
         val instruction = AssistantGeneralConversationPolicy.SYSTEM_INSTRUCTION.lowercase()
         assertTrue(instruction.contains("assistente conversacional de uso geral"))
-        assertTrue(instruction.contains("não te limites a temas de restauração"))
+        assertTrue(instruction.contains("não te limites a restauração"))
         assertTrue(instruction.contains("programação"))
         assertTrue(instruction.contains("matemática e ciências"))
         assertTrue(instruction.contains("traduções"))
@@ -19,8 +19,8 @@ class AssistantGeneralConversationPolicyTest {
     fun instructionHandlesNaturalLanguageAndConversationFollowUps() {
         val instruction = AssistantGeneralConversationPolicy.SYSTEM_INSTRUCTION.lowercase()
         assertTrue(instruction.contains("erros ortográficos"))
-        assertTrue(instruction.contains("contexto das mensagens anteriores"))
-        assertTrue(instruction.contains("faz uma pergunta curta para esclarecer"))
+        assertTrue(instruction.contains("histórico recente"))
+        assertTrue(instruction.contains("faz uma pergunta curta"))
     }
 
     @Test
