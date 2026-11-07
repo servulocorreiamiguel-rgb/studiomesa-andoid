@@ -242,6 +242,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     val enabledTools = mutableListOf(tool(dataTool), tool(priceTool))
                     if (invoiceTool != null) enabledTools.add(tool(invoiceTool))
                     enabledTools.add(tool(StudioMesaWikipediaSearchTool()))
+                    enabledTools.add(tool(StudioMesaWebSearchTool(appContext)))
                     val initialMessages = history
                         .takeLast(MAX_HISTORY_MESSAGES)
                         .mapNotNull { turn ->
