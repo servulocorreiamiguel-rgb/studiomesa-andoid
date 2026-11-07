@@ -1,17 +1,32 @@
-> **Estado em 07/11/2026 — NÃO PRONTO PARA VENDA/PRODUÇÃO.** A aplicação tem cinco variantes Android. Os APKs de demonstração continuam a ser builds debug; a assinatura comercial e a validação em dispositivos físicos continuam por concluir.
+> **Estado em 07/11/2026 — código avançado, ainda sem autorização para piloto/venda com dados reais.** Existem cinco variantes Android; os APKs atuais são demonstração/debug, não releases comerciais assinadas.
 >
-> **CI da integração IA/gestor (PR #88):** compilação das cinco variantes, testes unitários, Android Lint e validação da configuração comercial passaram. Os testes de interface Android 8 e Android 16 ainda estavam em execução na última verificação.
+> **IA e faturas:** o modelo local LFM2.5, o histórico/memória cifrados e o OCR local estão no Android. As tabelas cloud de conversas, mensagens, memória e arquivo de faturas de fornecedores, bem como o bucket privado de documentos, foram aplicados no Supabase através das migrations de 07/11/2026. A ligação da IA geral ao Assistente económico é de leitura e apenas para o proprietário; não envia PDFs integrais nem texto OCR à IA geral.
 >
-> **Backend Supabase:** projeto ativo. Existem 57 versões de migrations no Supabase e 55 ficheiros na `main`; continuam quatro versões apenas no repositório e seis apenas no projeto alojado. As três migrations recentes estão alinhadas com as versões remotas. Consultar [reconciliação da história de migrations](docs/SUPABASE-LIVE-MIGRATION-HISTORY-2026-11-07.md).
+> **Pesquisa na Internet:** a IA já contém a ferramenta `search_public_web`, mas a pesquisa geral só funciona depois de configurar `TAVILY_API_KEY` nos segredos das Edge Functions do Supabase. A branch atual acrescenta Tavily como fornecedor principal e mantém SearXNG como alternativa. Até existir chave válida, a pesquisa geral continua indisponível; a pesquisa Wikipedia mantém-se separada.
 >
-> **Assistente e faturas:** histórico, memória, arquivo de faturas de fornecedores e bucket privado de documentos estão agora implementados no Supabase. As quatro tabelas têm RLS e políticas restritas ao proprietário. A IA geral tem uma ligação de leitura ao Assistente económico; recebe metadados e totais, não o PDF integral nem o texto OCR.
+> **Loja de pontos:** criação/edição/ativação de recompensas pelo proprietário, custo em pontos, stock, resgate transacional, deduplicação, confirmação de entrega e histórico estão presentes na `main` e no Supabase alojado. A validação ponta a ponta com contas de cliente/restaurante continua pendente.
 >
-> **Manutenção silenciosa:** a função `studiomesa_keepalive()` está ativa e só executa `SELECT true`. O GitHub Actions está agendado para a chamar quatro vezes por dia; o agendamento não garante disponibilidade permanente e o primeiro ciclo automático ainda não foi validado.
+> **Notificações nesta branch:** estão a ser acrescentadas notificações locais em primeiro plano para novos pedidos, pedidos de reserva e eventos de recompensas. Não são notificações push quando a app está fechada; isso exige configuração Firebase/FCM, ainda não fornecida.
 >
-> **Pesquisa na Internet:** a função `studiomesa-web-search` foi substituída em produção por SearXNG e mantém JWT obrigatório. Ainda falta configurar um endpoint SearXNG HTTPS estável; por isso, a pesquisa geral na Web não está ativa. A pesquisa Wikipedia continua disponível. Ver [configuração SearXNG](docs/SEARXNG-SETUP.md).
+> **Backend:** o projeto Supabase está ativo. A reconciliação de migrations continua incompleta; não aplicar migrations em bloco nem alterar o esquema alojado sem backup, comparação e aprovação. As tabelas de fichas técnicas/consumo automático de stock e a tabela de permissões granulares por funcionário continuam ausentes no projeto alojado.
 >
-> **Ainda fora de âmbito:** testes físicos no OPPO A5m, assinatura comercial definitiva, credenciais Auth/SMTP/OAuth, publicação Google Play e integração POS/contabilidade. Consultar [gate de lançamento](docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md), [bloqueios verificados](docs/RELEASE-BLOCKERS-VERIFIED-2026-11-06.md) e os documentos de reconciliação acima.
+> **Preparação comercial:** faltam testes E2E com contas e dispositivos reais, backup/restauro comprovados, política de privacidade/Data Safety, configuração Auth/SMTP/OAuth, chave de assinatura e decisão sobre publicação Google Play. A integração POS/caixa/faturação/contabilidade não está implementada. Consultar [gate comercial](docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md) e [bloqueios verificados](docs/RELEASE-BLOCKERS-VERIFIED-2026-11-06.md).
+
 ## O que ainda falta antes da venda ou utilização em serviço real
+
+- Testes ponta a ponta em telemóveis reais, incluindo vários dispositivos e utilizadores, perda de Internet, sessões expiradas, notificações e erros do servidor.
+- Configurar e testar `TAVILY_API_KEY` no Supabase para ativar pesquisa geral na Internet. Nunca colocar a chave no APK, no GitHub ou em código Android.
+- Para notificações com a app fechada: criar/configurar o projeto Firebase, associar a aplicação Android, guardar as credenciais de servidor apenas em secrets e implementar o envio/renovação dos tokens FCM. A implementação desta branch é apenas local e em primeiro plano.
+- Fidelização: loja configurável já implementada; falta ensaio E2E de criação/edição, stock concorrente, resgate, entrega, saldos e isolamento entre dois restaurantes.
+- Reservas: criação, estados e prevenção de conflitos por mesa estão implementados; ainda faltam edição/reagendamento, calendário/turnos, lembretes, depósitos e regras de cancelamento.
+- Stock: inventário, entradas/saídas, histórico de movimentos, custo unitário e fotografia histórica estão implementados. Fichas técnicas e consumo automático de ingredientes continuam bloqueados até deployment aprovado das tabelas em falta; ainda faltam avisos automáticos, fornecedores/encomendas, armazéns e conversões de unidades.
+- Gestão de equipa: criação/remoção de funcionários e códigos estão implementados. A matriz granular por funcionário existe no código/migrations, mas a tabela privada correspondente ainda não está ativa no Supabase alojado; não anunciar permissões granulares como funcionais.
+- Cópias de segurança e procedimento de recuperação, monitorização, exportação, conservação e eliminação de dados têm de ser comprovados. O fluxo de eliminação de conta existe, mas continua a exigir ensaios E2E com contas descartáveis.
+- Política de privacidade pública, Data Safety, termos B2B e DPA precisam de validação final e identificação do responsável legal.
+- OAuth Google/Microsoft e envio de emails dependem de credenciais próprias, SMTP e URLs de retorno autorizados; os fluxos precisam de testes num dispositivo real.
+- Configuração de release comercial assinada: escolher package IDs definitivos, criar keystore fora do repositório, configurar secrets, gerar AAB/APK assinados e verificar a assinatura. O workflow não publica automaticamente na Google Play.
+- Integração com POS/caixa, pagamentos, impressoras de cozinha, recibos, faturação fiscal ou contabilidade não está incluída.
+
 
 - Testes ponta a ponta em telemóveis reais, incluindo vários dispositivos, utilizadores, perda de internet, sessões expiradas e erros de servidor. A compilação de um APK não substitui esses testes.
 - Regras comerciais da fidelização: acumulação automática, recompensas configuráveis, resgates, limites e prevenção de fraude. Neste momento, o saldo é ajustado manualmente pelo restaurante.
