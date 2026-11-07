@@ -4341,6 +4341,23 @@ class MainActivity : ComponentActivity() {
                 12f, false, muted
             ))
             addGap(content, 8)
+            content.addView(label("Perfil predefinido", 10f, true, forestSoft))
+            val presetSpinner = Spinner(this).apply {
+                adapter = ArrayAdapter(
+                    this@MainActivity,
+                    android.R.layout.simple_spinner_item,
+                    StaffRolePresets.labels
+                ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+                setSelection(StaffRolePresets.indexFor(current))
+                contentDescription = "Perfil de permissões do funcionário"
+            }
+            content.addView(presetSpinner, LinearLayout.LayoutParams(-1, dp(48)))
+            content.addView(label(
+                "Podes escolher um perfil e depois ajustar cada permissão manualmente.",
+                10.5f, false, muted
+            ))
+            addGap(content, 5)
+            var applyingPreset = false
             for ((key, title) in options) {
                 val check = android.widget.CheckBox(this).apply {
                     text = title
@@ -4350,9 +4367,32 @@ class MainActivity : ComponentActivity() {
                     minHeight = dp(48)
                     contentDescription = "Permissão: $title"
                 }
+                check.setOnCheckedChangeListener { _, _ ->
+                    if (!applyingPreset && presetSpinner.selectedItemPosition != 0) {
+                        presetSpinner.setSelection(0)
+                    }
+                }
                 checks[key] = check
                 content.addView(check, LinearLayout.LayoutParams(-1, dp(48)))
             }
+            presetSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+
+                override fun onItemSelected(
+                    parent: android.widget.AdapterView<*>?,
+                    view: View?,
+                    position: Int,
+                    id: Long
+                ) {
+                    val preset = StaffRolePresets.permissionsFor(StaffRolePresets.labels[position]) ?: return
+                    applyingPreset = true
+                    checks.forEach { (permission, check) ->
+                        check.isChecked = permission in preset
+                    }
+                    applyingPreset = false
+                }
+            }
+            presetSpinner.setSelection(StaffRolePresets.indexFor(current))
             val warning = makeCard(10, copperPale)
             warning.addView(label(
                 "A gestão da equipa, códigos de acesso, loja de recompensas, consultor económico e definições do restaurante continuam reservados ao proprietário.",
