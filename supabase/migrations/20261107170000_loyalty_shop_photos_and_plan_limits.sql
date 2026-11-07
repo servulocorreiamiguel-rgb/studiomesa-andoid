@@ -648,9 +648,9 @@ AS $function$
 DECLARE
     v_user_id uuid := (SELECT auth.uid());
     v_restaurant_id uuid;
-    v_name text := pg_catalog.trim(coalesce(p_guest_name, ''));
-    v_phone text := pg_catalog.trim(coalesce(p_guest_phone, ''));
-    v_notes text := pg_catalog.trim(coalesce(p_notes, ''));
+    v_name text := pg_catalog.btrim(coalesce(p_guest_name, ''));
+    v_phone text := pg_catalog.btrim(coalesce(p_guest_phone, ''));
+    v_notes text := pg_catalog.btrim(coalesce(p_notes, ''));
     v_existing public.restaurant_reservations%rowtype;
     v_reservation_id uuid;
 BEGIN
