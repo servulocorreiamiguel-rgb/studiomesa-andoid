@@ -389,6 +389,50 @@ jobs:
               RAISE EXCEPTION 'Loyalty tables unexpectedly allow direct API-role reads.';
             END IF;
 
+            IF to_regclass('private.restaurant_loyalty_entitlements') IS NULL
+              OR NOT EXISTS (
+                SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                WHERE n.nspname='private'
+                  AND c.relname='restaurant_loyalty_entitlements'
+                  AND c.relrowsecurity
+              ) THEN
+              RAISE EXCEPTION 'Private restaurant loyalty entitlements table/RLS is missing.';
+            END IF;
+
+            IF has_table_privilege('anon','private.restaurant_loyalty_entitlements','SELECT')
+              OR has_table_privilege('authenticated','private.restaurant_loyalty_entitlements','SELECT')
+              OR has_table_privilege('service_role','private.restaurant_loyalty_entitlements','SELECT') THEN
+              RAISE EXCEPTION 'Plan entitlements must not be readable directly through an API role.';
+            END IF;
+
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema='public' AND table_name='loyalty_rewards'
+                AND column_name='image_path'
+            ) OR to_regprocedure('public.get_restaurant_loyalty_entitlements(uuid)') IS NULL
+              OR to_regprocedure('public.set_loyalty_reward_image_path(uuid,uuid,text)') IS NULL THEN
+              RAISE EXCEPTION 'Loyalty tier/photo schema or RPCs are missing.';
+            END IF;
+
+            IF NOT EXISTS (
+              SELECT 1 FROM storage.buckets
+              WHERE id='loyalty-reward-images'
+                AND public
+                AND file_size_limit=1572864
+                AND allowed_mime_types=ARRAY['image/jpeg']::text[]
+            ) OR (
+              SELECT count(*) FROM pg_policies
+              WHERE schemaname='storage' AND tablename='objects'
+                AND policyname IN (
+                  'loyalty_reward_images_owner_insert',
+                  'loyalty_reward_images_owner_select',
+                  'loyalty_reward_images_owner_update',
+                  'loyalty_reward_images_owner_delete'
+                )
+            ) <> 4 THEN
+              RAISE EXCEPTION 'Reward image bucket or owner-only Storage policies are incomplete.';
+            END IF;
+
             IF has_function_privilege('anon','public.save_loyalty_reward(uuid,uuid,text,text,integer,integer,boolean)','EXECUTE')
               OR has_function_privilege('anon','public.create_loyalty_qr_token()','EXECUTE')
               OR has_function_privilege('anon','public.award_loyalty_points_from_qr(uuid,integer,uuid,text)','EXECUTE')
