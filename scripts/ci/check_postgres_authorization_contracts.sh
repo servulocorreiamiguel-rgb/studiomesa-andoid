@@ -1492,6 +1492,15 @@ then
   exit 1
 fi
 
+# Restaurant B is also used by the existing Professional reservation-isolation
+# regression below; grant that test fixture Professional only after the Essential
+# rejection case has completed.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO private.restaurant_loyalty_entitlements (restaurant_id, plan_code)
+VALUES ('$RESTAURANT_B'::uuid, 'profissional')
+ON CONFLICT (restaurant_id) DO UPDATE SET plan_code = EXCLUDED.plan_code;
+SQL
+
 # Customer booking requests are account-scoped and idempotent; the restaurant assigns
 # a suitable table and must do so before confirming the request.
 CUSTOMER_BOOKING_AT="$(date -u -d '+40 days' '+%Y-%m-%d %H:%M:%S+00:00')"
