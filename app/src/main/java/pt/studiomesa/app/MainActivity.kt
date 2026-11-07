@@ -905,13 +905,13 @@ class MainActivity : ComponentActivity() {
 
         if (turns.isEmpty()) {
             val welcome = makeCard(16, white)
-            welcome.addView(label("Nova conversa iniciada. Em que posso ajudar com o restaurante?", 17f, true, forestDeep))
+            welcome.addView(label("Nova conversa iniciada. Em que posso ajudar?", 17f, true, forestDeep))
             addGap(welcome, 6)
             welcome.addView(label("EXPERIMENTA PERGUNTAR", 9f, true, forestSoft))
             addGap(welcome, 5)
             addGap(welcome, 6)
             welcome.addView(label(
-                "Posso analisar preços, custos, stock, pedidos, reservas e desempenho da carta. Depois de instalar o modelo, a conversa generativa funciona no próprio telemóvel.",
+                "Com o modelo instalado, podes conversar sobre assuntos gerais, aprender, escrever, traduzir, programar e resolver problemas, além de analisar a gestão do restaurante. Sem o modelo, as respostas ficam limitadas às funções locais.",
                 12f, false, muted
             ))
             conversation.addView(welcome, cardParams())
