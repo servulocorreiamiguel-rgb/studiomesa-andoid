@@ -1925,10 +1925,20 @@ class MainActivity : ComponentActivity() {
         assistantModelStatusTextView = null
         assistantModelProgressTextView = null
         val modelInstalled = localAssistantModelManager.isModelInstalled()
-        val card = makeCard(13, if (modelInstalled) paleGreen else copperPale)
-        card.addView(label("MODELO DE IA NO DISPOSITIVO", 9.5f, true, forestDeep))
+        val cloudEnabled = cloudGeneralAssistantEnabled()
+        val card = makeCard(13, if (modelInstalled || cloudEnabled) paleGreen else copperPale)
+        card.addView(label(
+            if (cloudEnabled) "IA ONLINE · GEMINI 3.8 FLASH" else "MODELO DE IA NO DISPOSITIVO",
+            9.5f, true, forestDeep
+        ))
         addGap(card, 5)
-        val status = when {
+        val status = if (cloudEnabled) {
+            if (modelInstalled) {
+                "A IA online está ativa para perguntas gerais. A IA local continua disponível para trabalhar offline e consultar dados privados."
+            } else {
+                "A IA online está ativa para perguntas gerais. A IA local é opcional e pode ser instalada para trabalhar offline."
+            }
+        } else when {
             assistantModelDownloading || localAssistantModelManager.isDownloading() ->
                 "A transferir o modelo: ${((assistantModelProgressBytes * 100) / localAssistantModelManager.modelSizeBytes()).coerceIn(0, 100)}%."
             modelInstalled ->
