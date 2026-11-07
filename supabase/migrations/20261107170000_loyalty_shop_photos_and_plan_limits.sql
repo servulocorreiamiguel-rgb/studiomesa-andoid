@@ -12,6 +12,58 @@ REVOKE ALL ON TABLE private.restaurant_loyalty_entitlements FROM PUBLIC, anon, a
 COMMENT ON TABLE private.restaurant_loyalty_entitlements IS
     'Privileged, server-owned plan assignments. Never accept plan changes from Android or user metadata. Missing rows default to Essencial.';
 
+-- Prevent a plan downgrade that would leave the published catalogue above its new cap.
+CREATE OR REPLACE FUNCTION private.guard_restaurant_loyalty_plan_change()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+DECLARE
+    v_limit integer;
+    v_active_count integer;
+BEGIN
+    IF TG_OP = 'UPDATE' AND NEW.plan_code = OLD.plan_code THEN
+        RETURN NEW;
+    END IF;
+
+    PERFORM 1
+    FROM public.restaurants r
+    WHERE r.id = NEW.restaurant_id
+    FOR UPDATE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Restaurante não encontrado.';
+    END IF;
+
+    v_limit := CASE NEW.plan_code
+        WHEN 'profissional' THEN 15
+        WHEN 'premium' THEN 50
+        ELSE 5
+    END;
+
+    SELECT count(*)::integer INTO v_active_count
+    FROM public.loyalty_rewards r
+    WHERE r.restaurant_id = NEW.restaurant_id
+      AND r.is_active;
+
+    IF v_active_count > v_limit THEN
+        RAISE EXCEPTION 'Antes de alterar para o plano %, desativa produtos até ficar no máximo de % prémios ativos.',
+            NEW.plan_code, v_limit;
+    END IF;
+
+    RETURN NEW;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION private.guard_restaurant_loyalty_plan_change() FROM PUBLIC, anon, authenticated, service_role;
+
+DROP TRIGGER IF EXISTS restaurant_loyalty_plan_change_guard ON private.restaurant_loyalty_entitlements;
+CREATE TRIGGER restaurant_loyalty_plan_change_guard
+BEFORE INSERT OR UPDATE OF plan_code
+ON private.restaurant_loyalty_entitlements
+FOR EACH ROW
+EXECUTE FUNCTION private.guard_restaurant_loyalty_plan_change();
+
 ALTER TABLE public.loyalty_rewards
     ADD COLUMN IF NOT EXISTS image_path text;
 
@@ -221,7 +273,7 @@ BEGIN
     RETURN QUERY
     SELECT r.id, r.name, r.description, r.points_cost,
            r.is_active, r.stock_limit, r.redeemed_count,
-           CASE WHEN v_photos_enabled THEN r.image_path ELSE NULL END
+           r.image_path
     FROM public.loyalty_rewards r
     WHERE r.restaurant_id = p_restaurant_id
     ORDER BY r.is_active DESC, r.points_cost ASC, r.name ASC;
