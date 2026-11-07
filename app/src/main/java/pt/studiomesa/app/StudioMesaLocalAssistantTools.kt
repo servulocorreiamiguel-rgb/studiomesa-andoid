@@ -338,7 +338,7 @@ internal class StudioMesaSupplierInvoiceTool(
             .put("name", "get_supplier_invoice_summary")
             .put(
                 "description",
-                "Consulta metadados de faturas de fornecedores que o proprietário já importou e confirmou no arquivo. É apenas leitura: não aprova, rejeita, altera, paga ou apaga faturas. Não revela o texto OCR nem o caminho privado dos ficheiros. Os totais são somas dos documentos arquivados, não prova de pagamento nem lançamento contabilístico."
+                "Consulta metadados das faturas de fornecedores importadas para o arquivo do restaurante, incluindo documentos pendentes, aprovados ou rejeitados. É apenas leitura: não aprova, rejeita, altera, paga ou apaga faturas. Não revela o texto OCR, as linhas de artigos nem o caminho privado dos ficheiros. Os totais são somas dos documentos arquivados, não prova de pagamento, reconciliação bancária ou lançamento contabilístico."
             )
             .put("parameters", parameters)
             .toString()
