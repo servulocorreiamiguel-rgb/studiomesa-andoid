@@ -530,7 +530,9 @@ BEGIN
             RAISE EXCEPTION 'As fotografias da loja de pontos estão disponíveis nos planos Profissional e Premium.';
         END IF;
 
-        IF p_image_path <> p_restaurant_id::text || '/' || p_reward_id::text || '/photo.jpg' THEN
+        IF p_image_path !~ (
+            '^' || p_restaurant_id::text || '/' || p_reward_id::text || '/photo[.]jpg$'
+        ) THEN
             RAISE EXCEPTION 'O caminho da fotografia não é válido.';
         END IF;
 
@@ -985,7 +987,9 @@ BEGIN
             RAISE EXCEPTION 'As fotografias da loja de pontos estão disponíveis nos planos Profissional e Premium.';
         END IF;
 
-        IF p_image_path <> p_restaurant_id::text || '/' || p_reward_id::text || '/photo.jpg' THEN
+        IF p_image_path !~ (
+            '^' || p_restaurant_id::text || '/' || p_reward_id::text || '/photo[.]jpg$'
+        ) THEN
             RAISE EXCEPTION 'O caminho da fotografia não é válido.';
         END IF;
 
@@ -1434,7 +1438,9 @@ BEGIN
             RAISE EXCEPTION 'As fotografias da loja de pontos estão disponíveis nos planos Profissional e Premium.';
         END IF;
 
-        IF p_image_path <> p_restaurant_id::text || '/' || p_reward_id::text || '/photo.jpg' THEN
+        IF p_image_path !~ (
+            '^' || p_restaurant_id::text || '/' || p_reward_id::text || '/photo[.]jpg$'
+        ) THEN
             RAISE EXCEPTION 'O caminho da fotografia não é válido.';
         END IF;
 
@@ -1883,7 +1889,9 @@ BEGIN
             RAISE EXCEPTION 'As fotografias da loja de pontos estão disponíveis nos planos Profissional e Premium.';
         END IF;
 
-        IF p_image_path <> p_restaurant_id::text || '/' || p_reward_id::text || '/photo.jpg' THEN
+        IF p_image_path !~ (
+            '^' || p_restaurant_id::text || '/' || p_reward_id::text || '/photo[.]jpg$'
+        ) THEN
             RAISE EXCEPTION 'O caminho da fotografia não é válido.';
         END IF;
 
