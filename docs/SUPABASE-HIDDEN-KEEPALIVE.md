@@ -15,29 +15,22 @@ Supabase project is paused.
 - Repeated calls inside one hour do not update the timestamp again.
 - No notification or visible message is shown in the Android app.
 
-## One-time GitHub configuration
-
-In the repository, open **Settings → Secrets and variables → Actions → Variables**
-and add these repository variables:
-
-| Name | Value |
-|---|---|
-| `SUPABASE_URL` | `https://svwvkfsyevuyabelrtjk.supabase.co` |
-| `SUPABASE_ANON_KEY` | The project's legacy `anon` public API key from Supabase → Project Settings → API Keys |
-
-The key is intentionally the public `anon` key. **Never use the
-`service_role` key** in this workflow.
-
 ## Activation sequence
 
 1. Merge the code containing this migration and workflow.
 2. Apply migration `20261107120000_hidden_supabase_keepalive.sql` to the
    Supabase project after the project's existing migration-history drift has
    been reconciled and a recovery point has been confirmed.
-3. In GitHub → Actions, run **Maintain StudioMesa Supabase (hidden heartbeat)**
+3. In GitHub → Settings → Secrets and variables → Actions → Variables, add
+   `SUPABASE_KEEPALIVE_ENABLED` with value `true`.
+4. In GitHub → Actions, run **Maintain StudioMesa Supabase (hidden heartbeat)**
    manually once and confirm the job succeeds.
-4. After that, GitHub Actions runs it automatically at 01:17, 07:17, 13:17,
+5. After that, GitHub Actions runs it automatically at 01:17, 07:17, 13:17,
    and 19:17 UTC.
+
+The workflow contains only the project's public legacy `anon` API key. This
+key is designed to be used in client applications and is not the privileged
+`service_role` key. The job is restricted to the dedicated heartbeat RPC.
 
 ## Limits
 
