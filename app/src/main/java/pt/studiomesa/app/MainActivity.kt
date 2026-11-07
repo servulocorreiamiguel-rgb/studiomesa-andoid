@@ -3339,14 +3339,18 @@ class MainActivity : ComponentActivity() {
 
             runOnUiThread {
                 activityNotificationRefreshInFlight = false
-                val events = loadedEvents ?: return@runOnUiThread
+                val events = loadedEvents
                 if (
+                    events != null &&
                     activityResumed &&
                     backendToken().isNotBlank() &&
                     backendPrefs.getString("user_id", "").orEmpty() == accountId
                 ) {
                     persistActivityNotificationSnapshot(accountId, events)
                 }
+                // A pause/resume can happen while the HTTP request is in flight.
+                // Re-arm the timer after completion rather than leaving polling stopped.
+                scheduleNextActivityNotificationRefresh()
             }
         }.start()
     }
