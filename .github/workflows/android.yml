@@ -119,10 +119,10 @@ jobs:
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Compile app
-        run: gradle --no-daemon assembleEssencialRestauranteDebug assembleProfissionalRestauranteDebug assembleProfissionalClienteDebug assemblePremiumRestauranteDebug assemblePremiumClienteDebug
+        run: gradle --no-daemon assembleEssencialRestauranteDebug assembleEssencialClienteDebug assembleProfissionalRestauranteDebug assembleProfissionalClienteDebug assemblePremiumRestauranteDebug assemblePremiumClienteDebug
 
       - name: Run unit tests for every distributed variant
-        run: gradle --no-daemon testEssencialRestauranteDebugUnitTest testProfissionalRestauranteDebugUnitTest testProfissionalClienteDebugUnitTest testPremiumRestauranteDebugUnitTest testPremiumClienteDebugUnitTest
+        run: gradle --no-daemon testEssencialRestauranteDebugUnitTest testEssencialClienteDebugUnitTest testProfissionalRestauranteDebugUnitTest testProfissionalClienteDebugUnitTest testPremiumRestauranteDebugUnitTest testPremiumClienteDebugUnitTest
 
       - name: Run Android lint
         timeout-minutes: 10
