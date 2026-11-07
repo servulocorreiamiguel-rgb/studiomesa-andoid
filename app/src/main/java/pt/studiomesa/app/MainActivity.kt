@@ -19,6 +19,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.LruCache
 import android.text.InputFilter
 import android.text.InputType
 import android.text.method.LinkMovementMethod
@@ -50,7 +51,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.MultiFormatWriter
@@ -110,7 +111,10 @@ class MainActivity : ComponentActivity() {
     private var pendingLoyaltyRewardPhotoUri: android.net.Uri? = null
     private var pendingLoyaltyRewardPhotoId: String? = null
     private var loyaltyRewardPhotoStatusView: TextView? = null
-    private val loyaltyRewardPhotoCache = ConcurrentHashMap<String, Bitmap>()
+    private val loyaltyRewardPhotoCache = object : LruCache<String, Bitmap>(8 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
+    }
+    private val loyaltyRewardImageExecutor = Executors.newFixedThreadPool(3)
 
     private data class PendingInvoiceImport(
         val uri: android.net.Uri,
@@ -275,6 +279,7 @@ class MainActivity : ComponentActivity() {
         if (localAssistantModelManagerDelegate.isInitialized()) {
             localAssistantModelManager.close()
         }
+        loyaltyRewardImageExecutor.shutdownNow()
         super.onDestroy()
     }
 
@@ -5164,7 +5169,7 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        Thread {
+        loyaltyRewardImageExecutor.execute {
             val bitmap = runCatching {
                 val bytes = SupabaseApi.downloadLoyaltyRewardPhoto(backendToken(), imagePath)
                 val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -5180,14 +5185,16 @@ class MainActivity : ComponentActivity() {
             }.getOrNull()
 
             if (bitmap != null) {
-                loyaltyRewardPhotoCache.putIfAbsent(imagePath, bitmap)
+                val cachedBitmap = loyaltyRewardPhotoCache.get(imagePath) ?: bitmap.also {
+                    loyaltyRewardPhotoCache.put(imagePath, it)
+                }
                 runOnUiThread {
                     if (image.tag == imagePath && !isFinishing && !isDestroyed) {
-                        image.setImageBitmap(loyaltyRewardPhotoCache[imagePath] ?: bitmap)
+                        image.setImageBitmap(cachedBitmap)
                     }
                 }
             }
-        }.start()
+        }
     }
 
     private fun showLoyaltyRewardEditorForm(existing: JSONObject?) {
