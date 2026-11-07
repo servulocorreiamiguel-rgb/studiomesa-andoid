@@ -1,5 +1,5 @@
 # StudioMesa — preparação para lançamento comercial
-> **Fotografia atual — 06/11/2026: NÃO LIBERADO PARA VENDA.** O workflow gera cinco AABs/APKs comerciais assinados quando houver package ID, keystore e secrets, mas não publica na Google Play. Os APKs debug normais são apenas demonstrações.
+> **Fotografia atual — 06/11/2026: NÃO LIBERADO PARA VENDA.** O workflow gera seis AABs/APKs comerciais assinados quando houver package ID, keystore e secrets, mas não publica na Google Play. Os APKs debug normais são apenas demonstrações.
 >
 > **Bloqueio backend:** 53 ficheiros locais vs 54 versões remotas (48 comuns, cinco só locais e seis só remotas). Faltam no backend as tabelas de fichas técnicas, permissões granulares, sync do assistente, arquivo de faturas e bucket privado. Não aplicar migrations antes de reconciliar o histórico, testar backup/restauro e ensaiar o replay numa cópia descartável.
 >
@@ -15,13 +15,13 @@ Referências: [compatibilidade Kotlin/AGP/D8/R8](https://developer.android.com/b
 
 ## Estado real
 
-O workflow `.github/workflows/commercial-release.yml` foi preparado para criar cinco Android App Bundles (AAB) e cinco APKs assinados para instalação direta. **Não publica automaticamente na Google Play**. Antes de correr esse workflow, é necessário definir o identificador de aplicação final e guardar a chave de assinatura nos GitHub Actions Secrets.
+O workflow `.github/workflows/commercial-release.yml` foi preparado para criar seis Android App Bundles (AAB) e seis APKs assinados para instalação direta. **Não publica automaticamente na Google Play**. Antes de correr esse workflow, é necessário definir o identificador de aplicação final e guardar a chave de assinatura nos GitHub Actions Secrets.
 
 Os APKs do workflow normal continuam a usar os identificadores `pt.studiomesa.preview.*`. A configuração comercial é opt-in e não altera a identidade dos APKs de demonstração.
 
 ## Decisão obrigatória: identificadores das aplicações
 
-A configuração de sabores atual produz aplicações separadas para Essencial/Profissional/Premium e Gestão/Cliente. O workflow comercial acrescenta os sufixos de sabor ao identificador base definido na variável `STUDIOMESA_RELEASE_APPLICATION_ID`.
+A configuração de sabores atual produz seis variantes técnicas (três planos × Gestão/Cliente). A variante Cliente Essencial inclui cartão, carta e loja de pontos, mas não reservas. A configuração produz aplicações separadas para Essencial/Profissional/Premium e Gestão/Cliente. O workflow comercial acrescenta os sufixos de sabor ao identificador base definido na variável `STUDIOMESA_RELEASE_APPLICATION_ID`.
 
 **Atenção à política de conteúdo repetitivo:** não assumas que podes publicar cinco fichas Play só porque o Gradle gera cinco variantes. A Google não permite múltiplas apps com funcionalidade, conteúdo e experiência altamente semelhantes e recomenda agregar apps com pouca diferenciação. Avalia primeiro duas apps com funções distintas (Gestão e Cliente), com os planos controlados por entitlement/licença segura no servidor, ou distribuição privada B2B. Os entitlements ainda não estão implementados e dependem da reconciliação do Supabase. Fontes: https://support.google.com/googleplay/android-developer/answer/18265346 e https://support.google.com/googleplay/android-developer/answer/15884185.
 
@@ -66,7 +66,7 @@ No separador **Variables**, cria a variável `STUDIOMESA_RELEASE_APPLICATION_ID`
 
 1. Abre **Actions → Build signed StudioMesa commercial AABs → Run workflow**.
 2. No campo de confirmação, escreve exatamente `BUILD`.
-3. O workflow verifica os segredos, valida o keystore, executa os testes unitários para as cinco variantes de distribuição e Android Lint, compila cinco AABs e cinco APKs com assinatura, verifica ambos os formatos e gera checksums.
+3. O workflow verifica os segredos, valida o keystore, executa os testes unitários para as seis variantes de distribuição e Android Lint, compila seis AABs e seis APKs com assinatura, verifica ambos os formatos e gera checksums.
 4. Descarrega o artefacto `StudioMesa-Commercial-AABs-and-APKs` e guarda o ficheiro de checksums.
 
 Se a variável de identificador ou qualquer segredo estiver em falta, a execução falha com uma mensagem explícita. O workflow **não** envia os AAB para a Google Play nem publica a aplicação. Os APKs assinados destinam-se a instalações diretas autorizadas; distribui-os apenas por canais controlados.
