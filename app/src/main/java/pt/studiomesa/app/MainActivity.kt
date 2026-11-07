@@ -951,7 +951,7 @@ class MainActivity : ComponentActivity() {
                 else if (ownerInvoiceAccess)
                     "Com o modelo instalado, podes conversar sobre qualquer tema e pedir à IA para consultar o Assistente económico sobre as faturas do restaurante. Esta ligação só lê metadados do arquivo; não altera documentos nem comprova pagamentos."
                 else
-                    "Com o modelo instalado, podes conversar sobre assuntos gerais, aprender, escrever, traduzir, programar e resolver problemas. Os dados financeiros privados continuam reservados ao proprietário."
+                    "Com o modelo instalado, podes conversar sobre assuntos gerais, aprender, escrever, traduzir, programar e resolver problemas. Os dados financeiros privados continuam reservados ao proprietário.",
                 12f, false, muted
             ))
             conversation.addView(welcome, cardParams())
