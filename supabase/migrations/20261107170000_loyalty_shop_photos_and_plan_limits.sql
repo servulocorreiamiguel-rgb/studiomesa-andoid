@@ -33,6 +33,57 @@ SET public = true,
     file_size_limit = 1572864,
     allowed_mime_types = ARRAY['image/jpeg']::text[];
 
+CREATE OR REPLACE FUNCTION private.can_upload_loyalty_reward_image(
+    p_restaurant_id uuid,
+    p_reward_id uuid
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+    SELECT
+        (SELECT auth.uid()) IS NOT NULL
+        AND EXISTS (
+            SELECT 1
+            FROM public.restaurant_staff rs
+            JOIN public.loyalty_rewards r
+              ON r.restaurant_id = rs.restaurant_id
+             AND r.id = p_reward_id
+            LEFT JOIN private.restaurant_loyalty_entitlements e
+              ON e.restaurant_id = rs.restaurant_id
+            WHERE rs.restaurant_id = p_restaurant_id
+              AND rs.user_id = (SELECT auth.uid())
+              AND rs.role = 'owner'
+              AND COALESCE(e.plan_code, 'essencial') IN ('profissional', 'premium')
+        );
+$function$;
+
+CREATE OR REPLACE FUNCTION private.can_delete_loyalty_reward_image(
+    p_restaurant_id uuid
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+    SELECT (SELECT auth.uid()) IS NOT NULL
+       AND EXISTS (
+            SELECT 1
+            FROM public.restaurant_staff rs
+            WHERE rs.restaurant_id = p_restaurant_id
+              AND rs.user_id = (SELECT auth.uid())
+              AND rs.role = 'owner'
+       );
+$function$;
+
+REVOKE ALL ON FUNCTION private.can_upload_loyalty_reward_image(uuid, uuid) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.can_delete_loyalty_reward_image(uuid) FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION private.can_upload_loyalty_reward_image(uuid, uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION private.can_delete_loyalty_reward_image(uuid) TO authenticated;
+
 DROP POLICY IF EXISTS loyalty_reward_images_owner_insert ON storage.objects;
 CREATE POLICY loyalty_reward_images_owner_insert
 ON storage.objects
@@ -41,15 +92,9 @@ TO authenticated
 WITH CHECK (
     bucket_id = 'loyalty-reward-images'
     AND name ~ '^[0-9a-f-]{36}/[0-9a-f-]{36}/[0-9a-f-]{36}[.]jpg$'
-    AND EXISTS (
-        SELECT 1
-        FROM public.restaurant_staff rs
-        JOIN public.loyalty_rewards r
-          ON r.restaurant_id = rs.restaurant_id
-         AND r.id::text = split_part(storage.objects.name, '/', 2)
-        WHERE rs.restaurant_id::text = split_part(storage.objects.name, '/', 1)
-          AND rs.user_id = (SELECT auth.uid())
-          AND rs.role = 'owner'
+    AND private.can_upload_loyalty_reward_image(
+        split_part(name, '/', 1)::uuid,
+        split_part(name, '/', 2)::uuid
     )
 );
 
@@ -61,13 +106,7 @@ TO authenticated
 USING (
     bucket_id = 'loyalty-reward-images'
     AND name ~ '^[0-9a-f-]{36}/[0-9a-f-]{36}/[0-9a-f-]{36}[.]jpg$'
-    AND EXISTS (
-        SELECT 1
-        FROM public.restaurant_staff rs
-        WHERE rs.restaurant_id::text = split_part(storage.objects.name, '/', 1)
-          AND rs.user_id = (SELECT auth.uid())
-          AND rs.role = 'owner'
-    )
+    AND private.can_delete_loyalty_reward_image(split_part(name, '/', 1)::uuid)
 );
 
 -- Replace the customer getter's return type only after removing its public wrapper.
