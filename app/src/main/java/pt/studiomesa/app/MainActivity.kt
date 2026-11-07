@@ -1974,6 +1974,21 @@ class MainActivity : ComponentActivity() {
             assistantChatAutoFollow = true
             assistantChatError = null
 
+            // Answer capability-discovery questions consistently, with or without the local model.
+            AssistantCapabilitiesPolicy.answer(
+                question,
+                AssistantCapabilitiesPolicy.Features(
+                    hasReservationsAndPricing = hasCalculator,
+                    isPremium = isPremium,
+                    localModelInstalled = localAssistantModelManager.isModelInstalled()
+                )
+            )?.let { capabilityReply ->
+                assistantChatStore.appendTurn(scope, conversationId, "assistant", capabilityReply)
+                syncAssistantCloud(silent = true)
+                renderApp()
+                return
+            }
+
             if (localAssistantModelManager.isModelInstalled()) {
                 assistantSending = true
                 renderApp()
