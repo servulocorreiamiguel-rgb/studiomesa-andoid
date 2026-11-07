@@ -36,8 +36,9 @@ Os preços abaixo são os valores de referência que já estavam definidos para 
 | Análise operacional avançada | — | — | ✓ |
 | OCR local de faturas de fornecedores | ✓ | ✓ | ✓ |
 | Assistente económico (proprietário) com consulta de faturas | ✓ | ✓ | ✓ |
-| Histórico/memória cloud e arquivo privado de faturas | — | — | ✓ |
-| Notificações locais em primeiro plano | ✓ | ✓ | ✓ |
+| Histórico/memória cloud e arquivo privado de faturas | ✓ | ✓ | ✓ |
+| Notificações locais em primeiro plano | Em PR | Em PR | Em PR |
+| Pesquisa geral na Internet | Condicionada | Condicionada | Condicionada |
 
 ## O que cada plano entrega
 
@@ -80,6 +81,8 @@ Inclui o Profissional, mais:
 **Limites:** as fichas técnicas e o consumo automático de ingredientes ainda não estão ativos no Supabase alojado. O OCR exige revisão humana antes de qualquer utilização contabilística. A IA não aprova, altera nem paga faturas e não substitui um contabilista certificado.
 
 ## Estado técnico e condições a comunicar
+
+A linha «Notificações locais» só passa a incluída depois de a PR #91 ser aprovada, integrada e testada. A pesquisa Web geral depende da configuração de uma chave/endpoint no Supabase.
 
 - **IA e pesquisa Web:** a IA usa um modelo local no dispositivo. A pesquisa geral está preparada no código, mas só fica ativa depois de configurar uma chave Tavily (ou um endpoint SearXNG estável) nos secrets do Supabase. A pesquisa Wikipedia é separada. Não prometer pesquisa Web geral até ser testada com uma chave válida.
 - **Faturas:** OCR local e arquivo privado no backend estão implementados; a ligação da IA geral ao Assistente económico é de leitura e só para o proprietário. A IA geral recebe metadados/totais, não os PDFs nem o texto OCR integral.
