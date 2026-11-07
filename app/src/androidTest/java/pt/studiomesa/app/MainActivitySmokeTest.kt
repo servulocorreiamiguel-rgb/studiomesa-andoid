@@ -430,6 +430,7 @@ class MainActivitySmokeTest {
             onView(withContentDescription("Abrir secção Cozinha")).perform(scrollTo()).check(matches(isDisplayed()))
             onView(withContentDescription("Abrir secção Assistente económico")).perform(scrollTo()).check(matches(isDisplayed()))
             onView(withContentDescription("Abrir secção IA")).perform(scrollTo()).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Assistente")).check(doesNotExist())
             onView(withContentDescription("Abrir secção Carta")).perform(scrollTo()).check(matches(isDisplayed()))
             onView(withContentDescription("Abrir secção Pontos")).perform(scrollTo()).check(matches(isDisplayed()))
             onView(withContentDescription("Abrir secção Conta")).perform(scrollTo()).check(matches(isDisplayed()))
