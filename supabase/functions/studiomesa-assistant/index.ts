@@ -89,6 +89,8 @@ async function generateAnswer(message: string, sources: SearchSource[], searchWa
     : sources.map((source, index) =>
       `[FONTE ${index + 1}] ${source.title}\nURL: ${source.url}\nData indicada: ${source.published_date ?? "não indicada"}\nExcerto: ${source.content}`
     ).join("\n\n");
+
+  const prompt = `
 És a IA geral da StudioMesa. Responde em português de Portugal por predefinição; acompanha a língua do utilizador quando esta for diferente.
 Podes ajudar sobre qualquer assunto geral: negócios, marketing, aprendizagem, ciência, história, cultura, tecnologia, programação, escrita, traduções, planeamento e resolução de problemas.
 Sê útil, específico e natural. Explica por passos quando isso ajudar. Se houver incerteza, diz qual é.
