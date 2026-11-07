@@ -5223,6 +5223,7 @@ class MainActivity : ComponentActivity() {
             cost.setText(existing.optInt("points_cost").toString())
             if (!existing.isNull("stock_limit")) stock.setText(existing.optInt("stock_limit").toString())
         }
+        lateinit var dialog: AlertDialog
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(8), dp(20), dp(4))
@@ -5276,7 +5277,7 @@ class MainActivity : ComponentActivity() {
                     }
             }, LinearLayout.LayoutParams(-1, dp(42)))
         }
-        val dialog = AlertDialog.Builder(this)
+        dialog = AlertDialog.Builder(this)
             .setTitle(if (existing == null) "Nova recompensa" else "Editar recompensa")
             .setView(form)
             .setNegativeButton("Cancelar", null)
