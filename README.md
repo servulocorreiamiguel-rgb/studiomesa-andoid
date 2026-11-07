@@ -15,7 +15,7 @@
 ## O que ainda falta antes da venda ou utilização em serviço real
 
 - Testes ponta a ponta em telemóveis reais, incluindo vários dispositivos e utilizadores, perda de Internet, sessões expiradas, notificações e erros do servidor.
-- Configurar e testar `TAVILY_API_KEY` no Supabase para ativar pesquisa geral na Internet. Nunca colocar a chave no APK, no GitHub ou em código Android.
+- Configurar e testar `TAVILY_API_KEY` no Supabase para ativar pesquisa geral na Internet. Nunca colocar a chave no APK, no GitHub ou em código Android. Ver [guia Tavily/SearXNG](docs/WEB-SEARCH-SETUP.md).
 - Para notificações com a app fechada: criar/configurar o projeto Firebase, associar a aplicação Android, guardar as credenciais de servidor apenas em secrets e implementar o envio/renovação dos tokens FCM. A implementação desta branch é apenas local e em primeiro plano; ver [estado e requisitos FCM](docs/NOTIFICATIONS-STATUS.md).
 - Fidelização: loja configurável já implementada; falta ensaio E2E de criação/edição, stock concorrente, resgate, entrega, saldos e isolamento entre dois restaurantes.
 - Reservas: criação, estados e prevenção de conflitos por mesa estão implementados; ainda faltam edição/reagendamento, calendário/turnos, lembretes, depósitos e regras de cancelamento.
