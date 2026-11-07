@@ -16,7 +16,6 @@ COMMENT ON TABLE private.restaurant_loyalty_entitlements IS
 CREATE OR REPLACE FUNCTION private.guard_restaurant_loyalty_plan_change()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
 SET search_path = ''
 AS $function$
 DECLARE
@@ -263,13 +262,19 @@ RETURNS TABLE (
     redeemed_count integer,
     image_path text
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path = ''
 AS $function$
+BEGIN
+    IF (SELECT auth.uid()) IS NULL THEN
+        RAISE EXCEPTION 'É necessário iniciar sessão.';
+    END IF;
+    RETURN QUERY
     SELECT *
     FROM private.get_customer_loyalty_rewards_internal(p_member_id);
+END;
 $function$;
 
 -- Replace the restaurant getter with the same image field, while keeping staff access scoped.
@@ -327,13 +332,19 @@ RETURNS TABLE (
     redeemed_count integer,
     image_path text
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path = ''
 AS $function$
+BEGIN
+    IF (SELECT auth.uid()) IS NULL THEN
+        RAISE EXCEPTION 'É necessário iniciar sessão.';
+    END IF;
+    RETURN QUERY
     SELECT *
     FROM private.get_restaurant_loyalty_rewards_internal(p_restaurant_id);
+END;
 $function$;
 
 -- The plan is looked up in a private table; missing assignment is fail-safe Essencial.
@@ -392,13 +403,19 @@ RETURNS TABLE (
     photos_enabled boolean,
     max_photo_bytes integer
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path = ''
 AS $function$
+BEGIN
+    IF (SELECT auth.uid()) IS NULL THEN
+        RAISE EXCEPTION 'É necessário iniciar sessão.';
+    END IF;
+    RETURN QUERY
     SELECT *
     FROM private.get_restaurant_loyalty_entitlements_internal(p_restaurant_id);
+END;
 $function$;
 
 -- Recreate the save function with a per-restaurant row lock so parallel owner requests
@@ -514,14 +531,19 @@ CREATE FUNCTION public.save_loyalty_reward(
     p_is_active boolean
 )
 RETURNS uuid
-LANGUAGE sql
+LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
 AS $function$
-    SELECT private.save_loyalty_reward_internal(
+BEGIN
+    IF (SELECT auth.uid()) IS NULL THEN
+        RAISE EXCEPTION 'É necessário iniciar sessão.';
+    END IF;
+    RETURN private.save_loyalty_reward_internal(
         p_restaurant_id, p_reward_id, p_name, p_description,
         p_points_cost, p_stock_limit, p_is_active
     );
+END;
 $function$;
 
 -- Set or clear one photo path only after the object exists in the public catalogue bucket.
@@ -596,13 +618,18 @@ CREATE FUNCTION public.set_loyalty_reward_image_path(
     p_image_path text
 )
 RETURNS void
-LANGUAGE sql
+LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
 AS $function$
-    SELECT private.set_loyalty_reward_image_path_internal(
+BEGIN
+    IF (SELECT auth.uid()) IS NULL THEN
+        RAISE EXCEPTION 'É necessário iniciar sessão.';
+    END IF;
+    PERFORM private.set_loyalty_reward_image_path_internal(
         p_restaurant_id, p_reward_id, p_image_path
     );
+END;
 $function$;
 
 -- Explicitly restrict every privileged function to authenticated callers at the public boundary.
