@@ -25,7 +25,7 @@ class StaffPermissionSetTest {
     fun staffOnlySeeOperationalPagesForEnabledAreas() {
         val pages = listOf(
             "Início", "Mesas", "Pedidos", "Cozinha", "Carta", "Pontos",
-            "Assistente", "Conta", "Reservas", "Preço Justo", "Stock", "Análise"
+            "IA", "Assistente económico", "Conta", "Reservas", "Preço Justo", "Stock", "Análise"
         )
         assertEquals(
             listOf("Início", "Pedidos", "Cozinha", "Conta", "Reservas"),
@@ -35,7 +35,7 @@ class StaffPermissionSetTest {
 
     @Test
     fun ownerNavigationIsNotFilteredByStaffPermissions() {
-        val pages = listOf("Início", "Mesas", "Pedidos", "Assistente", "Conta")
+        val pages = listOf("Início", "Mesas", "Pedidos", "IA", "Assistente económico", "Conta")
         assertEquals(
             pages,
             StaffPermissionSet.filterPages(pages, emptySet(), isStaff = false)
