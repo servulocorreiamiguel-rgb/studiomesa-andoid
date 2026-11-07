@@ -17,10 +17,16 @@ internal object AssistantCapabilitiesPolicy {
     private val capabilityPhrases = listOf(
         "o que consegues fazer",
         "o que consegues",
+        "consegues fazer o que",
         "o que podes fazer",
         "o que sabes fazer",
+        "o que e que consegues fazer",
         "como me podes ajudar",
         "como podes ajudar",
+        "como te posso usar",
+        "que tipo de perguntas posso fazer",
+        "que perguntas posso fazer",
+        "quais sao as tuas capacidades",
         "em que me podes ajudar",
         "em que podes ajudar",
         "quais sao as tuas funcoes",
@@ -45,7 +51,12 @@ internal object AssistantCapabilitiesPolicy {
             appendLine("Posso:")
             appendLine("• Explicar como utilizar a StudioMesa e as suas secções.")
             appendLine("• Analisar a carta, custos por dose, margens e preços, usando os dados disponíveis.")
-            appendLine("• Ajudar a interpretar pedidos, mesas, cozinha e reservas.")
+            appendLine(
+                if (features.hasReservationsAndPricing)
+                    "• Ajudar a interpretar pedidos, mesas, cozinha e reservas."
+                else
+                    "• Ajudar a interpretar pedidos, mesas e cozinha."
+            )
             appendLine("• Dar sugestões para reduzir desperdício, organizar a operação e melhorar resultados.")
             if (features.hasReservationsAndPricing) {
                 appendLine("• Ajudar com reservas e referências de preço.")
@@ -63,7 +74,7 @@ internal object AssistantCapabilitiesPolicy {
                 appendLine("O modelo generativo local ainda não está instalado. Sem ele, algumas respostas ficam limitadas às funções e regras já disponíveis na aplicação.")
             }
             appendLine()
-            append("Limites importantes: analiso e recomendo, mas não altero preços, stock, pedidos, reservas, pagamentos ou documentos por iniciativa própria. As operações exigem confirmação nos controlos da aplicação. Não substituo um contabilista nem tenho acesso geral à Internet.")
+            append("Limites importantes: analiso e recomendo, mas não altero preços, stock, pedidos, reservas, pagamentos ou documentos por iniciativa própria. As operações exigem confirmação nos controlos da aplicação. Não substituo um contabilista nem tenho navegação livre pela Internet.")
         }.trim()
     }
 
