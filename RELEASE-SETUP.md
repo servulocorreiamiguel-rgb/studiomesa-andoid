@@ -23,7 +23,7 @@ Os APKs do workflow normal continuam a usar os identificadores `pt.studiomesa.pr
 
 A configuração de sabores atual produz seis variantes técnicas (três planos × Gestão/Cliente). A variante Cliente Essencial inclui cartão, carta e loja de pontos, mas não reservas. A configuração produz aplicações separadas para Essencial/Profissional/Premium e Gestão/Cliente. O workflow comercial acrescenta os sufixos de sabor ao identificador base definido na variável `STUDIOMESA_RELEASE_APPLICATION_ID`.
 
-**Atenção à política de conteúdo repetitivo:** não assumas que podes publicar seis fichas Play só porque o Gradle gera cinco variantes. A Google não permite múltiplas apps com funcionalidade, conteúdo e experiência altamente semelhantes e recomenda agregar apps com pouca diferenciação. Avalia primeiro duas apps com funções distintas (Gestão e Cliente), com os planos controlados por entitlements seguros no servidor, ou distribuição privada B2B. A branch atual introduz entitlements para a loja de pontos e bloqueia reservas no Essencial, mas ainda não constitui um sistema completo de licenciamento e faturação automática. Fontes: https://support.google.com/googleplay/android-developer/answer/18265346 e https://support.google.com/googleplay/android-developer/answer/15884185.
+**Atenção à política de conteúdo repetitivo:** não assumas que podes publicar seis fichas Play só porque o Gradle gera seis variantes. A Google não permite múltiplas apps com funcionalidade, conteúdo e experiência altamente semelhantes e recomenda agregar apps com pouca diferenciação. Avalia primeiro duas apps com funções distintas (Gestão e Cliente), com os planos controlados por entitlements seguros no servidor, ou distribuição privada B2B. A branch atual introduz entitlements para a loja de pontos e bloqueia reservas no Essencial, mas ainda não constitui um sistema completo de licenciamento e faturação automática. Fontes: https://support.google.com/googleplay/android-developer/answer/18265346 e https://support.google.com/googleplay/android-developer/answer/15884185.
 
 O identificador de pacote é permanente depois da publicação. Cria primeiro a aplicação na Play Console e confirma o nome do pacote que fica registado. A Google Play regista o nome de pacote da nova aplicação na conta do programador; se o nome já estiver em uso, será necessário escolher outro. Referência: https://developer.android.com/developer-verification/guides/google-play-console
 
@@ -95,7 +95,7 @@ A página pública já está ativa em:
 
 A página envia uma ligação única ao email da conta; depois de a pessoa autenticar a sessão, permite pedir a eliminação. Não é seguro permitir eliminação apenas por introduzir um email.
 
-**Estado atual da página de eliminação:** a versão ativa usa `resetPasswordForEmail` com callback PKCE e mensagem neutra, não `signInWithOtp`. A eliminação efetiva é feita por `delete-account`, num endpoint separado que exige JWT. O envio por email, callback no mesmo navegador, troca PKCE e eliminação com contas descartáveis continuam sem teste E2E; por isso, não afirmar que a proteção contra enumeração ou a eliminação estão totalmente validadas. Ver `SUPABASE-SETUP.md` e `docs/SUPABASE-LIVE-RECONCILIATION-2026-11-06.md`.
+**Estado atual da página de eliminação:** a versão ativa usa `resetPasswordForEmail` com callback PKCE e mensagem neutra, não `signInWithOtp`. A eliminação efetiva é feita por `delete-account`, num endpoint separado que exige JWT. O envio por email, callback no mesmo navegador, troca PKCE e eliminação com contas descartáveis continuam sem teste E2E; por isso, não afirmar que a proteção contra enumeração ou a eliminação estão totalmente validadas. Ver `SUPABASE-SETUP.md` e `docs/SUPABASE-LIVE-MIGRATION-HISTORY-2026-11-07.md`.
 
 **Configuração obrigatória antes de testar o email:**
 
@@ -138,7 +138,7 @@ Regra para cada nova migração que crie uma tabela em `public`:
 
 Não aplicar um `GRANT` amplo para `anon` como solução rápida. Os privilégios da tabela controlam se o papel pode aceder ao objeto; o RLS controla as linhas que esse papel pode ver ou alterar. Ambos são necessários.
 
-[REGISTO HISTÓRICO — 29/10/2026, não usar como fotografia atual] Naquela data foram verificadas 41 versões aplicadas e privilégios por omissão fechados. Esta fotografia foi ultrapassada: em 06/11/2026 o histórico tem 54 versões remotas e 53 ficheiros locais, com cinco versões só locais e seis só remotas. O estado atual está em `docs/SUPABASE-LIVE-RECONCILIATION-2026-11-06.md`. A migração de privilégios por omissão foi aplicada historicamente, mas a divergência atual impede qualquer novo deployment.
+[REGISTO HISTÓRICO — 29/10/2026, não usar como fotografia atual] Naquela data foram verificadas 41 versões aplicadas e privilégios por omissão fechados. Esta fotografia foi ultrapassada: em 07/11/2026 o histórico tem 57 versões remotas e 55 ficheiros na main, com quatro versões só locais e seis só remotas. O estado atual está em `docs/SUPABASE-LIVE-MIGRATION-HISTORY-2026-11-07.md`. A migração de privilégios por omissão foi aplicada historicamente, mas a divergência atual impede qualquer novo deployment.
 
 
 A verificação da compilação, por si só, não certifica que a aplicação esteja pronta para operação comercial.
