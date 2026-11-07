@@ -57,4 +57,21 @@ class AssistantCapabilitiesPolicyTest {
         assertNull(AssistantCapabilitiesPolicy.answer("Quantas reservas tenho hoje?", standardFeatures))
         assertFalse(AssistantCapabilitiesPolicy.answer("O que consegues fazer?", standardFeatures).isNullOrBlank())
     }
+
+    @Test
+    fun onlyAuthorizedOwnerCapabilitiesMentionInvoiceBridge() {
+        val standard = AssistantCapabilitiesPolicy.answer(
+            "O que consegues fazer?",
+            standardFeatures
+        ).orEmpty()
+        assertFalse(standard.contains("Assistente económico"))
+
+        val owner = AssistantCapabilitiesPolicy.answer(
+            "O que consegues fazer?",
+            standardFeatures.copy(canAccessInvoices = true)
+        ).orEmpty()
+        assertTrue(owner.contains("Assistente económico"))
+        assertTrue(owner.contains("apenas de leitura"))
+    }
+
 }
