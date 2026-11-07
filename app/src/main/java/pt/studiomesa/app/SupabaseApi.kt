@@ -23,7 +23,7 @@ object SupabaseApi {
         require(query.length in 3..200) { "A pesquisa tem de ter entre 3 e 200 caracteres." }
         return JSONObject(call(
             "POST",
-            "/functions/v1/studiomesa-assistant",
+            "/functions/v1/studiomesa-web-search",
             JSONObject().put("query", query),
             token,
             readTimeoutMillis = 20_000
