@@ -1767,7 +1767,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun assistantConversationScope(economicAssistant: Boolean = activePage == "Assistente económico"): String =
-        assistantChatScope() + if (economicAssistant) ":economic" else ":general"
+        assistantChatScope() + if (economicAssistant) ":economic" else ""
 
     private fun renderLocalAssistantModelCard(container: LinearLayout) {
         val modelInstalled = localAssistantModelManager.isModelInstalled()
