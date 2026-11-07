@@ -421,26 +421,20 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun navigateToActivityNotificationKey(eventKey: String) {
-        if (isCustomerApp) {
-            activeCustomerPage = when {
-                eventKey.startsWith("customer:reservation:") -> "Reservas"
-                eventKey.startsWith("customer:reward:") -> "Cartão"
-                else -> return
-            }
-            renderCustomerApp()
-            return
-        }
+        val destination = StudioMesaNotificationDestination.pageFor(
+            isCustomerApp = isCustomerApp,
+            eventKey = eventKey,
+            availableRestaurantPages = if (isCustomerApp) emptySet() else availablePages().toSet()
+        ) ?: return
 
-        val targetPage = when {
-            eventKey.startsWith("restaurant:order:") -> "Cozinha"
-            eventKey.startsWith("restaurant:reservation:") -> "Reservas"
-            eventKey.startsWith("restaurant:redemption:") -> "Pontos"
-            else -> return
+        if (isCustomerApp) {
+            activeCustomerPage = destination
+            renderCustomerApp()
+        } else {
+            activePage = destination
+            assistantToolsVisible = false
+            renderApp()
         }
-        if (targetPage !in availablePages()) return
-        activePage = targetPage
-        assistantToolsVisible = false
-        renderApp()
     }
 
     private fun parseAuthParams(raw: String?): Map<String, String> =
