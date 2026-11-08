@@ -30,6 +30,30 @@ object SupabaseApi {
         ))
     }
 
+    /**
+     * Online general assistant. Sends only this message; no conversation history,
+     * memory, restaurant snapshot, invoices, customer or staff records are attached.
+     */
+    fun generateCloudGeneralAssistant(
+        token: String,
+        message: String,
+        searchWeb: Boolean
+    ): JSONObject {
+        require(token.isNotBlank()) { "Inicia sessão para usar a IA online." }
+        require(message.isNotBlank() && message.length <= 4000) {
+            "A mensagem tem de ter entre 1 e 4000 caracteres."
+        }
+        return JSONObject(call(
+            "POST",
+            "/functions/v1/studiomesa-assistant",
+            JSONObject()
+                .put("message", message)
+                .put("search_web", searchWeb),
+            token,
+            readTimeoutMillis = 60_000
+        ))
+    }
+
     private fun call(
         method: String,
         path: String,
@@ -160,7 +184,8 @@ object SupabaseApi {
         path: String,
         token: String,
         payload: ByteArray? = null,
-        mimeType: String = "application/octet-stream"
+        mimeType: String = "application/octet-stream",
+        upsert: Boolean = false
     ): ByteArray {
         val connection = (URL(BASE_URL + path).openConnection() as HttpURLConnection).apply {
             requestMethod = method
@@ -173,6 +198,7 @@ object SupabaseApi {
             setRequestProperty("Accept", "application/json, application/octet-stream")
             setRequestProperty("Cache-Control", "no-store")
             setRequestProperty("Content-Type", mimeType)
+            if (upsert) setRequestProperty("x-upsert", "true")
         }
         try {
             if (payload != null) {
@@ -1004,6 +1030,97 @@ object SupabaseApi {
             token
         )
         return JSONArray(response)
+    }
+
+    fun getRestaurantLoyaltyEntitlements(token: String, restaurantId: String): JSONObject {
+        require(token.isNotBlank() && restaurantId.matches(Regex("^[0-9a-fA-F-]{36}$")))
+        val rows = JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/get_restaurant_loyalty_entitlements",
+            JSONObject().put("p_restaurant_id", restaurantId),
+            token
+        ))
+        val result = rows.optJSONObject(0)
+            ?: throw IllegalStateException("O servidor não devolveu os limites do plano.")
+        val plan = result.optString("plan_code")
+        val limit = result.optInt("reward_limit", 0)
+        val active = result.optInt("active_rewards", -1)
+        require(plan in setOf("essencial", "profissional", "premium") && limit > 0 && active >= 0) {
+            "Os limites da loja de pontos devolvidos pelo servidor são inválidos."
+        }
+        return result
+    }
+
+    fun setLoyaltyRewardImagePath(
+        token: String,
+        restaurantId: String,
+        rewardId: String,
+        imagePath: String?
+    ) {
+        require(token.isNotBlank())
+        require(restaurantId.matches(Regex("^[0-9a-fA-F-]{36}$")))
+        require(rewardId.matches(Regex("^[0-9a-fA-F-]{36}$")))
+        if (imagePath != null) {
+            require(imagePath == "$restaurantId/$rewardId/photo.jpg") {
+                "O caminho da fotografia não corresponde à recompensa."
+            }
+        }
+        call(
+            "POST",
+            "/rest/v1/rpc/set_loyalty_reward_image_path",
+            JSONObject()
+                .put("p_restaurant_id", restaurantId)
+                .put("p_reward_id", rewardId)
+                .put("p_image_path", imagePath ?: JSONObject.NULL),
+            token
+        )
+    }
+
+    fun uploadLoyaltyRewardPhoto(
+        token: String,
+        restaurantId: String,
+        rewardId: String,
+        bytes: ByteArray
+    ): String {
+        require(token.isNotBlank())
+        require(restaurantId.matches(Regex("^[0-9a-fA-F-]{36}$")))
+        require(rewardId.matches(Regex("^[0-9a-fA-F-]{36}$")))
+        require(bytes.size in 1..(1536 * 1024)) { "A fotografia tem de ter até 1,5 MB." }
+        val objectPath = "$restaurantId/$rewardId/photo.jpg"
+        val encodedPath = objectPath.split("/").joinToString("/") { URLEncoder.encode(it, "UTF-8") }
+        binaryStorageRequest(
+            "POST",
+            "/storage/v1/object/loyalty-reward-images/$encodedPath",
+            token,
+            bytes,
+            "image/jpeg",
+            upsert = true
+        )
+        return objectPath
+    }
+
+    fun deleteLoyaltyRewardPhoto(token: String, objectPath: String) {
+        require(token.isNotBlank())
+        val parts = objectPath.split("/")
+        require(parts.size == 3 && parts[0].matches(Regex("^[0-9a-fA-F-]{36}$")) &&
+            parts[1].matches(Regex("^[0-9a-fA-F-]{36}$")) && parts[2] == "photo.jpg")
+        val encodedPath = parts.joinToString("/") { URLEncoder.encode(it, "UTF-8") }
+        binaryStorageRequest("DELETE", "/storage/v1/object/loyalty-reward-images/$encodedPath", token)
+    }
+
+    fun downloadLoyaltyRewardPhoto(token: String, objectPath: String): ByteArray {
+        require(token.isNotBlank())
+        val parts = objectPath.split("/")
+        require(parts.size == 3 && parts[0].matches(Regex("^[0-9a-fA-F-]{36}$")) &&
+            parts[1].matches(Regex("^[0-9a-fA-F-]{36}$")) && parts[2] == "photo.jpg")
+        val encodedPath = parts.joinToString("/") { URLEncoder.encode(it, "UTF-8") }
+        return binaryStorageRequest(
+            "GET",
+            "/storage/v1/object/public/loyalty-reward-images/$encodedPath",
+            token
+        ).also {
+            require(it.size in 1..(1536 * 1024)) { "A fotografia da recompensa é inválida ou demasiado grande." }
+        }
     }
 
     fun saveLoyaltyReward(

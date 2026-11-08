@@ -8,6 +8,10 @@ verify_jwt = true
 enabled = true
 verify_jwt = false
 
+[functions.studiomesa-assistant]
+enabled = true
+verify_jwt = true
+
 [functions.studiomesa-web-search]
 enabled = true
 verify_jwt = true

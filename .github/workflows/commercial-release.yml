@@ -144,7 +144,7 @@ jobs:
           echo "STUDIOMESA_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
 
       - name: Run unit tests for every distributed variant
-        run: gradle --no-daemon testEssencialRestauranteDebugUnitTest testProfissionalRestauranteDebugUnitTest testProfissionalClienteDebugUnitTest testPremiumRestauranteDebugUnitTest testPremiumClienteDebugUnitTest
+        run: gradle --no-daemon testEssencialRestauranteDebugUnitTest testEssencialClienteDebugUnitTest testProfissionalRestauranteDebugUnitTest testProfissionalClienteDebugUnitTest testPremiumRestauranteDebugUnitTest testPremiumClienteDebugUnitTest
 
       - name: Run Android lint
         timeout-minutes: 10
@@ -163,18 +163,20 @@ jobs:
             -PstudiomesaCommercialRelease=true \
             -PstudiomesaReleaseApplicationId="$STUDIOMESA_RELEASE_APPLICATION_ID" \
             bundleEssencialRestauranteRelease \
+            bundleEssencialClienteRelease \
             bundleProfissionalRestauranteRelease \
             bundleProfissionalClienteRelease \
             bundlePremiumRestauranteRelease \
             bundlePremiumClienteRelease \
             assembleEssencialRestauranteRelease \
+            assembleEssencialClienteRelease \
             assembleProfissionalRestauranteRelease \
             assembleProfissionalClienteRelease \
             assemblePremiumRestauranteRelease \
             assemblePremiumClienteRelease
           mapfile -d '' bundles < <(find app/build/outputs/bundle -type f -name '*.aab' -print0)
-          if [ "${#bundles[@]}" -ne 5 ]; then
-            echo "Expected five AABs, found ${#bundles[@]}."
+          if [ "${#bundles[@]}" -ne 6 ]; then
+            echo "Expected six AABs, found ${#bundles[@]}."
             exit 1
           fi
           for bundle in "${bundles[@]}"; do
@@ -190,8 +192,8 @@ jobs:
             fi
           done
           mapfile -d '' apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' -print0)
-          if [ "${#apks[@]}" -ne 5 ]; then
-            echo "Expected exactly five release APKs, found ${#apks[@]}."
+          if [ "${#apks[@]}" -ne 6 ]; then
+            echo "Expected exactly six release APKs, found ${#apks[@]}."
             exit 1
           fi
           APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"

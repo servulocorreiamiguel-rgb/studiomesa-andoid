@@ -8,6 +8,8 @@ import android.content.ClipboardManager
 import android.content.res.ColorStateList
 import android.app.AlertDialog
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
@@ -17,6 +19,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.LruCache
 import android.text.InputFilter
 import android.text.InputType
 import android.text.method.LinkMovementMethod
@@ -48,6 +51,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.Executors
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.MultiFormatWriter
@@ -57,6 +61,8 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val REQUEST_EXPORT_ORDERS_CSV = 7812
         private const val REQUEST_IMPORT_SUPPLIER_INVOICE = 7813
+        private const val REQUEST_PICK_LOYALTY_REWARD_IMAGE = 7815
+        const val EXTRA_ACTIVITY_NOTIFICATION_KEY = "studiomesa_activity_notification_key"
     }
 
     private lateinit var store: RestaurantStore
@@ -65,6 +71,18 @@ class MainActivity : ComponentActivity() {
     private var activeCustomerPage = "Cartão"
 
     private var activityResumed = false
+    private var pendingActivityNotificationKey: String? = null
+    private var activityNotificationRefreshScheduled = false
+    private var activityNotificationRefreshInFlight = false
+    private val activityNotificationRefreshHandler = Handler(Looper.getMainLooper())
+    private val activityNotificationRefreshRunnable = object : Runnable {
+        override fun run() {
+            activityNotificationRefreshScheduled = false
+            if (!shouldRunActivityNotificationRefresh()) return
+            refreshActivityNotificationsSilently()
+            scheduleNextActivityNotificationRefresh()
+        }
+    }
     private var kitchenAutoRefreshScheduled = false
     private var kitchenRefreshInFlight = false
     private var kitchenOrdersCache: JSONArray? = null
@@ -103,6 +121,13 @@ class MainActivity : ComponentActivity() {
     private var assistantCloudLastSyncAtMillis = 0L
     private var invoiceImportInFlight = false
     private var pendingInvoiceImport: PendingInvoiceImport? = null
+    private var pendingLoyaltyRewardPhotoUri: android.net.Uri? = null
+    private var pendingLoyaltyRewardPhotoId: String? = null
+    private var loyaltyRewardPhotoStatusView: TextView? = null
+    private val loyaltyRewardPhotoCache = object : LruCache<String, Bitmap>(8 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
+    }
+    private val loyaltyRewardImageExecutor = Executors.newFixedThreadPool(3)
 
     private data class PendingInvoiceImport(
         val uri: android.net.Uri,
@@ -230,6 +255,7 @@ class MainActivity : ComponentActivity() {
         window.navigationBarColor = forestDeep
         renderApp()
         handleAuthCallback(intent)
+        handleActivityNotificationIntent(intent)
 
         // Refresh shared data when an already-authenticated user opens the app,
         // but do not start a second request while processing an OAuth callback.
@@ -245,14 +271,27 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         activityResumed = true
+        StudioMesaNotificationCenter.ensureChannel(this)
+        if (backendToken().isNotBlank()) {
+            StudioMesaNotificationCenter.requestPermissionIfNeeded(
+                this,
+                backendPrefs.getBoolean("activity_notification_permission_asked_v1", false)
+            ) {
+                backendPrefs.edit()
+                    .putBoolean("activity_notification_permission_asked_v1", true)
+                    .apply()
+            }
+        }
         updateKitchenAutoRefresh()
         updateInventoryAutoRefresh()
+        updateActivityNotificationRefresh()
     }
 
     override fun onPause() {
         activityResumed = false
         stopKitchenAutoRefresh()
         stopInventoryAutoRefresh()
+        stopActivityNotificationRefresh()
         super.onPause()
     }
 
@@ -267,6 +306,8 @@ class MainActivity : ComponentActivity() {
         if (localAssistantModelManagerDelegate.isInitialized()) {
             localAssistantModelManager.close()
         }
+        stopActivityNotificationRefresh()
+        loyaltyRewardImageExecutor.shutdownNow()
         super.onDestroy()
     }
 
@@ -284,6 +325,25 @@ class MainActivity : ComponentActivity() {
         }
 
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_PICK_LOYALTY_REWARD_IMAGE) {
+            val uri = data?.data
+            if (resultCode == RESULT_OK && uri != null) {
+                val selectedRewardId = pendingLoyaltyRewardPhotoId
+                if (selectedRewardId.isNullOrBlank()) {
+                    Toast.makeText(this, "O formulário da recompensa já não está aberto. Escolhe a fotografia novamente.", Toast.LENGTH_LONG).show()
+                } else {
+                    runCatching {
+                        contentResolver.takePersistableUriPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        )
+                    }
+                    pendingLoyaltyRewardPhotoUri = uri
+                    loyaltyRewardPhotoStatusView?.text = "Nova fotografia selecionada. Será comprimida antes do envio."
+                }
+            }
+            return
+        }
         if (requestCode == REQUEST_IMPORT_SUPPLIER_INVOICE) {
             val uri = data?.data
             if (resultCode == RESULT_OK && uri != null) {
@@ -332,6 +392,49 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleAuthCallback(intent)
+        handleActivityNotificationIntent(intent)
+    }
+
+    private fun handleActivityNotificationIntent(notificationIntent: Intent?) {
+        val eventKey = notificationIntent
+            ?.getStringExtra(EXTRA_ACTIVITY_NOTIFICATION_KEY)
+            ?.trim()
+            .orEmpty()
+        if (eventKey.isBlank()) return
+        notificationIntent?.removeExtra(EXTRA_ACTIVITY_NOTIFICATION_KEY)
+
+        if (!isCustomerApp &&
+            backendPrefs.getString("restaurant_role", "").orEmpty() == "staff" &&
+            currentStaffPermissions == null
+        ) {
+            // A cold start must first restore the server-authoritative permission matrix.
+            pendingActivityNotificationKey = eventKey
+            return
+        }
+        navigateToActivityNotificationKey(eventKey)
+    }
+
+    private fun applyPendingActivityNotificationNavigation() {
+        val eventKey = pendingActivityNotificationKey ?: return
+        pendingActivityNotificationKey = null
+        navigateToActivityNotificationKey(eventKey)
+    }
+
+    private fun navigateToActivityNotificationKey(eventKey: String) {
+        val destination = StudioMesaNotificationDestination.pageFor(
+            isCustomerApp = isCustomerApp,
+            eventKey = eventKey,
+            availableRestaurantPages = if (isCustomerApp) emptySet() else availablePages().toSet()
+        ) ?: return
+
+        if (isCustomerApp) {
+            activeCustomerPage = destination
+            renderCustomerApp()
+        } else {
+            activePage = destination
+            assistantToolsVisible = false
+            renderApp()
+        }
     }
 
     private fun parseAuthParams(raw: String?): Map<String, String> =
@@ -748,6 +851,7 @@ class MainActivity : ComponentActivity() {
         setContentView(appRoot)
         updateKitchenAutoRefresh()
         updateInventoryAutoRefresh()
+        updateActivityNotificationRefresh()
     }
 
     private fun renderAssistantChatScreen(
@@ -855,6 +959,23 @@ class MainActivity : ComponentActivity() {
             setOnClickListener { syncAssistantCloud(silent = false) }
         }
         toolbar.addView(syncButton, LinearLayout.LayoutParams(dp(34), dp(44)))
+
+        if (!isEconomicAssistant) {
+            val cloudButton = TextView(this).apply {
+                text = if (cloudGeneralAssistantEnabled()) "☁✓" else "☁"
+                textSize = 17f
+                gravity = Gravity.CENTER
+                setTextColor(if (cloudGeneralAssistantEnabled()) forest else forestDeep)
+                contentDescription = if (cloudGeneralAssistantEnabled())
+                    "Desativar ou configurar IA online"
+                else "Ativar IA online para perguntas gerais"
+                background = rippleBackground(paper, 12)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { showCloudGeneralAssistantDialog() }
+            }
+            toolbar.addView(cloudButton, LinearLayout.LayoutParams(dp(38), dp(44)))
+        }
 
         if (isEconomicAssistant) {
             val documentsButton = TextView(this).apply {
@@ -988,11 +1109,22 @@ class MainActivity : ComponentActivity() {
         if (assistantSending) {
             val thinkingCard = makeCard(12)
             thinkingCard.addView(label(
-                if (isEconomicAssistant) "STUDIOMESA · ASSISTENTE ECONÓMICO" else "STUDIOMESA · IA LOCAL",
+                when {
+                    isEconomicAssistant -> "STUDIOMESA · ASSISTENTE ECONÓMICO"
+                    cloudGeneralAssistantEnabled() -> "STUDIOMESA · IA ONLINE"
+                    else -> "STUDIOMESA · IA LOCAL"
+                },
                 9f, true, forestSoft
             ))
             addGap(thinkingCard, 5)
-            assistantStreamingTextView = label("A analisar no dispositivo…", 13f, false, ink)
+            assistantStreamingTextView = label(
+                when {
+                    isEconomicAssistant -> "A analisar os dados financeiros autorizados…"
+                    cloudGeneralAssistantEnabled() -> "A consultar a IA online e, quando necessário, fontes atuais…"
+                    else -> "A analisar no dispositivo…"
+                },
+                13f, false, ink
+            )
             thinkingCard.addView(assistantStreamingTextView)
             conversation.addView(thinkingCard, cardParams())
         } else {
@@ -1789,14 +1921,70 @@ class MainActivity : ComponentActivity() {
     private fun assistantConversationScope(economicAssistant: Boolean = activePage == "Assistente económico"): String =
         assistantChatScope() + if (economicAssistant) ":economic" else ""
 
+    private fun cloudGeneralAssistantEnabled(): Boolean =
+        getSharedPreferences("studiomesa_assistant_settings", MODE_PRIVATE)
+            .getBoolean("cloud_general_assistant_enabled", false)
+
+    private fun showCloudGeneralAssistantDialog() {
+        val settings = getSharedPreferences("studiomesa_assistant_settings", MODE_PRIVATE)
+        val enabled = settings.getBoolean("cloud_general_assistant_enabled", false)
+        if (enabled) {
+            AlertDialog.Builder(this)
+                .setTitle("IA online")
+                .setMessage("A IA online está ativa apenas na conversa geral. A conversa económica continua local e privada. Podes desligar o modo online a qualquer momento.")
+                .setNegativeButton("Manter ativa", null)
+                .setPositiveButton("Desativar") { _, _ ->
+                    settings.edit().putBoolean("cloud_general_assistant_enabled", false).apply()
+                    renderAssistantChatScreen(isEconomicAssistant = false)
+                }
+                .show()
+            return
+        }
+        if (backendToken().isBlank()) {
+            AlertDialog.Builder(this)
+                .setTitle("Inicia sessão primeiro")
+                .setMessage("A IA online exige uma sessão autenticada. A IA local continua disponível sem conta online.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Ativar IA online")
+            .setMessage(
+                "Este modo usa Gemini para responder a perguntas gerais e Tavily para pesquisar informação atual, quando necessário. " +
+                    "É uma opção separada da IA local e está desligada por defeito.\n\n" +
+                    "Só é enviada a mensagem atual. Não são enviados histórico, Memória, dados do restaurante, faturas, clientes ou equipa. " +
+                    "Não escrevas dados pessoais, comerciais confidenciais, palavras-passe, NIF, IBAN ou conteúdo de faturas. " +
+                    "O plano gratuito de alguns fornecedores pode usar pedidos para melhorar os seus serviços. " +
+                    "A IA económica permanece no dispositivo e não usa este modo.\n\n" +
+                    "A ativação na aplicação não substitui a configuração das chaves GEMINI_API_KEY e TAVILY_API_KEY no servidor."
+            )
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Ativar") { _, _ ->
+                settings.edit().putBoolean("cloud_general_assistant_enabled", true).apply()
+                renderAssistantChatScreen(isEconomicAssistant = false)
+            }
+            .show()
+    }
+
     private fun renderLocalAssistantModelCard(container: LinearLayout) {
         assistantModelStatusTextView = null
         assistantModelProgressTextView = null
         val modelInstalled = localAssistantModelManager.isModelInstalled()
-        val card = makeCard(13, if (modelInstalled) paleGreen else copperPale)
-        card.addView(label("MODELO DE IA NO DISPOSITIVO", 9.5f, true, forestDeep))
+        val cloudEnabled = cloudGeneralAssistantEnabled()
+        val card = makeCard(13, if (modelInstalled || cloudEnabled) paleGreen else copperPale)
+        card.addView(label(
+            if (cloudEnabled) "IA ONLINE · GEMINI 3.8 FLASH" else "MODELO DE IA NO DISPOSITIVO",
+            9.5f, true, forestDeep
+        ))
         addGap(card, 5)
-        val status = when {
+        val status = if (cloudEnabled) {
+            if (modelInstalled) {
+                "A IA online está ativa para perguntas gerais. A IA local continua disponível para trabalhar offline e consultar dados privados."
+            } else {
+                "A IA online está ativa para perguntas gerais. A IA local é opcional e pode ser instalada para trabalhar offline."
+            }
+        } else when {
             assistantModelDownloading || localAssistantModelManager.isDownloading() ->
                 "A transferir o modelo: ${((assistantModelProgressBytes * 100) / localAssistantModelManager.modelSizeBytes()).coerceIn(0, 100)}%."
             modelInstalled ->
@@ -2040,7 +2228,7 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "Escreve uma mensagem primeiro.", Toast.LENGTH_SHORT).show()
             return
         }
-        if (localAssistantModelManager.isModelInstalled() &&
+        if (!cloudGeneralAssistantEnabled() && localAssistantModelManager.isModelInstalled() &&
             question.length > LocalAssistantModelManager.MAX_USER_MESSAGE_CHARS) {
             Toast.makeText(
                 this,
@@ -2065,6 +2253,48 @@ class MainActivity : ComponentActivity() {
             assistantComposerDraft = ""
             assistantChatAutoFollow = true
             assistantChatError = null
+
+            if (!economicAssistant && cloudGeneralAssistantEnabled()) {
+                val token = backendToken()
+                if (token.isBlank()) {
+                    assistantChatError = "A IA online exige uma sessão autenticada. Desativa o modo online para continuar localmente."
+                    renderApp()
+                    return
+                }
+                val searchWeb = AssistantQuestionRouter.requiresWebSearch(question)
+                assistantSending = true
+                renderApp()
+                Thread {
+                    val result = runCatching {
+                        SupabaseApi.generateCloudGeneralAssistant(token, question, searchWeb)
+                    }
+                    runOnUiThread {
+                        assistantSending = false
+                        assistantStreamingTextView = null
+                        result.fold(
+                            onSuccess = { payload ->
+                                val answer = payload.optString("answer").trim()
+                                if (answer.isBlank()) {
+                                    assistantChatError = "O serviço online não devolveu uma resposta. Tenta novamente ou usa a IA local."
+                                } else {
+                                    runCatching {
+                                        assistantChatStore.appendTurn(scope, conversationId, "assistant", answer)
+                                        syncAssistantCloud(silent = true)
+                                    }.onFailure { error ->
+                                        assistantChatError = error.message ?: "A resposta chegou, mas não foi possível guardar o histórico."
+                                    }
+                                }
+                            },
+                            onFailure = { error ->
+                                assistantChatError = error.message
+                                    ?: "O serviço online não está disponível. Desativa o modo online para usar a IA local."
+                            }
+                        )
+                        renderApp()
+                    }
+                }.apply { name = "studiomesa-online-assistant" }.start()
+                return
+            }
 
             if (localAssistantModelManager.isModelInstalled()) {
                 assistantSending = true
@@ -3147,6 +3377,218 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun shouldRunActivityNotificationRefresh(): Boolean {
+        if (!activityResumed || backendToken().isBlank()) return false
+        return if (isCustomerApp) {
+            backendMemberId().isNotBlank()
+        } else {
+            hasRemoteRestaurant() && backendRestaurantId().isNotBlank()
+        }
+    }
+
+    private fun updateActivityNotificationRefresh() {
+        if (!shouldRunActivityNotificationRefresh()) {
+            stopActivityNotificationRefresh()
+            return
+        }
+        if (!activityNotificationRefreshScheduled && !activityNotificationRefreshInFlight) {
+            refreshActivityNotificationsSilently()
+            scheduleNextActivityNotificationRefresh()
+        }
+    }
+
+    private fun scheduleNextActivityNotificationRefresh() {
+        if (!shouldRunActivityNotificationRefresh()) {
+            stopActivityNotificationRefresh()
+            return
+        }
+        if (!activityNotificationRefreshScheduled) {
+            activityNotificationRefreshScheduled = true
+            activityNotificationRefreshHandler.postDelayed(
+                activityNotificationRefreshRunnable,
+                60_000L
+            )
+        }
+    }
+
+    private fun stopActivityNotificationRefresh() {
+        activityNotificationRefreshHandler.removeCallbacks(activityNotificationRefreshRunnable)
+        activityNotificationRefreshScheduled = false
+    }
+
+    /**
+     * Checks existing server records while the app is in the foreground.
+     * It deliberately does not run in the background; proper remote push delivery
+     * still requires Firebase credentials and a configured FCM sender.
+     */
+    private fun refreshActivityNotificationsSilently() {
+        if (activityNotificationRefreshInFlight || !shouldRunActivityNotificationRefresh()) return
+
+        val token = backendToken()
+        val accountId = backendPrefs.getString("user_id", "").orEmpty()
+        val restaurantId = backendRestaurantId()
+        val role = backendPrefs.getString("restaurant_role", "").orEmpty()
+        val permissions = currentStaffPermissions.orEmpty()
+
+        if (accountId.isBlank()) return
+        if (!isCustomerApp && role == "staff" && currentStaffPermissions == null) return
+
+        activityNotificationRefreshInFlight = true
+        Thread {
+            var loadedEvents: List<StudioMesaNotificationEvent>? = null
+            try {
+                val events = mutableListOf<StudioMesaNotificationEvent>()
+                if (isCustomerApp) {
+                    val reservations = SupabaseApi.listMyRestaurantReservations(token)
+                    for (index in 0 until reservations.length()) {
+                        val item = reservations.optJSONObject(index) ?: continue
+                        val id = item.optString("reservation_id").trim()
+                        val state = item.optString("status").trim()
+                        if (id.isBlank() || state.isBlank()) continue
+                        events.add(
+                            StudioMesaNotificationEvent(
+                                key = "customer:reservation:$id",
+                                state = state,
+                                title = "Atualização da reserva",
+                                message = "O estado da tua reserva foi atualizado.",
+                                notifyWhenStateIs = setOf(
+                                    "confirmada", "confirmed", "cancelada", "cancelled",
+                                    "rejeitada", "rejected"
+                                )
+                            )
+                        )
+                    }
+
+                    val redemptions = SupabaseApi.listMyLoyaltyRewardRedemptions(token)
+                    for (index in 0 until redemptions.length()) {
+                        val item = redemptions.optJSONObject(index) ?: continue
+                        val id = item.optString("redemption_id").trim()
+                        val state = item.optString("status").trim()
+                        if (id.isBlank() || state.isBlank()) continue
+                        events.add(
+                            StudioMesaNotificationEvent(
+                                key = "customer:reward:$id",
+                                state = state,
+                                title = "A tua recompensa está pronta",
+                                message = "Podes levantar a recompensa no restaurante.",
+                                notifyWhenStateIs = setOf("fulfilled", "entregue")
+                            )
+                        )
+                    }
+                } else {
+                    if (restaurantId.isBlank()) throw IllegalStateException("Restaurante não configurado.")
+
+                    if (role != "staff" || "orders" in permissions) {
+                        val orders = SupabaseApi.listActiveKitchenOrders(token, restaurantId)
+                        for (index in 0 until orders.length()) {
+                            val item = orders.optJSONObject(index) ?: continue
+                            val id = item.optString("id").trim()
+                            if (id.isBlank()) continue
+                            events.add(
+                                StudioMesaNotificationEvent(
+                                    key = "restaurant:order:$id",
+                                    state = item.optString("status").ifBlank { "ativo" },
+                                    title = "Novo pedido recebido",
+                                    message = "Foi recebido um novo pedido para a cozinha.",
+                                    notifyOnNew = true
+                                )
+                            )
+                        }
+                    }
+
+                    if (role != "staff" || "reservations" in permissions) {
+                        val reservations = SupabaseApi.listReservations(token, restaurantId)
+                        for (index in 0 until reservations.length()) {
+                            val item = reservations.optJSONObject(index) ?: continue
+                            val id = item.optString("id").trim()
+                            if (id.isBlank()) continue
+                            events.add(
+                                StudioMesaNotificationEvent(
+                                    key = "restaurant:reservation:$id",
+                                    state = item.optString("status").ifBlank { "pendente" },
+                                    title = "Novo pedido de reserva",
+                                    message = "Foi recebido um novo pedido de reserva.",
+                                    notifyOnNew = true
+                                )
+                            )
+                        }
+                    }
+
+                    // The owner-scoped management RPC must not be polled for staff.
+                    if (role == "owner") {
+                        val redemptions = SupabaseApi.listRestaurantRewardRedemptions(token, restaurantId)
+                        for (index in 0 until redemptions.length()) {
+                            val item = redemptions.optJSONObject(index) ?: continue
+                            val id = item.optString("redemption_id").trim()
+                            if (id.isBlank()) continue
+                            events.add(
+                                StudioMesaNotificationEvent(
+                                    key = "restaurant:redemption:$id",
+                                    state = item.optString("status").ifBlank { "pending" },
+                                    title = "Novo resgate na loja de pontos",
+                                    message = "Um cliente reservou uma recompensa para levantar.",
+                                    notifyOnNew = true
+                                )
+                            )
+                        }
+                    }
+                }
+                loadedEvents = events
+            } catch (_: Exception) {
+                // A failed or expired session must not advance the saved event snapshot.
+            }
+
+            runOnUiThread {
+                activityNotificationRefreshInFlight = false
+                val events = loadedEvents
+                if (
+                    events != null &&
+                    activityResumed &&
+                    backendToken().isNotBlank() &&
+                    backendPrefs.getString("user_id", "").orEmpty() == accountId
+                ) {
+                    persistActivityNotificationSnapshot(accountId, events)
+                }
+                // A pause/resume can happen while the HTTP request is in flight.
+                scheduleNextActivityNotificationRefresh()
+            }
+        }.start()
+    }
+
+    private fun persistActivityNotificationSnapshot(
+        accountId: String,
+        events: List<StudioMesaNotificationEvent>
+    ) {
+        val scope = if (isCustomerApp) "customer" else "restaurant"
+        val preferenceKey = "activity_notification_snapshot_v1_${scope}_${accountId}"
+        val previousJson = try {
+            JSONObject(backendPrefs.getString(preferenceKey, "{}") ?: "{}")
+        } catch (_: Exception) {
+            JSONObject()
+        }
+        val previous = LinkedHashMap<String, String>()
+        val previousKeys = previousJson.keys()
+        while (previousKeys.hasNext()) {
+            val key = previousKeys.next()
+            previous[key] = previousJson.optString(key)
+        }
+
+        val initializedKey = "${preferenceKey}_initialized"
+        val initialized = backendPrefs.getBoolean(initializedKey, false)
+        val result = StudioMesaNotificationSnapshot.compare(previous, events, initialized)
+        val snapshotJson = JSONObject()
+        result.snapshot.forEach { (key, state) -> snapshotJson.put(key, state) }
+
+        backendPrefs.edit()
+            .putString(preferenceKey, snapshotJson.toString())
+            .putBoolean(initializedKey, true)
+            .apply()
+
+        result.notifications.forEach { event ->
+            StudioMesaNotificationCenter.show(this, event.key, event.title, event.message)
+        }
+    }
+
     private fun shouldRunKitchenAutoRefresh(): Boolean =
         KitchenQueueRefreshPolicy.shouldScheduleAutoRefresh(
             activityResumed = activityResumed,
@@ -3699,7 +4141,11 @@ class MainActivity : ComponentActivity() {
             kitchenOrdersCache = null
             kitchenQueueUpdatedAtMillis = System.currentTimeMillis()
             kitchenQueueRefreshFailed = false
-            renderApp()
+            if (pendingActivityNotificationKey != null) {
+                applyPendingActivityNotificationNavigation()
+            } else {
+                renderApp()
+            }
         }
     }
 
@@ -4309,6 +4755,23 @@ class MainActivity : ComponentActivity() {
                 12f, false, muted
             ))
             addGap(content, 8)
+            content.addView(label("Perfil predefinido", 10f, true, forestSoft))
+            val presetSpinner = Spinner(this).apply {
+                adapter = ArrayAdapter(
+                    this@MainActivity,
+                    android.R.layout.simple_spinner_item,
+                    StaffRolePresets.labels
+                ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+                setSelection(StaffRolePresets.indexFor(current))
+                contentDescription = "Perfil de permissões do funcionário"
+            }
+            content.addView(presetSpinner, LinearLayout.LayoutParams(-1, dp(48)))
+            content.addView(label(
+                "Podes escolher um perfil e depois ajustar cada permissão manualmente.",
+                10.5f, false, muted
+            ))
+            addGap(content, 5)
+            var applyingPreset = false
             for ((key, title) in options) {
                 val check = android.widget.CheckBox(this).apply {
                     text = title
@@ -4318,9 +4781,32 @@ class MainActivity : ComponentActivity() {
                     minHeight = dp(48)
                     contentDescription = "Permissão: $title"
                 }
+                check.setOnCheckedChangeListener { _, _ ->
+                    if (!applyingPreset && presetSpinner.selectedItemPosition != 0) {
+                        presetSpinner.setSelection(0)
+                    }
+                }
                 checks[key] = check
                 content.addView(check, LinearLayout.LayoutParams(-1, dp(48)))
             }
+            presetSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+
+                override fun onItemSelected(
+                    parent: android.widget.AdapterView<*>?,
+                    view: View?,
+                    position: Int,
+                    id: Long
+                ) {
+                    val preset = StaffRolePresets.permissionsFor(StaffRolePresets.labels[position]) ?: return
+                    applyingPreset = true
+                    checks.forEach { (permission, check) ->
+                        check.isChecked = permission in preset
+                    }
+                    applyingPreset = false
+                }
+            }
+            presetSpinner.setSelection(StaffRolePresets.indexFor(current))
             val warning = makeCard(10, copperPale)
             warning.addView(label(
                 "A gestão da equipa, códigos de acesso, loja de recompensas, consultor económico e definições do restaurante continuam reservados ao proprietário.",
@@ -4731,11 +5217,19 @@ class MainActivity : ComponentActivity() {
             val members = SupabaseApi.listMembers(token, restaurantId)
             val rewards = SupabaseApi.listRestaurantRewards(token, restaurantId)
             val redemptions = SupabaseApi.listRestaurantRewardRedemptions(token, restaurantId)
+            val entitlements = if (backendPrefs.getString("restaurant_role", "") == "owner") {
+                SupabaseApi.getRestaurantLoyaltyEntitlements(token, restaurantId)
+            } else null
             backendPrefs.edit()
                 .putString("remote_members_json", members.toString())
                 .putString("restaurant_rewards_json", rewards.toString())
                 .putString("remote_reward_redemptions_json", redemptions.toString())
                 .apply()
+            if (entitlements != null) {
+                backendPrefs.edit()
+                    .putString("loyalty_entitlements_json", entitlements.toString())
+                    .apply()
+            }
             members.length().toString()
         }) { count ->
             if (activePage == "Pontos") renderApp()
@@ -4783,9 +5277,28 @@ class MainActivity : ComponentActivity() {
             container.addView(label("LOJA DE PONTOS", 10f, true, forestSoft))
             addGap(container, 5)
             container.addView(label("Recompensas do restaurante", 20f, true, forestDeep))
+            val entitlements = runCatching {
+                JSONObject(backendPrefs.getString("loyalty_entitlements_json", "{}") ?: "{}")
+            }.getOrDefault(JSONObject())
+            val planCode = entitlements.optString("plan_code", "")
+            val rewardLimit = entitlements.optInt("reward_limit", 0)
+            val activeRewardCount = entitlements.optInt("active_rewards", 0)
+            if (isOwner && rewardLimit > 0) {
+                addGap(container, 5)
+                container.addView(label(
+                    "Plano " + planCode.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString() } +
+                        " · " + activeRewardCount + " / " + rewardLimit + " prémios ativos" +
+                        if (entitlements.optBoolean("photos_enabled", false)) " · fotografias incluídas" else " · sem fotografias",
+                    11f, true, forestSoft
+                ))
+            }
             if (isOwner) {
                 addGap(container, 7)
-                container.addView(primaryButton("+ Criar recompensa") { showLoyaltyRewardEditor(null) }, LinearLayout.LayoutParams(-1, dp(44)))
+                if (rewardLimit > 0 && activeRewardCount >= rewardLimit) {
+                    container.addView(label("Atingiste o limite do teu plano. Desativa um prémio ou altera o plano para criar outro.", 11.5f, true, muted))
+                } else {
+                    container.addView(primaryButton("+ Criar recompensa") { showLoyaltyRewardEditor(null) }, LinearLayout.LayoutParams(-1, dp(44)))
+                }
             }
             val rewards = try { JSONArray(backendPrefs.getString("restaurant_rewards_json", "[]") ?: "[]") }
                 catch (_: Exception) { JSONArray() }
@@ -4797,6 +5310,8 @@ class MainActivity : ComponentActivity() {
                     val reward = rewards.optJSONObject(i) ?: continue
                     val card = makeCard(13)
                     val isActive = reward.optBoolean("is_active", false)
+                    val imagePath = reward.optString("image_path").trim()
+                    if (imagePath.isNotBlank()) addLoyaltyRewardPhotoImage(card, imagePath, 104)
                     card.addView(label(reward.optString("name"), 15f, true, forestDeep))
                     addGap(card, 3)
                     card.addView(label(reward.optInt("points_cost").toString() + " pontos", 11f, true, forestSoft))
@@ -5023,16 +5538,146 @@ class MainActivity : ComponentActivity() {
                 .setPositiveButton("OK", null).show()
             return
         }
+        runBackend({
+            val entitlements = SupabaseApi.getRestaurantLoyaltyEntitlements(backendToken(), backendRestaurantId())
+            backendPrefs.edit().putString("loyalty_entitlements_json", entitlements.toString()).apply()
+            "OK"
+        }) {
+            showLoyaltyRewardEditorForm(existing)
+        }
+    }
+
+    private fun readCompressedLoyaltyRewardPhoto(uri: android.net.Uri): ByteArray {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            ?: throw IllegalStateException("Não foi possível abrir a fotografia escolhida.")
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+            throw IllegalArgumentException("O ficheiro escolhido não é uma imagem válida.")
+        }
+
+        var sample = 1
+        val largest = maxOf(bounds.outWidth, bounds.outHeight)
+        while (largest / sample > 2048) sample *= 2
+        val options = BitmapFactory.Options().apply {
+            inJustDecodeBounds = false
+            inSampleSize = sample
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+        }
+        val decoded = contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, options)
+        } ?: throw IllegalStateException("Não foi possível descodificar a fotografia.")
+
+        val maxDimension = 1280
+        val scale = minOf(1f, maxDimension.toFloat() / maxOf(decoded.width, decoded.height))
+        val width = (decoded.width * scale).toInt().coerceAtLeast(1)
+        val height = (decoded.height * scale).toInt().coerceAtLeast(1)
+        val scaled = if (width != decoded.width || height != decoded.height) {
+            Bitmap.createScaledBitmap(decoded, width, height, true).also { decoded.recycle() }
+        } else decoded
+
+        // Flatten transparency onto white so transparent PNGs do not become black JPEGs.
+        val flattened = Bitmap.createBitmap(scaled.width, scaled.height, Bitmap.Config.ARGB_8888)
+        Canvas(flattened).apply {
+            drawColor(Color.WHITE)
+            drawBitmap(scaled, 0f, 0f, null)
+        }
+        if (flattened !== scaled) scaled.recycle()
+
+        try {
+            for (quality in listOf(88, 82, 76, 70, 64, 58)) {
+                val output = java.io.ByteArrayOutputStream()
+                if (!flattened.compress(Bitmap.CompressFormat.JPEG, quality, output)) {
+                    throw IllegalStateException("Não foi possível preparar a fotografia.")
+                }
+                val bytes = output.toByteArray()
+                if (bytes.size in 1..(1536 * 1024)) return bytes
+            }
+        } finally {
+            flattened.recycle()
+        }
+        throw IllegalArgumentException("A fotografia continua demasiado grande. Escolhe outra imagem mais simples.")
+    }
+
+    private fun addLoyaltyRewardPhotoImage(
+        container: LinearLayout,
+        imagePath: String,
+        heightDp: Int = 150
+    ) {
+        if (imagePath.isBlank()) return
+        val image = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(paleGreen)
+            }
+            contentDescription = "Fotografia da recompensa"
+            tag = imagePath
+        }
+        container.addView(image, LinearLayout.LayoutParams(-1, dp(heightDp)).apply {
+            bottomMargin = dp(8)
+        })
+
+        val cached = loyaltyRewardPhotoCache[imagePath]
+        if (cached != null) {
+            image.setImageBitmap(cached)
+            return
+        }
+
+        loyaltyRewardImageExecutor.execute {
+            val bitmap = runCatching {
+                val bytes = SupabaseApi.downloadLoyaltyRewardPhoto(backendToken(), imagePath)
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@runCatching null
+                var sample = 1
+                while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 1200) sample *= 2
+                val options = BitmapFactory.Options().apply {
+                    inSampleSize = sample
+                    inPreferredConfig = Bitmap.Config.RGB_565
+                }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+            }.getOrNull()
+
+            if (bitmap != null) {
+                val cachedBitmap = loyaltyRewardPhotoCache.get(imagePath) ?: bitmap.also {
+                    loyaltyRewardPhotoCache.put(imagePath, it)
+                }
+                runOnUiThread {
+                    if (image.tag == imagePath && !isFinishing && !isDestroyed) {
+                        image.setImageBitmap(cachedBitmap)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun showLoyaltyRewardEditorForm(existing: JSONObject?) {
+        val entitlement = runCatching {
+            JSONObject(backendPrefs.getString("loyalty_entitlements_json", "{}") ?: "{}")
+        }.getOrDefault(JSONObject())
+        val photosEnabled = entitlement.optBoolean("photos_enabled", false)
+        val rewardId = existing?.optString("id")?.takeIf { it.isNotBlank() }
+            ?: java.util.UUID.randomUUID().toString()
+        pendingLoyaltyRewardPhotoUri = null
+        pendingLoyaltyRewardPhotoId = rewardId
         val name = inputField("Nome da recompensa", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
         val description = inputField("Descrição (opcional)", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
         val cost = inputField("Pontos necessários", InputType.TYPE_CLASS_NUMBER)
         val stock = inputField("Quantidade disponível (vazio = sem limite)", InputType.TYPE_CLASS_NUMBER)
+        val photoStatus = label(
+            if (existing?.optString("image_path").orEmpty().isNotBlank()) "A recompensa já tem uma fotografia."
+            else if (!photosEnabled) "Fotografias disponíveis nos planos Profissional e Premium."
+            else "Sem fotografia selecionada.",
+            11f, false, muted
+        )
+        loyaltyRewardPhotoStatusView = photoStatus
         if (existing != null) {
             name.setText(existing.optString("name"))
             description.setText(existing.optString("description"))
             cost.setText(existing.optInt("points_cost").toString())
             if (!existing.isNull("stock_limit")) stock.setText(existing.optInt("stock_limit").toString())
         }
+        lateinit var dialog: AlertDialog
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(8), dp(20), dp(4))
@@ -5048,7 +5693,45 @@ class MainActivity : ComponentActivity() {
         addGap(form, 5)
         form.addView(label("STOCK", 10f, true, forestSoft))
         form.addView(stock, fieldParams())
-        val dialog = AlertDialog.Builder(this)
+        addGap(form, 6)
+        form.addView(label("FOTOGRAFIA DO PRÉMIO", 10f, true, forestSoft))
+        form.addView(photoStatus)
+        val existingImagePath = existing?.optString("image_path").orEmpty()
+        if (existingImagePath.isNotBlank()) {
+            addLoyaltyRewardPhotoImage(form, existingImagePath, 112)
+            addGap(form, 5)
+            form.addView(secondaryButton("Remover fotografia") {
+                runBackend({
+                    val token = backendToken()
+                    val restaurantId = backendRestaurantId()
+                    SupabaseApi.setLoyaltyRewardImagePath(token, restaurantId, rewardId, null)
+                    SupabaseApi.deleteLoyaltyRewardPhoto(token, existingImagePath)
+                    val rewards = SupabaseApi.listRestaurantRewards(token, restaurantId)
+                    backendPrefs.edit().putString("restaurant_rewards_json", rewards.toString()).apply()
+                    "OK"
+                }) {
+                    loyaltyRewardPhotoCache.remove(existingImagePath)
+                    dialog.dismiss()
+                    renderApp()
+                }
+            }, LinearLayout.LayoutParams(-1, dp(40)))
+        }
+        if (photosEnabled) {
+            addGap(form, 5)
+            form.addView(secondaryButton("Escolher / substituir fotografia") {
+                val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "image/*"
+                    putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/jpeg", "image/png", "image/webp"))
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                }
+                runCatching { startActivityForResult(picker, REQUEST_PICK_LOYALTY_REWARD_IMAGE) }
+                    .onFailure {
+                        Toast.makeText(this, "Não foi possível abrir a galeria.", Toast.LENGTH_LONG).show()
+                    }
+            }, LinearLayout.LayoutParams(-1, dp(42)))
+        }
+        dialog = AlertDialog.Builder(this)
             .setTitle(if (existing == null) "Nova recompensa" else "Editar recompensa")
             .setView(form)
             .setNegativeButton("Cancelar", null)
@@ -5067,22 +5750,57 @@ class MainActivity : ComponentActivity() {
                     points == null || points !in 1..1000000 -> cost.error = "Indica um custo entre 1 e 1000000 pontos."
                     limitText.isNotBlank() && (stockLimit == null || stockLimit < 0) -> stock.error = "Indica uma quantidade válida ou deixa vazio."
                     else -> {
-                        val rewardId = existing?.optString("id")?.takeIf { it.isNotBlank() }
-                            ?: java.util.UUID.randomUUID().toString()
+                        val selectedPhoto = pendingLoyaltyRewardPhotoUri
+                            .takeIf { pendingLoyaltyRewardPhotoId == rewardId }
+                        val previousImagePath = existing?.optString("image_path").orEmpty()
                         runBackend({
+                            val token = backendToken()
+                            val restaurantId = backendRestaurantId()
                             SupabaseApi.saveLoyaltyReward(
-                                backendToken(), backendRestaurantId(), rewardId, rewardName,
+                                token, restaurantId, rewardId, rewardName,
                                 rewardDescription, points, stockLimit, true
                             )
-                            val rewards = SupabaseApi.listRestaurantRewards(backendToken(), backendRestaurantId())
-                            backendPrefs.edit().putString("restaurant_rewards_json", rewards.toString()).apply()
+                            if (selectedPhoto != null) {
+                                val bytes = readCompressedLoyaltyRewardPhoto(selectedPhoto)
+                                val newPath = SupabaseApi.uploadLoyaltyRewardPhoto(
+                                    token, restaurantId, rewardId, bytes
+                                )
+                                try {
+                                    SupabaseApi.setLoyaltyRewardImagePath(token, restaurantId, rewardId, newPath)
+                                } catch (error: Exception) {
+                                    runCatching { SupabaseApi.deleteLoyaltyRewardPhoto(token, newPath) }
+                                    throw error
+                                }
+                                loyaltyRewardPhotoCache.remove(newPath)
+                                if (previousImagePath.isNotBlank() && previousImagePath != newPath) {
+                                    runCatching { SupabaseApi.deleteLoyaltyRewardPhoto(token, previousImagePath) }
+                                    loyaltyRewardPhotoCache.remove(previousImagePath)
+                                }
+                                pendingLoyaltyRewardPhotoUri = null
+                            }
+                            val rewards = SupabaseApi.listRestaurantRewards(token, restaurantId)
+                            val entitlements = SupabaseApi.getRestaurantLoyaltyEntitlements(token, restaurantId)
+                            backendPrefs.edit()
+                                .putString("restaurant_rewards_json", rewards.toString())
+                                .putString("loyalty_entitlements_json", entitlements.toString())
+                                .apply()
                             "OK"
                         }) {
+                            pendingLoyaltyRewardPhotoUri = null
+                            pendingLoyaltyRewardPhotoId = null
+                            loyaltyRewardPhotoStatusView = null
                             dialog.dismiss()
                             renderApp()
                         }
                     }
                 }
+            }
+        }
+        dialog.setOnDismissListener {
+            if (pendingLoyaltyRewardPhotoId == rewardId) {
+                pendingLoyaltyRewardPhotoUri = null
+                pendingLoyaltyRewardPhotoId = null
+                loyaltyRewardPhotoStatusView = null
             }
         }
         dialog.show()
@@ -5098,7 +5816,11 @@ class MainActivity : ComponentActivity() {
                 reward.optInt("points_cost"), stock, active
             )
             val rewards = SupabaseApi.listRestaurantRewards(backendToken(), backendRestaurantId())
-            backendPrefs.edit().putString("restaurant_rewards_json", rewards.toString()).apply()
+            val entitlements = SupabaseApi.getRestaurantLoyaltyEntitlements(backendToken(), backendRestaurantId())
+            backendPrefs.edit()
+                .putString("restaurant_rewards_json", rewards.toString())
+                .putString("loyalty_entitlements_json", entitlements.toString())
+                .apply()
             "OK"
         }) { renderApp() }
     }
@@ -5243,7 +5965,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun renderCustomerApp() {
-        if (activeCustomerPage !in setOf("Cartão", "Carta", "Reservas", "Conta")) activeCustomerPage = "Cartão"
+        val customerPages = if (hasCalculator) {
+            listOf("Cartão", "Carta", "Reservas", "Conta")
+        } else {
+            listOf("Cartão", "Carta", "Conta")
+        }
+        if (activeCustomerPage !in customerPages) activeCustomerPage = "Cartão"
         appRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(paper)
@@ -5300,7 +6027,7 @@ class MainActivity : ComponentActivity() {
             setBackgroundColor(white)
             elevation = dp(6).toFloat()
         }
-        listOf("Cartão", "Carta", "Reservas", "Conta").forEach { page ->
+        customerPages.forEach { page ->
             val selected = activeCustomerPage == page
             val item = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
@@ -5396,6 +6123,8 @@ class MainActivity : ComponentActivity() {
             val redeemed = reward.optInt("redeemed_count", 0)
             val remaining = if (stockLimit < 0) -1 else (stockLimit - redeemed).coerceAtLeast(0)
             val card = makeCard(14)
+            val imagePath = reward.optString("image_path").trim()
+            if (imagePath.isNotBlank()) addLoyaltyRewardPhotoImage(card, imagePath, 160)
             card.addView(label(reward.optString("name"), 16f, true, forestDeep))
             val description = reward.optString("description").trim()
             if (description.isNotBlank()) {

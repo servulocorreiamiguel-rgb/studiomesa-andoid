@@ -1,25 +1,41 @@
 # StudioMesa — lista de preparação para uso profissional
 
-**Estado atual em 06/11/2026: CÓDIGO AVANÇADO, NÃO PRONTO PARA PILOTO/VENDA.**
+**Estado em 07/11/2026: código avançado em validação; ainda não liberado para piloto/venda com dados reais.**
 
-Esta secção é a fotografia atual e sobrepõe-se aos registos históricos mais abaixo. A lista de bloqueios única e atualizada é [docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md](docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md).
+Esta fotografia descreve a branch `feature/loyalty-shop-photos-tier-limits`. A integração da loja por plano, fichas técnicas, consumo de stock, permissões granulares, IA online opcional e alertas locais de atividade ainda exige validação final, revisão e deployment controlado das migrations.
 
-- [x] Cinco variantes Android no código; compileSdk/targetSdk 36, minSdk 24, Java 17 e versão 1.5.0.
-- [x] APKs debug de demonstração e workflow manual para cinco AABs/APKs assinados preparado; não publica automaticamente na Google Play.
-- [x] IA local LFM2.5-1.2B, histórico/Memória local cifrada, OCR local e ferramentas de leitura implementadas no código.
-- [x] Fluxo de reservas de cliente e restaurante presente no código. PR #86 foi integrada na main (commit `0770ad7`), com testes de regressão para sobreposição, capacidade, mesa inexistente, idempotência e ecrãs sem autenticação.
-- [x] CI #1332 terminou com os quatro jobs em sucesso: replay PostgreSQL/autorização, compilação, unit tests, Lint e smoke tests em Android 8 e Android 16. Os skips de interface são condicionados à variante/plano; as páginas de reservas executaram nas variantes que as incluem.
-- [ ] Reconciliar as 53 migrations locais com as 54 versões do Supabase alojado (48 comuns, cinco só locais e seis só remotas); backup/restauro e replay descartável antes de deployment.
-- [ ] Aplicar de forma aprovada as tabelas de receitas, permissões granulares, sync do assistente, faturas e bucket privado — atualmente ausentes no backend alojado.
-- [ ] Resolver o aviso Leaked Password Protection Disabled, com decisão consciente sobre upgrade Pro, SMTP, URLs Auth, OAuth e teste E2E.
-- [ ] Concluir política de privacidade, Data Safety, termos, DPA, retenção, licenças/avisos e suporte; os novos documentos desta branch continuam drafts.
-- [ ] Escolher package IDs, criar keystore fora do repositório e configurar os quatro secrets e a variável do release workflow.
-- [ ] Testes E2E no backend com contas descartáveis, restauro, eliminação, concorrência e isolamento entre restaurantes.
-- [ ] Teste físico no OPPO A5m fica deliberadamente para o utilizador; ainda não foi executado.
+- [x] Seis variantes Android definidas: Essencial/Profissional/Premium para Gestão e Cliente.
+- [x] Fichas técnicas por artigo e ingredientes por dose no código/migration.
+- [x] Consumo automático de ingredientes ao passar pedido de `Aberto` para `Em preparação`, com movimentos transacionais, bloqueio de stock insuficiente e proteção contra dupla dedução.
+- [x] Matriz de permissões por pedidos, mesas, reservas, carta, stock e fidelização; perfis rápidos Gerente, Empregado de mesa, Cozinha e Caixa. As receitas exigem permissão de inventário também nas RPCs e políticas do servidor.
+- [x] Loja de pontos por plano: Essencial até 5 prémios sem foto; Profissional até 15 com foto; Premium até 50 com foto; Cliente Essencial sem reservas.
+- [x] Notificações locais em primeiro plano para pedidos, reservas e resgates/entregas, com deduplicação e abertura da secção certa. Não é push FCM e não funciona com a app fechada.
+- [x] IA online geral opcional no código, separada da IA local/económica; pesquisa atual através de Tavily/SearXNG. Os segredos e a publicação do serviço ainda não foram configurados.
+- [x] Testes de migração PostgreSQL isolada e autorização; testes TypeScript das Edge Functions incluídos no workflow.
+- [ ] CI final da branch: compilação das seis variantes, testes unitários, Android Lint, validação de release e smoke tests Android 8/16.
+- [ ] Testes físicos no OPPO A5m com conta de proprietário, funcionário e cliente, rede móvel, Wi-Fi, perda de ligação, sessão expirada e permissões.
+- [ ] Deployment das migrations de receitas, permissões e loja por plano no Supabase alojado só depois de reconciliar a história, fazer backup e ensaiar restauração.
+- [ ] Atribuir planos Pro/Premium existentes com base nos contratos reais. Sem entitlement atribuído, o servidor assume Essencial.
+- [ ] Configurar e publicar IA cloud: secrets `GEMINI_API_KEY` e `TAVILY_API_KEY`, JWT obrigatório e ensaios de privacidade, pesquisa, timeouts, erros 429 e ausência de resultados.
+- [ ] FCM em segundo plano: criar projeto Firebase, registar IDs finais das apps, guardar configuração e credenciais HTTP v1 em ambiente seguro, implementar tokens e sender server-side e testar isolamento. Até lá, só há alertas locais em primeiro plano.
+- [ ] Resolver cancelamento de resgate pendente com reposição automática dos pontos e stock.
+- [ ] Testes E2E com contas descartáveis de proprietário, funcionário, cliente e dois restaurantes; concorrência de pedidos, quotas, fotos, downgrade, receitas, reservas e eliminação.
+- [ ] Backup/restauro, monitorização, política de privacidade, Data Safety, DPA, termos, Auth/SMTP/OAuth, keystore comercial e assinatura definitiva.
+- [ ] Escolher e validar integração POS/contabilidade do primeiro cliente; os pontos por compra continuam atribuídos por funcionário autorizado.
+- [ ] Verificar dados fiscais, faturação, suporte, manutenção e contrato antes de aceitar o primeiro pagamento.
 
-**Funcionalidades que não devem ser anunciadas como ativas no Supabase alojado:** fichas técnicas/consumo automático, matriz granular de permissões, sync cloud de histórico/Memória e arquivo cloud de faturas. As tabelas necessárias e o bucket privado ainda não existem.
+**Não vender nem instalar para serviço real até as migrations estarem aplicadas de forma controlada, a CI final passar, os testes físicos relevantes passarem e a build comercial estar assinada.** Ver [checklist OPPO A5m e primeira venda](docs/OPPO-A5M-ACCEPTANCE-TEST.md), [gate comercial](docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md) e [reconciliação de migrations](docs/SUPABASE-LIVE-MIGRATION-HISTORY-2026-11-07.md).
 
-**Regra:** um botão na interface ou um replay limpo na CI não prova que a funcionalidade esteja operacional no backend alojado. Não fazer deployment enquanto o histórico não estiver reconciliado e não existir backup/restauro verificado.
+---
+
+## Registo da segurança da base ativa (consulta read-only)
+
+**Segurança validada na fotografia do Supabase atual:** o cliente não pode escrever diretamente o saldo, custo, stock, resgates ou catálogo; as operações passam por RPCs autenticadas e as tabelas têm RLS. Isto não substitui os testes ponta a ponta e não protege contra abuso interno de um funcionário autorizado.
+
+**Não anunciar como concluído:** novas quotas por plano, fotos, variante Cliente Essencial e bloqueio de reservas por plano até a PR passar CI, ser integrada e a migration ser aplicada de forma controlada. Não fazer deployment em bloco enquanto a história de migrations e o backup/restauro não estiverem resolvidos.
+
+Ver [auditoria da loja de pontos](docs/LOYALTY-SHOP-SECURITY-AND-PLANS.md), [gate comercial](docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md) e [reconciliação de migrations](docs/SUPABASE-LIVE-MIGRATION-HISTORY-2026-11-07.md).
+
 
 ---
 

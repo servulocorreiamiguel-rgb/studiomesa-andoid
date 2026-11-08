@@ -2,7 +2,7 @@ name: Build StudioMesa Android APK
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "feature/**"]
   pull_request:
     branches: ["main", "integration/non-ai-core-2026-11-05"]
   workflow_dispatch:
@@ -41,6 +41,12 @@ jobs:
         run: |
           python3 scripts/test_audit_supabase_security.py
           python3 scripts/audit_supabase_security.py
+
+      - name: Type-check StudioMesa Edge Functions
+        run: |
+          python3 -m unittest scripts/test_check_studiomesa_assistant_edge_function.py scripts/test_check_studiomesa_web_search_edge_function.py
+          python3 -m unittest scripts/test_check_studiomesa_edge_function_config.py
+          npm exec --yes --package=typescript@5.9.3 -- tsc --noEmit --target ES2022 --module ESNext --moduleResolution bundler --lib ES2022,DOM --strict --skipLibCheck scripts/ci/edge-runtime-shim.d.ts supabase/functions/studiomesa-assistant/index.ts supabase/functions/studiomesa-web-search/index.ts
 
       - name: Audit Android HTTP transport safety
         run: |
@@ -119,10 +125,10 @@ jobs:
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Compile app
-        run: gradle --no-daemon assembleEssencialRestauranteDebug assembleProfissionalRestauranteDebug assembleProfissionalClienteDebug assemblePremiumRestauranteDebug assemblePremiumClienteDebug
+        run: gradle --no-daemon assembleEssencialRestauranteDebug assembleEssencialClienteDebug assembleProfissionalRestauranteDebug assembleProfissionalClienteDebug assemblePremiumRestauranteDebug assemblePremiumClienteDebug
 
       - name: Run unit tests for every distributed variant
-        run: gradle --no-daemon testEssencialRestauranteDebugUnitTest testProfissionalRestauranteDebugUnitTest testProfissionalClienteDebugUnitTest testPremiumRestauranteDebugUnitTest testPremiumClienteDebugUnitTest
+        run: gradle --no-daemon testEssencialRestauranteDebugUnitTest testEssencialClienteDebugUnitTest testProfissionalRestauranteDebugUnitTest testProfissionalClienteDebugUnitTest testPremiumRestauranteDebugUnitTest testPremiumClienteDebugUnitTest
 
       - name: Run Android lint
         timeout-minutes: 10
@@ -210,7 +216,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot
-          script: set -eu; for test_task in connectedEssencialRestauranteDebugAndroidTest connectedProfissionalRestauranteDebugAndroidTest connectedProfissionalClienteDebugAndroidTest connectedPremiumRestauranteDebugAndroidTest connectedPremiumClienteDebugAndroidTest; do echo "STARTING_ANDROID_SMOKE_TASK=$test_task"; timeout --signal=TERM --kill-after=30s 8m gradle --no-daemon --max-workers=1 "$test_task"; echo "PASSED_ANDROID_SMOKE_TASK=$test_task"; done
+          script: set -eu; for test_task in connectedEssencialRestauranteDebugAndroidTest connectedEssencialClienteDebugAndroidTest connectedProfissionalRestauranteDebugAndroidTest connectedProfissionalClienteDebugAndroidTest connectedPremiumRestauranteDebugAndroidTest connectedPremiumClienteDebugAndroidTest; do echo "STARTING_ANDROID_SMOKE_TASK=$test_task"; timeout --signal=TERM --kill-after=30s 8m gradle --no-daemon --max-workers=1 "$test_task"; echo "PASSED_ANDROID_SMOKE_TASK=$test_task"; done
 
       - name: Upload emulator test results
         if: always()
@@ -257,7 +263,7 @@ jobs:
           profile: Nexus 5X
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot
-          script: set -eu; for test_task in connectedEssencialRestauranteDebugAndroidTest connectedProfissionalRestauranteDebugAndroidTest connectedProfissionalClienteDebugAndroidTest connectedPremiumRestauranteDebugAndroidTest connectedPremiumClienteDebugAndroidTest; do echo "STARTING_ANDROID_SMOKE_TASK=$test_task"; timeout --signal=TERM --kill-after=30s 8m gradle --no-daemon --max-workers=1 "$test_task"; echo "PASSED_ANDROID_SMOKE_TASK=$test_task"; done
+          script: set -eu; for test_task in connectedEssencialRestauranteDebugAndroidTest connectedEssencialClienteDebugAndroidTest connectedProfissionalRestauranteDebugAndroidTest connectedProfissionalClienteDebugAndroidTest connectedPremiumRestauranteDebugAndroidTest connectedPremiumClienteDebugAndroidTest; do echo "STARTING_ANDROID_SMOKE_TASK=$test_task"; timeout --signal=TERM --kill-after=30s 8m gradle --no-daemon --max-workers=1 "$test_task"; echo "PASSED_ANDROID_SMOKE_TASK=$test_task"; done
 
       - name: Upload Android 8 test results
         if: always()
@@ -387,6 +393,50 @@ jobs:
               OR has_table_privilege('anon','private.loyalty_qr_tokens','SELECT')
               OR has_table_privilege('authenticated','private.loyalty_qr_tokens','SELECT') THEN
               RAISE EXCEPTION 'Loyalty tables unexpectedly allow direct API-role reads.';
+            END IF;
+
+            IF to_regclass('private.restaurant_loyalty_entitlements') IS NULL
+              OR NOT EXISTS (
+                SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+                WHERE n.nspname='private'
+                  AND c.relname='restaurant_loyalty_entitlements'
+                  AND c.relrowsecurity
+              ) THEN
+              RAISE EXCEPTION 'Private restaurant loyalty entitlements table/RLS is missing.';
+            END IF;
+
+            IF has_table_privilege('anon','private.restaurant_loyalty_entitlements','SELECT')
+              OR has_table_privilege('authenticated','private.restaurant_loyalty_entitlements','SELECT')
+              OR has_table_privilege('service_role','private.restaurant_loyalty_entitlements','SELECT') THEN
+              RAISE EXCEPTION 'Plan entitlements must not be readable directly through an API role.';
+            END IF;
+
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.columns
+              WHERE table_schema='public' AND table_name='loyalty_rewards'
+                AND column_name='image_path'
+            ) OR to_regprocedure('public.get_restaurant_loyalty_entitlements(uuid)') IS NULL
+              OR to_regprocedure('public.set_loyalty_reward_image_path(uuid,uuid,text)') IS NULL THEN
+              RAISE EXCEPTION 'Loyalty tier/photo schema or RPCs are missing.';
+            END IF;
+
+            IF NOT EXISTS (
+              SELECT 1 FROM storage.buckets
+              WHERE id='loyalty-reward-images'
+                AND public
+                AND file_size_limit=1572864
+                AND allowed_mime_types=ARRAY['image/jpeg']::text[]
+            ) OR (
+              SELECT count(*) FROM pg_policies
+              WHERE schemaname='storage' AND tablename='objects'
+                AND policyname IN (
+                  'loyalty_reward_images_owner_insert',
+                  'loyalty_reward_images_owner_select',
+                  'loyalty_reward_images_owner_update',
+                  'loyalty_reward_images_owner_delete'
+                )
+            ) <> 4 THEN
+              RAISE EXCEPTION 'Reward image bucket or owner-only Storage policies are incomplete.';
             END IF;
 
             IF has_function_privilege('anon','public.save_loyalty_reward(uuid,uuid,text,text,integer,integer,boolean)','EXECUTE')

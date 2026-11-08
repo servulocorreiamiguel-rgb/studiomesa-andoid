@@ -1,7 +1,7 @@
 # StudioMesa — preparação para lançamento comercial
-> **Fotografia atual — 06/11/2026: NÃO LIBERADO PARA VENDA.** O workflow gera cinco AABs/APKs comerciais assinados quando houver package ID, keystore e secrets, mas não publica na Google Play. Os APKs debug normais são apenas demonstrações.
+> **Fotografia atual — 06/11/2026: NÃO LIBERADO PARA VENDA.** O workflow gera seis AABs/APKs comerciais assinados quando houver package ID, keystore e secrets, mas não publica na Google Play. Os APKs debug normais são apenas demonstrações.
 >
-> **Bloqueio backend:** 53 ficheiros locais vs 54 versões remotas (48 comuns, cinco só locais e seis só remotas). Faltam no backend as tabelas de fichas técnicas, permissões granulares, sync do assistente, arquivo de faturas e bucket privado. Não aplicar migrations antes de reconciliar o histórico, testar backup/restauro e ensaiar o replay numa cópia descartável.
+> **Backend verificado:** o Supabase alojado tem 57 versões de migrations e a main tem 55 ficheiros (quatro só locais e seis só remotas). O histórico continua divergente; não aplicar migrations em bloco. As tabelas cloud de conversas, mensagens, memória e arquivo privado de faturas, assim como o bucket privado de documentos, já foram criadas no Supabase. As tabelas de fichas técnicas/consumo automático e permissões granulares continuam em falta. A branch atual acrescenta limites e fotos à loja, mas a respetiva migration ainda não foi aplicada.
 >
 > **Privacidade/Auth:** os drafts estão em `PRIVACY-POLICY-TEMPLATE.md` e `DATA-SAFETY-DRAFT.md`. A página externa de eliminação usa `resetPasswordForEmail` + PKCE, mas o percurso completo ainda não foi testado com contas descartáveis. SMTP/OAuth não foram confirmados.
 >
@@ -15,15 +15,15 @@ Referências: [compatibilidade Kotlin/AGP/D8/R8](https://developer.android.com/b
 
 ## Estado real
 
-O workflow `.github/workflows/commercial-release.yml` foi preparado para criar cinco Android App Bundles (AAB) e cinco APKs assinados para instalação direta. **Não publica automaticamente na Google Play**. Antes de correr esse workflow, é necessário definir o identificador de aplicação final e guardar a chave de assinatura nos GitHub Actions Secrets.
+O workflow `.github/workflows/commercial-release.yml` foi preparado para criar seis Android App Bundles (AAB) e seis APKs assinados para instalação direta. **Não publica automaticamente na Google Play**. Antes de correr esse workflow, é necessário definir o identificador de aplicação final e guardar a chave de assinatura nos GitHub Actions Secrets.
 
 Os APKs do workflow normal continuam a usar os identificadores `pt.studiomesa.preview.*`. A configuração comercial é opt-in e não altera a identidade dos APKs de demonstração.
 
 ## Decisão obrigatória: identificadores das aplicações
 
-A configuração de sabores atual produz aplicações separadas para Essencial/Profissional/Premium e Gestão/Cliente. O workflow comercial acrescenta os sufixos de sabor ao identificador base definido na variável `STUDIOMESA_RELEASE_APPLICATION_ID`.
+A configuração de sabores atual produz seis variantes técnicas (três planos × Gestão/Cliente). A variante Cliente Essencial inclui cartão, carta e loja de pontos, mas não reservas. A configuração produz aplicações separadas para Essencial/Profissional/Premium e Gestão/Cliente. O workflow comercial acrescenta os sufixos de sabor ao identificador base definido na variável `STUDIOMESA_RELEASE_APPLICATION_ID`.
 
-**Atenção à política de conteúdo repetitivo:** não assumas que podes publicar cinco fichas Play só porque o Gradle gera cinco variantes. A Google não permite múltiplas apps com funcionalidade, conteúdo e experiência altamente semelhantes e recomenda agregar apps com pouca diferenciação. Avalia primeiro duas apps com funções distintas (Gestão e Cliente), com os planos controlados por entitlement/licença segura no servidor, ou distribuição privada B2B. Os entitlements ainda não estão implementados e dependem da reconciliação do Supabase. Fontes: https://support.google.com/googleplay/android-developer/answer/18265346 e https://support.google.com/googleplay/android-developer/answer/15884185.
+**Atenção à política de conteúdo repetitivo:** não assumas que podes publicar seis fichas Play só porque o Gradle gera seis variantes. A Google não permite múltiplas apps com funcionalidade, conteúdo e experiência altamente semelhantes e recomenda agregar apps com pouca diferenciação. Avalia primeiro duas apps com funções distintas (Gestão e Cliente), com os planos controlados por entitlements seguros no servidor, ou distribuição privada B2B. A branch atual introduz entitlements para a loja de pontos e bloqueia reservas no Essencial, mas ainda não constitui um sistema completo de licenciamento e faturação automática. Fontes: https://support.google.com/googleplay/android-developer/answer/18265346 e https://support.google.com/googleplay/android-developer/answer/15884185.
 
 O identificador de pacote é permanente depois da publicação. Cria primeiro a aplicação na Play Console e confirma o nome do pacote que fica registado. A Google Play regista o nome de pacote da nova aplicação na conta do programador; se o nome já estiver em uso, será necessário escolher outro. Referência: https://developer.android.com/developer-verification/guides/google-play-console
 
@@ -66,7 +66,7 @@ No separador **Variables**, cria a variável `STUDIOMESA_RELEASE_APPLICATION_ID`
 
 1. Abre **Actions → Build signed StudioMesa commercial AABs → Run workflow**.
 2. No campo de confirmação, escreve exatamente `BUILD`.
-3. O workflow verifica os segredos, valida o keystore, executa os testes unitários para as cinco variantes de distribuição e Android Lint, compila cinco AABs e cinco APKs com assinatura, verifica ambos os formatos e gera checksums.
+3. O workflow verifica os segredos, valida o keystore, executa os testes unitários para as seis variantes de distribuição e Android Lint, compila seis AABs e seis APKs com assinatura, verifica ambos os formatos e gera checksums.
 4. Descarrega o artefacto `StudioMesa-Commercial-AABs-and-APKs` e guarda o ficheiro de checksums.
 
 Se a variável de identificador ou qualquer segredo estiver em falta, a execução falha com uma mensagem explícita. O workflow **não** envia os AAB para a Google Play nem publica a aplicação. Os APKs assinados destinam-se a instalações diretas autorizadas; distribui-os apenas por canais controlados.
@@ -84,7 +84,7 @@ Verifica sempre a documentação oficial antes da submissão, porque os requisit
 - **Privacidade:** cada aplicação precisa de política de privacidade pública, não editável e acessível globalmente, além de ligação/texto dentro da app. A secção Data safety tem de ser respondida para cada app e corresponder ao binário, aos SDKs e à configuração cloud efetivamente publicada. Fontes: https://support.google.com/googleplay/android-developer/answer/10144311 e https://support.google.com/googleplay/android-developer/answer/10144311?hl=pt
 - **Eliminação de conta:** como o StudioMesa permite criar conta, tem de haver um caminho facilmente acessível dentro da app e um recurso web externo para solicitar a eliminação da conta e dos dados associados. A retenção excecional tem de ter fundamento legítimo e ser claramente explicada. O fluxo atual está implementado, mas ainda precisa de teste E2E com contas descartáveis. Fonte: https://support.google.com/googleplay/android-developer/answer/13327111
 
-**Situação do projeto:** os cinco AAB/APKs comerciais ainda não foram gerados com uma chave definitiva; não existe ficha Play Console aprovada; a política pública e Data safety continuam em rascunho. A versão atual não está liberada para submissão.
+**Situação do projeto:** os seis AAB/APKs comerciais ainda não foram gerados com uma chave definitiva; não existe ficha Play Console aprovada; a política pública e Data safety continuam em rascunho. A versão atual não está liberada para submissão.
 
 Não publiques ainda: permanecem pendentes a reconciliação e deployment seguro do Supabase, autenticação/SMTP, E2E com contas descartáveis, política de privacidade, Data safety, licença do modelo, assinatura comercial, package IDs e testes de aceitação.
 ## Recurso web externo para eliminação de conta
@@ -95,7 +95,7 @@ A página pública já está ativa em:
 
 A página envia uma ligação única ao email da conta; depois de a pessoa autenticar a sessão, permite pedir a eliminação. Não é seguro permitir eliminação apenas por introduzir um email.
 
-**Estado atual da página de eliminação:** a versão ativa usa `resetPasswordForEmail` com callback PKCE e mensagem neutra, não `signInWithOtp`. A eliminação efetiva é feita por `delete-account`, num endpoint separado que exige JWT. O envio por email, callback no mesmo navegador, troca PKCE e eliminação com contas descartáveis continuam sem teste E2E; por isso, não afirmar que a proteção contra enumeração ou a eliminação estão totalmente validadas. Ver `SUPABASE-SETUP.md` e `docs/SUPABASE-LIVE-RECONCILIATION-2026-11-06.md`.
+**Estado atual da página de eliminação:** a versão ativa usa `resetPasswordForEmail` com callback PKCE e mensagem neutra, não `signInWithOtp`. A eliminação efetiva é feita por `delete-account`, num endpoint separado que exige JWT. O envio por email, callback no mesmo navegador, troca PKCE e eliminação com contas descartáveis continuam sem teste E2E; por isso, não afirmar que a proteção contra enumeração ou a eliminação estão totalmente validadas. Ver `SUPABASE-SETUP.md` e `docs/SUPABASE-LIVE-MIGRATION-HISTORY-2026-11-07.md`.
 
 **Configuração obrigatória antes de testar o email:**
 
@@ -138,7 +138,7 @@ Regra para cada nova migração que crie uma tabela em `public`:
 
 Não aplicar um `GRANT` amplo para `anon` como solução rápida. Os privilégios da tabela controlam se o papel pode aceder ao objeto; o RLS controla as linhas que esse papel pode ver ou alterar. Ambos são necessários.
 
-[REGISTO HISTÓRICO — 29/10/2026, não usar como fotografia atual] Naquela data foram verificadas 41 versões aplicadas e privilégios por omissão fechados. Esta fotografia foi ultrapassada: em 06/11/2026 o histórico tem 54 versões remotas e 53 ficheiros locais, com cinco versões só locais e seis só remotas. O estado atual está em `docs/SUPABASE-LIVE-RECONCILIATION-2026-11-06.md`. A migração de privilégios por omissão foi aplicada historicamente, mas a divergência atual impede qualquer novo deployment.
+[REGISTO HISTÓRICO — 29/10/2026, não usar como fotografia atual] Naquela data foram verificadas 41 versões aplicadas e privilégios por omissão fechados. Esta fotografia foi ultrapassada: em 07/11/2026 o histórico tem 57 versões remotas e 55 ficheiros na main, com quatro versões só locais e seis só remotas. O estado atual está em `docs/SUPABASE-LIVE-MIGRATION-HISTORY-2026-11-07.md`. A migração de privilégios por omissão foi aplicada historicamente, mas a divergência atual impede qualquer novo deployment.
 
 
 A verificação da compilação, por si só, não certifica que a aplicação esteja pronta para operação comercial.

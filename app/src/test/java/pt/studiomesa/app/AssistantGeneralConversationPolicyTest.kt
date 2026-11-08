@@ -41,6 +41,13 @@ class AssistantGeneralConversationPolicyTest {
     }
 
     @Test
+    fun instructionExplainsHowToEnableOnlineSearchWithoutPretendingItIsAvailable() {
+        val instruction = AssistantGeneralConversationPolicy.SYSTEM_INSTRUCTION.lowercase()
+        assertTrue(instruction.contains("ia online"))
+        assertTrue(instruction.contains("não simules pesquisas"))
+    }
+
+    @Test
     fun instructionDescribesTheOwnerOnlyReadOnlyEconomicBridge() {
         val instruction = AssistantGeneralConversationPolicy.SYSTEM_INSTRUCTION.lowercase()
         assertTrue(instruction.contains("consult_economic_assistant"))

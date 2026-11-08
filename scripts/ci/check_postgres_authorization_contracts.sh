@@ -1466,6 +1466,41 @@ if [ "$loyalty_redemption_state" != "fulfilled|$USER_C" ] ||
 fi
 echo "PASS: reward redemption is one-time, stock-limited, customer-scoped and staff-fulfilled."
 
+# The booking regression fixture uses a Professional restaurant. Plan entitlements
+# are server-owned; a restaurant with no entitlement row defaults to Essential.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO private.restaurant_loyalty_entitlements (restaurant_id, plan_code)
+VALUES ('$RESTAURANT_A'::uuid, 'profissional')
+ON CONFLICT (restaurant_id) DO UPDATE SET plan_code = EXCLUDED.plan_code;
+SQL
+
+# The separate customer B belongs to restaurant B, which has no entitlement row.
+# A direct RPC attempt must therefore be rejected by the Essential server gate.
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_F', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.create_customer_reservation_request(
+  'e1111111-1111-4111-8111-111111111111'::uuid,
+  'Essential plan bypass test', '', 2,
+  now() + interval '40 days', 90, 'Must be rejected'
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: an Essential customer bypassed the server-side reservation entitlement." >&2
+  exit 1
+fi
+
+# Restaurant B is also used by the existing Professional reservation-isolation
+# regression below; grant that test fixture Professional only after the Essential
+# rejection case has completed.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO private.restaurant_loyalty_entitlements (restaurant_id, plan_code)
+VALUES ('$RESTAURANT_B'::uuid, 'profissional')
+ON CONFLICT (restaurant_id) DO UPDATE SET plan_code = EXCLUDED.plan_code;
+SQL
+
 # Customer booking requests are account-scoped and idempotent; the restaurant assigns
 # a suitable table and must do so before confirming the request.
 CUSTOMER_BOOKING_AT="$(date -u -d '+40 days' '+%Y-%m-%d %H:%M:%S+00:00')"
@@ -1920,6 +1955,52 @@ if [ "$owner_recipe_activated" != "true" ]; then
   echo "ERROR: restaurant owner could not activate a configured recipe." >&2
   exit 1
 fi
+
+# Recipe reads and writes must require the inventory permission, not merely team membership.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders']);
+COMMIT;
+SQL
+if save_recipe_ingredient "$USER_C" "$RESTAURANT_A" "$PRICE_MENU_ITEM_A" "$ITEM_A" "0.250" "0.00" >/dev/null 2>&1; then
+  echo "ERROR: staff without inventory permission unexpectedly edited a recipe through the SECURITY DEFINER RPC." >&2
+  exit 1
+fi
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT public.remove_restaurant_recipe_ingredient('$RECIPE_ID_A'::uuid, '$ITEM_A'::uuid);
+COMMIT;
+SQL
+then
+  echo "ERROR: staff without inventory permission unexpectedly removed a recipe ingredient." >&2
+  exit 1
+fi
+restricted_recipe_reads="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text FROM public.restaurant_recipe_ingredients WHERE recipe_id = '$RECIPE_ID_A'::uuid;
+ROLLBACK;
+SQL
+)"
+if [ "$restricted_recipe_reads" != "0" ]; then
+  echo "ERROR: staff without inventory permission could read recipe ingredient details." >&2
+  exit 1
+fi
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions(
+  '$USER_C'::uuid, ARRAY['orders','tables','reservations','menu','inventory','loyalty']
+);
+COMMIT;
+SQL
+echo "PASS: recipe ingredient reads, writes and SECURITY DEFINER RPCs require the server-enforced inventory permission."
 
 # An ingredient edit by a staff member invalidates the owner's previous approval;
 # reactivation must be explicit and owner-only.

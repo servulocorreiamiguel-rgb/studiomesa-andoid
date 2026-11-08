@@ -58,10 +58,10 @@ jobs:
 
       - name: Build and verify signed APKs
         run: |
-          gradle assembleEssencialRestauranteRelease assembleProfissionalRestauranteRelease assembleProfissionalClienteRelease assemblePremiumRestauranteRelease assemblePremiumClienteRelease
+          gradle assembleEssencialRestauranteRelease assembleEssencialClienteRelease assembleProfissionalRestauranteRelease assembleProfissionalClienteRelease assemblePremiumRestauranteRelease assemblePremiumClienteRelease
           mapfile -d '' apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' -print0)
-          if [ "${#apks[@]}" -ne 5 ]; then
-            echo "Expected exactly five release APKs, found ${#apks[@]}."
+          if [ "${#apks[@]}" -ne 6 ]; then
+            echo "Expected exactly six release APKs, found ${#apks[@]}."
             exit 1
           fi
           APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
