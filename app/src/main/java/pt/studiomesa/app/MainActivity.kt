@@ -4872,13 +4872,149 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun createStudioMesaQrBitmap(payload: String, sizePx: Int): Bitmap {
+        val hints = hashMapOf<EncodeHintType, Any>(EncodeHintType.MARGIN to 1)
+        val matrix = MultiFormatWriter().encode(
+            payload, BarcodeFormat.QR_CODE, sizePx, sizePx, hints
+        )
+        val bitmap = Bitmap.createBitmap(matrix.width, matrix.height, Bitmap.Config.ARGB_8888)
+        for (y in 0 until matrix.height) {
+            for (x in 0 until matrix.width) {
+                bitmap.setPixel(x, y, if (matrix[x, y]) Color.BLACK else Color.WHITE)
+            }
+        }
+        return bitmap
+    }
+
     private fun showRestaurantJoinCode() {
-        val code = backendPrefs.getString("join_code", "") ?: ""
+        val code = backendPrefs.getString("join_code", "")?.trim()?.uppercase(Locale.ROOT).orEmpty()
+        if (!code.matches(Regex("^[A-Z0-9]{6,12}$"))) {
+            AlertDialog.Builder(this)
+                .setTitle("Código indisponível")
+                .setMessage("Não foi possível obter o código de adesão deste restaurante. Atualiza os dados da conta e tenta novamente.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(18), dp(8), dp(18), dp(8))
+        }
+        val qr = runCatching {
+            createStudioMesaQrBitmap("STUDIOMESA-JOIN:$code", dp(236))
+        }.getOrNull()
+        if (qr != null) {
+            content.addView(ImageView(this).apply {
+                setImageBitmap(qr)
+                contentDescription = "QR de adesão do restaurante"
+                adjustViewBounds = true
+            }, LinearLayout.LayoutParams(dp(236), dp(236)))
+        } else {
+            content.addView(emptyCard("Não foi possível gerar a imagem QR neste dispositivo."))
+        }
+        addGap(content, 8)
+        content.addView(label("CÓDIGO DE ADESÃO", 10f, true, forestSoft))
+        addGap(content, 3)
+        content.addView(label(code, 24f, true, forestDeep))
+        addGap(content, 7)
+        content.addView(label(
+            "O cliente pode pesquisar o restaurante pelo nome e pedir aprovação, ou ler este QR para aderir diretamente. Mantém este convite junto do restaurante.",
+            12f, false, muted
+        ))
         AlertDialog.Builder(this)
-            .setTitle("Código de adesão")
-            .setMessage("Código: $code\n\nO cliente deve abrir a aplicação «StudioMesa - Cliente», criar conta ou iniciar sessão e escolher «Associar ao restaurante».")
-            .setPositiveButton("OK", null)
+            .setTitle("Código e QR de adesão")
+            .setView(content)
+            .setPositiveButton("Fechar", null)
             .show()
+    }
+
+    private fun showRestaurantMembershipRequestsDialog() {
+        val restaurantId = backendRestaurantId()
+        if (backendToken().isBlank() || restaurantId.isBlank() ||
+            backendPrefs.getString("restaurant_role", "") != "owner") {
+            AlertDialog.Builder(this)
+                .setTitle("Acesso reservado")
+                .setMessage("Só o proprietário do restaurante pode aprovar pedidos de associação.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        runBackend({
+            SupabaseApi.listPendingRestaurantMembershipRequests(backendToken(), restaurantId).toString()
+        }) { raw ->
+            val requests = JSONArray(raw)
+            val content = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(18), dp(8), dp(18), dp(6))
+            }
+            if (requests.length() == 0) {
+                content.addView(emptyCard("Não existem pedidos de associação pendentes."))
+            } else {
+                for (index in 0 until requests.length()) {
+                    val item = requests.optJSONObject(index) ?: continue
+                    val requestId = item.optString("request_id")
+                    val customerName = item.optString("display_name")
+                    val requestedAt = item.optString("requested_at").replace("T", " ").take(16)
+                    val card = makeCard(13)
+                    card.addView(label(customerName, 16f, true, forestDeep))
+                    if (requestedAt.isNotBlank()) {
+                        addGap(card, 3)
+                        card.addView(label("Pedido recebido: $requestedAt", 10f, false, muted))
+                    }
+                    addGap(card, 8)
+                    val actions = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                    }
+                    actions.addView(primaryButton("Aprovar") {
+                        runBackend({
+                            SupabaseApi.reviewRestaurantMembershipRequest(
+                                backendToken(), requestId, true
+                            )
+                            SupabaseApi.listPendingRestaurantMembershipRequests(
+                                backendToken(), restaurantId
+                            ).toString()
+                        }) { updated ->
+                            AlertDialog.Builder(this)
+                                .setTitle("Pedido aprovado")
+                                .setMessage("O cartão de $customerName foi criado e associado à conta do cliente.")
+                                .setPositiveButton("OK") { _, _ ->
+                                    showRestaurantMembershipRequestsDialog()
+                                }
+                                .show()
+                        }
+                    }, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+                        setMargins(0, 0, dp(4), 0)
+                    })
+                    actions.addView(secondaryButton("Rejeitar") {
+                        AlertDialog.Builder(this)
+                            .setTitle("Rejeitar pedido?")
+                            .setMessage("O cliente não ficará associado ao programa de fidelização.")
+                            .setNegativeButton("Cancelar", null)
+                            .setPositiveButton("Rejeitar") { _, _ ->
+                                runBackend({
+                                    SupabaseApi.reviewRestaurantMembershipRequest(
+                                        backendToken(), requestId, false
+                                    )
+                                    "OK"
+                                }) {
+                                    showRestaurantMembershipRequestsDialog()
+                                }
+                            }
+                            .show()
+                    }, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+                        setMargins(dp(4), 0, 0, 0)
+                    })
+                    card.addView(actions)
+                    content.addView(card, cardParams())
+                }
+            }
+            AlertDialog.Builder(this)
+                .setTitle("Pedidos de associação")
+                .setView(content)
+                .setPositiveButton("Fechar", null)
+                .show()
+        }
     }
 
     private fun checkInactiveMembersForDashboard() {
@@ -5224,7 +5360,13 @@ class MainActivity : ComponentActivity() {
             addGap(container, 6)
             container.addView(secondaryButton("Atualizar cartões e loja") { refreshRemoteCustomers() }, LinearLayout.LayoutParams(-1, dp(48)))
             addGap(container, 6)
-            container.addView(secondaryButton("Ver código de adesão") { showRestaurantJoinCode() }, LinearLayout.LayoutParams(-1, dp(48)))
+            container.addView(secondaryButton("Ver código e QR de adesão") { showRestaurantJoinCode() }, LinearLayout.LayoutParams(-1, dp(48)))
+            if (isOwner) {
+                addGap(container, 6)
+                container.addView(secondaryButton("Pedidos de associação de clientes") {
+                    showRestaurantMembershipRequestsDialog()
+                }, LinearLayout.LayoutParams(-1, dp(48)))
+            }
         } else {
             container.addView(primaryButton("+  Adicionar cliente (local)") { showAddCustomerDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
         }
