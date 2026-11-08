@@ -290,8 +290,13 @@ class MainActivity : ComponentActivity() {
             val contents = scanResult.contents
             if (contents.isNullOrBlank()) {
                 Toast.makeText(this, "Leitura do QR cancelada.", Toast.LENGTH_SHORT).show()
-            } else if (isCustomerApp && contents.startsWith("STUDIOMESA-JOIN:", ignoreCase = true)) {
-                showCustomerJoinCodeDialog(contents.substringAfter(':').trim())
+            } else if (isCustomerApp && RestaurantJoinQrParser.hasPrefix(contents)) {
+                val inviteCode = RestaurantJoinQrParser.extractCode(contents)
+                if (inviteCode == null) {
+                    Toast.makeText(this, "O QR de adesão não contém um código válido.", Toast.LENGTH_LONG).show()
+                } else {
+                    showCustomerJoinCodeDialog(inviteCode)
+                }
             } else {
                 handleLoyaltyQrPayload(contents)
             }
