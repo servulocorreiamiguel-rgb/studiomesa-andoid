@@ -248,9 +248,9 @@ class MainActivity : ComponentActivity() {
         // Refresh shared data when an already-authenticated user opens the app,
         // but do not start a second request while processing an OAuth callback.
         if (intent?.data == null && backendToken().isNotBlank()) {
-            if (isCustomerApp && backendMemberId().isNotBlank()) {
+            if (isCustomerApp) {
                 refreshCustomerMembership()
-            } else if (!isCustomerApp && hasRemoteRestaurant()) {
+            } else if (hasRemoteRestaurant()) {
                 refreshRemoteOperations()
             }
         }
@@ -6092,15 +6092,48 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun refreshCustomerMembership() {
-        val memberId = backendMemberId()
-        if (backendToken().isBlank()) { showAuthChooser { renderCustomerApp() }; return }
-        if (memberId.isBlank()) { showCustomerJoinDialog(); return }
+        if (backendToken().isBlank()) {
+            showAuthChooser { renderCustomerApp() }
+            return
+        }
         runBackend({
             val token = backendToken()
             val memberships = SupabaseApi.listMyLoyaltyMemberships(token)
-            loadSelectedCustomerMembership(token, memberships, memberId)
-            "OK"
-        }) { renderCustomerApp() }
+            if (memberships.length() == 0) {
+                "NO_CARDS"
+            } else {
+                val savedId = backendMemberId()
+                var selectedId = ""
+                for (index in 0 until memberships.length()) {
+                    val item = memberships.optJSONObject(index) ?: continue
+                    if (item.optString("member_id") == savedId && savedId.isNotBlank()) {
+                        selectedId = savedId
+                        break
+                    }
+                }
+                if (selectedId.isBlank()) {
+                    selectedId = memberships.optJSONObject(0)?.optString("member_id").orEmpty()
+                }
+                loadSelectedCustomerMembership(token, memberships, selectedId)
+                "OK"
+            }
+        }) { result ->
+            if (result == "NO_CARDS") {
+                customerMembershipsCache = JSONArray()
+                backendPrefs.edit()
+                    .remove("member_id")
+                    .remove("member_code")
+                    .remove("member_points")
+                    .remove("member_restaurant_name")
+                    .putString("customer_memberships_json", "[]")
+                    .putString("customer_menu_json", "[]")
+                    .putString("customer_rewards_json", "[]")
+                    .apply()
+                renderCustomerApp()
+            } else {
+                renderCustomerApp()
+            }
+        }
     }
 
     private fun renderCustomerEntryScreen() {
