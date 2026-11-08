@@ -236,7 +236,12 @@ class MainActivity : ComponentActivity() {
         }
         window.statusBarColor = forestDeep
         window.navigationBarColor = forestDeep
-        renderApp()
+        if (isCustomerApp && backendToken().isBlank() &&
+            !backendPrefs.getBoolean("customer_entry_choice_complete_v1", false)) {
+            renderCustomerEntryScreen()
+        } else {
+            renderApp()
+        }
         handleAuthCallback(intent)
 
         // Refresh shared data when an already-authenticated user opens the app,
@@ -398,6 +403,9 @@ class MainActivity : ComponentActivity() {
             else restoreOwnedRestaurant(session.accessToken)
             "SIGNED_IN"
         }, refreshSession = false) {
+            if (isCustomerApp) {
+                backendPrefs.edit().putBoolean("customer_entry_choice_complete_v1", true).apply()
+            }
             if (isPasswordRecovery) {
                 showSetNewPasswordDialog()
             } else {
@@ -4020,7 +4028,7 @@ class MainActivity : ComponentActivity() {
             setPadding(dp(22), dp(12), dp(22), dp(6))
         }
         form.addView(label(
-            "Primeira utilização? Escolhe «Criar conta». Se já tens uma conta, escolhe «Iniciar sessão».",
+            "Primeira utilização? Escolhe «Criar conta». Se já tens uma conta, escolhe «Já tenho uma conta».",
             13f, false, muted
         ))
         addGap(form, 14)
@@ -4036,7 +4044,7 @@ class MainActivity : ComponentActivity() {
             showCredentialsDialog(true, afterAuth)
         }, LinearLayout.LayoutParams(-1, dp(48)))
         addGap(form, 8)
-        form.addView(secondaryButton("Iniciar sessão") {
+        form.addView(secondaryButton("Já tenho uma conta") {
             dialog.dismiss()
             showCredentialsDialog(false, afterAuth)
         }, LinearLayout.LayoutParams(-1, dp(48)))
@@ -5687,6 +5695,90 @@ class MainActivity : ComponentActivity() {
                 .apply()
             "OK"
         }) { renderCustomerApp() }
+    }
+
+    private fun renderCustomerEntryScreen() {
+        appRoot = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(paper)
+        }
+        applySystemBarInsets(appRoot)
+
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_NEVER
+            isVerticalScrollBarEnabled = false
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(24), dp(34), dp(24), dp(28))
+        }
+        val hero = makeCard(22, forestDeep)
+        hero.addView(label("STUDIOMESA CLIENTE", 10f, true, copperPale))
+        addGap(hero, 12)
+        hero.addView(label("Bem-vindo ao StudioMesa", 27f, true, white))
+        addGap(hero, 8)
+        hero.addView(label(
+            "Consulta a experiência do restaurante sem criar conta. Para guardar os teus pontos, reservas e avisos em vários dispositivos, entra ou cria uma conta.",
+            13f, false, Color.rgb(229, 235, 228)
+        ))
+        content.addView(hero, LinearLayout.LayoutParams(-1, -2))
+        addGap(content, 22)
+
+        content.addView(primaryButton("Continuar sem conta") {
+            backendPrefs.edit().putBoolean("customer_entry_choice_complete_v1", true).apply()
+            renderCustomerApp()
+        }, LinearLayout.LayoutParams(-1, dp(52)))
+        addGap(content, 10)
+        content.addView(secondaryButton("Já tenho uma conta") {
+            showCredentialsDialog(false) {
+                backendPrefs.edit().putBoolean("customer_entry_choice_complete_v1", true).apply()
+                renderCustomerApp()
+            }
+        }, LinearLayout.LayoutParams(-1, dp(50)))
+        addGap(content, 8)
+        content.addView(secondaryButton("Criar conta") {
+            showCredentialsDialog(true) {
+                backendPrefs.edit().putBoolean("customer_entry_choice_complete_v1", true).apply()
+                renderCustomerApp()
+            }
+        }, LinearLayout.LayoutParams(-1, dp(50)))
+
+        val socialOptions = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        content.addView(socialOptions, LinearLayout.LayoutParams(-1, -2))
+        addGap(content, 16)
+        content.addView(label(
+            "Podes consultar a carta como convidado. Para acumular pontos, pedir reservas e receber promoções personalizadas, precisas de uma conta e de associar o restaurante.",
+            12f, false, muted
+        ))
+        scroll.addView(content)
+        appRoot.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        setContentView(appRoot)
+
+        // Offer social sign-in only when the Supabase project confirms it is configured.
+        Thread {
+            val enabledProviders = listOf("google", "azure").filter { provider ->
+                runCatching { SupabaseApi.isOAuthProviderEnabled(provider) }.getOrDefault(false)
+            }
+            runOnUiThread {
+                if (isFinishing || appRoot.parent == null) return@runOnUiThread
+                if ("google" in enabledProviders) {
+                    addGap(socialOptions, 8)
+                    socialOptions.addView(secondaryButton("Continuar com Google") {
+                        startOAuth("google")
+                    }, LinearLayout.LayoutParams(-1, dp(48)))
+                }
+                if ("azure" in enabledProviders) {
+                    addGap(socialOptions, 8)
+                    socialOptions.addView(secondaryButton("Continuar com Microsoft (Outlook)") {
+                        startOAuth("azure")
+                    }, LinearLayout.LayoutParams(-1, dp(48)))
+                }
+            }
+        }.start()
     }
 
     private fun renderCustomerApp() {
