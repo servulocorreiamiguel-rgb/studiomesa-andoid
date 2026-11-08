@@ -164,6 +164,8 @@ class MainActivity : ComponentActivity() {
     private var customerRedemptionHistory = JSONArray()
     private var reactivationMembersCache = JSONArray()
     private var reactivationMembersLoaded = false
+    private var reactivationDashboardCheckInFlight = false
+    private var reactivationDashboardCheckedAtMillis = 0L
     private var customerMarketingNotificationsCache = JSONArray()
     private var marketingOptInPrefLoaded = false
     // Reservation contacts are kept in memory only, not persisted to SharedPreferences.
@@ -2478,6 +2480,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun renderHome(container: LinearLayout) {
+        checkInactiveMembersForDashboard()
         container.addView(label("Painel de operação", 10f, true, forestSoft))
         addGap(container, 5)
         container.addView(label("A sala, num relance.", 27f, true, forestDeep))
@@ -2507,6 +2510,34 @@ class MainActivity : ComponentActivity() {
         stats.addView(statCard("PEDIDOS ATIVOS", activeOrders.toString(), if (activeOrders > 0) copper else forestSoft),
             LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, 0) })
         container.addView(stats)
+
+        if (hasRemoteRestaurant() && backendPrefs.getString("restaurant_role", "") == "owner" &&
+            reactivationMembersLoaded && reactivationMembersCache.length() > 0) {
+            var eligible = 0
+            for (i in 0 until reactivationMembersCache.length()) {
+                val member = reactivationMembersCache.optJSONObject(i) ?: continue
+                if (member.optBoolean("marketing_opt_in", false) && member.optBoolean("has_account", false)) eligible++
+            }
+            addGap(container, 12)
+            val alertCard = makeCard(14, copperPale)
+            alertCard.addView(label("CLIENTES A RECUPERAR", 10f, true, forest))
+            addGap(alertCard, 5)
+            alertCard.addView(label(
+                reactivationMembersCache.length().toString() + " clientes sem visita de fidelização há 30 ou mais dias.",
+                15f, true, forestDeep
+            ))
+            addGap(alertCard, 4)
+            alertCard.addView(label(
+                eligible.toString() + " autorizaram receber campanhas. Podes preparar uma mensagem e uma oferta.",
+                12f, false, ink
+            ))
+            addGap(alertCard, 8)
+            alertCard.addView(primaryButton("Ver clientes e criar campanha") {
+                activePage = "Marketing"
+                renderApp()
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+            container.addView(alertCard, cardParams())
+        }
 
         addGap(container, 21)
         sectionHeading(container, "Acesso rápido", "Escolhe uma área para continuar.")
@@ -4762,6 +4793,40 @@ class MainActivity : ComponentActivity() {
             .setMessage("Código: $code\n\nO cliente deve abrir a aplicação «StudioMesa - Cliente», criar conta ou iniciar sessão e escolher «Associar ao restaurante».")
             .setPositiveButton("OK", null)
             .show()
+    }
+
+    private fun checkInactiveMembersForDashboard() {
+        if (!hasRemoteRestaurant() ||
+            backendPrefs.getString("restaurant_role", "") != "owner" ||
+            backendToken().isBlank()) return
+
+        val now = System.currentTimeMillis()
+        if (reactivationDashboardCheckInFlight ||
+            (reactivationDashboardCheckedAtMillis > 0L &&
+             now - reactivationDashboardCheckedAtMillis < 6L * 60L * 60L * 1000L)) return
+
+        reactivationDashboardCheckInFlight = true
+        Thread {
+            try {
+                refreshSessionIfNeeded()
+                val members = SupabaseApi.listInactiveLoyaltyMembers(
+                    backendToken(),
+                    backendRestaurantId(),
+                    ReactivationCampaignPolicy.MIN_INACTIVITY_DAYS
+                )
+                runOnUiThread {
+                    if (!isFinishing) {
+                        reactivationMembersCache = members
+                        reactivationMembersLoaded = true
+                        reactivationDashboardCheckedAtMillis = System.currentTimeMillis()
+                        reactivationDashboardCheckInFlight = false
+                        if (activePage == "Início" && !isCustomerApp) renderApp()
+                    }
+                }
+            } catch (_: Exception) {
+                runOnUiThread { reactivationDashboardCheckInFlight = false }
+            }
+        }.start()
     }
 
     private fun refreshReactivationMembers() {
