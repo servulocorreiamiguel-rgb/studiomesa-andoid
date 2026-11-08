@@ -1473,6 +1473,73 @@ if [ "$loyalty_balance_ok" != "t" ] || [ "$loyalty_transaction_ok" != "t" ] || [
 fi
 echo "PASS: QR replacement, restaurant authorization, one-use enforcement and safe retry."
 
+# The same customer can accrue and redeem points through a second restaurant card.
+LOYALTY_QR_B_REQUEST="88888888-8888-4888-8888-888888888889"
+LOYALTY_QR_B_TOKEN="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT qr_token::text
+FROM public.create_loyalty_qr_token('$MEMBER_A_B'::uuid);
+COMMIT;
+SQL
+)"
+test -n "$LOYALTY_QR_B_TOKEN"
+
+LOYALTY_B_POINTS="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
+SET LOCAL ROLE authenticated;
+SELECT points::text FROM public.award_loyalty_points_from_qr(
+  '$LOYALTY_QR_B_TOKEN'::uuid, 20, '$LOYALTY_QR_B_REQUEST'::uuid, 'CI second restaurant receipt'
+);
+COMMIT;
+SQL
+)"
+if [ "$LOYALTY_B_POINTS" != "20" ]; then
+  echo "ERROR: the second restaurant did not credit the selected customer card." >&2
+  exit 1
+fi
+
+LOYALTY_REWARD_B_ID="99999999-3333-4333-8333-333333333333"
+LOYALTY_REDEEM_B_REQUEST="99999999-4444-4444-8444-444444444444"
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
+SET LOCAL ROLE authenticated;
+SELECT public.save_loyalty_reward(
+  '$RESTAURANT_B'::uuid, '$LOYALTY_REWARD_B_ID'::uuid,
+  'CI Restaurant B Reward', 'Second restaurant reward', 10, 5, true
+);
+COMMIT;
+SQL
+
+LOYALTY_B_REDEMPTION="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT points_remaining::text || '|' || status
+FROM public.redeem_loyalty_reward(
+  '$MEMBER_A_B'::uuid, '$LOYALTY_REWARD_B_ID'::uuid, '$LOYALTY_REDEEM_B_REQUEST'::uuid
+);
+COMMIT;
+SQL
+)"
+if [ "$LOYALTY_B_REDEMPTION" != "10|pending" ]; then
+  echo "ERROR: the selected second card could not redeem its own restaurant's reward." >&2
+  exit 1
+fi
+
+multi_card_balances="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT (SELECT points FROM public.loyalty_members WHERE id='$MEMBER_A'::uuid)::text || '|' || (SELECT points FROM public.loyalty_members WHERE id='$MEMBER_A_B'::uuid)::text;")"
+multi_card_ledger="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*)::text FROM public.loyalty_transactions WHERE member_id='$MEMBER_A_B'::uuid;")"
+if [ "$multi_card_balances" != "10|10" ] || [ "$multi_card_ledger" != "2" ]; then
+  echo "ERROR: points or ledger entries leaked between a customer's two restaurant cards." >&2
+  exit 1
+fi
+echo "PASS: one customer can earn and redeem points at a second restaurant without changing the first card."
+
 # Customer redeems the reward once. The same request key returns the original
 # redemption; points and stock are updated atomically.
 LOYALTY_REDEMPTION_FIRST="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
