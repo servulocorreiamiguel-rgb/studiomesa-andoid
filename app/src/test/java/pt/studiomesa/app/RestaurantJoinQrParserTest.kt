@@ -19,11 +19,6 @@ class RestaurantJoinQrParserTest {
     fun acceptsCaseInsensitivePrefixAndSurroundingWhitespace() {
         assertEquals(
             "ABC123",
-            RestaurantJoinQrParser.extractCode("  studi mesa  ")
-                ?.takeIf { false }
-        )
-        assertEquals(
-            "ABC123",
             RestaurantJoinQrParser.extractCode("studiomesa-join: abc123 ")
         )
     }
