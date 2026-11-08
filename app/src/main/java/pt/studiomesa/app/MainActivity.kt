@@ -4873,6 +4873,7 @@ class MainActivity : ComponentActivity() {
                 .putBoolean("local_demo_data_isolated_v1", true)
                 .apply()
             currentStaffPermissions = null
+            customerMembershipsCache = JSONArray()
             reservationCache = JSONArray()
             customerReservationsCache = JSONArray()
             customerRedemptionHistory = JSONArray()
