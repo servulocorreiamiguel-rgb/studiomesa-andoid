@@ -44,6 +44,61 @@ if [ "$unsafe_definer_count" != "0" ]; then
 fi
 echo "PASS: application SECURITY DEFINER functions pin an empty search_path and are not executable by anon."
 
+# Marketing campaigns and notification rows are only reachable through
+# owner/customer-scoped SECURITY DEFINER RPCs, never direct table grants.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<'SQL'
+DO $check$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_class c
+    JOIN pg_namespace n ON n.oid=c.relnamespace
+    WHERE n.nspname='public' AND c.relname='restaurant_reactivation_campaigns'
+      AND c.relrowsecurity
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_class c
+    JOIN pg_namespace n ON n.oid=c.relnamespace
+    WHERE n.nspname='public' AND c.relname='restaurant_customer_notifications'
+      AND c.relrowsecurity
+  ) THEN
+    RAISE EXCEPTION 'Marketing campaign/notification tables must have RLS enabled.';
+  END IF;
+
+  IF has_table_privilege('anon','public.restaurant_reactivation_campaigns','SELECT')
+    OR has_table_privilege('authenticated','public.restaurant_reactivation_campaigns','SELECT')
+    OR has_table_privilege('anon','public.restaurant_customer_notifications','SELECT')
+    OR has_table_privilege('authenticated','public.restaurant_customer_notifications','SELECT')
+    OR has_table_privilege('authenticated','public.restaurant_customer_notifications','INSERT') THEN
+    RAISE EXCEPTION 'Marketing tables unexpectedly allow direct API-role access.';
+  END IF;
+
+  IF to_regprocedure('public.get_my_marketing_opt_in()') IS NULL
+    OR to_regprocedure('public.set_my_marketing_opt_in(boolean)') IS NULL
+    OR to_regprocedure('public.get_restaurant_inactive_members(uuid,integer)') IS NULL
+    OR to_regprocedure('public.send_reactivation_campaign(uuid,uuid,text,text,text,text,text,integer)') IS NULL
+    OR to_regprocedure('public.list_my_marketing_notifications()') IS NULL
+    OR to_regprocedure('public.mark_my_marketing_notification_read(uuid)') IS NULL THEN
+    RAISE EXCEPTION 'A marketing campaign or notification RPC is missing.';
+  END IF;
+
+  IF has_function_privilege('anon','public.get_my_marketing_opt_in()','EXECUTE')
+    OR has_function_privilege('anon','public.set_my_marketing_opt_in(boolean)','EXECUTE')
+    OR has_function_privilege('anon','public.get_restaurant_inactive_members(uuid,integer)','EXECUTE')
+    OR has_function_privilege('anon','public.send_reactivation_campaign(uuid,uuid,text,text,text,text,text,integer)','EXECUTE')
+    OR has_function_privilege('anon','public.list_my_marketing_notifications()','EXECUTE')
+    OR has_function_privilege('anon','public.mark_my_marketing_notification_read(uuid)','EXECUTE')
+    OR NOT has_function_privilege('authenticated','public.get_my_marketing_opt_in()','EXECUTE')
+    OR NOT has_function_privilege('authenticated','public.set_my_marketing_opt_in(boolean)','EXECUTE')
+    OR NOT has_function_privilege('authenticated','public.get_restaurant_inactive_members(uuid,integer)','EXECUTE')
+    OR NOT has_function_privilege('authenticated','public.send_reactivation_campaign(uuid,uuid,text,text,text,text,text,integer)','EXECUTE')
+    OR NOT has_function_privilege('authenticated','public.list_my_marketing_notifications()','EXECUTE')
+    OR NOT has_function_privilege('authenticated','public.mark_my_marketing_notification_read(uuid)','EXECUTE') THEN
+    RAISE EXCEPTION 'Marketing RPC grants are not restricted to authenticated callers.';
+  END IF;
+END;
+$check$;
+SQL
+echo "PASS: marketing tables use RLS, have no direct API access, and expose only authenticated RPCs."
+
 # Test the effective defaults by creating disposable objects as the same postgres
 # role that replays migrations. Newly-created API objects must be opt-in, not public.
 psql --no-psqlrc --set ON_ERROR_STOP=1 <<'SQL'
@@ -2140,6 +2195,250 @@ if [ "$legacy_movements" != "0" ]; then
   exit 1
 fi
 echo "PASS: insufficient stock rolls back the whole preparation, cancellation before preparation consumes nothing, and legacy orders remain compatible."
+
+# Reactivation campaigns: only owners may list/send; customers must opt in;
+# messages are private to each customer; campaign retries are idempotent.
+CAMPAIGN_VISIT_REQUEST="cccccccc-cccc-4ccc-8ccc-ccccccccccc1"
+CAMPAIGN_REQUEST_A="dddddddd-dddd-4ddd-8ddd-ddddddddddd1"
+CAMPAIGN_REQUEST_B="dddddddd-dddd-4ddd-8ddd-ddddddddddd2"
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+-- Make the disposable A-card's most recent positive point event 31 days old.
+UPDATE public.loyalty_transactions
+   SET created_at = now() - interval '31 days'
+ WHERE restaurant_id = '$RESTAURANT_A'::uuid
+   AND member_id = '$MEMBER_A'::uuid
+   AND points_delta > 0;
+
+WITH updated AS (
+  UPDATE public.loyalty_members
+     SET points = points + 1
+   WHERE id = '$MEMBER_A'::uuid
+  RETURNING id, restaurant_id, points
+)
+INSERT INTO public.loyalty_transactions (
+  restaurant_id, member_id, created_by, points_delta, points_after,
+  note, client_request_id, created_at
+)
+SELECT restaurant_id, id, '$USER_A'::uuid, 1, points,
+       'CI visit older than 30 days', '$CAMPAIGN_VISIT_REQUEST'::uuid,
+       now() - interval '31 days'
+FROM updated;
+SQL
+
+default_marketing_consent="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT public.get_my_marketing_opt_in()::text;
+ROLLBACK;
+SQL
+)"
+if [ "$default_marketing_consent" != "false" ]; then
+  echo "ERROR: a new customer unexpectedly receives marketing without explicit consent." >&2
+  exit 1
+fi
+
+inactive_owner_list="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text || '|' ||
+       coalesce(bool_or(marketing_opt_in)::text, 'false') || '|' ||
+       coalesce(bool_or(has_account)::text, 'false')
+FROM public.get_restaurant_inactive_members('$RESTAURANT_A'::uuid, 30);
+ROLLBACK;
+SQL
+)"
+if [ "$inactive_owner_list" != "1|false|true" ]; then
+  echo "ERROR: owner A did not receive exactly its inactive customer with consent still disabled." >&2
+  printf 'Observed: %s
+' "$inactive_owner_list" >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.get_restaurant_inactive_members('$RESTAURANT_A'::uuid, 30);
+COMMIT;
+SQL
+then
+  echo "ERROR: owner B queried inactive customers from restaurant A." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.send_reactivation_campaign(
+  '$RESTAURANT_A'::uuid, '$CAMPAIGN_REQUEST_A'::uuid,
+  'Test cross-restaurant', 'This must not be sent.',
+  'none', NULL, NULL, 30
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: owner B sent a campaign to restaurant A." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_my_marketing_opt_in(true);
+COMMIT;
+SQL
+
+enabled_marketing_consent="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT public.get_my_marketing_opt_in()::text;
+ROLLBACK;
+SQL
+)"
+if [ "$enabled_marketing_consent" != "true" ]; then
+  echo "ERROR: customer E could not enable marketing consent." >&2
+  exit 1
+fi
+
+eligible_owner_list="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text || '|' ||
+       coalesce(bool_or(marketing_opt_in)::text, 'false')
+FROM public.get_restaurant_inactive_members('$RESTAURANT_A'::uuid, 30);
+ROLLBACK;
+SQL
+)"
+if [ "$eligible_owner_list" != "1|true" ]; then
+  echo "ERROR: owner A did not see customer E become eligible after explicit consent." >&2
+  exit 1
+fi
+
+CAMPAIGN_FIRST="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT campaign_id::text || '|' || recipient_count::text
+FROM public.send_reactivation_campaign(
+  '$RESTAURANT_A'::uuid, '$CAMPAIGN_REQUEST_A'::uuid,
+  'Temos saudades tuas!', 'Gostávamos de voltar a receber-te.',
+  'discount', '20% de desconto', 'Válido em refeições elegíveis.', 30
+);
+COMMIT;
+SQL
+)"
+CAMPAIGN_ID="$(cut -d '|' -f 1 <<<"$CAMPAIGN_FIRST")"
+if [[ "$CAMPAIGN_FIRST" != *"|1" ]] || [ -z "$CAMPAIGN_ID" ]; then
+  echo "ERROR: owner A did not send the campaign to the one eligible customer." >&2
+  printf 'Observed: %s
+' "$CAMPAIGN_FIRST" >&2
+  exit 1
+fi
+
+CAMPAIGN_RETRY="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT campaign_id::text || '|' || recipient_count::text
+FROM public.send_reactivation_campaign(
+  '$RESTAURANT_A'::uuid, '$CAMPAIGN_REQUEST_A'::uuid,
+  'Temos saudades tuas!', 'Gostávamos de voltar a receber-te.',
+  'discount', '20% de desconto', 'Válido em refeições elegíveis.', 30
+);
+COMMIT;
+SQL
+)"
+if [ "$CAMPAIGN_RETRY" != "$CAMPAIGN_FIRST" ]; then
+  echo "ERROR: retrying a campaign duplicated or changed its original result." >&2
+  exit 1
+fi
+
+campaign_notification_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1   -c "SELECT count(*)::text FROM public.restaurant_customer_notifications WHERE campaign_id='$CAMPAIGN_ID'::uuid;")"
+campaign_recipient_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1   -c "SELECT count(*)::text FROM public.restaurant_customer_notifications WHERE campaign_id='$CAMPAIGN_ID'::uuid AND recipient_user_id='$USER_E'::uuid;")"
+if [ "$campaign_notification_count" != "1" ] || [ "$campaign_recipient_count" != "1" ]; then
+  echo "ERROR: campaign notification was duplicated or sent to the wrong account." >&2
+  exit 1
+fi
+
+customer_inbox_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text FROM public.list_my_marketing_notifications();
+ROLLBACK;
+SQL
+)"
+other_customer_inbox_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_F', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text FROM public.list_my_marketing_notifications();
+ROLLBACK;
+SQL
+)"
+if [ "$customer_inbox_count" != "1" ] || [ "$other_customer_inbox_count" != "0" ]; then
+  echo "ERROR: marketing inbox exposed a campaign to the wrong customer's account." >&2
+  exit 1
+fi
+
+NOTIFICATION_ID="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1   -c "SELECT id::text FROM public.restaurant_customer_notifications WHERE campaign_id='$CAMPAIGN_ID'::uuid AND recipient_user_id='$USER_E'::uuid;")"
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT public.mark_my_marketing_notification_read('$NOTIFICATION_ID'::uuid);
+COMMIT;
+SQL
+notification_read_at="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1   -c "SELECT (read_at IS NOT NULL)::text FROM public.restaurant_customer_notifications WHERE id='$NOTIFICATION_ID'::uuid;")"
+if [ "$notification_read_at" != "true" ]; then
+  echo "ERROR: customer E could not mark its own marketing notification as read." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_my_marketing_opt_in(false);
+COMMIT;
+SQL
+withdrawn_marketing_consent="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT public.get_my_marketing_opt_in()::text;
+ROLLBACK;
+SQL
+)"
+if [ "$withdrawn_marketing_consent" != "false" ]; then
+  echo "ERROR: customer E could not withdraw marketing consent." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.send_reactivation_campaign(
+  '$RESTAURANT_A'::uuid, '$CAMPAIGN_REQUEST_B'::uuid,
+  'Outra campanha', 'Apenas com consentimento ativo.',
+  'none', NULL, NULL, 30
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: a campaign was sent after the only eligible customer withdrew consent." >&2
+  exit 1
+fi
+
+echo "PASS: inactive-customer campaigns are owner-scoped, consent is opt-in/withdrawable, delivery is customer-private and idempotent."
 
 # Account-deletion contract tests run only in the disposable PostgreSQL CI database.
 # They never connect to the hosted Supabase project or delete real accounts/data.
