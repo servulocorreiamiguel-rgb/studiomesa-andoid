@@ -6419,8 +6419,9 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "Associa primeiro o teu cartão ao restaurante.", Toast.LENGTH_LONG).show()
             return
         }
+        val selectedMemberId = backendMemberId()
         runBackend({
-            SupabaseApi.createLoyaltyQrToken(backendToken()).optString("qr_token")
+            SupabaseApi.createLoyaltyQrToken(backendToken(), selectedMemberId).optString("qr_token")
         }) { qrToken ->
             try {
                 val hints = hashMapOf<EncodeHintType, Any>(EncodeHintType.MARGIN to 1)
@@ -6462,7 +6463,15 @@ class MainActivity : ComponentActivity() {
             .setMessage("Vais trocar " + pointsCost + " pontos por «" + rewardName + "». O desconto é confirmado pelo servidor.")
             .setNegativeButton("Cancelar", null)
             .setPositiveButton("Resgatar") { _, _ ->
-                val signature = JSONObject().put("reward_id", rewardId).toString()
+                val memberId = backendMemberId()
+                if (memberId.isBlank()) {
+                    Toast.makeText(this, "Seleciona primeiro um cartão de restaurante.", Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+                val signature = JSONObject()
+                    .put("member_id", memberId)
+                    .put("reward_id", rewardId)
+                    .toString()
                 val operation = "loyalty_reward_redeem"
                 val accountId = backendPrefs.getString("user_id", "").orEmpty()
                 val requestId = try {
@@ -6472,15 +6481,10 @@ class MainActivity : ComponentActivity() {
                     return@setPositiveButton
                 }
                 runBackend({
-                    val result = SupabaseApi.redeemLoyaltyReward(backendToken(), rewardId, requestId)
-                    val member = SupabaseApi.getMyLoyaltyMembership(backendToken())
-                    val rewards = SupabaseApi.listCustomerRewards(backendToken(), backendMemberId())
-                    val redemptions = SupabaseApi.listMyLoyaltyRewardRedemptions(backendToken())
-                    customerRedemptionHistory = redemptions
-                    backendPrefs.edit()
-                        .putInt("member_points", member?.optInt("points", result.optInt("points_remaining", 0)) ?: 0)
-                        .putString("customer_rewards_json", rewards.toString())
-                        .apply()
+                    val token = backendToken()
+                    val result = SupabaseApi.redeemLoyaltyReward(token, memberId, rewardId, requestId)
+                    val memberships = SupabaseApi.listMyLoyaltyMemberships(token)
+                    loadSelectedCustomerMembership(token, memberships, memberId)
                     result.optInt("points_remaining", -1).toString()
                 }) { remaining ->
                     pendingRequestIds.complete(operation, accountId, signature, requestId)
