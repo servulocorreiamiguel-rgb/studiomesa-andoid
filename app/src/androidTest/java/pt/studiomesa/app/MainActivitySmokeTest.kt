@@ -16,6 +16,7 @@ import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.platform.app.InstrumentationRegistry
 import org.hamcrest.Matchers.containsString
 import org.hamcrest.Matchers.not
+import org.junit.Before
 import org.junit.Assume.assumeFalse
 import org.junit.Assume.assumeTrue
 import org.junit.Test
@@ -25,6 +26,17 @@ import org.junit.Test
  * Keep these independent of production credentials: all actions use fresh local demo data.
  */
 class MainActivitySmokeTest {
+    @Before
+    fun prepareCustomerScreensForSmokeTests() {
+        if (isCustomerVariant()) {
+            InstrumentationRegistry.getInstrumentation().targetContext
+                .getSharedPreferences("studiomesa_backend", android.content.Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("customer_entry_choice_complete_v1", true)
+                .apply()
+        }
+    }
+
     private fun isCustomerVariant(): Boolean =
         InstrumentationRegistry.getInstrumentation()
             .targetContext.packageName.endsWith(".cliente")
@@ -127,6 +139,29 @@ class MainActivitySmokeTest {
                 .check(matches(isCompletelyDisplayed()))
             onView(withText("Enviar"))
                 .check(matches(isCompletelyDisplayed()))
+        }
+    }
+
+    @Test
+    fun customerFirstLaunchOffersGuestCreateAndExistingAccountOptions() {
+        assumeTrue("Only the customer app has the customer entry screen.", isCustomerVariant())
+        InstrumentationRegistry.getInstrumentation().targetContext
+            .getSharedPreferences("studiomesa_backend", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .remove("customer_entry_choice_complete_v1")
+            .apply()
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withText("Bem-vindo ao StudioMesa")).check(matches(isDisplayed()))
+            onView(withText("Continuar sem conta")).check(matches(isDisplayed()))
+            onView(withText("Já tenho uma conta")).check(matches(isDisplayed()))
+            onView(withText("Criar conta")).check(matches(isDisplayed()))
+
+            onView(withText("Continuar sem conta")).perform(click())
+            onView(withText(containsString("Cartão digital de cliente")))
+                .check(matches(isDisplayed()))
+            onView(withText("Cartão de fidelização do restaurante."))
+                .check(matches(isDisplayed()))
         }
     }
 
@@ -581,7 +616,7 @@ class MainActivitySmokeTest {
                 .perform(scrollTo(), click())
             onView(withText("Conta StudioMesa"))
                 .check(matches(isDisplayed()))
-            onView(withText("Iniciar sessão"))
+            onView(withText("Já tenho uma conta"))
                 .check(matches(isDisplayed()))
             onView(withText("Continuar com Google")).check(doesNotExist())
             onView(withText("Continuar com Microsoft (Outlook)")).check(doesNotExist())
@@ -595,7 +630,7 @@ class MainActivitySmokeTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withText("Criar conta / iniciar sessão"))
                 .perform(scrollTo(), click())
-            onView(withText("Iniciar sessão"))
+            onView(withText("Já tenho uma conta"))
                 .perform(click())
 
             onView(withHint("Email")).check(matches(isDisplayed()))
