@@ -6057,66 +6057,54 @@ class MainActivity : ComponentActivity() {
         }
         runBackend({
             val token = backendToken()
-            val membership = SupabaseApi.getMyLoyaltyMembership(token)
-            if (membership != null) {
+            val memberships = SupabaseApi.listMyLoyaltyMemberships(token)
+            val requests = SupabaseApi.listMyRestaurantMembershipRequests(token)
+            if (memberships.length() > 0) {
                 restoreCustomerMembership(token)
-                "ASSOCIATED"
-            } else {
-                SupabaseApi.listMyRestaurantMembershipRequests(token).toString()
             }
+            JSONObject()
+                .put("memberships", memberships)
+                .put("requests", requests)
+                .toString()
         }) { raw ->
-            if (raw == "ASSOCIATED") {
-                renderCustomerApp()
-                AlertDialog.Builder(this)
-                    .setTitle("Cartão associado")
-                    .setMessage("O pedido foi aprovado. Já podes consultar os teus pontos e a carta do restaurante.")
-                    .setPositiveButton("OK", null)
-                    .show()
-            } else {
-                val requests = JSONArray(raw)
-                val messages = ArrayList<String>()
-                for (index in 0 until requests.length()) {
-                    val item = requests.optJSONObject(index) ?: continue
-                    val state = when (item.optString("request_status")) {
-                        "pending" -> "A aguardar aprovação"
-                        "approved" -> "Aprovado"
-                        "rejected" -> "Não aprovado"
-                        else -> "Estado desconhecido"
-                    }
-                    messages.add(item.optString("restaurant_name") + " — " + state)
-                }
-                AlertDialog.Builder(this)
-                    .setTitle("Pedidos de associação")
-                    .setMessage(
-                        if (messages.isEmpty()) "Ainda não tens pedidos de associação."
-                        else messages.joinToString("\n")
-                    )
-                    .setPositiveButton("OK", null)
-                    .show()
+            val data = JSONObject(raw)
+            val memberships = data.optJSONArray("memberships") ?: JSONArray()
+            val requests = data.optJSONArray("requests") ?: JSONArray()
+            val messages = ArrayList<String>()
+            for (index in 0 until memberships.length()) {
+                val item = memberships.optJSONObject(index) ?: continue
+                messages.add("Cartão ativo: " + item.optString("restaurant_name"))
             }
+            for (index in 0 until requests.length()) {
+                val item = requests.optJSONObject(index) ?: continue
+                val state = when (item.optString("request_status")) {
+                    "pending" -> "A aguardar aprovação"
+                    "approved" -> "Aprovado"
+                    "rejected" -> "Não aprovado"
+                    else -> "Estado desconhecido"
+                }
+                messages.add(item.optString("restaurant_name") + " — " + state)
+            }
+            renderCustomerApp()
+            AlertDialog.Builder(this)
+                .setTitle("Cartões e pedidos de associação")
+                .setMessage(
+                    if (messages.isEmpty()) "Ainda não tens cartões nem pedidos de associação."
+                    else messages.joinToString("\n")
+                )
+                .setPositiveButton("OK", null)
+                .show()
         }
     }
 
     private fun refreshCustomerMembership() {
         val memberId = backendMemberId()
-        if (backendToken().isBlank() || memberId.isBlank()) { showCustomerJoinDialog(); return }
+        if (backendToken().isBlank()) { showAuthChooser { renderCustomerApp() }; return }
+        if (memberId.isBlank()) { showCustomerJoinDialog(); return }
         runBackend({
             val token = backendToken()
-            val member = SupabaseApi.getMember(token, memberId)
-            val menu = SupabaseApi.listCustomerMenu(token, memberId)
-            val rewards = SupabaseApi.listCustomerRewards(token, memberId)
-            val redemptions = SupabaseApi.listMyLoyaltyRewardRedemptions(token)
-            val reservations = SupabaseApi.listMyRestaurantReservations(token)
-            val marketingOptIn = SupabaseApi.getMyMarketingOptIn(token)
-            customerRedemptionHistory = redemptions
-            customerReservationsCache = reservations
-            marketingOptInPrefLoaded = true
-            backendPrefs.edit().putInt("member_points", member.optInt("points", 0))
-                .putString("member_code", member.optString("member_code"))
-                .putString("customer_menu_json", menu.toString())
-                .putString("customer_rewards_json", rewards.toString())
-                .putBoolean("marketing_opt_in", marketingOptIn)
-                .apply()
+            val memberships = SupabaseApi.listMyLoyaltyMemberships(token)
+            loadSelectedCustomerMembership(token, memberships, memberId)
             "OK"
         }) { renderCustomerApp() }
     }
