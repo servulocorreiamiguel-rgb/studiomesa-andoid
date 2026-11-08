@@ -1230,7 +1230,7 @@ BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
 SET LOCAL ROLE authenticated;
 SELECT qr_token::text FROM public.create_loyalty_qr_token();
-ROLLBACK;
+COMMIT;
 SQL
 )"
 legacy_qr_member="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
