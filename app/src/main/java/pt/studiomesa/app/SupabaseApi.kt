@@ -1061,9 +1061,25 @@ object SupabaseApi {
         return result.getJSONObject(0)
     }
 
-    fun getMyLoyaltyMembership(token: String): JSONObject? {
+    fun listMyLoyaltyMemberships(token: String): JSONArray {
         val response = call("POST", "/rest/v1/rpc/get_my_loyalty_membership", JSONObject(), token)
-        val memberships = JSONArray(response)
+        return JSONArray(response)
+    }
+
+    fun getMyLoyaltyMembership(token: String, memberId: String): JSONObject? {
+        require(runCatching { java.util.UUID.fromString(memberId) }.isSuccess) {
+            "O identificador do cartão não é válido."
+        }
+        val memberships = listMyLoyaltyMemberships(token)
+        for (index in 0 until memberships.length()) {
+            val membership = memberships.optJSONObject(index) ?: continue
+            if (membership.optString("member_id") == memberId) return membership
+        }
+        return null
+    }
+
+    fun getMyLoyaltyMembership(token: String): JSONObject? {
+        val memberships = listMyLoyaltyMemberships(token)
         return if (memberships.length() == 0) null else memberships.getJSONObject(0)
     }
 
@@ -1087,11 +1103,14 @@ object SupabaseApi {
         return JSONArray(response)
     }
 
-    fun listMyLoyaltyRewardRedemptions(token: String): JSONArray {
+    fun listMyLoyaltyRewardRedemptions(token: String, memberId: String): JSONArray {
+        require(runCatching { java.util.UUID.fromString(memberId) }.isSuccess) {
+            "O identificador do cartão não é válido."
+        }
         val response = call(
             "POST",
             "/rest/v1/rpc/get_my_loyalty_reward_redemptions",
-            JSONObject(),
+            JSONObject().put("p_member_id", memberId),
             token
         )
         return JSONArray(response)
@@ -1134,8 +1153,16 @@ object SupabaseApi {
         return savedId
     }
 
-    fun createLoyaltyQrToken(token: String): JSONObject {
-        val response = call("POST", "/rest/v1/rpc/create_loyalty_qr_token", JSONObject(), token)
+    fun createLoyaltyQrToken(token: String, memberId: String): JSONObject {
+        require(runCatching { java.util.UUID.fromString(memberId) }.isSuccess) {
+            "O identificador do cartão não é válido."
+        }
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/create_loyalty_qr_token",
+            JSONObject().put("p_member_id", memberId),
+            token
+        )
         val rows = JSONArray(response)
         if (rows.length() == 0) throw IllegalStateException("O servidor não gerou um QR de fidelização.")
         val result = rows.getJSONObject(0)
@@ -1174,7 +1201,7 @@ object SupabaseApi {
         return result
     }
 
-    fun redeemLoyaltyReward(token: String, rewardId: String, requestId: String): JSONObject {
+    fun redeemLoyaltyReward(token: String, memberId: String, rewardId: String, requestId: String): JSONObject {
         require(runCatching { java.util.UUID.fromString(rewardId) }.isSuccess) {
             "A recompensa selecionada não é válida."
         }
@@ -1184,7 +1211,10 @@ object SupabaseApi {
         val response = call(
             "POST",
             "/rest/v1/rpc/redeem_loyalty_reward",
-            JSONObject().put("p_reward_id", rewardId).put("p_client_request_id", requestId),
+            JSONObject()
+                .put("p_member_id", memberId)
+                .put("p_reward_id", rewardId)
+                .put("p_client_request_id", requestId),
             token
         )
         val rows = JSONArray(response)
@@ -1225,16 +1255,27 @@ object SupabaseApi {
             null, token))
     }
 
-    fun getMyMarketingOptIn(token: String): Boolean {
-        val response = call("POST", "/rest/v1/rpc/get_my_marketing_opt_in", JSONObject(), token)
+    fun getMyMarketingOptIn(token: String, memberId: String): Boolean {
+        require(runCatching { java.util.UUID.fromString(memberId) }.isSuccess) {
+            "O identificador do cartão não é válido."
+        }
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/get_my_marketing_opt_in",
+            JSONObject().put("p_member_id", memberId),
+            token
+        )
         return response.trim().trim('"').equals("true", ignoreCase = true)
     }
 
-    fun setMyMarketingOptIn(token: String, enabled: Boolean): Boolean {
+    fun setMyMarketingOptIn(token: String, memberId: String, enabled: Boolean): Boolean {
+        require(runCatching { java.util.UUID.fromString(memberId) }.isSuccess) {
+            "O identificador do cartão não é válido."
+        }
         val response = call(
             "POST",
             "/rest/v1/rpc/set_my_marketing_opt_in",
-            JSONObject().put("p_enabled", enabled),
+            JSONObject().put("p_member_id", memberId).put("p_enabled", enabled),
             token
         )
         val confirmed = response.trim().trim('"').equals(enabled.toString(), ignoreCase = true)
@@ -1753,6 +1794,7 @@ object SupabaseApi {
 
     fun createCustomerReservationRequest(
         token: String,
+        memberId: String,
         requestId: String,
         guestName: String,
         guestPhone: String,
@@ -1764,7 +1806,11 @@ object SupabaseApi {
         require(runCatching { java.util.UUID.fromString(requestId).toString() == requestId }.getOrDefault(false)) {
             "O identificador da tentativa de reserva não é válido."
         }
+        require(runCatching { java.util.UUID.fromString(memberId) }.isSuccess) {
+            "O identificador do cartão não é válido."
+        }
         val body = JSONObject()
+            .put("p_member_id", memberId)
             .put("p_client_request_id", requestId)
             .put("p_guest_name", guestName.trim())
             .put("p_guest_phone", guestPhone.trim())
@@ -1786,11 +1832,14 @@ object SupabaseApi {
         return result
     }
 
-    fun listMyRestaurantReservations(token: String): JSONArray {
+    fun listMyRestaurantReservations(token: String, memberId: String): JSONArray {
+        require(runCatching { java.util.UUID.fromString(memberId) }.isSuccess) {
+            "O identificador do cartão não é válido."
+        }
         return JSONArray(call(
             "POST",
             "/rest/v1/rpc/get_my_restaurant_reservations",
-            JSONObject(),
+            JSONObject().put("p_member_id", memberId),
             token
         ))
     }
