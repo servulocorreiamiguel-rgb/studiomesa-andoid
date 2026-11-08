@@ -2524,7 +2524,7 @@ class MainActivity : ComponentActivity() {
             alertCard.addView(label("CLIENTES A RECUPERAR", 10f, true, forest))
             addGap(alertCard, 5)
             alertCard.addView(label(
-                reactivationMembersCache.length().toString() + " clientes sem visita de fidelização há 30 ou mais dias.",
+                reactivationMembersCache.length().toString() + " clientes sem atividade de pontos registada há 30 ou mais dias.",
                 15f, true, forestDeep
             ))
             addGap(alertCard, 4)
@@ -4850,7 +4850,7 @@ class MainActivity : ComponentActivity() {
             reactivationMembersCache.length().toString()
         }) { count ->
             renderApp()
-            Toast.makeText(this, count + " clientes com visita registada há 30 ou mais dias.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, count + " clientes com última atribuição positiva de pontos há 30 ou mais dias.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -4858,7 +4858,7 @@ class MainActivity : ComponentActivity() {
         pageIntro(
             container,
             "Recuperar clientes",
-            "Identifica clientes sem uma visita de fidelização registada há 30 ou mais dias e prepara uma mensagem de regresso."
+            "Identifica clientes sem atividade de pontos registada há 30 ou mais dias e prepara uma mensagem de regresso."
         )
         addGap(container, 9)
 
@@ -4875,7 +4875,7 @@ class MainActivity : ComponentActivity() {
         explanation.addView(label("ANÁLISE DE FIDELIZAÇÃO", 10f, true, forest))
         addGap(explanation, 5)
         explanation.addView(label(
-            "A última visita é estimada pela última atribuição positiva de pontos através do sistema de fidelização. Cartões sem uma visita registada não são classificados como inativos.",
+            "A última atividade é estimada pela última atribuição positiva de pontos através do sistema de fidelização. Cartões sem uma atribuição positiva registada não são classificados como inativos.",
             12f, false, ink
         ))
         addGap(explanation, 5)
@@ -4926,7 +4926,7 @@ class MainActivity : ComponentActivity() {
         }
 
         addGap(container, 14)
-        container.addView(label("CLIENTES SEM VISITA RECENTE", 10f, true, forestSoft))
+        container.addView(label("CLIENTES SEM ATIVIDADE RECENTE", 10f, true, forestSoft))
         addGap(container, 5)
         if (total == 0) {
             container.addView(emptyCard("Não foram encontrados clientes com uma visita de fidelização registada há 30 ou mais dias."))
@@ -4948,7 +4948,7 @@ class MainActivity : ComponentActivity() {
             addGap(card, 3)
             card.addView(label("Cartão " + code + " · " + item.optInt("points", 0) + " pontos", 11f, false, muted))
             addGap(card, 6)
-            card.addView(label("Última visita registada: " + formattedDate, 12f, false, ink))
+            card.addView(label("Última atribuição positiva de pontos: " + formattedDate, 12f, false, ink))
             addGap(card, 4)
             card.addView(label(
                 if (contactable) "AUTORIZOU receber campanhas"
