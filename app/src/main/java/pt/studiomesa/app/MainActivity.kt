@@ -3905,6 +3905,7 @@ class MainActivity : ComponentActivity() {
             .remove("member_id").remove("member_code").remove("member_points")
             .remove("member_restaurant_name")
             .remove("marketing_opt_in")
+            .remove("customer_memberships_json")
             .remove("remote_members_json").remove("remote_tables_json")
             .remove("remote_menu_json").remove("remote_orders_json")
             .remove("customer_menu_json")
@@ -3914,6 +3915,7 @@ class MainActivity : ComponentActivity() {
             .apply()
 
         currentStaffPermissions = null
+        customerMembershipsCache = JSONArray()
         reservationCache = JSONArray()
         customerReservationsCache = JSONArray()
         customerRedemptionHistory = JSONArray()
@@ -5909,22 +5911,14 @@ class MainActivity : ComponentActivity() {
                             val token = backendToken()
                             val member = SupabaseApi.joinRestaurant(token, code, name)
                             val memberId = member.optString("member_id")
-                            val menu = SupabaseApi.listCustomerMenu(token, memberId)
-                            val rewards = SupabaseApi.listCustomerRewards(token, memberId)
-                            val marketingOptIn = SupabaseApi.getMyMarketingOptIn(token)
-                            marketingOptInPrefLoaded = true
+                            if (memberId.isBlank()) {
+                                throw IllegalStateException("O servidor não devolveu o cartão do restaurante.")
+                            }
+                            val memberships = SupabaseApi.listMyLoyaltyMemberships(token)
                             backendPrefs.edit()
                                 .putBoolean("customer_entry_choice_complete_v1", true)
-                                .putString("member_id", memberId)
-                                .putBoolean("marketing_opt_in", marketingOptIn)
-                                .putString("member_code", member.optString("member_code"))
-                                .putInt("member_points", member.optInt("points", 0))
-                                .putString("member_restaurant_name", member.optString("restaurant_name"))
-                                .putString("customer_menu_json", menu.toString())
-                                .putString("customer_rewards_json", rewards.toString())
                                 .apply()
-                            customerRedemptionHistory = SupabaseApi.listMyLoyaltyRewardRedemptions(token)
-                            customerReservationsCache = SupabaseApi.listMyRestaurantReservations(token)
+                            loadSelectedCustomerMembership(token, memberships, memberId)
                             store.saveCustomerProfileName(name)
                             "OK"
                         }) {
