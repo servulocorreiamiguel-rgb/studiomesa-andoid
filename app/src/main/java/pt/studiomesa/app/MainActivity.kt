@@ -162,6 +162,14 @@ class MainActivity : ComponentActivity() {
     private var currentStaffPermissions: Set<String>? = null
     private var customerReservationsCache = JSONArray()
     private var customerRedemptionHistory = JSONArray()
+    private var reactivationMembersCache = JSONArray()
+    private var reactivationMembersLoaded = false
+    private var reactivationMembersRestaurantId: String? = null
+    private var reactivationDashboardCheckInFlight = false
+    private var reactivationDashboardCheckedAtMillis = 0L
+    private var reactivationDashboardLastAttemptAtMillis = 0L
+    private var customerMarketingNotificationsCache = JSONArray()
+    private var marketingOptInPrefLoaded = false
     // Reservation contacts are kept in memory only, not persisted to SharedPreferences.
     private var reservationCache = JSONArray()
     private var reservationsLoaded = false
@@ -406,6 +414,9 @@ class MainActivity : ComponentActivity() {
 
     private fun availablePages(): List<String> {
         val pages = mutableListOf("Início", "Mesas", "Pedidos", "Cozinha", "Carta", "Pontos", "IA", "Assistente económico", "Conta")
+        if (hasRemoteRestaurant() && backendPrefs.getString("restaurant_role", "") == "owner") {
+            pages.add("Marketing")
+        }
         if (hasCalculator) {
             pages.add("Reservas")
             pages.add("Preço Justo")
@@ -475,7 +486,7 @@ class MainActivity : ComponentActivity() {
         }
         val pageGroups = listOf(
             "OPERAÇÃO" to listOf("Início", "Mesas", "Pedidos", "Cozinha"),
-            "GESTÃO DO RESTAURANTE" to listOf("Carta", "Pontos", "Reservas", "Preço Justo", "Stock", "Análise"),
+            "GESTÃO DO RESTAURANTE" to listOf("Carta", "Pontos", "Marketing", "Reservas", "Preço Justo", "Stock", "Análise"),
             "ASSISTÊNCIA" to listOf("IA", "Assistente económico"),
             "CONTA" to listOf("Conta")
         )
@@ -551,6 +562,8 @@ class MainActivity : ComponentActivity() {
         "Cozinha" -> "◉"
         "Carta" -> "▤"
         "Pontos" -> "◎"
+        "Marketing" -> "✦"
+        "Avisos" -> "♢"
         "Conta" -> "⚙"
         "Reservas" -> "◷"
         "Preço Justo" -> "€"
@@ -1063,7 +1076,7 @@ class MainActivity : ComponentActivity() {
             setMargins(0, 0, dp(6), 0)
         })
         optionsRow.addView(label(
-            if (assistantSending) "A analisar…" else if (modelInstalled) "IA offline" else "IA local por instalar",
+            if (assistantSending) "A analisar…" else if (modelInstalled) "IA local" else "IA local por instalar",
             9.5f, true, if (modelInstalled) forestSoft else muted
         ).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(dp(100), -2))
         composerArea.addView(optionsRow, LinearLayout.LayoutParams(-1, -2))
@@ -1071,7 +1084,7 @@ class MainActivity : ComponentActivity() {
             if (assistantDeepThinkingEnabled && modelInstalled)
                 "Modo aprofundado: verifica dados e compara opções; não expõe raciocínio interno."
             else if (modelInstalled)
-                "As mensagens são processadas no dispositivo. Sem API ou custo por mensagem."
+                "O modelo gera respostas neste telemóvel, sem depender de um servidor de IA."
             else
                 "Sem modelo instalado, continuam disponíveis as respostas locais baseadas em regras.",
             9f, false, muted
@@ -2454,6 +2467,7 @@ class MainActivity : ComponentActivity() {
             "Cozinha" -> renderKitchen(container)
             "Carta" -> renderMenu(container)
             "Pontos" -> renderCustomers(container)
+            "Marketing" -> renderReactivationMarketing(container)
             "Conta" -> renderBackendAccount(container)
             "Preço Justo" -> renderPriceCalculator(container)
             "Reservas" -> renderReservations(container)
@@ -2468,6 +2482,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun renderHome(container: LinearLayout) {
+        checkInactiveMembersForDashboard()
         container.addView(label("Painel de operação", 10f, true, forestSoft))
         addGap(container, 5)
         container.addView(label("A sala, num relance.", 27f, true, forestDeep))
@@ -2497,6 +2512,36 @@ class MainActivity : ComponentActivity() {
         stats.addView(statCard("PEDIDOS ATIVOS", activeOrders.toString(), if (activeOrders > 0) copper else forestSoft),
             LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, 0) })
         container.addView(stats)
+
+        if (hasRemoteRestaurant() && backendPrefs.getString("restaurant_role", "") == "owner" &&
+            reactivationMembersLoaded &&
+            reactivationMembersRestaurantId == backendRestaurantId() &&
+            reactivationMembersCache.length() > 0) {
+            var eligible = 0
+            for (i in 0 until reactivationMembersCache.length()) {
+                val member = reactivationMembersCache.optJSONObject(i) ?: continue
+                if (member.optBoolean("marketing_opt_in", false) && member.optBoolean("has_account", false)) eligible++
+            }
+            addGap(container, 12)
+            val alertCard = makeCard(14, copperPale)
+            alertCard.addView(label("CLIENTES A RECUPERAR", 10f, true, forest))
+            addGap(alertCard, 5)
+            alertCard.addView(label(
+                reactivationMembersCache.length().toString() + " clientes sem atividade de pontos registada há 30 ou mais dias.",
+                15f, true, forestDeep
+            ))
+            addGap(alertCard, 4)
+            alertCard.addView(label(
+                eligible.toString() + " autorizaram receber campanhas. Podes preparar uma mensagem e uma oferta.",
+                12f, false, ink
+            ))
+            addGap(alertCard, 8)
+            alertCard.addView(primaryButton("Ver clientes e criar campanha") {
+                activePage = "Marketing"
+                renderApp()
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+            container.addView(alertCard, cardParams())
+        }
 
         addGap(container, 21)
         sectionHeading(container, "Acesso rápido", "Escolhe uma área para continuar.")
@@ -3713,9 +3758,12 @@ class MainActivity : ComponentActivity() {
                     .remove("member_code")
                     .remove("member_points")
                     .remove("member_restaurant_name")
+                    .remove("marketing_opt_in")
                     .putString("customer_menu_json", "[]")
                     .putString("customer_rewards_json", "[]")
                     .apply()
+                marketingOptInPrefLoaded = false
+                customerMarketingNotificationsCache = JSONArray()
                 customerReservationsCache = JSONArray()
                 customerRedemptionHistory = JSONArray()
                 return
@@ -3726,10 +3774,13 @@ class MainActivity : ComponentActivity() {
             val rewards = if (memberId.isNotBlank()) SupabaseApi.listCustomerRewards(token, memberId) else JSONArray()
             val redemptions = if (memberId.isNotBlank()) SupabaseApi.listMyLoyaltyRewardRedemptions(token) else JSONArray()
             val reservations = if (memberId.isNotBlank()) SupabaseApi.listMyRestaurantReservations(token) else JSONArray()
+            val marketingOptIn = if (memberId.isNotBlank()) SupabaseApi.getMyMarketingOptIn(token) else false
             customerRedemptionHistory = redemptions
             customerReservationsCache = reservations
+            marketingOptInPrefLoaded = memberId.isNotBlank()
             backendPrefs.edit()
                 .putString("member_id", memberId)
+                .putBoolean("marketing_opt_in", marketingOptIn)
                 .putString("member_code", member.optString("member_code"))
                 .putInt("member_points", member.optInt("points", 0))
                 .putString("member_restaurant_name", member.optString("restaurant_name"))
@@ -3767,6 +3818,7 @@ class MainActivity : ComponentActivity() {
             .remove("staff_join_code").remove("restaurant_role")
             .remove("member_id").remove("member_code").remove("member_points")
             .remove("member_restaurant_name")
+            .remove("marketing_opt_in")
             .remove("remote_members_json").remove("remote_tables_json")
             .remove("remote_menu_json").remove("remote_orders_json")
             .remove("customer_menu_json")
@@ -3779,6 +3831,12 @@ class MainActivity : ComponentActivity() {
         reservationCache = JSONArray()
         customerReservationsCache = JSONArray()
         customerRedemptionHistory = JSONArray()
+        customerMarketingNotificationsCache = JSONArray()
+        marketingOptInPrefLoaded = false
+        reactivationMembersCache = JSONArray()
+        reactivationMembersLoaded = false
+        reactivationMembersRestaurantId = null
+        reactivationDashboardCheckedAtMillis = 0L
         reservationsLoaded = false
     }
 
@@ -3936,24 +3994,8 @@ class MainActivity : ComponentActivity() {
             dialog.dismiss()
             showCredentialsDialog(false, afterAuth)
         }, LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(form, 14)
-        form.addView(label("Ou continuar com uma conta externa:", 11.5f, true, muted))
-        addGap(form, 6)
-        form.addView(secondaryButton("Continuar com Google") {
-            dialog.dismiss()
-            startOAuth("google")
-        }, LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(form, 6)
-        form.addView(secondaryButton("Continuar com Microsoft (Outlook)") {
-            dialog.dismiss()
-            startOAuth("azure")
-        }, LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(form, 7)
-        form.addView(label(
-            "Google e Outlook só podem ser usados depois de os fornecedores estarem ativados no servidor.",
-            10.5f, false, muted
-        ))
-
+        // Google and Microsoft OAuth are currently disabled in the Supabase project.
+        // Keep unavailable providers out of the account chooser instead of offering dead actions.
         dialog.show()
     }
 
@@ -4684,6 +4726,11 @@ class MainActivity : ComponentActivity() {
             reservationCache = JSONArray()
             customerReservationsCache = JSONArray()
             customerRedemptionHistory = JSONArray()
+            customerMarketingNotificationsCache = JSONArray()
+            marketingOptInPrefLoaded = false
+            reactivationMembersCache = JSONArray()
+            reactivationMembersLoaded = false
+            reactivationMembersRestaurantId = null
             reservationsLoaded = false
 
             if (isCustomerApp) renderCustomerApp() else renderApp()
@@ -4752,6 +4799,330 @@ class MainActivity : ComponentActivity() {
             .setMessage("Código: $code\n\nO cliente deve abrir a aplicação «StudioMesa - Cliente», criar conta ou iniciar sessão e escolher «Associar ao restaurante».")
             .setPositiveButton("OK", null)
             .show()
+    }
+
+    private fun checkInactiveMembersForDashboard() {
+        if (!hasRemoteRestaurant() ||
+            backendPrefs.getString("restaurant_role", "") != "owner" ||
+            backendToken().isBlank()) return
+
+        val now = System.currentTimeMillis()
+        if (reactivationDashboardCheckInFlight ||
+            (reactivationDashboardLastAttemptAtMillis > 0L &&
+             now - reactivationDashboardLastAttemptAtMillis < 5L * 60L * 1000L) ||
+            (reactivationDashboardCheckedAtMillis > 0L &&
+             now - reactivationDashboardCheckedAtMillis < 6L * 60L * 60L * 1000L)) return
+
+        reactivationDashboardCheckInFlight = true
+        reactivationDashboardLastAttemptAtMillis = now
+        Thread {
+            try {
+                refreshSessionIfNeeded()
+                val restaurantId = backendRestaurantId()
+                val members = SupabaseApi.listInactiveLoyaltyMembers(
+                    backendToken(),
+                    restaurantId,
+                    ReactivationCampaignPolicy.MIN_INACTIVITY_DAYS
+                )
+                runOnUiThread {
+                    if (!isFinishing) {
+                        reactivationMembersCache = members
+                        reactivationMembersRestaurantId = restaurantId
+                        reactivationMembersLoaded = true
+                        reactivationDashboardCheckedAtMillis = System.currentTimeMillis()
+                        reactivationDashboardCheckInFlight = false
+                        if (activePage == "Início" && !isCustomerApp) renderApp()
+                    }
+                }
+            } catch (_: Exception) {
+                runOnUiThread { reactivationDashboardCheckInFlight = false }
+            }
+        }.start()
+    }
+
+    private fun refreshReactivationMembers() {
+        if (backendToken().isBlank() || backendRestaurantId().isBlank() ||
+            backendPrefs.getString("restaurant_role", "") != "owner") {
+            AlertDialog.Builder(this)
+                .setMessage("Só o proprietário de um restaurante configurado pode consultar esta lista.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        runBackend({
+            val restaurantId = backendRestaurantId()
+            val members = SupabaseApi.listInactiveLoyaltyMembers(
+                backendToken(), restaurantId, ReactivationCampaignPolicy.MIN_INACTIVITY_DAYS
+            )
+            reactivationMembersCache = members
+            reactivationMembersRestaurantId = restaurantId
+            reactivationMembersLoaded = true
+            reactivationMembersCache.length().toString()
+        }) { count ->
+            renderApp()
+            Toast.makeText(this, count + " clientes com última atribuição positiva de pontos há 30 ou mais dias.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun renderReactivationMarketing(container: LinearLayout) {
+        pageIntro(
+            container,
+            "Recuperar clientes",
+            "Identifica clientes sem atividade de pontos registada há 30 ou mais dias e prepara uma mensagem de regresso."
+        )
+        addGap(container, 9)
+
+        if (!hasRemoteRestaurant() || backendToken().isBlank()) {
+            container.addView(emptyCard("Configura o restaurante e inicia sessão para consultar os clientes inativos."))
+            return
+        }
+        if (backendPrefs.getString("restaurant_role", "") != "owner") {
+            container.addView(emptyCard("A gestão de campanhas está reservada ao proprietário do restaurante."))
+            return
+        }
+
+        val explanation = makeCard(14, copperPale)
+        explanation.addView(label("ANÁLISE DE FIDELIZAÇÃO", 10f, true, forest))
+        addGap(explanation, 5)
+        explanation.addView(label(
+            "A última atividade é estimada pela última atribuição positiva de pontos através do sistema de fidelização. Cartões sem uma atribuição positiva registada não são classificados como inativos.",
+            12f, false, ink
+        ))
+        addGap(explanation, 5)
+        explanation.addView(label(
+            "Só recebem campanhas os clientes que ativaram a autorização de marketing na aplicação. Quem não autorizou continua visível na análise, mas fica excluído do envio.",
+            12f, true, forestDeep
+        ))
+        container.addView(explanation, cardParams())
+        addGap(container, 8)
+        container.addView(primaryButton("Atualizar clientes inativos") {
+            refreshReactivationMembers()
+        }, LinearLayout.LayoutParams(-1, dp(48)))
+
+        if (reactivationMembersRestaurantId != backendRestaurantId()) {
+            reactivationMembersCache = JSONArray()
+            reactivationMembersLoaded = false
+            reactivationMembersRestaurantId = null
+        }
+        if (!reactivationMembersLoaded) {
+            addGap(container, 8)
+            container.addView(emptyCard("Atualiza a análise para consultar os clientes que não regressam há pelo menos 30 dias."))
+            return
+        }
+
+        val total = reactivationMembersCache.length()
+        var eligible = 0
+        var excluded = 0
+        for (i in 0 until total) {
+            val item = reactivationMembersCache.optJSONObject(i) ?: continue
+            if (item.optBoolean("marketing_opt_in", false) && item.optBoolean("has_account", false)) eligible++ else excluded++
+        }
+
+        addGap(container, 12)
+        val summary = makeCard(14)
+        summary.addView(label("CLIENTES INATIVOS", 10f, true, forestSoft))
+        addGap(summary, 5)
+        summary.addView(label(total.toString(), 31f, true, forestDeep))
+        addGap(summary, 4)
+        summary.addView(label(
+            eligible.toString() + " podem receber campanhas · " + excluded + " sem autorização ou sem conta associada",
+            12f, false, muted
+        ))
+        container.addView(summary, cardParams())
+
+        if (eligible > 0) {
+            addGap(container, 8)
+            container.addView(primaryButton("Criar mensagem e promoção · " + eligible + " destinatários") {
+                showReactivationCampaignDialog(eligible)
+            }, LinearLayout.LayoutParams(-1, dp(48)))
+        } else {
+            addGap(container, 8)
+            container.addView(emptyCard("Não há destinatários autorizados. Os clientes podem ativar a receção de campanhas na secção Conta da aplicação StudioMesa · Cliente."))
+        }
+
+        addGap(container, 14)
+        container.addView(label("CLIENTES SEM ATIVIDADE RECENTE", 10f, true, forestSoft))
+        addGap(container, 5)
+        if (total == 0) {
+            container.addView(emptyCard("Não foram encontrados clientes com uma visita de fidelização registada há 30 ou mais dias."))
+            return
+        }
+
+        for (i in 0 until total) {
+            val item = reactivationMembersCache.optJSONObject(i) ?: continue
+            val name = item.optString("display_name").ifBlank { "Cliente sem nome" }
+            val code = item.optString("member_code")
+            val lastVisit = item.optString("last_visit_at").substringBefore("T")
+            val formattedDate = try {
+                val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).parse(lastVisit)
+                if (parsed != null) SimpleDateFormat("dd/MM/yyyy", Locale("pt", "PT")).format(parsed) else lastVisit
+            } catch (_: Exception) { lastVisit }
+            val contactable = item.optBoolean("marketing_opt_in", false) && item.optBoolean("has_account", false)
+            val card = makeCard(13)
+            card.addView(label(name, 15f, true, forestDeep))
+            addGap(card, 3)
+            card.addView(label("Cartão " + code + " · " + item.optInt("points", 0) + " pontos", 11f, false, muted))
+            addGap(card, 6)
+            card.addView(label("Última atribuição positiva de pontos: " + formattedDate, 12f, false, ink))
+            addGap(card, 4)
+            card.addView(label(
+                if (contactable) "AUTORIZOU receber campanhas"
+                else if (!item.optBoolean("has_account", false)) "SEM CONTA DE CLIENTE ASSOCIADA"
+                else "SEM AUTORIZAÇÃO — NÃO CONTACTAR",
+                10f, true, if (contactable) green else red
+            ))
+            container.addView(card, cardParams())
+        }
+    }
+
+    private fun showReactivationCampaignDialog(eligibleCount: Int) {
+        if (backendPrefs.getString("restaurant_role", "") != "owner" || eligibleCount <= 0) {
+            Toast.makeText(this, "Não existem destinatários autorizados para esta campanha.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val titleField = inputField(
+            "Título da notificação",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        ).apply { setText("Temos saudades tuas!") }
+        val messageField = EditText(this).apply {
+            hint = "Escreve a mensagem que o restaurante quer enviar"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            minLines = 4
+            maxLines = 6
+            gravity = Gravity.TOP
+            filters = arrayOf(InputFilter.LengthFilter(ReactivationCampaignPolicy.MAX_MESSAGE_LENGTH))
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = rippleBackground(white, 10, line)
+            setText("Olá! Já não te vemos há algum tempo. Gostávamos de voltar a receber-te no nosso restaurante.")
+        }
+        val promotionOptions = listOf(
+            "Sem promoção" to "none",
+            "Desconto" to "discount",
+            "Cashback" to "cashback",
+            "Pontos extra" to "extra_points",
+            "Voucher / vale" to "voucher",
+            "Oferta (ex.: sobremesa)" to "free_item",
+            "Oferta personalizada" to "custom"
+        )
+        val promotionSpinner = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_item,
+                promotionOptions.map { it.first }
+            ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        }
+        val promotionTitleField = inputField(
+            "Nome da promoção",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        )
+        val promotionDetailsField = EditText(this).apply {
+            hint = "Condições ou detalhes da oferta"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            minLines = 2
+            maxLines = 4
+            filters = arrayOf(InputFilter.LengthFilter(ReactivationCampaignPolicy.MAX_PROMOTION_DETAILS_LENGTH))
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = rippleBackground(white, 10, line)
+        }
+
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(8))
+        }
+        form.addView(label("TÍTULO", 10f, true, forestSoft))
+        form.addView(titleField, fieldParams())
+        addGap(form, 6)
+        form.addView(label("MENSAGEM DO RESTAURANTE", 10f, true, forestSoft))
+        form.addView(messageField, fieldParams())
+        addGap(form, 6)
+        form.addView(label("PROMOÇÃO OPCIONAL", 10f, true, forestSoft))
+        form.addView(promotionSpinner, fieldParams())
+        addGap(form, 4)
+        form.addView(promotionTitleField, fieldParams())
+        addGap(form, 4)
+        form.addView(promotionDetailsField, fieldParams())
+        addGap(form, 7)
+        form.addView(label(
+            "A promoção é apresentada como informação na mensagem. Este envio não cria automaticamente um cupão, não aplica descontos no pagamento e não altera saldos de pontos ou cashback.",
+            11f, false, muted
+        ))
+
+        val scroll = ScrollView(this).apply {
+            isFillViewport = false
+            addView(form)
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Nova campanha de regresso")
+            .setMessage("A campanha será enviada para " + eligibleCount + " clientes que autorizaram receber marketing.")
+            .setView(scroll)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Enviar campanha", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val selectedType = promotionOptions[promotionSpinner.selectedItemPosition].second
+                val title = titleField.text.toString().trim()
+                val message = messageField.text.toString().trim()
+                val promotionTitle = promotionTitleField.text.toString().trim()
+                val promotionDetails = promotionDetailsField.text.toString().trim()
+                val validation = ReactivationCampaignPolicy.validateDraft(
+                    title, message, selectedType, promotionTitle, promotionDetails
+                )
+                if (validation != null) {
+                    AlertDialog.Builder(this)
+                        .setMessage(validation)
+                        .setPositiveButton("OK", null)
+                        .show()
+                    return@setOnClickListener
+                }
+
+                val campaignSignature = JSONObject()
+                    .put("restaurant_id", backendRestaurantId())
+                    .put("title", title)
+                    .put("message", message)
+                    .put("promotion_type", selectedType)
+                    .put("promotion_title", if (selectedType == "none") "" else promotionTitle)
+                    .put("promotion_details", if (selectedType == "none") "" else promotionDetails)
+                    .put("inactivity_days", ReactivationCampaignPolicy.MIN_INACTIVITY_DAYS)
+                    .toString()
+                val operation = "reactivation_campaign"
+                val accountId = backendPrefs.getString("user_id", "").orEmpty()
+                val requestId = try {
+                    pendingRequestIds.getOrCreate(operation, accountId, campaignSignature)
+                } catch (_: Exception) {
+                    Toast.makeText(this, "Não foi possível guardar a referência segura da campanha.", Toast.LENGTH_LONG).show()
+                    return@setOnClickListener
+                }
+
+                runBackend({
+                    val sent = SupabaseApi.sendReactivationCampaign(
+                        backendToken(),
+                        backendRestaurantId(),
+                        requestId,
+                        title,
+                        message,
+                        selectedType,
+                        if (selectedType == "none") null else promotionTitle,
+                        if (selectedType == "none") null else promotionDetails,
+                        ReactivationCampaignPolicy.MIN_INACTIVITY_DAYS
+                    )
+                    sent.optInt("recipient_count", 0).toString()
+                }) { sentCount ->
+                    pendingRequestIds.complete(operation, accountId, campaignSignature, requestId)
+                    dialog.dismiss()
+                    reactivationMembersLoaded = false
+                    renderApp()
+                    AlertDialog.Builder(this)
+                        .setTitle("Campanha enviada")
+                        .setMessage("A mensagem foi guardada na caixa de avisos de " + sentCount + " clientes autorizados.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            }
+        }
+        dialog.show()
+        dialog.window?.setLayout(-1, dp(640))
     }
 
     private fun renderCustomers(container: LinearLayout) {
@@ -5199,7 +5570,10 @@ class MainActivity : ComponentActivity() {
                             val memberId = member.optString("member_id")
                             val menu = SupabaseApi.listCustomerMenu(token, memberId)
                             val rewards = SupabaseApi.listCustomerRewards(token, memberId)
+                            val marketingOptIn = SupabaseApi.getMyMarketingOptIn(token)
+                            marketingOptInPrefLoaded = true
                             backendPrefs.edit().putString("member_id", memberId)
+                                .putBoolean("marketing_opt_in", marketingOptIn)
                                 .putString("member_code", member.optString("member_code"))
                                 .putInt("member_points", member.optInt("points", 0))
                                 .putString("member_restaurant_name", member.optString("restaurant_name"))
@@ -5231,19 +5605,22 @@ class MainActivity : ComponentActivity() {
             val rewards = SupabaseApi.listCustomerRewards(token, memberId)
             val redemptions = SupabaseApi.listMyLoyaltyRewardRedemptions(token)
             val reservations = SupabaseApi.listMyRestaurantReservations(token)
+            val marketingOptIn = SupabaseApi.getMyMarketingOptIn(token)
             customerRedemptionHistory = redemptions
             customerReservationsCache = reservations
+            marketingOptInPrefLoaded = true
             backendPrefs.edit().putInt("member_points", member.optInt("points", 0))
                 .putString("member_code", member.optString("member_code"))
                 .putString("customer_menu_json", menu.toString())
                 .putString("customer_rewards_json", rewards.toString())
+                .putBoolean("marketing_opt_in", marketingOptIn)
                 .apply()
             "OK"
         }) { renderCustomerApp() }
     }
 
     private fun renderCustomerApp() {
-        if (activeCustomerPage !in setOf("Cartão", "Carta", "Reservas", "Conta")) activeCustomerPage = "Cartão"
+        if (activeCustomerPage !in setOf("Cartão", "Carta", "Avisos", "Reservas", "Conta")) activeCustomerPage = "Cartão"
         appRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(paper)
@@ -5287,6 +5664,7 @@ class MainActivity : ComponentActivity() {
         when (activeCustomerPage) {
             "Cartão" -> renderCustomerLoyaltyPage(content)
             "Carta" -> renderCustomerMenuPage(content)
+            "Avisos" -> renderCustomerNotificationsPage(content)
             "Reservas" -> renderCustomerReservationsPage(content)
             "Conta" -> renderCustomerAccountPage(content)
         }
@@ -5300,7 +5678,7 @@ class MainActivity : ComponentActivity() {
             setBackgroundColor(white)
             elevation = dp(6).toFloat()
         }
-        listOf("Cartão", "Carta", "Reservas", "Conta").forEach { page ->
+        listOf("Cartão", "Carta", "Avisos", "Reservas", "Conta").forEach { page ->
             val selected = activeCustomerPage == page
             val item = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
@@ -5313,6 +5691,7 @@ class MainActivity : ComponentActivity() {
                 setOnClickListener {
                     activeCustomerPage = page
                     renderCustomerApp()
+                    if (page == "Avisos") refreshCustomerNotifications()
                 }
             }
             item.addView(TextView(this).apply {
@@ -5612,6 +5991,85 @@ class MainActivity : ComponentActivity() {
         container.addView(menuCard, cardParams())
     }
 
+    private fun refreshCustomerNotifications() {
+        // Opening the inbox must not put a modal login/join dialog over the page.
+        // The page itself explains the next step and offers the appropriate action.
+        if (backendToken().isBlank() || backendMemberId().isBlank()) return
+        runBackend({
+            customerMarketingNotificationsCache = SupabaseApi.listMyMarketingNotifications(backendToken())
+            "OK"
+        }) { renderCustomerApp() }
+    }
+
+    private fun renderCustomerNotificationsPage(container: LinearLayout) {
+        pageIntro(container, "Avisos do restaurante", "Mensagens e promoções enviadas pelo restaurante.")
+        addGap(container, 9)
+        if (backendToken().isBlank()) {
+            container.addView(emptyCard("Inicia sessão para receber e consultar os avisos do restaurante."))
+            addGap(container, 7)
+            container.addView(primaryButton("Criar conta / iniciar sessão") {
+                showAuthChooser { renderCustomerApp() }
+            }, LinearLayout.LayoutParams(-1, dp(48)))
+            return
+        }
+        if (backendMemberId().isBlank()) {
+            container.addView(emptyCard("Associa primeiro a tua conta ao restaurante."))
+            addGap(container, 7)
+            container.addView(primaryButton("Associar ao restaurante") { showCustomerJoinDialog() },
+                LinearLayout.LayoutParams(-1, dp(48)))
+            return
+        }
+
+        container.addView(secondaryButton("Atualizar avisos") {
+            refreshCustomerNotifications()
+        }, LinearLayout.LayoutParams(-1, dp(46)))
+        addGap(container, 10)
+        if (customerMarketingNotificationsCache.length() == 0) {
+            container.addView(emptyCard("Ainda não recebeste mensagens ou promoções deste restaurante."))
+            return
+        }
+
+        for (i in 0 until customerMarketingNotificationsCache.length()) {
+            val item = customerMarketingNotificationsCache.optJSONObject(i) ?: continue
+            val card = makeCard(14)
+            val unread = item.isNull("read_at")
+            card.addView(label(
+                if (unread) "NOVA MENSAGEM" else item.optString("restaurant_name", "RESTAURANTE").uppercase(Locale("pt", "PT")),
+                10f, true, if (unread) forest else muted
+            ))
+            addGap(card, 4)
+            card.addView(label(item.optString("title"), 16f, true, forestDeep))
+            addGap(card, 6)
+            card.addView(label(item.optString("message"), 13f, false, ink))
+            val promotionType = item.optString("promotion_type", "none")
+            if (promotionType != "none" && item.optString("promotion_title").isNotBlank()) {
+                addGap(card, 9)
+                val promotion = makeCard(10, copperPale)
+                promotion.addView(label("OFERTA DO RESTAURANTE", 9.5f, true, forest))
+                addGap(promotion, 3)
+                promotion.addView(label(item.optString("promotion_title"), 14f, true, forestDeep))
+                addGap(promotion, 3)
+                promotion.addView(label(item.optString("promotion_details"), 12f, false, ink))
+                card.addView(promotion, cardParams())
+            }
+            val created = item.optString("created_at").substringBefore("T")
+            if (created.isNotBlank()) {
+                addGap(card, 7)
+                card.addView(label("Recebida em " + created, 10f, false, muted))
+            }
+            if (unread) {
+                addGap(card, 8)
+                card.addView(secondaryButton("Marcar como lida") {
+                    runBackend({
+                        SupabaseApi.markMyMarketingNotificationRead(backendToken(), item.optString("id"))
+                        "OK"
+                    }) { refreshCustomerNotifications() }
+                }, LinearLayout.LayoutParams(-1, dp(42)))
+            }
+            container.addView(card, cardParams())
+        }
+    }
+
     private fun refreshCustomerReservations() {
         if (backendToken().isBlank() || backendMemberId().isBlank()) {
             showCustomerJoinDialog()
@@ -5838,6 +6296,32 @@ class MainActivity : ComponentActivity() {
         container.addView(secondaryButton("Definir o meu nome") { showCustomerProfileDialog() },
             LinearLayout.LayoutParams(-1, dp(48)))
         addGap(container, 12)
+        val marketingCard = makeCard(13)
+        marketingCard.addView(label("CAMPANHAS E OFERTAS", 10f, true, forestSoft))
+        addGap(marketingCard, 5)
+        marketingCard.addView(label(
+            "Escolhe se queres receber mensagens e promoções deste restaurante na caixa de avisos da aplicação. Podes retirar a autorização quando quiseres.",
+            12f, false, muted
+        ))
+        addGap(marketingCard, 8)
+        if (backendMemberId().isBlank()) {
+            marketingCard.addView(label("Associa a tua conta ao restaurante para gerir esta preferência.", 11.5f, false, muted))
+        } else {
+            val marketingEnabled = backendPrefs.getBoolean("marketing_opt_in", false)
+            marketingCard.addView(label(
+                if (marketingEnabled) "Autorização ativa" else "Não autorizaste campanhas",
+                11f, true, if (marketingEnabled) green else muted
+            ))
+            addGap(marketingCard, 6)
+            marketingCard.addView(secondaryButton(
+                if (marketingEnabled) "Retirar autorização" else "Autorizar campanhas e ofertas"
+            ) {
+                showCustomerMarketingConsentDialog(!marketingEnabled)
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+        }
+        container.addView(marketingCard, cardParams())
+
+        addGap(container, 12)
         val syncNote = makeCard(13)
         syncNote.addView(label(if (backendMemberId().isBlank()) "CARTÃO AINDA NÃO ASSOCIADO" else "CONTA LIGADA", 10f, true, if (backendMemberId().isBlank()) red else green))
         addGap(syncNote, 5)
@@ -5858,9 +6342,12 @@ class MainActivity : ComponentActivity() {
                 backendPrefs.edit()
                     .remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
                     .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
+                    .remove("marketing_opt_in")
                     .remove("customer_menu_json")
                     .remove("customer_rewards_json")
                     .apply()
+                customerMarketingNotificationsCache = JSONArray()
+                marketingOptInPrefLoaded = false
                 customerRedemptionHistory = JSONArray()
                 customerReservationsCache = JSONArray()
                 activeCustomerPage = "Cartão"
@@ -5871,6 +6358,35 @@ class MainActivity : ComponentActivity() {
         container.addView(secondaryButton("Privacidade e dados") {
             showPrivacyInformation()
         }, LinearLayout.LayoutParams(-1, dp(48)))
+    }
+
+    private fun showCustomerMarketingConsentDialog(enable: Boolean) {
+        val title = if (enable) "Autorizar campanhas?" else "Retirar autorização?"
+        val message = if (enable) {
+            "Autorizas este restaurante a enviar mensagens e ofertas comerciais para a caixa de avisos da tua aplicação StudioMesa? Podes retirar esta autorização a qualquer momento."
+        } else {
+            "O restaurante deixará de poder incluir a tua conta em futuras campanhas. Os avisos que já recebeste continuam disponíveis."
+        }
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton(if (enable) "Autorizar" else "Retirar") { _, _ ->
+                runBackend({
+                    val confirmed = SupabaseApi.setMyMarketingOptIn(backendToken(), enable)
+                    marketingOptInPrefLoaded = true
+                    backendPrefs.edit().putBoolean("marketing_opt_in", confirmed).apply()
+                    "OK"
+                }) {
+                    renderCustomerApp()
+                    Toast.makeText(
+                        this,
+                        if (enable) "Autorização de campanhas ativada." else "Autorização de campanhas retirada.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+            .show()
     }
 
     private fun showCustomerProfileDialog() {

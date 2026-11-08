@@ -1124,6 +1124,99 @@ object SupabaseApi {
             null, token))
     }
 
+    fun getMyMarketingOptIn(token: String): Boolean {
+        val response = call("POST", "/rest/v1/rpc/get_my_marketing_opt_in", JSONObject(), token)
+        return response.trim().trim('"').equals("true", ignoreCase = true)
+    }
+
+    fun setMyMarketingOptIn(token: String, enabled: Boolean): Boolean {
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/set_my_marketing_opt_in",
+            JSONObject().put("p_enabled", enabled),
+            token
+        )
+        val confirmed = response.trim().trim('"').equals(enabled.toString(), ignoreCase = true)
+        if (!confirmed) throw IllegalStateException("O servidor não confirmou a preferência de campanhas.")
+        return enabled
+    }
+
+    fun listInactiveLoyaltyMembers(
+        token: String,
+        restaurantId: String,
+        inactivityDays: Int = 30
+    ): JSONArray {
+        require(token.isNotBlank()) { "Inicia sessão para consultar os clientes inativos." }
+        require(runCatching { java.util.UUID.fromString(restaurantId) }.isSuccess) {
+            "O restaurante selecionado não é válido."
+        }
+        require(inactivityDays in 30..365) { "O período deve estar entre 30 e 365 dias." }
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/get_restaurant_inactive_members",
+            JSONObject()
+                .put("p_restaurant_id", restaurantId)
+                .put("p_inactivity_days", inactivityDays),
+            token
+        ))
+    }
+
+    fun sendReactivationCampaign(
+        token: String,
+        restaurantId: String,
+        requestId: String,
+        title: String,
+        message: String,
+        promotionType: String,
+        promotionTitle: String?,
+        promotionDetails: String?,
+        inactivityDays: Int = 30
+    ): JSONObject {
+        require(token.isNotBlank()) { "Inicia sessão para enviar a campanha." }
+        require(runCatching { java.util.UUID.fromString(restaurantId) }.isSuccess) {
+            "O restaurante selecionado não é válido."
+        }
+        require(runCatching { java.util.UUID.fromString(requestId) }.isSuccess) {
+            "O identificador da campanha não é válido."
+        }
+        val body = JSONObject()
+            .put("p_restaurant_id", restaurantId)
+            .put("p_client_request_id", requestId)
+            .put("p_title", title.trim())
+            .put("p_message", message.trim())
+            .put("p_promotion_type", promotionType)
+            .put("p_promotion_title", promotionTitle?.trim()?.takeIf { it.isNotEmpty() } ?: JSONObject.NULL)
+            .put("p_promotion_details", promotionDetails?.trim()?.takeIf { it.isNotEmpty() } ?: JSONObject.NULL)
+            .put("p_inactivity_days", inactivityDays)
+        val rows = JSONArray(call("POST", "/rest/v1/rpc/send_reactivation_campaign", body, token))
+        if (rows.length() == 0) throw IllegalStateException("O servidor não confirmou o envio da campanha.")
+        val result = rows.getJSONObject(0)
+        require(runCatching { java.util.UUID.fromString(result.optString("campaign_id")) }.isSuccess) {
+            "O servidor devolveu uma confirmação de campanha inválida."
+        }
+        if (result.optInt("recipient_count", 0) <= 0) {
+            throw IllegalStateException("A campanha não tem destinatários com consentimento ativo.")
+        }
+        return result
+    }
+
+    fun listMyMarketingNotifications(token: String): JSONArray {
+        require(token.isNotBlank()) { "Inicia sessão para consultar os avisos." }
+        return JSONArray(call("POST", "/rest/v1/rpc/list_my_marketing_notifications", JSONObject(), token))
+    }
+
+    fun markMyMarketingNotificationRead(token: String, notificationId: String) {
+        require(runCatching { java.util.UUID.fromString(notificationId) }.isSuccess) {
+            "A notificação selecionada não é válida."
+        }
+        call(
+            "POST",
+            "/rest/v1/rpc/mark_my_marketing_notification_read",
+            JSONObject().put("p_notification_id", notificationId),
+            token
+        )
+    }
+
     fun adjustPoints(
         token: String,
         restaurantId: String,

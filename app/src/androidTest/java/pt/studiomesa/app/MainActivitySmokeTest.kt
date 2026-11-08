@@ -433,6 +433,7 @@ class MainActivitySmokeTest {
             onView(withContentDescription("Abrir secção Assistente")).check(doesNotExist())
             onView(withContentDescription("Abrir secção Carta")).perform(scrollTo()).check(matches(isDisplayed()))
             onView(withContentDescription("Abrir secção Pontos")).perform(scrollTo()).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Marketing")).check(doesNotExist())
             onView(withContentDescription("Abrir secção Conta")).perform(scrollTo()).check(matches(isDisplayed()))
 
             if (isCalculatorAvailable()) {
@@ -471,6 +472,12 @@ class MainActivitySmokeTest {
 
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir secção Cartão")).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Avisos")).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Avisos")).perform(click())
+            onView(withText("Avisos do restaurante")).check(matches(isDisplayed()))
+            onView(withText("Inicia sessão para receber e consultar os avisos do restaurante."))
+                .check(matches(isDisplayed()))
+
             onView(withContentDescription("Abrir secção Carta")).perform(click())
             onView(withText("Exemplos de artigos")).check(matches(isDisplayed()))
 
@@ -576,6 +583,8 @@ class MainActivitySmokeTest {
                 .check(matches(isDisplayed()))
             onView(withText("Iniciar sessão"))
                 .check(matches(isDisplayed()))
+            onView(withText("Continuar com Google")).check(doesNotExist())
+            onView(withText("Continuar com Microsoft (Outlook)")).check(doesNotExist())
         }
     }
 

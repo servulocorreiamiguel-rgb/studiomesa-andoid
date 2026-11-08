@@ -65,6 +65,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
     private var activeConversationId: String? = null
     private var activeSystemInstruction: String? = null
     private var activeUserTurns = 0
+    private var activeMaxNumTokens = MAX_CONTEXT_TOKENS
     private var restaurantDataTool: StudioMesaRestaurantDataTool? = null
     private var priceReferenceTool: StudioMesaPriceReferenceTool? = null
     private var supplierInvoiceTool: StudioMesaSupplierInvoiceTool? = null
@@ -225,18 +226,13 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     )) {
                     closeActiveSession()
 
-                    val createdEngine = Engine(
-                        EngineConfig(
-                            modelPath = modelFile.absolutePath,
-                            backend = Backend.CPU(),
-                            maxNumTokens = MAX_CONTEXT_TOKENS,
-                            cacheDir = File(appContext.cacheDir, "studiomesa-litert-cache").absolutePath
-                        )
-                    )
+                    // Retry with smaller KV caches on devices that cannot allocate
+                    // the preferred native engine memory. LFM2.5 supports up to 4096 tokens.
+                    val (createdEngine, selectedContextTokens) = createInitializedEngine()
+                    activeMaxNumTokens = selectedContextTokens
                     // An Engine and its Conversation belong to one user conversation.
                     // LiteRT-LM 0.18/LFM2 can retain short-convolution state when a second
                     // Conversation is created on an already-used Engine.
-                    createdEngine.initialize()
 
                     val dataTool = StudioMesaRestaurantDataTool(snapshot)
                     val priceTool = StudioMesaPriceReferenceTool(snapshot)
@@ -255,9 +251,9 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     enabledTools.add(tool(StudioMesaWikipediaSearchTool()))
                     enabledTools.add(tool(StudioMesaWebSearchTool(appContext)))
                     val initialMessages = history
-                        .takeLast(MAX_HISTORY_MESSAGES)
+                        .takeLast(historyMessageLimit(activeMaxNumTokens))
                         .mapNotNull { turn ->
-                            val clean = turn.content.trim().take(MAX_HISTORY_MESSAGE_CHARS)
+                            val clean = turn.content.trim().take(historyMessageCharLimit(activeMaxNumTokens))
                             when {
                                 clean.isBlank() -> null
                                 turn.role == "user" -> Message.user(clean)
@@ -278,7 +274,10 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                                     topP = 0.9,
                                     temperature = AssistantThinkingModePolicy.temperature(deepThinking)
                                 ),
-                                maxOutputToken = AssistantThinkingModePolicy.maxOutputTokens(deepThinking),
+                                maxOutputToken = AssistantThinkingModePolicy.maxOutputTokens(
+                                    deepThinking,
+                                    activeMaxNumTokens
+                                ),
                                 prefillPrefaceOnInit = false
                             )
                         )
@@ -344,6 +343,53 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         }
     }
 
+    private fun createInitializedEngine(): Pair<Engine, Int> {
+        var lastFailure: Throwable? = null
+
+        for (contextTokens in AssistantThinkingModePolicy.ENGINE_CONTEXT_CANDIDATES) {
+            try {
+                val candidate = Engine(
+                    EngineConfig(
+                        modelPath = modelFile.absolutePath,
+                        backend = Backend.CPU(),
+                        maxNumTokens = contextTokens,
+                        cacheDir = File(appContext.cacheDir, "studiomesa-litert-cache").absolutePath
+                    )
+                )
+                try {
+                    candidate.initialize()
+                    return candidate to contextTokens
+                } catch (failure: Throwable) {
+                    runCatching { candidate.close() }
+                    throw failure
+                }
+            } catch (failure: Throwable) {
+                lastFailure = failure
+            }
+        }
+
+        val detail = lastFailure?.message?.take(700).orEmpty()
+            .ifBlank { "O runtime não devolveu detalhes." }
+        throw IllegalStateException(
+            "O motor de IA não conseguiu iniciar. Foram tentados contextos de " +
+                AssistantThinkingModePolicy.ENGINE_CONTEXT_CANDIDATES.joinToString(", ") +
+                " tokens. Último erro: $detail",
+            lastFailure
+        )
+    }
+
+    private fun historyMessageLimit(contextTokens: Int): Int = when {
+        contextTokens >= 4096 -> MAX_HISTORY_MESSAGES
+        contextTokens >= 2048 -> 4
+        else -> 2
+    }
+
+    private fun historyMessageCharLimit(contextTokens: Int): Int = when {
+        contextTokens >= 4096 -> MAX_HISTORY_MESSAGE_CHARS
+        contextTokens >= 2048 -> 400
+        else -> 240
+    }
+
     private fun closeActiveSession() {
         val currentConversation = conversation
         val currentEngine = engine
@@ -352,6 +398,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         activeConversationId = null
         activeSystemInstruction = null
         activeUserTurns = 0
+        activeMaxNumTokens = MAX_CONTEXT_TOKENS
         restaurantDataTool = null
         priceReferenceTool = null
         supplierInvoiceTool = null
