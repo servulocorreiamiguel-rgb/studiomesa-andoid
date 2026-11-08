@@ -576,6 +576,70 @@ object SupabaseApi {
         return array.getJSONObject(0)
     }
 
+    fun searchRestaurantsByName(token: String, query: String): JSONArray {
+        require(query.trim().length in 3..80) {
+            "Escreve pelo menos 3 caracteres do nome do restaurante."
+        }
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/search_restaurants_by_name",
+            JSONObject().put("p_query", query.trim()),
+            token
+        ))
+    }
+
+    fun requestRestaurantMembership(token: String, restaurantId: String, displayName: String): JSONObject {
+        val result = JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/request_restaurant_membership",
+            JSONObject()
+                .put("p_restaurant_id", restaurantId)
+                .put("p_display_name", displayName.trim()),
+            token
+        ))
+        if (result.length() == 0) {
+            throw IllegalStateException("O servidor não confirmou o pedido de associação.")
+        }
+        return result.getJSONObject(0)
+    }
+
+    fun listMyRestaurantMembershipRequests(token: String): JSONArray {
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/get_my_restaurant_membership_requests",
+            JSONObject(),
+            token
+        ))
+    }
+
+    fun listPendingRestaurantMembershipRequests(token: String, restaurantId: String): JSONArray {
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/get_pending_restaurant_membership_requests",
+            JSONObject().put("p_restaurant_id", restaurantId),
+            token
+        ))
+    }
+
+    fun reviewRestaurantMembershipRequest(
+        token: String,
+        requestId: String,
+        approve: Boolean
+    ): JSONObject {
+        val result = JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/review_restaurant_membership_request",
+            JSONObject()
+                .put("p_request_id", requestId)
+                .put("p_approve", approve),
+            token
+        ))
+        if (result.length() == 0) {
+            throw IllegalStateException("O servidor não confirmou a decisão sobre o pedido.")
+        }
+        return result.getJSONObject(0)
+    }
+
     fun listTables(token: String, restaurantId: String): JSONArray {
         val encoded = URLEncoder.encode(restaurantId, "UTF-8")
         return JSONArray(call(
