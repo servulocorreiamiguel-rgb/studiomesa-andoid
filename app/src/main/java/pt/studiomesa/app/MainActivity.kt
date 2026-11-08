@@ -290,6 +290,8 @@ class MainActivity : ComponentActivity() {
             val contents = scanResult.contents
             if (contents.isNullOrBlank()) {
                 Toast.makeText(this, "Leitura do QR cancelada.", Toast.LENGTH_SHORT).show()
+            } else if (isCustomerApp && contents.startsWith("STUDIOMESA-JOIN:", ignoreCase = true)) {
+                showCustomerJoinCodeDialog(contents.substringAfter(':').trim())
             } else {
                 handleLoyaltyQrPayload(contents)
             }
