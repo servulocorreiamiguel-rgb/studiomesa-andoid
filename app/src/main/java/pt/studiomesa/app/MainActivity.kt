@@ -3825,20 +3825,12 @@ class MainActivity : ComponentActivity() {
 
             val savedId = preferredMemberId?.takeIf { it.isNotBlank() }
                 ?: backendPrefs.getString("member_id", "").orEmpty()
-            var selectedId = ""
-            if (savedId.isNotBlank()) {
-                for (index in 0 until memberships.length()) {
-                    val item = memberships.optJSONObject(index) ?: continue
-                    if (item.optString("member_id") == savedId) {
-                        selectedId = savedId
-                        break
-                    }
-                }
+            val memberIds = (0 until memberships.length()).mapNotNull { index ->
+                memberships.optJSONObject(index)?.optString("member_id")
             }
-            if (selectedId.isBlank()) {
-                selectedId = memberships.optJSONObject(0)?.optString("member_id").orEmpty()
-            }
-            if (selectedId.isBlank()) throw IllegalStateException("O servidor devolveu cartões sem identificador.")
+            val selectedId = CustomerMembershipSelectionPolicy
+                .selectMemberId(memberIds, savedId)
+                ?: throw IllegalStateException("O servidor devolveu cartões sem identificador.")
             loadSelectedCustomerMembership(token, memberships, selectedId)
         } catch (_: Exception) {
             // Do not discard a valid login if membership data is temporarily unavailable.
@@ -6103,17 +6095,12 @@ class MainActivity : ComponentActivity() {
                 "NO_CARDS"
             } else {
                 val savedId = backendMemberId()
-                var selectedId = ""
-                for (index in 0 until memberships.length()) {
-                    val item = memberships.optJSONObject(index) ?: continue
-                    if (item.optString("member_id") == savedId && savedId.isNotBlank()) {
-                        selectedId = savedId
-                        break
-                    }
+                val memberIds = (0 until memberships.length()).mapNotNull { index ->
+                    memberships.optJSONObject(index)?.optString("member_id")
                 }
-                if (selectedId.isBlank()) {
-                    selectedId = memberships.optJSONObject(0)?.optString("member_id").orEmpty()
-                }
+                val selectedId = CustomerMembershipSelectionPolicy
+                    .selectMemberId(memberIds, savedId)
+                    ?: throw IllegalStateException("O servidor devolveu cartões sem identificador.")
                 loadSelectedCustomerMembership(token, memberships, selectedId)
                 "OK"
             }
