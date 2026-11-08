@@ -86,7 +86,7 @@ BEGIN
 
   RETURN coalesce(v_enabled, false);
 END;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.set_my_marketing_opt_in(p_enabled boolean)
@@ -117,7 +117,7 @@ BEGIN
 
   RETURN p_enabled;
 END;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.get_restaurant_inactive_members(p_restaurant_id uuid, p_inactivity_days integer DEFAULT 30)
@@ -165,7 +165,7 @@ BEGIN
     AND activity.last_visit_at <= now() - make_interval(days => p_inactivity_days)
   ORDER BY activity.last_visit_at ASC, lm.display_name ASC;
 END;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.send_reactivation_campaign(p_restaurant_id uuid, p_client_request_id uuid, p_title text, p_message text, p_promotion_type text DEFAULT 'none'::text, p_promotion_title text DEFAULT NULL::text, p_promotion_details text DEFAULT NULL::text, p_inactivity_days integer DEFAULT 30)
@@ -326,7 +326,7 @@ BEGIN
 
   RETURN QUERY SELECT v_campaign_id, v_recipient_count;
 END;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.list_my_marketing_notifications()
@@ -357,7 +357,7 @@ BEGIN
   ORDER BY n.created_at DESC
   LIMIT 100;
 END;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.mark_my_marketing_notification_read(p_notification_id uuid)
@@ -383,7 +383,7 @@ BEGIN
     RAISE EXCEPTION 'A notificação não existe ou não pertence à tua conta.';
   END IF;
 END;
-$function$
+$function$;
 
 
 REVOKE ALL ON FUNCTION public.get_my_marketing_opt_in() FROM PUBLIC, anon;
