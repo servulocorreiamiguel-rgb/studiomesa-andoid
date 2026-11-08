@@ -6008,14 +6008,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun refreshCustomerNotifications() {
-        if (backendToken().isBlank()) {
-            showAuthChooser { renderCustomerApp() }
-            return
-        }
-        if (backendMemberId().isBlank()) {
-            showCustomerJoinDialog()
-            return
-        }
+        // Opening the inbox must not put a modal login/join dialog over the page.
+        // The page itself explains the next step and offers the appropriate action.
+        if (backendToken().isBlank() || backendMemberId().isBlank()) return
         runBackend({
             customerMarketingNotificationsCache = SupabaseApi.listMyMarketingNotifications(backendToken())
             "OK"
