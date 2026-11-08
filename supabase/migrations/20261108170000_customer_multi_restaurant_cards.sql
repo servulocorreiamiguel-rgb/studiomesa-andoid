@@ -892,21 +892,20 @@ SET search_path TO ''
 AS $function$
 DECLARE
     v_member_id uuid;
-    v_count integer;
 BEGIN
     IF (SELECT auth.uid()) IS NULL THEN
         RAISE EXCEPTION 'É necessário iniciar sessão.';
     END IF;
-    SELECT count(*)::integer, min(lm.id)
-      INTO v_count, v_member_id
+    SELECT lm.id INTO v_member_id
     FROM public.loyalty_members AS lm
-    WHERE lm.auth_user_id = (SELECT auth.uid());
-    IF v_count = 0 THEN
+    WHERE lm.auth_user_id = (SELECT auth.uid())
+    ORDER BY lm.created_at ASC, lm.id ASC
+    LIMIT 1;
+    IF v_member_id IS NULL THEN
         RAISE EXCEPTION 'Associa primeiro a tua conta ao restaurante.';
     END IF;
-    IF v_count > 1 THEN
-        RAISE EXCEPTION 'Esta versão da aplicação suporta apenas um restaurante. Atualiza o StudioMesa para escolheres o cartão correto.';
-    END IF;
+    -- Old APKs have no restaurant picker. Keep their historical behavior
+    -- deterministic; the current app always passes the selected member ID.
     RETURN v_member_id;
 END;
 $function$;
