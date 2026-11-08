@@ -71,8 +71,8 @@ BEGIN
     RAISE EXCEPTION 'Marketing tables unexpectedly allow direct API-role access.';
   END IF;
 
-  IF to_regprocedure('public.get_my_marketing_opt_in()') IS NULL
-    OR to_regprocedure('public.set_my_marketing_opt_in(boolean)') IS NULL
+  IF to_regprocedure('public.get_my_marketing_opt_in(uuid)') IS NULL
+    OR to_regprocedure('public.set_my_marketing_opt_in(uuid,boolean)') IS NULL
     OR to_regprocedure('public.get_restaurant_inactive_members(uuid,integer)') IS NULL
     OR to_regprocedure('public.send_reactivation_campaign(uuid,uuid,text,text,text,text,text,integer)') IS NULL
     OR to_regprocedure('public.list_my_marketing_notifications()') IS NULL
@@ -80,14 +80,14 @@ BEGIN
     RAISE EXCEPTION 'A marketing campaign or notification RPC is missing.';
   END IF;
 
-  IF has_function_privilege('anon','public.get_my_marketing_opt_in()','EXECUTE')
-    OR has_function_privilege('anon','public.set_my_marketing_opt_in(boolean)','EXECUTE')
+  IF has_function_privilege('anon','public.get_my_marketing_opt_in(uuid)','EXECUTE')
+    OR has_function_privilege('anon','public.set_my_marketing_opt_in(uuid,boolean)','EXECUTE')
     OR has_function_privilege('anon','public.get_restaurant_inactive_members(uuid,integer)','EXECUTE')
     OR has_function_privilege('anon','public.send_reactivation_campaign(uuid,uuid,text,text,text,text,text,integer)','EXECUTE')
     OR has_function_privilege('anon','public.list_my_marketing_notifications()','EXECUTE')
     OR has_function_privilege('anon','public.mark_my_marketing_notification_read(uuid)','EXECUTE')
-    OR NOT has_function_privilege('authenticated','public.get_my_marketing_opt_in()','EXECUTE')
-    OR NOT has_function_privilege('authenticated','public.set_my_marketing_opt_in(boolean)','EXECUTE')
+    OR NOT has_function_privilege('authenticated','public.get_my_marketing_opt_in(uuid)','EXECUTE')
+    OR NOT has_function_privilege('authenticated','public.set_my_marketing_opt_in(uuid,boolean)','EXECUTE')
     OR NOT has_function_privilege('authenticated','public.get_restaurant_inactive_members(uuid,integer)','EXECUTE')
     OR NOT has_function_privilege('authenticated','public.send_reactivation_campaign(uuid,uuid,text,text,text,text,text,integer)','EXECUTE')
     OR NOT has_function_privilege('authenticated','public.list_my_marketing_notifications()','EXECUTE')
@@ -1174,9 +1174,27 @@ echo "PASS: purchase cost creation is idempotent, waste snapshots preserve each 
 # users for restaurants A/B. All records are created only in this disposable database.
 MEMBER_A="$(join_customer "$USER_E" "SMOKEAA001" "CI Customer A")"
 MEMBER_B="$(join_customer "$USER_F" "SMOKEBB001" "CI Customer B")"
+MEMBER_A_B="$(join_customer "$USER_E" "SMOKEBB001" "CI Customer A")"
 test -n "$MEMBER_A"
 test -n "$MEMBER_B"
+test -n "$MEMBER_A_B"
 test "$MEMBER_A" != "$MEMBER_B"
+test "$MEMBER_A" != "$MEMBER_A_B"
+test "$MEMBER_B" != "$MEMBER_A_B"
+
+customer_multi_card_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text FROM public.get_my_loyalty_membership();
+ROLLBACK;
+SQL
+)"
+if [ "$customer_multi_card_count" != "2" ]; then
+  echo "ERROR: one customer account could not retrieve both restaurant cards." >&2
+  exit 1
+fi
+echo "PASS: one customer account can hold separate loyalty cards at multiple restaurants."
 
 own_menu_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
 BEGIN;
@@ -1281,7 +1299,7 @@ LOYALTY_QR_OLD="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERR
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
 SET LOCAL ROLE authenticated;
-SELECT qr_token::text FROM public.create_loyalty_qr_token();
+SELECT qr_token::text FROM public.create_loyalty_qr_token('$MEMBER_A'::uuid);
 COMMIT;
 SQL
 )"
@@ -1289,7 +1307,7 @@ LOYALTY_QR_CURRENT="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
 SET LOCAL ROLE authenticated;
-SELECT qr_token::text FROM public.create_loyalty_qr_token();
+SELECT qr_token::text FROM public.create_loyalty_qr_token('$MEMBER_A'::uuid);
 COMMIT;
 SQL
 )"
@@ -1417,7 +1435,7 @@ BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
 SET LOCAL ROLE authenticated;
 SELECT redemption_id::text || '|' || points_remaining::text || '|' || status
-FROM public.redeem_loyalty_reward('$LOYALTY_REWARD_ID'::uuid, '$LOYALTY_REDEEM_REQUEST'::uuid);
+FROM public.redeem_loyalty_reward('$MEMBER_A'::uuid, '$LOYALTY_REWARD_ID'::uuid, '$LOYALTY_REDEEM_REQUEST'::uuid);
 COMMIT;
 SQL
 )"
@@ -1426,7 +1444,7 @@ BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
 SET LOCAL ROLE authenticated;
 SELECT redemption_id::text || '|' || points_remaining::text || '|' || status
-FROM public.redeem_loyalty_reward('$LOYALTY_REWARD_ID'::uuid, '$LOYALTY_REDEEM_REQUEST'::uuid);
+FROM public.redeem_loyalty_reward('$MEMBER_A'::uuid, '$LOYALTY_REWARD_ID'::uuid, '$LOYALTY_REDEEM_REQUEST'::uuid);
 COMMIT;
 SQL
 )"
@@ -1442,7 +1460,7 @@ if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_F', true);
 SET LOCAL ROLE authenticated;
-SELECT * FROM public.redeem_loyalty_reward('$LOYALTY_REWARD_ID'::uuid, '$LOYALTY_QR_SECOND_REQUEST'::uuid);
+SELECT * FROM public.redeem_loyalty_reward('$MEMBER_B'::uuid, '$LOYALTY_REWARD_ID'::uuid, '$LOYALTY_QR_SECOND_REQUEST'::uuid);
 COMMIT;
 SQL
 then
@@ -1536,32 +1554,32 @@ VALUES ('$RESTAURANT_A'::uuid, 99, false, 'CI Booking', 2);
 SQL
 
 create_customer_booking() {
-  local user_id="$1" request_id="$2" guest_name="$3" booking_at="$4"
+  local user_id="$1" member_id="$2" request_id="$3" guest_name="$4" booking_at="$5"
   psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$user_id', true);
 SET LOCAL ROLE authenticated;
 SELECT reservation_id::text || '|' || status
 FROM public.create_customer_reservation_request(
-  '$request_id'::uuid, '$guest_name', '', 2, '$booking_at'::timestamptz, 90, 'CI customer booking'
+  '$member_id'::uuid, '$request_id'::uuid, '$guest_name', '', 2, '$booking_at'::timestamptz, 90, 'CI customer booking'
 );
 COMMIT;
 SQL
 }
 
 my_customer_booking_count() {
-  local user_id="$1"
+  local user_id="$1" member_id="$2"
   psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$user_id', true);
 SET LOCAL ROLE authenticated;
-SELECT count(*)::text FROM public.get_my_restaurant_reservations();
+SELECT count(*)::text FROM public.get_my_restaurant_reservations('$member_id'::uuid);
 ROLLBACK;
 SQL
 }
 
-CUSTOMER_BOOKING_FIRST="$(create_customer_booking "$USER_E" "$CUSTOMER_BOOKING_REQUEST_A" "CI Customer A" "$CUSTOMER_BOOKING_AT")"
-CUSTOMER_BOOKING_RETRY="$(create_customer_booking "$USER_E" "$CUSTOMER_BOOKING_REQUEST_A" "CI Customer A" "$CUSTOMER_BOOKING_AT")"
+CUSTOMER_BOOKING_FIRST="$(create_customer_booking "$USER_E" "$MEMBER_A" "$CUSTOMER_BOOKING_REQUEST_A" "CI Customer A" "$CUSTOMER_BOOKING_AT")"
+CUSTOMER_BOOKING_RETRY="$(create_customer_booking "$USER_E" "$MEMBER_A" "$CUSTOMER_BOOKING_REQUEST_A" "CI Customer A" "$CUSTOMER_BOOKING_AT")"
 if [ "$CUSTOMER_BOOKING_FIRST" != "$CUSTOMER_BOOKING_RETRY" ] ||
    [[ "$CUSTOMER_BOOKING_FIRST" != *"|Pendente" ]]; then
   echo "ERROR: customer booking retry did not return the original pending request." >&2
@@ -1570,13 +1588,13 @@ fi
 CUSTOMER_BOOKING_ID="$(cut -d '|' -f 1 <<<"$CUSTOMER_BOOKING_FIRST")"
 booking_request_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1   -c "SELECT count(*)::text FROM public.restaurant_reservations WHERE restaurant_id='$RESTAURANT_A'::uuid AND created_by='$USER_E'::uuid AND client_request_id='$CUSTOMER_BOOKING_REQUEST_A'::uuid;")"
 if [ "$booking_request_count" != "1" ] ||
-   [ "$(my_customer_booking_count "$USER_E")" != "1" ] ||
-   [ "$(my_customer_booking_count "$USER_F")" != "0" ]; then
+   [ "$(my_customer_booking_count "$USER_E" "$MEMBER_A")" != "1" ] ||
+   [ "$(my_customer_booking_count "$USER_F" "$MEMBER_B")" != "0" ]; then
   echo "ERROR: customer booking was duplicated or visible to another customer's account." >&2
   exit 1
 fi
 
-CUSTOMER_BOOKING_B="$(create_customer_booking "$USER_F" "$CUSTOMER_BOOKING_REQUEST_B" "CI Customer B" "$CUSTOMER_BOOKING_AT")"
+CUSTOMER_BOOKING_B="$(create_customer_booking "$USER_F" "$MEMBER_B" "$CUSTOMER_BOOKING_REQUEST_B" "CI Customer B" "$CUSTOMER_BOOKING_AT")"
 CUSTOMER_BOOKING_B_ID="$(cut -d '|' -f 1 <<<"$CUSTOMER_BOOKING_B")"
 if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
 BEGIN;
@@ -1604,7 +1622,7 @@ if [ "$customer_cancel_status" != "Cancelada" ]; then
   exit 1
 fi
 
-CUSTOMER_BOOKING_C="$(create_customer_booking "$USER_E" "$CUSTOMER_BOOKING_REQUEST_C" "CI Customer A" "$CUSTOMER_BOOKING_LATER")"
+CUSTOMER_BOOKING_C="$(create_customer_booking "$USER_E" "$MEMBER_A" "$CUSTOMER_BOOKING_REQUEST_C" "CI Customer A" "$CUSTOMER_BOOKING_LATER")"
 CUSTOMER_BOOKING_C_ID="$(cut -d '|' -f 1 <<<"$CUSTOMER_BOOKING_C")"
 if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
 BEGIN;
@@ -1771,7 +1789,7 @@ SELECT public.assign_restaurant_reservation_table('$CUSTOMER_BOOKING_C_ID'::uuid
 SELECT public.update_restaurant_reservation_status('$CUSTOMER_BOOKING_C_ID'::uuid, 'Confirmada');
 COMMIT;
 SQL
-CUSTOMER_BOOKING_C_RETRY="$(create_customer_booking "$USER_E" "$CUSTOMER_BOOKING_REQUEST_C" "CI Customer A" "$CUSTOMER_BOOKING_LATER")"
+CUSTOMER_BOOKING_C_RETRY="$(create_customer_booking "$USER_E" "$MEMBER_A" "$CUSTOMER_BOOKING_REQUEST_C" "CI Customer A" "$CUSTOMER_BOOKING_LATER")"
 CUSTOMER_BOOKING_C_RETRY_ID="$(cut -d '|' -f 1 <<<"$CUSTOMER_BOOKING_C_RETRY")"
 if [ "$(cut -d '|' -f 1 <<<"$CUSTOMER_BOOKING_C")" != "$CUSTOMER_BOOKING_C_RETRY_ID" ] ||
    [[ "$CUSTOMER_BOOKING_C_RETRY" != *"|Confirmada" ]]; then
@@ -1783,7 +1801,7 @@ echo "PASS: customer retries remain idempotent after table assignment and confir
 # The restaurant must also reject assigning an unallocated customer request
 # to a table already occupied during that time window.
 CUSTOMER_BOOKING_D_AT="$(date -u -d "$RESERVATION_AT + 30 minutes" '+%Y-%m-%d %H:%M:%S+00:00')"
-CUSTOMER_BOOKING_D="$(create_customer_booking "$USER_E" "$CUSTOMER_BOOKING_REQUEST_D" "CI Customer A" "$CUSTOMER_BOOKING_D_AT")"
+CUSTOMER_BOOKING_D="$(create_customer_booking "$USER_E" "$MEMBER_A" "$CUSTOMER_BOOKING_REQUEST_D" "CI Customer A" "$CUSTOMER_BOOKING_D_AT")"
 CUSTOMER_BOOKING_D_ID="$(cut -d '|' -f 1 <<<"$CUSTOMER_BOOKING_D")"
 if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
 BEGIN;
@@ -2230,7 +2248,7 @@ default_marketing_consent="$(psql --no-psqlrc --quiet --tuples-only --no-align -
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
 SET LOCAL ROLE authenticated;
-SELECT public.get_my_marketing_opt_in()::text;
+SELECT public.get_my_marketing_opt_in('$MEMBER_A'::uuid)::text;
 ROLLBACK;
 SQL
 )"
@@ -2289,7 +2307,7 @@ psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
 SET LOCAL ROLE authenticated;
-SELECT public.set_my_marketing_opt_in(true);
+SELECT public.set_my_marketing_opt_in('$MEMBER_A'::uuid, true);
 COMMIT;
 SQL
 
@@ -2297,7 +2315,7 @@ enabled_marketing_consent="$(psql --no-psqlrc --quiet --tuples-only --no-align -
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
 SET LOCAL ROLE authenticated;
-SELECT public.get_my_marketing_opt_in()::text;
+SELECT public.get_my_marketing_opt_in('$MEMBER_A'::uuid)::text;
 ROLLBACK;
 SQL
 )"
@@ -2406,14 +2424,14 @@ psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
 SET LOCAL ROLE authenticated;
-SELECT public.set_my_marketing_opt_in(false);
+SELECT public.set_my_marketing_opt_in('$MEMBER_A'::uuid, false);
 COMMIT;
 SQL
 withdrawn_marketing_consent="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
 SET LOCAL ROLE authenticated;
-SELECT public.get_my_marketing_opt_in()::text;
+SELECT public.get_my_marketing_opt_in('$MEMBER_A'::uuid)::text;
 ROLLBACK;
 SQL
 )"
