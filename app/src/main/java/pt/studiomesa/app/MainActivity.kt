@@ -6284,8 +6284,25 @@ class MainActivity : ComponentActivity() {
         val savedName = store.getCustomerProfileName()
         container.addView(label(if (savedName.isBlank()) "Olá!" else "Olá, " + savedName + "!", 25f, true, forestDeep))
         addGap(container, 5)
-        container.addView(label("Cartão de fidelização do restaurante.", 13.5f, false, muted))
+        container.addView(label("Os teus cartões de fidelização.", 13.5f, false, muted))
         addGap(container, 12)
+        if (backendToken().isNotBlank() && backendMemberId().isNotBlank()) {
+            val selectedRestaurant = backendPrefs.getString("member_restaurant_name", "Restaurante") ?: "Restaurante"
+            container.addView(label("RESTAURANTE SELECIONADO", 10f, true, forestSoft))
+            addGap(container, 3)
+            container.addView(label(selectedRestaurant, 17f, true, forestDeep))
+            addGap(container, 8)
+            if (customerMembershipsCache.length() > 1) {
+                container.addView(secondaryButton("Trocar de restaurante") {
+                    showCustomerMembershipPicker()
+                }, LinearLayout.LayoutParams(-1, dp(46)))
+                addGap(container, 6)
+            }
+            container.addView(secondaryButton("Associar outro restaurante") {
+                showCustomerJoinDialog()
+            }, LinearLayout.LayoutParams(-1, dp(46)))
+            addGap(container, 6)
+        }
         when {
             backendToken().isBlank() -> container.addView(
                 primaryButton("Criar conta / iniciar sessão") { showAuthChooser { renderCustomerApp() } },
@@ -6303,7 +6320,7 @@ class MainActivity : ComponentActivity() {
                 )
             }
             else -> container.addView(
-                primaryButton("Atualizar saldo e recompensas") { refreshCustomerMembership() },
+                primaryButton("Atualizar cartão selecionado") { refreshCustomerMembership() },
                 LinearLayout.LayoutParams(-1, dp(48))
             )
         }
