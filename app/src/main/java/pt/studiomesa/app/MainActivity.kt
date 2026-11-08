@@ -5626,23 +5626,66 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showCustomerJoinDialog() {
-        if (backendToken().isBlank()) { showAuthChooser { renderCustomerApp() }; return }
-        val form = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(22), dp(8), dp(22), dp(4)) }
-        val codeField = inputField("Código de adesão do restaurante", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS)
-        val nameField = inputField("O teu nome", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
-        nameField.setText(store.getCustomerProfileName())
-        form.addView(label("Código do restaurante", 10f, true, forestSoft)); form.addView(codeField, fieldParams())
-        addGap(form, 4); form.addView(label("Nome para o cartão", 10f, true, forestSoft)); form.addView(nameField, fieldParams())
-        val dialog = AlertDialog.Builder(this).setTitle("Associar ao restaurante")
-            .setMessage("Pede o código de adesão ao restaurante.").setView(form)
-            .setNegativeButton("Cancelar", null).setPositiveButton("Associar", null).create()
+        if (backendToken().isBlank()) {
+            showAuthChooser { renderCustomerApp() }
+            return
+        }
+        val options = arrayOf(
+            "Pesquisar pelo nome do restaurante",
+            "Introduzir código de adesão",
+            "Ler QR de adesão"
+        )
+        AlertDialog.Builder(this)
+            .setTitle("Associar ao restaurante")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> showCustomerRestaurantSearchDialog()
+                    1 -> showCustomerJoinCodeDialog()
+                    2 -> startCustomerJoinQrScan()
+                }
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    private fun showCustomerJoinCodeDialog(initialCode: String = "") {
+        if (backendToken().isBlank()) {
+            showAuthChooser { renderCustomerApp() }
+            return
+        }
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(8), dp(22), dp(4))
+        }
+        val codeField = inputField(
+            "Código de adesão do restaurante",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
+        ).apply { setText(initialCode.uppercase(Locale.ROOT)) }
+        val nameField = inputField(
+            "O teu nome",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        ).apply { setText(store.getCustomerProfileName()) }
+        form.addView(label("Código do restaurante", 10f, true, forestSoft))
+        form.addView(codeField, fieldParams())
+        addGap(form, 4)
+        form.addView(label("Nome para o cartão", 10f, true, forestSoft))
+        form.addView(nameField, fieldParams())
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Associar por código")
+            .setMessage("Podes escrever o código ou lê-lo no QR disponibilizado pelo restaurante.")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Associar", null)
+            .create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val code = codeField.text.toString().trim().uppercase(Locale.ROOT)
                 val name = nameField.text.toString().trim()
                 when {
-                    code.length !in 6..12 -> codeField.error = "O código deve ter 6 a 12 caracteres"
-                    name.isBlank() || name.length > 100 -> nameField.error = "Introduz um nome válido"
+                    !code.matches(Regex("^[A-Z0-9]{6,12}$")) ->
+                        codeField.error = "Introduz um código válido de 6 a 12 caracteres"
+                    name.isBlank() || name.length > 100 ->
+                        nameField.error = "Introduz um nome válido"
                     else -> {
                         runBackend({
                             val token = backendToken()
@@ -5652,7 +5695,9 @@ class MainActivity : ComponentActivity() {
                             val rewards = SupabaseApi.listCustomerRewards(token, memberId)
                             val marketingOptIn = SupabaseApi.getMyMarketingOptIn(token)
                             marketingOptInPrefLoaded = true
-                            backendPrefs.edit().putString("member_id", memberId)
+                            backendPrefs.edit()
+                                .putBoolean("customer_entry_choice_complete_v1", true)
+                                .putString("member_id", memberId)
                                 .putBoolean("marketing_opt_in", marketingOptIn)
                                 .putString("member_code", member.optString("member_code"))
                                 .putInt("member_points", member.optInt("points", 0))
@@ -5673,6 +5718,165 @@ class MainActivity : ComponentActivity() {
             }
         }
         dialog.show()
+    }
+
+    private fun startCustomerJoinQrScan() {
+        if (backendToken().isBlank()) {
+            showAuthChooser { renderCustomerApp() }
+            return
+        }
+        IntentIntegrator(this)
+            .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
+            .setPrompt("Lê o QR de adesão apresentado pelo restaurante")
+            .setBeepEnabled(false)
+            .setOrientationLocked(false)
+            .initiateScan()
+    }
+
+    private fun showCustomerRestaurantSearchDialog() {
+        if (backendToken().isBlank()) {
+            showAuthChooser { renderCustomerApp() }
+            return
+        }
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(4))
+        }
+        val queryField = inputField(
+            "Nome do restaurante",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        )
+        val nameField = inputField(
+            "O teu nome para o cartão",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        ).apply { setText(store.getCustomerProfileName()) }
+        val results = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        form.addView(label("PROCURAR", 10f, true, forestSoft))
+        form.addView(queryField, fieldParams())
+        addGap(form, 7)
+        form.addView(label("NOME PARA O CARTÃO", 10f, true, forestSoft))
+        form.addView(nameField, fieldParams())
+        addGap(form, 8)
+        form.addView(results, LinearLayout.LayoutParams(-1, -2))
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Encontrar restaurante")
+            .setMessage("Escreve pelo menos 3 letras. O restaurante terá de aprovar o teu pedido.")
+            .setView(form)
+            .setNegativeButton("Fechar", null)
+            .setPositiveButton("Pesquisar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val query = queryField.text.toString().trim()
+                val displayName = nameField.text.toString().trim()
+                when {
+                    query.length !in 3..80 ->
+                        queryField.error = "Escreve pelo menos 3 caracteres"
+                    displayName.isBlank() || displayName.length > 100 ->
+                        nameField.error = "Introduz um nome válido"
+                    else -> runBackend({
+                        SupabaseApi.searchRestaurantsByName(backendToken(), query).toString()
+                    }) { raw ->
+                        val matches = JSONArray(raw)
+                        results.removeAllViews()
+                        if (matches.length() == 0) {
+                            results.addView(emptyCard("Não encontrámos restaurantes com esse nome. Confirma a escrita ou tenta outra parte do nome."))
+                        } else {
+                            for (index in 0 until matches.length()) {
+                                val restaurant = matches.optJSONObject(index) ?: continue
+                                val restaurantId = restaurant.optString("restaurant_id")
+                                val restaurantName = restaurant.optString("restaurant_name")
+                                if (restaurantId.isBlank() || restaurantName.isBlank()) continue
+                                val card = makeCard(12)
+                                card.addView(label(restaurantName, 15f, true, forestDeep))
+                                addGap(card, 7)
+                                card.addView(secondaryButton("Pedir associação") {
+                                    val chosenName = nameField.text.toString().trim()
+                                    if (chosenName.isBlank() || chosenName.length > 100) {
+                                        nameField.error = "Introduz um nome válido"
+                                        return@secondaryButton
+                                    }
+                                    runBackend({
+                                        val request = SupabaseApi.requestRestaurantMembership(
+                                            backendToken(), restaurantId, chosenName
+                                        )
+                                        request.optString("request_status")
+                                    }) { status ->
+                                        dialog.dismiss()
+                                        store.saveCustomerProfileName(chosenName)
+                                        AlertDialog.Builder(this)
+                                            .setTitle(if (status == "pending") "Pedido enviado" else "Pedido existente")
+                                            .setMessage(
+                                                if (status == "pending") {
+                                                    "O restaurante recebeu o teu pedido. Quando o proprietário o aprovar, o cartão ficará disponível nesta conta."
+                                                } else {
+                                                    "Já existe um pedido com este estado: $status. Consulta o estado na secção Cartão."
+                                                }
+                                            )
+                                            .setPositiveButton("OK", null)
+                                            .show()
+                                        renderCustomerApp()
+                                    }
+                                }, LinearLayout.LayoutParams(-1, dp(42)))
+                                results.addView(card, cardParams())
+                            }
+                        }
+                        dialog.getButton(AlertDialog.BUTTON_POSITIVE).text = "Pesquisar novamente"
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showCustomerMembershipRequestStatus() {
+        if (backendToken().isBlank()) {
+            showAuthChooser { renderCustomerApp() }
+            return
+        }
+        runBackend({
+            val token = backendToken()
+            val membership = SupabaseApi.getMyLoyaltyMembership(token)
+            if (membership != null) {
+                restoreCustomerMembership(token)
+                "ASSOCIATED"
+            } else {
+                SupabaseApi.listMyRestaurantMembershipRequests(token).toString()
+            }
+        }) { raw ->
+            if (raw == "ASSOCIATED") {
+                renderCustomerApp()
+                AlertDialog.Builder(this)
+                    .setTitle("Cartão associado")
+                    .setMessage("O pedido foi aprovado. Já podes consultar os teus pontos e a carta do restaurante.")
+                    .setPositiveButton("OK", null)
+                    .show()
+            } else {
+                val requests = JSONArray(raw)
+                val messages = ArrayList<String>()
+                for (index in 0 until requests.length()) {
+                    val item = requests.optJSONObject(index) ?: continue
+                    val state = when (item.optString("request_status")) {
+                        "pending" -> "A aguardar aprovação"
+                        "approved" -> "Aprovado"
+                        "rejected" -> "Não aprovado"
+                        else -> "Estado desconhecido"
+                    }
+                    messages.add(item.optString("restaurant_name") + " — " + state)
+                }
+                AlertDialog.Builder(this)
+                    .setTitle("Pedidos de associação")
+                    .setMessage(
+                        if (messages.isEmpty()) "Ainda não tens pedidos de associação."
+                        else messages.joinToString("\n")
+                    )
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
+        }
     }
 
     private fun refreshCustomerMembership() {
