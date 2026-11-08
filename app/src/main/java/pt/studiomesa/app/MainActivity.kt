@@ -6681,7 +6681,9 @@ class MainActivity : ComponentActivity() {
             return
         }
         runBackend({
-            customerReservationsCache = SupabaseApi.listMyRestaurantReservations(backendToken())
+            customerReservationsCache = SupabaseApi.listMyRestaurantReservations(
+                backendToken(), backendMemberId()
+            )
             "OK"
         }) { renderCustomerApp() }
     }
@@ -6763,7 +6765,9 @@ class MainActivity : ComponentActivity() {
                         .setPositiveButton("Cancelar") { _, _ ->
                             runBackend({
                                 SupabaseApi.cancelMyRestaurantReservation(backendToken(), reservationId)
-                                customerReservationsCache = SupabaseApi.listMyRestaurantReservations(backendToken())
+                                customerReservationsCache = SupabaseApi.listMyRestaurantReservations(
+                                    backendToken(), backendMemberId()
+                                )
                                 "OK"
                             }) { renderCustomerApp() }
                         }
@@ -6837,7 +6841,13 @@ class MainActivity : ComponentActivity() {
                     notesText.length > 1000 -> notes.error = "Máximo de 1000 caracteres."
                     else -> {
                         val reservationAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).format(parsedDate)
+                        val memberId = backendMemberId()
+                        if (memberId.isBlank()) {
+                            notes.error = "Seleciona primeiro um cartão de restaurante."
+                            return@setOnClickListener
+                        }
                         val signature = JSONObject()
+                            .put("member_id", memberId)
                             .put("guest_name", name)
                             .put("guest_phone", phoneText)
                             .put("party_size", partySize)
@@ -6855,10 +6865,12 @@ class MainActivity : ComponentActivity() {
                         }
                         runBackend({
                             SupabaseApi.createCustomerReservationRequest(
-                                backendToken(), requestId, name, phoneText, partySize,
+                                backendToken(), memberId, requestId, name, phoneText, partySize,
                                 reservationAt, 90, notesText
                             )
-                            customerReservationsCache = SupabaseApi.listMyRestaurantReservations(backendToken())
+                            customerReservationsCache = SupabaseApi.listMyRestaurantReservations(
+                                backendToken(), memberId
+                            )
                             "OK"
                         }) {
                             dialog.dismiss()
@@ -6978,7 +6990,9 @@ class MainActivity : ComponentActivity() {
             .setNegativeButton("Cancelar", null)
             .setPositiveButton(if (enable) "Autorizar" else "Retirar") { _, _ ->
                 runBackend({
-                    val confirmed = SupabaseApi.setMyMarketingOptIn(backendToken(), enable)
+                    val memberId = backendMemberId()
+                    if (memberId.isBlank()) throw IllegalStateException("Seleciona primeiro um cartão de restaurante.")
+                    val confirmed = SupabaseApi.setMyMarketingOptIn(backendToken(), memberId, enable)
                     marketingOptInPrefLoaded = true
                     backendPrefs.edit().putBoolean("marketing_opt_in", confirmed).apply()
                     "OK"
