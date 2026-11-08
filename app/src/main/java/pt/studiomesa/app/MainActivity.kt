@@ -6981,9 +6981,11 @@ class MainActivity : ComponentActivity() {
                     .remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
                     .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
                     .remove("marketing_opt_in")
+                    .remove("customer_memberships_json")
                     .remove("customer_menu_json")
                     .remove("customer_rewards_json")
                     .apply()
+                customerMembershipsCache = JSONArray()
                 customerMarketingNotificationsCache = JSONArray()
                 marketingOptInPrefLoaded = false
                 customerRedemptionHistory = JSONArray()
