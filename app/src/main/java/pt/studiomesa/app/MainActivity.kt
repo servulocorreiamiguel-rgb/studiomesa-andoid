@@ -3906,6 +3906,52 @@ class MainActivity : ComponentActivity() {
         }.start()
     }
 
+    private fun showRecoveryOtpDialog(email: String) {
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(10), dp(22), dp(4))
+        }
+        val codeField = inputField("Código de 6 algarismos", InputType.TYPE_CLASS_NUMBER)
+        codeField.filters = arrayOf(InputFilter.LengthFilter(6))
+        form.addView(label("Código enviado para $email", 12f, false, muted))
+        addGap(form, 8)
+        form.addView(codeField, fieldParams())
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Confirmar recuperação")
+            .setMessage("Introduz o código recebido por email. O código só pode ser utilizado uma vez.")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Verificar código", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val otp = codeField.text.toString().trim()
+                if (!otp.matches(Regex("^\\d{6}$"))) {
+                    codeField.error = "Introduz os seis algarismos do email"
+                    return@setOnClickListener
+                }
+                runBackend({
+                    val session = SupabaseApi.verifyPasswordRecoveryOtp(email, otp)
+                    secureSession.save(session.accessToken, session.refreshToken)
+                    secureSession.clearPendingCodeVerifier()
+                    prepareForAuthenticatedUser(session.userId)
+                    backendPrefs.edit()
+                        .putString("user_id", session.userId)
+                        .putString("user_email", session.email)
+                        .apply()
+                    if (isCustomerApp) restoreCustomerMembership(session.accessToken)
+                    else restoreOwnedRestaurant(session.accessToken)
+                    "VERIFIED"
+                }, refreshSession = false) {
+                    dialog.dismiss()
+                    showSetNewPasswordDialog()
+                }
+            }
+        }
+        dialog.show()
+    }
+
     private fun showSetNewPasswordDialog() {
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -3967,8 +4013,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showAuthChooser(afterAuth: () -> Unit) {
-        // Use explicit buttons in a custom view. Combining setMessage and setItems
-        // can render inconsistently across Android dialog implementations.
+        // Keep email/password available immediately, even when the network is slow.
+        // Social buttons are added only after Supabase confirms each provider is enabled.
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(22), dp(12), dp(22), dp(6))
@@ -3994,9 +4040,30 @@ class MainActivity : ComponentActivity() {
             dialog.dismiss()
             showCredentialsDialog(false, afterAuth)
         }, LinearLayout.LayoutParams(-1, dp(48)))
-        // Google and Microsoft OAuth are currently disabled in the Supabase project.
-        // Keep unavailable providers out of the account chooser instead of offering dead actions.
         dialog.show()
+
+        Thread {
+            val enabledProviders = listOf("google", "azure").filter { provider ->
+                runCatching { SupabaseApi.isOAuthProviderEnabled(provider) }.getOrDefault(false)
+            }
+            runOnUiThread {
+                if (isFinishing || !dialog.isShowing) return@runOnUiThread
+                if ("google" in enabledProviders) {
+                    addGap(form, 8)
+                    form.addView(secondaryButton("Continuar com Google") {
+                        dialog.dismiss()
+                        startOAuth("google")
+                    }, LinearLayout.LayoutParams(-1, dp(48)))
+                }
+                if ("azure" in enabledProviders) {
+                    addGap(form, 8)
+                    form.addView(secondaryButton("Continuar com Microsoft (Outlook)") {
+                        dialog.dismiss()
+                        startOAuth("azure")
+                    }, LinearLayout.LayoutParams(-1, dp(48)))
+                }
+            }
+        }.start()
     }
 
     private fun createPkceVerifier(): String {
@@ -4091,8 +4158,11 @@ class MainActivity : ComponentActivity() {
                         dialog.dismiss()
                         AlertDialog.Builder(this)
                             .setTitle("Verifica o teu email")
-                            .setMessage("Se existir uma conta com este endereço, será enviado um email para recuperar o acesso. Abre a ligação no mesmo telemóvel para definires uma nova palavra-passe. Verifica também Spam.")
-                            .setPositiveButton("OK", null)
+                            .setMessage("Se existir uma conta com este endereço, será enviado um email de recuperação. Podes abrir a ligação recebida ou, quando o email estiver configurado para códigos, introduzir aqui o código de seis algarismos. Verifica também Spam.")
+                            .setNegativeButton("Fechar", null)
+                            .setPositiveButton("Introduzir código") { _, _ ->
+                                showRecoveryOtpDialog(email)
+                            }
                             .show()
                     }
                 }
