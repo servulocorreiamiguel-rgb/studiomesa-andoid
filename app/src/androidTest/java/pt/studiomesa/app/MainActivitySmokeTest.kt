@@ -487,6 +487,7 @@ class MainActivitySmokeTest {
     @Test
     fun customerReservationsPageRequiresAccountBeforeBooking() {
         assumeTrue("Restaurant variant has no customer navigation.", isCustomerVariant())
+        assumeTrue("Reservations are only available in Professional and Premium.", isCalculatorAvailable())
 
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir secção Reservas")).perform(click())
