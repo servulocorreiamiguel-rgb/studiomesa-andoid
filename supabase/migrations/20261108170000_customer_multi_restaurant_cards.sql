@@ -623,14 +623,6 @@ BEGIN
         RAISE EXCEPTION 'O cartão selecionado não pertence a esta conta.';
     END IF;
 
-    IF NOT EXISTS (
-        SELECT 1 FROM private.restaurant_loyalty_entitlements AS e
-        WHERE e.restaurant_id = v_restaurant_id
-          AND e.plan_code IN ('profissional', 'premium')
-    ) THEN
-        RAISE EXCEPTION 'Os pedidos de reserva na aplicação Cliente estão disponíveis nos planos Profissional e Premium.';
-    END IF;
-
     SELECT r.* INTO v_existing
     FROM public.restaurant_reservations AS r
     WHERE r.restaurant_id = v_restaurant_id
