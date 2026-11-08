@@ -34,7 +34,8 @@ class LocalAssistantModelArtifactTest {
         assertTrue(LocalAssistantModelManager.MAX_HISTORY_MESSAGES in 1..16)
         assertTrue(LocalAssistantModelManager.MAX_HISTORY_MESSAGE_CHARS <= 1000)
         assertEquals(1024, AssistantThinkingModePolicy.DEFAULT_MAX_OUTPUT_TOKENS)
-        assertEquals(1400, AssistantThinkingModePolicy.DEEP_MAX_OUTPUT_TOKENS)
+        assertEquals(2048, AssistantThinkingModePolicy.DEEP_MAX_OUTPUT_TOKENS)
+        assertEquals(listOf(4096, 2048, 1024), AssistantThinkingModePolicy.ENGINE_CONTEXT_CANDIDATES)
         assertEquals(2, LocalAssistantModelManager.MAX_SESSION_USER_TURNS)
     }
     @Test
