@@ -6,7 +6,7 @@ ALTER TABLE public.loyalty_members
 CREATE TABLE IF NOT EXISTS public.restaurant_reactivation_campaigns (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   restaurant_id uuid NOT NULL REFERENCES public.restaurants(id) ON DELETE CASCADE,
-  created_by uuid NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT,
+  created_by uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   client_request_id uuid NOT NULL,
   title text NOT NULL CHECK (char_length(title) BETWEEN 1 AND 80),
   message text NOT NULL CHECK (char_length(message) BETWEEN 1 AND 500),
