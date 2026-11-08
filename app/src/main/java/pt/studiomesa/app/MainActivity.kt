@@ -3758,9 +3758,12 @@ class MainActivity : ComponentActivity() {
                     .remove("member_code")
                     .remove("member_points")
                     .remove("member_restaurant_name")
+                    .remove("marketing_opt_in")
                     .putString("customer_menu_json", "[]")
                     .putString("customer_rewards_json", "[]")
                     .apply()
+                marketingOptInPrefLoaded = false
+                customerMarketingNotificationsCache = JSONArray()
                 customerReservationsCache = JSONArray()
                 customerRedemptionHistory = JSONArray()
                 return
@@ -3771,10 +3774,13 @@ class MainActivity : ComponentActivity() {
             val rewards = if (memberId.isNotBlank()) SupabaseApi.listCustomerRewards(token, memberId) else JSONArray()
             val redemptions = if (memberId.isNotBlank()) SupabaseApi.listMyLoyaltyRewardRedemptions(token) else JSONArray()
             val reservations = if (memberId.isNotBlank()) SupabaseApi.listMyRestaurantReservations(token) else JSONArray()
+            val marketingOptIn = if (memberId.isNotBlank()) SupabaseApi.getMyMarketingOptIn(token) else false
             customerRedemptionHistory = redemptions
             customerReservationsCache = reservations
+            marketingOptInPrefLoaded = memberId.isNotBlank()
             backendPrefs.edit()
                 .putString("member_id", memberId)
+                .putBoolean("marketing_opt_in", marketingOptIn)
                 .putString("member_code", member.optString("member_code"))
                 .putInt("member_points", member.optInt("points", 0))
                 .putString("member_restaurant_name", member.optString("restaurant_name"))
