@@ -438,6 +438,43 @@ object SupabaseApi {
         )
     }
 
+    /**
+     * Verifies the six-digit recovery OTP sent by Supabase Auth.
+     * The recovery email template must use {{ .Token }} instead of a confirmation link.
+     */
+    fun verifyPasswordRecoveryOtp(email: String, otp: String): Session {
+        require(android.util.Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()) {
+            "O email introduzido não é válido."
+        }
+        require(otp.matches(Regex("^\\d{6}$"))) {
+            "O código de recuperação tem de conter seis algarismos."
+        }
+        val result = jsonCall(
+            "POST",
+            "/auth/v1/verify",
+            JSONObject()
+                .put("type", "recovery")
+                .put("email", email.trim())
+                .put("token", otp)
+        )
+        val accessToken = result.optString("access_token")
+        val refreshToken = result.optString("refresh_token")
+        if (accessToken.isBlank() || refreshToken.isBlank()) {
+            throw IllegalStateException("O código não foi aceite ou já expirou. Pede um novo email de recuperação.")
+        }
+        val user = result.optJSONObject("user") ?: getUser(accessToken)
+        val userId = user.optString("id")
+        if (userId.isBlank()) {
+            throw IllegalStateException("O servidor não identificou a conta depois de validar o código.")
+        }
+        return Session(
+            accessToken,
+            userId,
+            user.optString("email", email.trim()),
+            refreshToken
+        )
+    }
+
     fun exchangeCodeForSession(authCode: String, codeVerifier: String): Session {
         require(authCode.isNotBlank()) { "A ligação de autenticação não contém um código válido." }
         require(codeVerifier.matches(Regex("^[A-Za-z0-9._~-]{43,128}$"))) {
