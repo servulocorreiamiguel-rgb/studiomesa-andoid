@@ -164,6 +164,7 @@ class MainActivity : ComponentActivity() {
     private var customerRedemptionHistory = JSONArray()
     private var reactivationMembersCache = JSONArray()
     private var reactivationMembersLoaded = false
+    private var reactivationMembersRestaurantId: String? = null
     private var reactivationDashboardCheckInFlight = false
     private var reactivationDashboardCheckedAtMillis = 0L
     private var reactivationDashboardLastAttemptAtMillis = 0L
@@ -2513,7 +2514,9 @@ class MainActivity : ComponentActivity() {
         container.addView(stats)
 
         if (hasRemoteRestaurant() && backendPrefs.getString("restaurant_role", "") == "owner" &&
-            reactivationMembersLoaded && reactivationMembersCache.length() > 0) {
+            reactivationMembersLoaded &&
+            reactivationMembersRestaurantId == backendRestaurantId() &&
+            reactivationMembersCache.length() > 0) {
             var eligible = 0
             for (i in 0 until reactivationMembersCache.length()) {
                 val member = reactivationMembersCache.optJSONObject(i) ?: continue
@@ -3809,6 +3812,7 @@ class MainActivity : ComponentActivity() {
             .remove("staff_join_code").remove("restaurant_role")
             .remove("member_id").remove("member_code").remove("member_points")
             .remove("member_restaurant_name")
+            .remove("marketing_opt_in")
             .remove("remote_members_json").remove("remote_tables_json")
             .remove("remote_menu_json").remove("remote_orders_json")
             .remove("customer_menu_json")
@@ -3821,6 +3825,12 @@ class MainActivity : ComponentActivity() {
         reservationCache = JSONArray()
         customerReservationsCache = JSONArray()
         customerRedemptionHistory = JSONArray()
+        customerMarketingNotificationsCache = JSONArray()
+        marketingOptInPrefLoaded = false
+        reactivationMembersCache = JSONArray()
+        reactivationMembersLoaded = false
+        reactivationMembersRestaurantId = null
+        reactivationDashboardCheckedAtMillis = 0L
         reservationsLoaded = false
     }
 
@@ -4726,6 +4736,11 @@ class MainActivity : ComponentActivity() {
             reservationCache = JSONArray()
             customerReservationsCache = JSONArray()
             customerRedemptionHistory = JSONArray()
+            customerMarketingNotificationsCache = JSONArray()
+            marketingOptInPrefLoaded = false
+            reactivationMembersCache = JSONArray()
+            reactivationMembersLoaded = false
+            reactivationMembersRestaurantId = null
             reservationsLoaded = false
 
             if (isCustomerApp) renderCustomerApp() else renderApp()
@@ -4813,14 +4828,16 @@ class MainActivity : ComponentActivity() {
         Thread {
             try {
                 refreshSessionIfNeeded()
+                val restaurantId = backendRestaurantId()
                 val members = SupabaseApi.listInactiveLoyaltyMembers(
                     backendToken(),
-                    backendRestaurantId(),
+                    restaurantId,
                     ReactivationCampaignPolicy.MIN_INACTIVITY_DAYS
                 )
                 runOnUiThread {
                     if (!isFinishing) {
                         reactivationMembersCache = members
+                        reactivationMembersRestaurantId = restaurantId
                         reactivationMembersLoaded = true
                         reactivationDashboardCheckedAtMillis = System.currentTimeMillis()
                         reactivationDashboardCheckInFlight = false
@@ -4843,9 +4860,12 @@ class MainActivity : ComponentActivity() {
             return
         }
         runBackend({
-            reactivationMembersCache = SupabaseApi.listInactiveLoyaltyMembers(
-                backendToken(), backendRestaurantId(), ReactivationCampaignPolicy.MIN_INACTIVITY_DAYS
+            val restaurantId = backendRestaurantId()
+            val members = SupabaseApi.listInactiveLoyaltyMembers(
+                backendToken(), restaurantId, ReactivationCampaignPolicy.MIN_INACTIVITY_DAYS
             )
+            reactivationMembersCache = members
+            reactivationMembersRestaurantId = restaurantId
             reactivationMembersLoaded = true
             reactivationMembersCache.length().toString()
         }) { count ->
@@ -4889,6 +4909,11 @@ class MainActivity : ComponentActivity() {
             refreshReactivationMembers()
         }, LinearLayout.LayoutParams(-1, dp(48)))
 
+        if (reactivationMembersRestaurantId != backendRestaurantId()) {
+            reactivationMembersCache = JSONArray()
+            reactivationMembersLoaded = false
+            reactivationMembersRestaurantId = null
+        }
         if (!reactivationMembersLoaded) {
             addGap(container, 8)
             container.addView(emptyCard("Atualiza a análise para consultar os clientes que não regressam há pelo menos 30 dias."))
@@ -6332,9 +6357,12 @@ class MainActivity : ComponentActivity() {
                 backendPrefs.edit()
                     .remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
                     .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
+                    .remove("marketing_opt_in")
                     .remove("customer_menu_json")
                     .remove("customer_rewards_json")
                     .apply()
+                customerMarketingNotificationsCache = JSONArray()
+                marketingOptInPrefLoaded = false
                 customerRedemptionHistory = JSONArray()
                 customerReservationsCache = JSONArray()
                 activeCustomerPage = "Cartão"
