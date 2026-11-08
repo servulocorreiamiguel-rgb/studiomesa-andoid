@@ -5720,7 +5720,7 @@ class MainActivity : ComponentActivity() {
         hero.addView(label("Bem-vindo ao StudioMesa", 27f, true, white))
         addGap(hero, 8)
         hero.addView(label(
-            "Consulta a experiência do restaurante sem criar conta. Para guardar os teus pontos, reservas e avisos em vários dispositivos, entra ou cria uma conta.",
+            "Podes explorar a aplicação e ver uma carta de demonstração sem criar conta. Para aceder à carta real, aos pontos, às reservas e aos avisos do restaurante, associa uma conta.",
             13f, false, Color.rgb(229, 235, 228)
         ))
         content.addView(hero, LinearLayout.LayoutParams(-1, -2))
