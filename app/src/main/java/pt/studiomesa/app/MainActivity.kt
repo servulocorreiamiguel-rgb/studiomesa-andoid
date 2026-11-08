@@ -3994,24 +3994,8 @@ class MainActivity : ComponentActivity() {
             dialog.dismiss()
             showCredentialsDialog(false, afterAuth)
         }, LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(form, 14)
-        form.addView(label("Ou continuar com uma conta externa:", 11.5f, true, muted))
-        addGap(form, 6)
-        form.addView(secondaryButton("Continuar com Google") {
-            dialog.dismiss()
-            startOAuth("google")
-        }, LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(form, 6)
-        form.addView(secondaryButton("Continuar com Microsoft (Outlook)") {
-            dialog.dismiss()
-            startOAuth("azure")
-        }, LinearLayout.LayoutParams(-1, dp(48)))
-        addGap(form, 7)
-        form.addView(label(
-            "Google e Outlook só podem ser usados depois de os fornecedores estarem ativados no servidor.",
-            10.5f, false, muted
-        ))
-
+        // Google and Microsoft OAuth are currently disabled in the Supabase project.
+        // Keep unavailable providers out of the account chooser instead of offering dead actions.
         dialog.show()
     }
 
