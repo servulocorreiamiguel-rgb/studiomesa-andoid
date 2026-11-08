@@ -28,8 +28,16 @@ class AssistantThinkingModePolicyTest {
         assertTrue(result.startsWith("Responde em português europeu."))
         assertTrue(result.contains("verifica novamente cálculos e unidades"))
         assertTrue(result.contains("sem revelar raciocínio interno privado"))
-        assertEquals(1400, AssistantThinkingModePolicy.maxOutputTokens(true))
+        assertEquals(2048, AssistantThinkingModePolicy.maxOutputTokens(true))
         assertEquals(0.2, AssistantThinkingModePolicy.temperature(true), 0.0001)
+    }
+
+    @Test
+    fun outputBudgetAdaptsToSmallerDeviceContexts() {
+        assertEquals(listOf(4096, 2048, 1024), AssistantThinkingModePolicy.ENGINE_CONTEXT_CANDIDATES)
+        assertEquals(1024, AssistantThinkingModePolicy.maxOutputTokens(false, 2048))
+        assertEquals(1024, AssistantThinkingModePolicy.maxOutputTokens(true, 2048))
+        assertEquals(512, AssistantThinkingModePolicy.maxOutputTokens(true, 1024))
     }
 
     @Test

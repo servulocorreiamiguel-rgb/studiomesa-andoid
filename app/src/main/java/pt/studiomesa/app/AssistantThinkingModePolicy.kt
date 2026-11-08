@@ -8,7 +8,7 @@ package pt.studiomesa.app
  */
 internal object AssistantThinkingModePolicy {
     const val DEFAULT_MAX_OUTPUT_TOKENS = 1024
-    const val DEEP_MAX_OUTPUT_TOKENS = 1400
+    const val DEEP_MAX_OUTPUT_TOKENS = 2048
     const val DEFAULT_TEMPERATURE = 0.3
     const val DEEP_TEMPERATURE = 0.2
 
@@ -36,8 +36,14 @@ internal object AssistantThinkingModePolicy {
         }
     }
 
-    fun maxOutputTokens(enabled: Boolean): Int =
-        if (enabled) DEEP_MAX_OUTPUT_TOKENS else DEFAULT_MAX_OUTPUT_TOKENS
+    val ENGINE_CONTEXT_CANDIDATES = listOf(4096, 2048, 1024)
+
+    fun maxOutputTokens(enabled: Boolean, contextTokens: Int = 4096): Int {
+        require(contextTokens > 0) { "O contexto do motor tem de ser positivo." }
+        val requested = if (enabled) DEEP_MAX_OUTPUT_TOKENS else DEFAULT_MAX_OUTPUT_TOKENS
+        // Keep at least half of the context available for system instructions, tools and history.
+        return minOf(requested, (contextTokens / 2).coerceAtLeast(256))
+    }
 
     fun temperature(enabled: Boolean): Double =
         if (enabled) DEEP_TEMPERATURE else DEFAULT_TEMPERATURE

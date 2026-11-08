@@ -1076,7 +1076,7 @@ class MainActivity : ComponentActivity() {
             setMargins(0, 0, dp(6), 0)
         })
         optionsRow.addView(label(
-            if (assistantSending) "A analisar…" else if (modelInstalled) "IA offline" else "IA local por instalar",
+            if (assistantSending) "A analisar…" else if (modelInstalled) "IA local" else "IA local por instalar",
             9.5f, true, if (modelInstalled) forestSoft else muted
         ).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(dp(100), -2))
         composerArea.addView(optionsRow, LinearLayout.LayoutParams(-1, -2))
@@ -1084,7 +1084,7 @@ class MainActivity : ComponentActivity() {
             if (assistantDeepThinkingEnabled && modelInstalled)
                 "Modo aprofundado: verifica dados e compara opções; não expõe raciocínio interno."
             else if (modelInstalled)
-                "As mensagens são processadas no dispositivo. Sem API ou custo por mensagem."
+                "O modelo gera respostas neste telemóvel, sem depender de um servidor de IA."
             else
                 "Sem modelo instalado, continuam disponíveis as respostas locais baseadas em regras.",
             9f, false, muted
