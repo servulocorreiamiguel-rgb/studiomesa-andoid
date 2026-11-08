@@ -6229,9 +6229,25 @@ class MainActivity : ComponentActivity() {
         container.addView(label("Cartão de fidelização do restaurante.", 13.5f, false, muted))
         addGap(container, 12)
         when {
-            backendToken().isBlank() -> container.addView(primaryButton("Criar conta / iniciar sessão") { showAuthChooser { renderCustomerApp() } }, LinearLayout.LayoutParams(-1, dp(48)))
-            backendMemberId().isBlank() -> container.addView(primaryButton("Associar ao restaurante") { showCustomerJoinDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
-            else -> container.addView(primaryButton("Atualizar saldo e recompensas") { refreshCustomerMembership() }, LinearLayout.LayoutParams(-1, dp(48)))
+            backendToken().isBlank() -> container.addView(
+                primaryButton("Criar conta / iniciar sessão") { showAuthChooser { renderCustomerApp() } },
+                LinearLayout.LayoutParams(-1, dp(48))
+            )
+            backendMemberId().isBlank() -> {
+                container.addView(
+                    primaryButton("Encontrar restaurante ou usar QR") { showCustomerJoinDialog() },
+                    LinearLayout.LayoutParams(-1, dp(48))
+                )
+                addGap(container, 6)
+                container.addView(
+                    secondaryButton("Consultar pedidos de associação") { showCustomerMembershipRequestStatus() },
+                    LinearLayout.LayoutParams(-1, dp(46))
+                )
+            }
+            else -> container.addView(
+                primaryButton("Atualizar saldo e recompensas") { refreshCustomerMembership() },
+                LinearLayout.LayoutParams(-1, dp(48))
+            )
         }
         addGap(container, 15)
         val loyalty = makeCard(18, forest)
@@ -6246,7 +6262,7 @@ class MainActivity : ComponentActivity() {
         loyalty.addView(label(code, 20f, true, white))
         addGap(loyalty, 9)
         loyalty.addView(label(
-            if (backendMemberId().isBlank()) "Este é um cartão demonstrativo. Cria sessão e associa-o ao código do restaurante para consultar os pontos reais."
+            if (backendMemberId().isBlank()) "Este é um cartão de demonstração. Encontra o restaurante pelo nome, introduz o código ou lê o QR de adesão. A pesquisa por nome exige aprovação do proprietário."
             else "O saldo pertence à tua conta. O QR temporário só pode ser utilizado uma vez para creditar pontos.",
             12f, false, Color.rgb(229, 235, 228)
         ))
