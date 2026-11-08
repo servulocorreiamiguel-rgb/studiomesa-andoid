@@ -4013,27 +4013,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showAuthChooser(afterAuth: () -> Unit) {
-        // Read the public provider flags from Supabase off the UI thread. Social
-        // buttons appear only after their credentials have actually been configured.
-        runBackend({
-            val enabled = mutableListOf<String>()
-            if (runCatching { SupabaseApi.isOAuthProviderEnabled("google") }.getOrDefault(false)) {
-                enabled.add("google")
-            }
-            if (runCatching { SupabaseApi.isOAuthProviderEnabled("azure") }.getOrDefault(false)) {
-                enabled.add("azure")
-            }
-            enabled.joinToString(",")
-        }, refreshSession = false, onError = {
-            showAuthChooserContent(afterAuth, emptySet())
-        }) { providers ->
-            showAuthChooserContent(afterAuth, providers.split(",").filter { it.isNotBlank() }.toSet())
-        }
-    }
-
-    private fun showAuthChooserContent(afterAuth: () -> Unit, enabledProviders: Set<String>) {
-        // Use explicit buttons in a custom view. Combining setMessage and setItems
-        // can render inconsistently across Android dialog implementations.
+        // Keep email/password available immediately, even when the network is slow.
+        // Social buttons are added only after Supabase confirms each provider is enabled.
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(22), dp(12), dp(22), dp(6))
@@ -4059,21 +4040,30 @@ class MainActivity : ComponentActivity() {
             dialog.dismiss()
             showCredentialsDialog(false, afterAuth)
         }, LinearLayout.LayoutParams(-1, dp(48)))
-        if ("google" in enabledProviders) {
-            addGap(form, 8)
-            form.addView(secondaryButton("Continuar com Google") {
-                dialog.dismiss()
-                startOAuth("google")
-            }, LinearLayout.LayoutParams(-1, dp(48)))
-        }
-        if ("azure" in enabledProviders) {
-            addGap(form, 8)
-            form.addView(secondaryButton("Continuar com Microsoft (Outlook)") {
-                dialog.dismiss()
-                startOAuth("azure")
-            }, LinearLayout.LayoutParams(-1, dp(48)))
-        }
         dialog.show()
+
+        Thread {
+            val enabledProviders = listOf("google", "azure").filter { provider ->
+                runCatching { SupabaseApi.isOAuthProviderEnabled(provider) }.getOrDefault(false)
+            }
+            runOnUiThread {
+                if (isFinishing || !dialog.isShowing) return@runOnUiThread
+                if ("google" in enabledProviders) {
+                    addGap(form, 8)
+                    form.addView(secondaryButton("Continuar com Google") {
+                        dialog.dismiss()
+                        startOAuth("google")
+                    }, LinearLayout.LayoutParams(-1, dp(48)))
+                }
+                if ("azure" in enabledProviders) {
+                    addGap(form, 8)
+                    form.addView(secondaryButton("Continuar com Microsoft (Outlook)") {
+                        dialog.dismiss()
+                        startOAuth("azure")
+                    }, LinearLayout.LayoutParams(-1, dp(48)))
+                }
+            }
+        }.start()
     }
 
     private fun createPkceVerifier(): String {
