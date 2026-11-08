@@ -72,7 +72,9 @@ BEGIN
   END IF;
 
   IF to_regprocedure('public.get_my_marketing_opt_in(uuid)') IS NULL
+    OR to_regprocedure('public.get_my_marketing_opt_in()') IS NULL
     OR to_regprocedure('public.set_my_marketing_opt_in(uuid,boolean)') IS NULL
+    OR to_regprocedure('public.set_my_marketing_opt_in(boolean)') IS NULL
     OR to_regprocedure('public.get_restaurant_inactive_members(uuid,integer)') IS NULL
     OR to_regprocedure('public.send_reactivation_campaign(uuid,uuid,text,text,text,text,text,integer)') IS NULL
     OR to_regprocedure('public.list_my_marketing_notifications()') IS NULL
@@ -81,13 +83,17 @@ BEGIN
   END IF;
 
   IF has_function_privilege('anon','public.get_my_marketing_opt_in(uuid)','EXECUTE')
+    OR has_function_privilege('anon','public.get_my_marketing_opt_in()','EXECUTE')
     OR has_function_privilege('anon','public.set_my_marketing_opt_in(uuid,boolean)','EXECUTE')
+    OR has_function_privilege('anon','public.set_my_marketing_opt_in(boolean)','EXECUTE')
     OR has_function_privilege('anon','public.get_restaurant_inactive_members(uuid,integer)','EXECUTE')
     OR has_function_privilege('anon','public.send_reactivation_campaign(uuid,uuid,text,text,text,text,text,integer)','EXECUTE')
     OR has_function_privilege('anon','public.list_my_marketing_notifications()','EXECUTE')
     OR has_function_privilege('anon','public.mark_my_marketing_notification_read(uuid)','EXECUTE')
     OR NOT has_function_privilege('authenticated','public.get_my_marketing_opt_in(uuid)','EXECUTE')
+    OR NOT has_function_privilege('authenticated','public.get_my_marketing_opt_in()','EXECUTE')
     OR NOT has_function_privilege('authenticated','public.set_my_marketing_opt_in(uuid,boolean)','EXECUTE')
+    OR NOT has_function_privilege('authenticated','public.set_my_marketing_opt_in(boolean)','EXECUTE')
     OR NOT has_function_privilege('authenticated','public.get_restaurant_inactive_members(uuid,integer)','EXECUTE')
     OR NOT has_function_privilege('authenticated','public.send_reactivation_campaign(uuid,uuid,text,text,text,text,text,integer)','EXECUTE')
     OR NOT has_function_privilege('authenticated','public.list_my_marketing_notifications()','EXECUTE')
@@ -1195,6 +1201,45 @@ if [ "$customer_multi_card_count" != "2" ]; then
   exit 1
 fi
 echo "PASS: one customer account can hold separate loyalty cards at multiple restaurants."
+
+# Legacy client RPC overloads continue to target the oldest card only.
+legacy_marketing_default="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT public.get_my_marketing_opt_in()::text;
+ROLLBACK;
+SQL
+)"
+if [ "$legacy_marketing_default" != "false" ]; then
+  echo "ERROR: legacy marketing consent wrapper did not use the oldest customer card." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_my_marketing_opt_in(true);
+SELECT public.set_my_marketing_opt_in('$MEMBER_A'::uuid, false);
+COMMIT;
+SQL
+
+legacy_qr_token="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT qr_token::text FROM public.create_loyalty_qr_token();
+ROLLBACK;
+SQL
+)"
+legacy_qr_member="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT member_id::text FROM private.loyalty_qr_tokens WHERE token='$legacy_qr_token'::uuid;")"
+if [ "$legacy_qr_member" != "$MEMBER_A" ]; then
+  echo "ERROR: legacy QR wrapper did not scope to the oldest membership." >&2
+  exit 1
+fi
+
 
 own_menu_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
 BEGIN;
