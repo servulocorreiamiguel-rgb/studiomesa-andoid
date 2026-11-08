@@ -704,5 +704,181 @@ GRANT EXECUTE ON FUNCTION public.create_customer_reservation_request(
     uuid, uuid, text, text, integer, timestamptz, integer, text
 ) TO authenticated;
 
+-- Backward-compatible RPC overloads for clients that have not yet upgraded.
+-- Older app versions historically used the oldest membership implicitly.
+CREATE OR REPLACE FUNCTION public.create_loyalty_qr_token()
+RETURNS TABLE(qr_token uuid, expires_at timestamptz)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+    SELECT * FROM public.create_loyalty_qr_token((
+        SELECT lm.id
+        FROM public.loyalty_members AS lm
+        WHERE lm.auth_user_id = (SELECT auth.uid())
+        ORDER BY lm.created_at ASC
+        LIMIT 1
+    ));
+$function$;
+
+CREATE OR REPLACE FUNCTION public.redeem_loyalty_reward(
+    p_reward_id uuid,
+    p_client_request_id uuid
+)
+RETURNS TABLE(
+    redemption_id uuid,
+    reward_name text,
+    points_spent integer,
+    points_remaining integer,
+    status text
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+    SELECT * FROM public.redeem_loyalty_reward(
+        (
+            SELECT lm.id
+            FROM public.loyalty_members AS lm
+            WHERE lm.auth_user_id = (SELECT auth.uid())
+            ORDER BY lm.created_at ASC
+            LIMIT 1
+        ),
+        p_reward_id,
+        p_client_request_id
+    );
+$function$;
+
+CREATE OR REPLACE FUNCTION public.get_my_loyalty_reward_redemptions()
+RETURNS TABLE(
+    redemption_id uuid,
+    reward_name text,
+    points_spent integer,
+    status text,
+    redeemed_at timestamptz,
+    fulfilled_at timestamptz
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+    SELECT * FROM public.get_my_loyalty_reward_redemptions((
+        SELECT lm.id
+        FROM public.loyalty_members AS lm
+        WHERE lm.auth_user_id = (SELECT auth.uid())
+        ORDER BY lm.created_at ASC
+        LIMIT 1
+    ));
+$function$;
+
+CREATE OR REPLACE FUNCTION public.get_my_marketing_opt_in()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+    SELECT public.get_my_marketing_opt_in((
+        SELECT lm.id
+        FROM public.loyalty_members AS lm
+        WHERE lm.auth_user_id = (SELECT auth.uid())
+        ORDER BY lm.created_at ASC
+        LIMIT 1
+    ));
+$function$;
+
+CREATE OR REPLACE FUNCTION public.set_my_marketing_opt_in(p_enabled boolean)
+RETURNS boolean
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+    SELECT public.set_my_marketing_opt_in((
+        SELECT lm.id
+        FROM public.loyalty_members AS lm
+        WHERE lm.auth_user_id = (SELECT auth.uid())
+        ORDER BY lm.created_at ASC
+        LIMIT 1
+    ), p_enabled);
+$function$;
+
+CREATE OR REPLACE FUNCTION public.get_my_restaurant_reservations()
+RETURNS TABLE(
+    reservation_id uuid,
+    guest_name text,
+    party_size integer,
+    reservation_at timestamptz,
+    duration_minutes integer,
+    table_number integer,
+    status text,
+    notes text,
+    created_at timestamptz
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+    SELECT * FROM public.get_my_restaurant_reservations((
+        SELECT lm.id
+        FROM public.loyalty_members AS lm
+        WHERE lm.auth_user_id = (SELECT auth.uid())
+        ORDER BY lm.created_at ASC
+        LIMIT 1
+    ));
+$function$;
+
+CREATE OR REPLACE FUNCTION public.create_customer_reservation_request(
+    p_client_request_id uuid,
+    p_guest_name text,
+    p_guest_phone text,
+    p_party_size integer,
+    p_reservation_at timestamptz,
+    p_duration_minutes integer DEFAULT 90,
+    p_notes text DEFAULT NULL
+)
+RETURNS TABLE(reservation_id uuid, status text)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+    SELECT * FROM public.create_customer_reservation_request(
+        (
+            SELECT lm.id
+            FROM public.loyalty_members AS lm
+            WHERE lm.auth_user_id = (SELECT auth.uid())
+            ORDER BY lm.created_at ASC
+            LIMIT 1
+        ),
+        p_client_request_id,
+        p_guest_name,
+        p_guest_phone,
+        p_party_size,
+        p_reservation_at,
+        p_duration_minutes,
+        p_notes
+    );
+$function$;
+
+REVOKE ALL ON FUNCTION public.create_loyalty_qr_token() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.create_loyalty_qr_token() TO authenticated;
+REVOKE ALL ON FUNCTION public.redeem_loyalty_reward(uuid, uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.redeem_loyalty_reward(uuid, uuid) TO authenticated;
+REVOKE ALL ON FUNCTION public.get_my_loyalty_reward_redemptions() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_my_loyalty_reward_redemptions() TO authenticated;
+REVOKE ALL ON FUNCTION public.get_my_marketing_opt_in() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_my_marketing_opt_in() TO authenticated;
+REVOKE ALL ON FUNCTION public.set_my_marketing_opt_in(boolean) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.set_my_marketing_opt_in(boolean) TO authenticated;
+REVOKE ALL ON FUNCTION public.get_my_restaurant_reservations() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.get_my_restaurant_reservations() TO authenticated;
+REVOKE ALL ON FUNCTION public.create_customer_reservation_request(
+    uuid, text, text, integer, timestamptz, integer, text
+) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.create_customer_reservation_request(
+    uuid, text, text, integer, timestamptz, integer, text
+) TO authenticated;
+
 NOTIFY pgrst, 'reload schema';
 COMMIT;
