@@ -920,6 +920,9 @@ SECURITY DEFINER
 SET search_path TO ''
 AS $function$
 BEGIN
+    IF (SELECT auth.uid()) IS NULL THEN
+        RAISE EXCEPTION 'É necessário iniciar sessão.';
+    END IF;
     RETURN QUERY
     SELECT * FROM public.create_loyalty_qr_token(
         private.require_single_customer_membership()
@@ -943,6 +946,9 @@ SECURITY DEFINER
 SET search_path TO ''
 AS $function$
 BEGIN
+    IF (SELECT auth.uid()) IS NULL THEN
+        RAISE EXCEPTION 'É necessário iniciar sessão.';
+    END IF;
     RETURN QUERY
     SELECT * FROM public.redeem_loyalty_reward(
         private.require_single_customer_membership(),
@@ -967,6 +973,9 @@ SECURITY DEFINER
 SET search_path TO ''
 AS $function$
 BEGIN
+    IF (SELECT auth.uid()) IS NULL THEN
+        RAISE EXCEPTION 'É necessário iniciar sessão.';
+    END IF;
     RETURN QUERY
     SELECT * FROM public.get_my_loyalty_reward_redemptions(
         private.require_single_customer_membership()
@@ -982,6 +991,9 @@ SECURITY DEFINER
 SET search_path TO ''
 AS $function$
 BEGIN
+    IF (SELECT auth.uid()) IS NULL THEN
+        RAISE EXCEPTION 'É necessário iniciar sessão.';
+    END IF;
     RETURN public.get_my_marketing_opt_in(
         private.require_single_customer_membership()
     );
@@ -995,6 +1007,9 @@ SECURITY DEFINER
 SET search_path TO ''
 AS $function$
 BEGIN
+    IF (SELECT auth.uid()) IS NULL THEN
+        RAISE EXCEPTION 'É necessário iniciar sessão.';
+    END IF;
     RETURN public.set_my_marketing_opt_in(
         private.require_single_customer_membership(),
         p_enabled
@@ -1020,6 +1035,9 @@ SECURITY DEFINER
 SET search_path TO ''
 AS $function$
 BEGIN
+    IF (SELECT auth.uid()) IS NULL THEN
+        RAISE EXCEPTION 'É necessário iniciar sessão.';
+    END IF;
     RETURN QUERY
     SELECT * FROM public.get_my_restaurant_reservations(
         private.require_single_customer_membership()
@@ -1042,6 +1060,9 @@ SECURITY DEFINER
 SET search_path TO ''
 AS $function$
 BEGIN
+    IF (SELECT auth.uid()) IS NULL THEN
+        RAISE EXCEPTION 'É necessário iniciar sessão.';
+    END IF;
     RETURN QUERY
     SELECT * FROM public.create_customer_reservation_request(
         private.require_single_customer_membership(),
