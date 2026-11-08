@@ -166,6 +166,7 @@ class MainActivity : ComponentActivity() {
     private var reactivationMembersLoaded = false
     private var reactivationDashboardCheckInFlight = false
     private var reactivationDashboardCheckedAtMillis = 0L
+    private var reactivationDashboardLastAttemptAtMillis = 0L
     private var customerMarketingNotificationsCache = JSONArray()
     private var marketingOptInPrefLoaded = false
     // Reservation contacts are kept in memory only, not persisted to SharedPreferences.
@@ -4802,10 +4803,13 @@ class MainActivity : ComponentActivity() {
 
         val now = System.currentTimeMillis()
         if (reactivationDashboardCheckInFlight ||
+            (reactivationDashboardLastAttemptAtMillis > 0L &&
+             now - reactivationDashboardLastAttemptAtMillis < 5L * 60L * 1000L) ||
             (reactivationDashboardCheckedAtMillis > 0L &&
              now - reactivationDashboardCheckedAtMillis < 6L * 60L * 60L * 1000L)) return
 
         reactivationDashboardCheckInFlight = true
+        reactivationDashboardLastAttemptAtMillis = now
         Thread {
             try {
                 refreshSessionIfNeeded()
