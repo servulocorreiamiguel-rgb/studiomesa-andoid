@@ -28,12 +28,18 @@ Os valores abaixo são os valores de referência existentes no projeto. Ainda n�
 | Reservas | — | ✓ | ✓ | Fluxo e validações no backend; regressões PostgreSQL testadas, E2E com duas contas/dispositivos ainda pendente. |
 | Inventário e movimentos | — | — | ✓ | Inventário e custos unitários no backend; testes E2E e conciliação operacional ainda pendentes. |
 | Consultor de preço com aprovação | — | — | ✓ | Implementado com aprovação do proprietário; não é contabilidade nem garantia de margem. |
-| Assistente IA local | ✓ | ✓ | ✓ | Modelo pequeno no dispositivo; download inicial ~736 MB, desempenho real varia por telefone e não equivale ao ChatGPT. |
-| Pensar mais | ✓ | ✓ | ✓ | Altera o nível de verificação/quantidade de resposta, não muda o modelo. |
-| OCR local de faturas | — | — | ✓ | Código processa PDF/imagem localmente e pede revisão manual; arquivo cloud ainda não está ativo no Supabase atual. |
-| Histórico/Memória cloud da IA | — | — | — | Código preparado, mas tabelas ainda ausentes no backend atual; não vender como sincronização entre dispositivos ativa. |
-| Fichas técnicas e consumo automático de stock | — | — | — | Código/migration existem, mas tabelas ainda ausentes no backend atual; fora dos planos até deployment e validação. |
-| Permissões granulares por funcionário | — | — | — | Migration/tabela ainda ausente no Supabase atual; funcionários continuam com permissões gerais nesta fotografia. |
+| Assistente IA local | ✓ | ✓ | ✓ | Modelo de terceiros LFM2.5-1.2B-Instruct INT4 executado no dispositivo; download inicial ~736 MB. Não é ChatGPT nem foi treinado pela StudioMesa; desempenho varia por telefone. |
+| Pensar mais | ✓ | ✓ | ✓ | Reforça a verificação e aumenta o limite de resposta; não muda o modelo nem garante melhor raciocínio. |
+| Gestor Económico IA | ✓ | ✓ | ✓ | Cálculos determinísticos locais, apenas de leitura, com dados introduzidos/consultados; não liga automaticamente a POS, bancos ou contabilidade. |
+| Análise dos sete dias da semana e previsão na conversa | ✓ | ✓ | ✓ | Ferramenta do Assistente Económico baseada em pedidos concluídos e data de criação; apresenta amostras/confiança e não afirma pagamentos recebidos. |
+| Painel visual de análise semanal, padrões de afluência e previsão de 7 dias | — | — | ✓ | A página Análise está disponível no plano Premium. A afluência usa linhas de pedidos, não número de pessoas. |
+| Feriados nacionais e Carnaval facultativo na previsão | ✓ | ✓ | ✓ | Calendário nacional reconhecido automaticamente; o Carnaval é facultativo e o efeito só é medido com amostras históricas. |
+| Feriados municipais e eventos configuráveis | — | — | ✓ | Proprietário configura na página Análise; atualmente fica guardado neste dispositivo e não sincroniza com outros equipamentos. |
+| OCR local de faturas | — | — | ✓ | PDF/imagem processados localmente e campos sujeitos a revisão do proprietário. |
+| Arquivo cloud de faturas | — | — | ✓ | Tabela e bucket privado existem no Supabase atual; exige conta/permissão de proprietário e E2E de upload/leitura/eliminação ainda pendente. |
+| Histórico/Memória cloud da IA | — | — | — | Tabelas existem; sincronização desligada por defeito e só ativa com consentimento do proprietário. A cópia cloud não tem cifragem ponta a ponta e ainda requer E2E em vários dispositivos. |
+| Fichas técnicas e consumo automático de stock | — | — | — | Código/migration existem, mas as tabelas não foram encontradas no Supabase alojado; não anunciar como funcional no backend. |
+| Permissões granulares por funcionário | — | — | — | Migration/tabela não encontrada no Supabase alojado; a matriz granular não está pronta para uso real. |
 
 ## Não incluído em nenhum plano nesta fase
 
