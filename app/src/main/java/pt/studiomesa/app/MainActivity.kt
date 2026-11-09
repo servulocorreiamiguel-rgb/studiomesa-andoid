@@ -2003,7 +2003,7 @@ class MainActivity : ComponentActivity() {
             if (economicAssistant) {
                 appendLine("FUNÇÃO: Assistente económico. Analisa receitas, despesas, custos, tesouraria, compras e fornecedores com os dados disponíveis.")
                 appendLine("Consulta get_supplier_invoice_summary apenas para metadados; não lê PDFs/OCR nem prova pagamentos. Nunca alteres ou pagues faturas.")
-                appendLine("Usa calculate_restaurant_economics para cálculos determinísticos: monthly_analysis, recipe_cost, waste_log, supplier_quotes, budget_variance, usage_variance, labour_plan e reorder. Usa só valores fornecidos; se faltarem, pergunta. Não assumes que os valores vêm do POS ou da contabilidade.")
+                appendLine("Usa calculate_restaurant_economics para calcular indicadores mensais, custos por dose, desperdício, orçamentos, consumo, pessoal e reposição. Usa apenas valores explícitos; pergunta pelo que falta. Não assumes que os números vêm do POS ou da contabilidade.")
             } else {
                 appendLine("FUNÇÃO: assistente geral. Responde também a assuntos gerais; não transformes todas as perguntas em perguntas de restauração.")
                 if (ownerInvoiceAccess) {
