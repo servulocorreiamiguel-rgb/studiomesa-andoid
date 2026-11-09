@@ -8,11 +8,12 @@ class AssistantGeneralConversationPolicyTest {
     @Test
     fun instructionClearlySupportsGeneralTopicsBeyondRestaurantManagement() {
         val instruction = AssistantGeneralConversationPolicy.SYSTEM_INSTRUCTION.lowercase()
-        assertTrue(instruction.contains("assistente conversacional de uso geral"))
+        assertTrue(instruction.contains("assistente conversacional geral"))
         assertTrue(instruction.contains("não te limites à restauração"))
-        assertTrue(instruction.contains("programação"))
         assertTrue(instruction.contains("matemática, ciências"))
-        assertTrue(instruction.contains("traduções"))
+        assertTrue(instruction.contains("programação"))
+        assertTrue(instruction.contains("línguas"))
+        assertTrue(instruction.contains("assuntos gerais"))
     }
 
     @Test
@@ -20,7 +21,7 @@ class AssistantGeneralConversationPolicyTest {
         val instruction = AssistantGeneralConversationPolicy.SYSTEM_INSTRUCTION.lowercase()
         assertTrue(instruction.contains("erros ortográficos"))
         assertTrue(instruction.contains("histórico recente"))
-        assertTrue(instruction.contains("faz uma pergunta curta"))
+        assertTrue(instruction.contains("pergunta quando faltar informação essencial"))
     }
 
     @Test
@@ -48,6 +49,7 @@ class AssistantGeneralConversationPolicyTest {
         assertTrue(instruction.contains("consult_economic_assistant"))
         assertTrue(instruction.contains("está disponível apenas para o proprietário autenticado"))
         assertTrue(instruction.contains("nunca tentes aprovar"))
+        assertTrue(instruction.contains("não alegues que viste pdfs ou ocr"))
     }
 
 }
