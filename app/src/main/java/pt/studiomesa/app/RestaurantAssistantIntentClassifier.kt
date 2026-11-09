@@ -91,7 +91,7 @@ internal object RestaurantAssistantIntentClassifier {
             "vendas por dia da semana", "ganhos por dia da semana", "receitas por dia da semana",
             "valor por dia da semana", "dia da semana com mais vendas", "dia da semana com maior faturacao",
             "qual dia da semana vende mais", "que dia da semana vende mais",
-            "qual dia teve mais vendas", "dia com mais vendas",
+            "qual dia da semana teve mais vendas", "qual dia teve mais vendas", "dia com mais vendas",
             "dia de maior afluencia", "dia com maior afluencia", "dias de maior afluencia", "dias sao de maior afluencia",
             "dias mais movimentados"),
         rule(RestaurantAssistantIntent.ECONOMIC_MANAGER, 10,
