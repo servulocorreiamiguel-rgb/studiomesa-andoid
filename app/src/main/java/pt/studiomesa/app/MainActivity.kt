@@ -852,7 +852,7 @@ class MainActivity : ComponentActivity() {
             background = rippleBackground(paper, 12)
             isClickable = true
             isFocusable = true
-            setOnClickListener { syncAssistantCloud(silent = false) }
+            setOnClickListener { requestAssistantCloudSync() }
         }
         toolbar.addView(syncButton, LinearLayout.LayoutParams(dp(34), dp(44)))
 
@@ -1734,7 +1734,74 @@ class MainActivity : ComponentActivity() {
     private fun formatInvoiceEuro(value: BigDecimal): String =
         NumberFormat.getCurrencyInstance(Locale("pt", "PT")).format(value)
 
+    private fun assistantCloudSyncEnabled(): Boolean =
+        backendPrefs.getBoolean("assistant_cloud_sync_enabled", false)
+
+    /**
+     * Cloud sync is off by default. The owner must explicitly enable it after
+     * seeing that conversation text and memory are stored in Supabase without E2E encryption.
+     */
+    private fun requestAssistantCloudSync() {
+        val ownerConnected = backendToken().isNotBlank() &&
+            backendPrefs.getString("user_id", "").orEmpty().isNotBlank() &&
+            backendRestaurantId().isNotBlank() &&
+            backendPrefs.getString("restaurant_role", "") == "owner"
+        if (!ownerConnected) {
+            Toast.makeText(
+                this,
+                "A sincronização está disponível apenas para o proprietário com sessão iniciada.",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+
+        val enabled = assistantCloudSyncEnabled()
+        val builder = AlertDialog.Builder(this)
+        if (enabled) {
+            builder.setTitle("Sincronização cloud ativa")
+                .setMessage(
+                    "O histórico e a Memória desta conta estão a ser sincronizados com o Supabase " +
+                        "(região EU West 1). A cópia no servidor é protegida por autenticação e RLS, " +
+                        "mas não é cifrada ponta a ponta. Se desativares a sincronização, as novas " +
+                        "alterações deixam de ser enviadas; os dados já enviados não são apagados automaticamente."
+                )
+                .setPositiveButton("Sincronizar agora") { _, _ ->
+                    syncAssistantCloud(silent = false, force = true)
+                }
+                .setNeutralButton("Desativar") { _, _ ->
+                    backendPrefs.edit().putBoolean("assistant_cloud_sync_enabled", false).apply()
+                    Toast.makeText(
+                        this,
+                        "Novas sincronizações desativadas. A cópia já enviada continua no Supabase até ser eliminada.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                .setNegativeButton("Fechar", null)
+        } else {
+            builder.setTitle("Ativar sincronização cloud?")
+                .setMessage(
+                    "A sincronização está desligada por defeito. Se ativares, o histórico de conversas " +
+                        "e a Memória desta conta serão enviados para o Supabase (região EU West 1) para " +
+                        "poderem ser consultados noutros dispositivos. O acesso é controlado pela sessão " +
+                        "do proprietário e por regras RLS, mas a cópia no servidor não é cifrada ponta a ponta. " +
+                        "As mensagens novas e alterações da Memória serão sincronizadas automaticamente " +
+                        "enquanto a opção estiver ativa. Podes desativá-la mais tarde; os dados já enviados " +
+                        "não são apagados automaticamente."
+                )
+                .setPositiveButton("Aceitar e ativar") { _, _ ->
+                    backendPrefs.edit().putBoolean("assistant_cloud_sync_enabled", true).apply()
+                    syncAssistantCloud(silent = false, force = true)
+                }
+                .setNegativeButton("Manter apenas neste dispositivo", null)
+        }
+        builder.show()
+    }
+
     private fun syncAssistantCloud(silent: Boolean, force: Boolean = false) {
+        if (!assistantCloudSyncEnabled()) {
+            if (!silent) requestAssistantCloudSync()
+            return
+        }
         val token = backendToken()
         val userId = backendPrefs.getString("user_id", "").orEmpty()
         val restaurantId = backendRestaurantId()
@@ -4565,32 +4632,78 @@ class MainActivity : ComponentActivity() {
 
     private fun showPrivacyInformation() {
         val notice = """
-            PRIVACIDADE E DADOS — VERSÃO DE DEMONSTRAÇÃO
+            A SUA PRIVACIDADE É UMA PRIORIDADE
 
-            Conta e utilização
-            Quando inicias sessão, a StudioMesa utiliza o teu email, identificador de conta e dados técnicos da sessão. Os dados operacionais que introduzes — como carta, mesas, pedidos, reservas, stock e fidelização — podem ser enviados para o backend Supabase e partilhados com os utilizadores autorizados do mesmo restaurante, de acordo com o respetivo papel.
+            OS SEUS DADOS NÃO ESTÃO À VENDA.
+            O StudioMesa não vende dados pessoais nem utiliza informações privadas dos restaurantes para publicidade própria.
+            Os seus dados são tratados apenas para as finalidades explicadas nesta informação de privacidade e pelos prestadores necessários ao funcionamento do serviço.
+            O seu negócio é seu. Os seus dados merecem respeito e proteção.
 
-            Assistente de IA
-            O modelo generativo LFM2.5 é descarregado a pedido (cerca de 736 MB) e executado localmente. As perguntas e o histórico não são enviados ao fornecedor do modelo. Se usares a pesquisa da Wikipédia, é enviada uma consulta pública curta; não incluas dados privados nessa pesquisa.
+            DADOS DA CONTA E DO RESTAURANTE
+            Para disponibilizar as funcionalidades, dados como conta, carta, mesas, pedidos, reservas, stock e fidelização podem ser guardados no Supabase, na região EU West 1. O acesso é limitado por autenticação, permissões e regras de segurança no servidor. Os dados de clientes introduzidos pelo restaurante também podem ser tratados para executar essas funcionalidades.
 
-            Histórico e Memória
-            O histórico e as notas de Memória são cifrados neste dispositivo com uma chave do Android Keystore. O código da aplicação também suporta sincronização cloud para a conta proprietária. Quando essa função estiver ativa, a cópia no Supabase é protegida por autenticação e RLS, mas não é cifrada ponta a ponta. A disponibilidade da sincronização depende da configuração do backend.
+            ASSISTENTE DE INTELIGÊNCIA ARTIFICIAL
+            O modelo LFM2.5-1.2B-Instruct é desenvolvido e publicado por terceiros, descarregado para o armazenamento privado da aplicação e executado localmente no dispositivo. As perguntas e os dados usados na inferência local não são enviados ao fornecedor do modelo. A função de IA na nuvem do StudioMesa está desativada e não recebe mensagens.
 
-            Documentos e faturas
-            A leitura de PDFs e imagens e o OCR são processados localmente. O texto bruto extraído por OCR não é guardado pelo arquivo da aplicação. Os campos reconhecidos devem ser revistos antes de guardar. O envio de documentos e metadados para o arquivo cloud depende da configuração de uma tabela e de um bucket privado no backend.
+            HISTÓRICO E MEMÓRIA
+            O histórico e a Memória são cifrados localmente com uma chave do Android Keystore. A sincronização cloud está desligada por defeito. Só é ativada quando o proprietário a aceita no controlo de sincronização. Nesse caso, conversas e Memória são enviadas para o Supabase para utilização noutros dispositivos. A cópia cloud é protegida por autenticação e RLS, mas não é cifrada ponta a ponta. Desativar a sincronização impede novos envios, mas não elimina automaticamente cópias já enviadas.
 
-            Eliminação
+            DOCUMENTOS E FATURAS
+            A leitura de PDFs/imagens e o OCR são processados localmente. O texto bruto extraído por OCR não é guardado pelo arquivo. Quando o proprietário escolhe arquivar uma fatura no servidor, o documento original e os respetivos metadados são enviados para um bucket privado do Supabase. O acesso ao arquivo está limitado ao proprietário do restaurante. O documento não é enviado ao fornecedor do modelo de IA.
+
+            PESQUISA PÚBLICA
+            Quando utilizas a pesquisa pública na Web, a consulta é enviada ao serviço de pesquisa configurado para obter resultados. A função de pesquisa rejeita consultas que pareçam conter emails, números de telefone, NIF ou IBAN, mas este filtro não deteta todos os dados confidenciais. Nunca incluas nomes de clientes, contactos, faturas, valores privados ou informação interna do restaurante numa pesquisa pública.
+
+            FORNECEDORES E SEGURANÇA
+            O Supabase é utilizado para autenticação, base de dados e arquivo cloud. O alojamento público do modelo é utilizado apenas para descarregar o ficheiro do modelo, não para receber perguntas. Nenhuma medida elimina totalmente o risco de incidente; o StudioMesa aplica controlos de acesso, cifragem local e regras de segurança no servidor.
+
+            ELIMINAÇÃO
             Podes iniciar a eliminação em Conta → Eliminar conta permanentemente. Existe também uma página externa:
             https://svwvkfsyevuyabelrtjk.supabase.co/functions/v1/account-deletion-web
 
             A eliminação de uma conta de proprietário pode apagar permanentemente o restaurante e os dados associados, depois de confirmação e validação pelo servidor. A conta de um funcionário/cliente pode ser eliminada sem apagar os registos operacionais partilhados; a autoria pode ser anonimizada quando suportado.
 
-            Estado legal
+            ESTADO LEGAL
             ${if (BuildConfig.DEBUG) "Esta instalação é uma versão de demonstração. Não introduzas dados pessoais ou documentos reais." else "A política de privacidade pública final, a identidade e contacto do responsável pelo tratamento, os prazos de conservação e a declaração Data safety têm de estar aprovados e publicados antes da utilização comercial."}
         """.trimIndent()
 
+        val styledNotice = android.text.SpannableString(notice).apply {
+            val privacyHeading = "A SUA PRIVACIDADE É UMA PRIORIDADE"
+            val noSaleHeading = "OS SEUS DADOS NÃO ESTÃO À VENDA."
+            val privacyStart = notice.indexOf(privacyHeading)
+            val noSaleStart = notice.indexOf(noSaleHeading)
+            if (privacyStart >= 0) {
+                setSpan(
+                    android.text.style.StyleSpan(Typeface.BOLD),
+                    privacyStart,
+                    privacyStart + privacyHeading.length,
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                setSpan(
+                    android.text.style.RelativeSizeSpan(1.25f),
+                    privacyStart,
+                    privacyStart + privacyHeading.length,
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
+            if (noSaleStart >= 0) {
+                setSpan(
+                    android.text.style.StyleSpan(Typeface.BOLD),
+                    noSaleStart,
+                    noSaleStart + noSaleHeading.length,
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                setSpan(
+                    android.text.style.RelativeSizeSpan(1.15f),
+                    noSaleStart,
+                    noSaleStart + noSaleHeading.length,
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
+        }
+
         val textView = TextView(this).apply {
-            text = notice
+            text = styledNotice
             textSize = 13.5f
             setTextColor(ink)
             setPadding(dp(18), dp(14), dp(18), dp(14))
