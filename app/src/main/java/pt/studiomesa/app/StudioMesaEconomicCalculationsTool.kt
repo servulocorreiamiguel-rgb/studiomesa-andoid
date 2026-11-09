@@ -17,7 +17,7 @@ internal class StudioMesaEconomicCalculationsTool : OpenApiTool {
             listOf(
                 "monthly_analysis", "recipe_cost", "waste_log", "supplier_quotes",
                 "budget_variance", "usage_variance", "labour_plan", "reorder"
-            ).forEach(::put)
+            ).forEach { put(it) }
         }
         val properties = JSONObject()
             .put("operation", JSONObject()
@@ -71,7 +71,8 @@ internal class StudioMesaEconomicCalculationsTool : OpenApiTool {
         }
         JSONObject()
             .put("operation", operation)
-            .put("data_source", "valores fornecidos nesta pergunta")
+            .put("data_source", "parâmetros recebidos do modelo; a origem dos valores não é verificada pela ferramenta")
+            .put("confirmation_required", true)
             .put("read_only", true)
             .put("result", result)
             .put("warning", "Estimativa matemática baseada apenas nos valores introduzidos. Confirma período, unidades, IVA e origem dos dados antes de decidir.")
