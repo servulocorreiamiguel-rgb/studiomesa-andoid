@@ -47,6 +47,32 @@ class AssistantGeneralConversationPolicyTest {
     }
 
     @Test
+    fun economicAssistantPolicyFitsTheModelBudgetAndKeepsCriticalToolInstructions() {
+        val instruction = AssistantEconomicConversationPolicy.SYSTEM_INSTRUCTION
+
+        assertTrue(instruction.length < 1800)
+        listOf(
+            "get_restaurant_data",
+            "calculate_restaurant_economics",
+            "get_supplier_invoice_summary",
+            "issue_date_from",
+            "approved",
+            "pending_review",
+            "rejected",
+            "analyze_sales_patterns_and_forecast",
+            "weekday_profile",
+            "forecast",
+            "full_report",
+            "holiday_calendar",
+            "próximos 365 dias",
+            "não inventes números",
+            "não alteres preços"
+        ).forEach { required ->
+            assertTrue("Falta instrução essencial: $required", instruction.contains(required, ignoreCase = true))
+        }
+    }
+
+    @Test
     fun instructionDescribesTheOwnerOnlyReadOnlyEconomicBridge() {
         val instruction = AssistantGeneralConversationPolicy.SYSTEM_INSTRUCTION.lowercase()
         assertTrue(instruction.contains("consult_economic_assistant"))
