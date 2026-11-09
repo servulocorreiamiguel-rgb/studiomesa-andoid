@@ -38,6 +38,8 @@ class AssistantGeneralConversationPolicyTest {
         assertTrue(AssistantGeneralConversationPolicy.MAX_HISTORY_MESSAGE_CHARS > 300)
         assertTrue(AssistantGeneralConversationPolicy.MAX_HISTORY_MESSAGES *
             AssistantGeneralConversationPolicy.MAX_HISTORY_MESSAGE_CHARS <= 4000)
+        assertTrue(AssistantGeneralConversationPolicy.SYSTEM_INSTRUCTION.length <= 2200)
+        assertTrue(AssistantConversationContextPolicy.MAX_TOTAL_HISTORY_CHARS <= 2000)
     }
 
     @Test
