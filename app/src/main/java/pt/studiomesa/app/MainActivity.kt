@@ -4598,9 +4598,54 @@ class MainActivity : ComponentActivity() {
             linksClickable = true
             setMovementMethod(android.text.method.LinkMovementMethod.getInstance())
         }
+        val privacyBanner = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(18), dp(18), dp(18))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.RECTANGLE
+                cornerRadius = dp(16).toFloat()
+                setColor(0xFFEAF5EE.toInt())
+                setStroke(dp(1), 0xFFB7D8C0.toInt())
+            }
+
+            addView(TextView(this@MainActivity).apply {
+                text = "A SUA PRIVACIDADE É UMA PRIORIDADE"
+                textSize = 17f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setTextColor(0xFF176B3A.toInt())
+                gravity = android.view.Gravity.CENTER
+            })
+
+            addView(TextView(this@MainActivity).apply {
+                text = "OS SEUS DADOS NÃO ESTÃO À VENDA."
+                textSize = 20f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setTextColor(0xFF14532D.toInt())
+                gravity = android.view.Gravity.CENTER
+                setPadding(0, dp(10), 0, dp(10))
+            })
+
+            addView(TextView(this@MainActivity).apply {
+                text = "O StudioMesa não vende dados pessoais nem utiliza informações privadas dos restaurantes para publicidade própria.\\n\\nOs seus dados são tratados apenas para as finalidades explicadas na nossa Política de Privacidade.\\n\\nO seu negócio é seu. Os seus dados merecem respeito e proteção."
+                textSize = 14f
+                setTextColor(0xFF244333.toInt())
+                gravity = android.view.Gravity.CENTER
+                setLineSpacing(dp(3).toFloat(), 1f)
+            })
+        }
+
+        val privacyContent = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+            addView(privacyBanner, LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(16)
+            })
+            addView(textView, LinearLayout.LayoutParams(-1, -2))
+        }
+
         val scroll = ScrollView(this).apply {
             isFillViewport = false
-            addView(textView)
+            addView(privacyContent)
         }
         AlertDialog.Builder(this)
             .setTitle("Privacidade e dados")
