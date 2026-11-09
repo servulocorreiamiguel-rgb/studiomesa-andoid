@@ -53,6 +53,105 @@ class StudioMesaLocalAssistantToolsInstrumentedTest {
     }
 
     @Test
+    fun economicCalculationsToolAnalyzesMonthlyMetricsDeterministically() {
+        val tool = StudioMesaEconomicCalculationsTool()
+        val result = JSONObject(
+            tool.execute(
+                JSONObject()
+                    .put("operation", "monthly_analysis")
+                    .put("monthly_net_sales", 10000)
+                    .put("food_cost_consumed_including_waste", 3500)
+                    .put("monthly_payroll", 3000)
+                    .put("other_fixed_costs", 1000)
+                    .put("other_variable_costs", 500)
+                    .put("target_food_cost_percent", 30)
+                    .put("recorded_waste_cost", 200)
+                    .put("cash_available_now", 500)
+                    .put("expected_receipts_next_30_days", 1000)
+                    .put("payments_due_next_30_days", 1200)
+                    .put("weekly_net_sales_history", "1000;1100;1200;1300")
+                    .toString()
+            )
+        )
+
+        val data = result.getJSONObject("result")
+        assertTrue(result.getBoolean("read_only"))
+        assertEquals("valores fornecidos nesta pergunta", result.getString("data_source"))
+        assertEquals("35.0", data.getString("food_cost_percent"))
+        assertEquals("30.0", data.getString("payroll_percent"))
+        assertEquals("65.0", data.getString("prime_cost_percent"))
+        assertEquals("2000.00", data.getString("estimated_operating_result_eur"))
+        assertEquals("6666.67", data.getString("estimated_break_even_sales_eur"))
+        assertEquals("300.00", data.getString("projected_cash_in_30_days_eur"))
+        assertEquals("1150.00", data.getString("forecast_next_week_sales_eur"))
+        assertTrue(data.getJSONArray("warnings").length() >= 3)
+    }
+
+    @Test
+    fun economicCalculationsToolSupportsRecipeWasteQuotesBudgetUsageLabourAndReorder() {
+        val tool = StudioMesaEconomicCalculationsTool()
+        fun execute(operation: String, rawLines: String, target: BigDecimal? = null): JSONObject {
+            val params = JSONObject().put("operation", operation).put("raw_lines", rawLines)
+            if (target != null) params.put("target_food_cost_percent", target)
+            return JSONObject(tool.execute(params.toString()))
+        }
+
+        val recipe = execute(
+            "recipe_cost",
+            "carne | 0.2 | 10 | 5\\nbatata | 0.15 | 2 | 0",
+            BigDecimal("30")
+        ).getJSONObject("result")
+        assertEquals("2.41", recipe.getString("total_cost_per_portion_eur"))
+        assertEquals("8.02", recipe.getString("suggested_price_at_target_eur"))
+
+        val waste = execute("waste_log", "arroz | 2 | 3 | estragado\\nfrango | 1 | 5 | validade")
+            .getJSONObject("result")
+        assertEquals("11.00", waste.getString("total_recorded_waste_eur"))
+
+        val suppliers = execute(
+            "supplier_quotes",
+            "Arroz | Fornecedor A | kg | 5 | 10\\nArroz | Fornecedor B | kg | 10 | 18"
+        ).getJSONObject("result").getJSONArray("comparisons").getJSONObject(0)
+        assertEquals("Fornecedor B", suppliers.getString("lowest_unit_price_supplier"))
+
+        val budget = execute("budget_variance", "Alimentação | 1000 | 1200")
+            .getJSONObject("result").getJSONArray("categories").getJSONObject(0)
+        assertEquals("200.00", budget.getString("variance_eur"))
+
+        val usage = execute("usage_variance", "Arroz | 10 | 12 | 2")
+            .getJSONObject("result").getJSONArray("items").getJSONObject(0)
+        assertEquals("4.00", usage.getString("variance_cost_eur"))
+
+        val labour = execute("labour_plan", "160 | 12 | 10000 | 30")
+            .getJSONObject("result")
+        assertEquals("19.2", labour.getString("estimated_payroll_percent"))
+
+        val reorder = execute("reorder", "5 | 2 | 3 | 2")
+            .getJSONObject("result")
+        assertEquals("5.000", reorder.getString("suggested_order_quantity"))
+    }
+
+    @Test
+    fun economicCalculationsToolRejectsMissingOrInvalidInputsWithoutMutation() {
+        val tool = StudioMesaEconomicCalculationsTool()
+        val missing = JSONObject(tool.execute(JSONObject().put("operation", "monthly_analysis").toString()))
+        assertTrue(missing.has("error"))
+        assertTrue(missing.getBoolean("read_only"))
+
+        val invalid = JSONObject(
+            tool.execute(
+                JSONObject()
+                    .put("operation", "recipe_cost")
+                    .put("raw_lines", "carne | 0.2 | 10 | 110")
+                    .put("target_food_cost_percent", 30)
+                    .toString()
+            )
+        )
+        assertTrue(invalid.has("error"))
+        assertTrue(invalid.getBoolean("read_only"))
+    }
+
+    @Test
     fun priceReferenceToolCalculatesWithoutChangingTheMenu() {
         val item = AssistantMenuItem(
             name = "Bife da casa",
