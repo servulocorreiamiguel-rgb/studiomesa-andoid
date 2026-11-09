@@ -25,7 +25,7 @@ Este indicador não conta clientes ou pessoas. Uma linha pode incluir várias un
 
 ## Feriados e eventos
 
-O código reconhece os feriados obrigatórios do artigo 234.º do Código do Trabalho português, incluindo Sexta-Feira Santa, Domingo de Páscoa e Corpo de Deus. A terça-feira de Carnaval é apresentada como facultativa. A base legal está no Diário da República: https://diariodarepublica.pt/dr/legislacao-consolidada/lei/2009-34546475-66966857-
+O código reconhece os feriados obrigatórios do artigo 234.º do Código do Trabalho português, incluindo Sexta-Feira Santa, Domingo de Páscoa e Corpo de Deus. A terça-feira de Carnaval é apresentada como facultativa. A base legal está no Diário da República: https://diariodarepublica.pt/dr/legislacao-consolidada/lei/2009-34546475-46781775
 
 O feriado municipal e eventos locais — por exemplo, festas, concertos, jogos ou eventos turísticos — podem ser configurados no ecrã Análise no formato `AAAA-MM-DD | nome`. Essa configuração fica guardada localmente neste dispositivo e por restaurante; não é sincronizada automaticamente com outros dispositivos.
 
