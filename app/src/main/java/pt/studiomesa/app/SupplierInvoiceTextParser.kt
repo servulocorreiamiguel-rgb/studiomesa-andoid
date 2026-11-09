@@ -81,14 +81,22 @@ internal object SupplierInvoiceTextParser {
             lines,
             labels = listOf(
                 "total a pagar", "total da fatura", "total da factura",
-                "total geral", "total documento", "valor total", "total com iva", "total eur", "total"
+                "total geral", "total documento", "valor total", "total com iva", "total c/ iva",
+                "total incluindo iva", "valor com iva", "total eur", "total"
             ),
-            excludedLabels = listOf("iva", "vat", "imposto", "base tributavel", "base tributável", "subtotal", "desconto", "retencao", "retenção")
+            excludedLabels = listOf(
+                "total iva", "iva total", "valor iva", "valor do iva", "total vat", "vat total",
+                "valor vat", "imposto", "base tributavel", "base tributável",
+                "subtotal", "desconto", "retencao", "retenção"
+            )
         )
         val net = extractLabeledAmount(lines, listOf(
             "base tributavel", "base tributável", "subtotal", "valor sem iva", "total liquido", "total líquido"
         ))
-        val vat = extractLabeledAmount(lines, listOf("total iva", "valor iva", "iva total", "imposto total"))
+        val vat = extractLabeledAmount(
+            lines,
+            labels = listOf("total iva", "valor iva", "iva total", "imposto total", "iva", "vat")
+        )
 
         val warnings = buildList {
             if (supplierName.isBlank()) add("Não foi possível identificar o fornecedor. Confirma manualmente.")
@@ -159,14 +167,17 @@ internal object SupplierInvoiceTextParser {
             for (line in lines.asReversed()) {
                 val normalized = normalize(line)
                 if (excludedLabels.any { normalize(it) in normalized }) continue
-                val matchesLabel = if (normalize(label) == "total") {
-                    normalized == "total" ||
+                val normalizedLabel = normalize(label)
+                val matchesLabel = when (normalizedLabel) {
+                    "total" -> normalized == "total" ||
+                        normalized.startsWith("total ") ||
                         normalized.startsWith("total:") ||
                         normalized.startsWith("total -") ||
-                        normalized.startsWith("total #") ||
-                        normalized.matches(Regex("""^total\s+\d.*$"""))
-                } else {
-                    normalize(label) in normalized
+                        normalized.startsWith("total #")
+                    "iva", "vat" -> normalized == normalizedLabel ||
+                        normalized.startsWith("$normalizedLabel:") ||
+                        normalized.startsWith("$normalizedLabel ")
+                    else -> normalizedLabel in normalized
                 }
                 if (!matchesLabel) continue
                 amountPattern.findAll(line).mapNotNull { parseAmount(it.value) }
