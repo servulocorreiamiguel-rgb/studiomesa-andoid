@@ -198,6 +198,9 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
             val result = runCatching {
                 require(conversationId.isNotBlank()) { "A conversa não está identificada." }
                 require(userMessage.isNotBlank()) { "A mensagem está vazia." }
+                require(userMessage.length <= MAX_USER_MESSAGE_CHARS) {
+                    "A pergunta é demasiado longa para o modelo local (${MAX_USER_MESSAGE_CHARS} caracteres). Divide-a em duas mensagens para evitar perder contexto."
+                }
                 require(isModelInstalled()) { "Transfere primeiro o modelo de IA local." }
 
                 if (!verifiedThisProcess) {
@@ -254,16 +257,9 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     }
                     enabledTools.add(tool(StudioMesaWikipediaSearchTool()))
                     enabledTools.add(tool(StudioMesaWebSearchTool(appContext)))
-                    val initialMessages = history
-                        .takeLast(MAX_HISTORY_MESSAGES)
-                        .mapNotNull { turn ->
-                            val clean = turn.content.trim().take(MAX_HISTORY_MESSAGE_CHARS)
-                            when {
-                                clean.isBlank() -> null
-                                turn.role == "user" -> Message.user(clean)
-                                turn.role == "assistant" -> Message.model(clean)
-                                else -> null
-                            }
+                    val initialMessages = AssistantConversationContextPolicy.compactHistory(history)
+                        .map { turn ->
+                            if (turn.role == "user") Message.user(turn.content) else Message.model(turn.content)
                         }
 
                     val createdConversation = try {
@@ -320,7 +316,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                 val answer = StringBuilder()
                 runBlocking {
                     activeConversation.sendMessageAsync(
-                        Message.user(userMessage.take(MAX_USER_MESSAGE_CHARS))
+                        Message.user(userMessage)
                     ).collect { chunk ->
                         val text = chunk.toString()
                         if (text.isNotEmpty()) {
