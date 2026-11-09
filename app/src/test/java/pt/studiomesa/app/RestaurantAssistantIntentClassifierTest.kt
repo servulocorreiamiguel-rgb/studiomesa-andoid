@@ -31,6 +31,21 @@ class RestaurantAssistantIntentClassifierTest {
         }
     }
 
+    @Test fun routesHolidayCalendarAndEventQuestionsToEconomicManager() {
+        val questions = listOf(
+            "Quais são os próximos feriados?",
+            "Que feriados nacionais temos?",
+            "Quais eventos locais estão configurados?"
+        )
+        questions.forEach { question ->
+            assertEquals(
+                "$question -> ${RestaurantAssistantIntentClassifier.classify(question)}",
+                RestaurantAssistantIntent.ECONOMIC_MANAGER,
+                RestaurantAssistantIntentClassifier.classify(question).intent
+            )
+        }
+    }
+
     @Test fun keepsGeneralDailyBriefingSeparateFromEconomicSummary() {
         assertEquals(
             RestaurantAssistantIntent.DAILY_BRIEFING,
