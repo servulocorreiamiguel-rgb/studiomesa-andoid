@@ -259,7 +259,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     } else null
                     val calculationsTool = if (economicMode) StudioMesaEconomicCalculationsTool() else null
                     val salesForecast = if (economicMode) StudioMesaSalesForecastTool(snapshot) else null
-                    val enabledTools = mutableListOf(tool(dataTool), tool(priceTool))
+                    val enabledTools = mutableListOf(tool(dataTool), tool(priceTool), tool(StudioMesaExactMathTool()))
                     if (economicMode && invoiceTool != null) {
                         enabledTools.add(tool(invoiceTool))
                     } else if (bridgeTool != null) {
