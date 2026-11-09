@@ -9,7 +9,7 @@ Esta matriz ajuda a preparar a declaração Data safety. Não substitui a respos
 - StudioMesa Android 1.5.0, cinco variantes de plano/tipo, minSdk 24 e targetSdk 36.
 - Backend Supabase na região EU West 1.
 - O modelo generativo LFM2.5-1.2B-Instruct corre localmente depois de ser descarregado.
-- O modelo pode acionar uma pesquisa genérica na Wikipédia; só essa consulta pública é enviada à Wikimedia.
+- Quando a pesquisa pública na Web está configurada e é acionada, a consulta é enviada ao endpoint SearXNG configurado; o histórico completo e as faturas não são enviados pela função de pesquisa.
 - A sincronização do histórico/Memória existe no backend Supabase, é limitada ao proprietário por RLS e passa a ficar desligada por defeito, exigindo ativação explícita na aplicação. A cópia cloud não é cifrada ponta a ponta.
 - O OCR de PDFs/imagens é local. Quando o proprietário arquiva a fatura no servidor, o documento original e os metadados são enviados para a tabela de faturas e para o bucket privado `studiomesa-invoices`, com políticas de acesso limitadas ao proprietário.
 
@@ -25,14 +25,14 @@ Esta matriz ajuda a preparar a declaração Data safety. Não substitui a respos
 | Pontos, cartões, QR e recompensas | Fidelização | Android + Supabase, conforme a funcionalidade ativa | Backend e equipa autorizada; o cliente vê apenas os dados da própria associação | Conferir as funcionalidades efetivamente incluídas no binário/plano |
 | Perguntas, respostas, títulos e Memória da IA | Histórico e assistência | Android local cifrado; cloud sync opcional por ativação explícita do proprietário | Inferência no modelo local; quando o proprietário ativa cloud sync, o conteúdo é enviado ao Supabase e não é E2E cifrado | Validar o controlo da sincronização na versão binária final |
 | PDFs/imagens, OCR e metadados de faturas | Arquivo e análise de faturas | OCR no Android; metadados cifrados localmente; arquivo cloud quando o proprietário o solicita | Documento original e metadados no Supabase; bucket privado e políticas de Storage limitadas ao proprietário | Confirmar o fluxo de aprovação, upload, leitura e eliminação com contas descartáveis |
-| Consultas genéricas da Wikipédia | Pesquisa pública a pedido do utilizador | Android + Wikimedia | Apenas a consulta pública curta; não incluir dados privados de restaurante | Confirmar logs/termos do fornecedor e classificação |
+| Consultas públicas de pesquisa na Web | Pesquisa pública a pedido do utilizador | Android + Supabase Edge Function + endpoint SearXNG configurado | Apenas a consulta curta; a função bloqueia padrões comuns de emails, telefones, NIF/NIPC e IBAN, mas não deteta todos os dados confidenciais | Confirmar endpoint, logs/termos do fornecedor e classificação final |
 | Modelo de IA (ficheiro INT4) | Instalar capacidade generativa offline | Android + alojamento público do modelo | Download do ficheiro de modelo; sem prompts/histórico para o fornecedor | Confirmar a URL/hash na release final |
 | Dados técnicos/logs de segurança | Segurança, diagnóstico e prevenção de abuso | Android + fornecedores do backend | Depende dos logs configurados no Supabase/serviços | Inventariar logs, retenção e fornecedores antes de declarar |
 
 ## Perguntas que têm de ser respondidas na Play Console
 
 - [ ] Para cada categoria, determinar se a app recolhe, partilha ou apenas processa localmente os dados no sentido específico das definições do formulário.
-- [ ] Distinguir partilha com prestador de serviços (Supabase, email, Wikimedia, hosting do modelo) de partilha com o restaurante destinatário e de partilha pública.
+- [ ] Distinguir partilha com prestador de serviços (Supabase, email, SearXNG, hosting do modelo) de partilha com o restaurante destinatário e de partilha pública.
 - [ ] Confirmar se a app transmite dados pessoais/sensíveis fora do dispositivo; não marcar automaticamente “não recolhe”.
 - [ ] Confirmar se os dados são cifrados em trânsito em todas as ligações e se existe cifragem em repouso em cada local aplicável. A cifragem AES-GCM de alguns arquivos locais não significa que todos os dados estejam cifrados.
 - [ ] Confirmar mecanismo de eliminação na app e página web, retenção em backups e tempo de propagação.
