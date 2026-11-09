@@ -39,7 +39,7 @@ class AssistantAutomaticMemoryPolicyTest {
 
     @Test
     fun promptMemoryKeepsRecentCompleteNotesWithinItsBudget() {
-        val memory = (1..8).joinToString("\\n") { "• preferência estável número $it" }
+        val memory = (1..8).joinToString("\n") { "• preferência estável número $it" }
         val snippet = AssistantAutomaticMemoryPolicy.contextSnippet(memory, 70)
 
         assertTrue(snippet.length <= 70)
