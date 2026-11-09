@@ -55,6 +55,7 @@ class AssistantGeneralConversationPolicyTest {
         listOf(
             "get_restaurant_data",
             "calculate_restaurant_economics",
+            "calculate_exact_math",
             "get_supplier_invoice_summary",
             "issue_date_from",
             "approved",
