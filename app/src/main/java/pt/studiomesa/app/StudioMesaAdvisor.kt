@@ -502,6 +502,16 @@ internal object StudioMesaAdvisor {
             )
         }
 
+        val asksHolidayCalendar = containsAny(
+            q,
+            "quais os proximos feriados", "quais sao os proximos feriados",
+            "proximos feriados", "feriados proximos", "que feriados se aproximam",
+            "quais feriados se aproximam", "que feriados temos",
+            "quais feriados temos", "calendario de feriados", "feriados nacionais",
+            "feriado municipal", "eventos locais", "proximos eventos locais"
+        )
+        if (asksHolidayCalendar) return answerUpcomingSpecialDays(snapshot)
+
         val asksWeekdaySales = containsAny(
             q,
             "vendas por dia da semana", "ganhos por dia da semana",
@@ -519,7 +529,9 @@ internal object StudioMesaAdvisor {
             "previsao de vendas", "prever vendas", "quanto vou vender", "quanto vamos vender",
             "quanto venderei", "quanto venderemos", "vendas previstas", "estimativa de vendas",
             "projecao de vendas", "vendas da proxima semana", "proximo mes",
-            "proximos 30 dias", "previsao de afluencia", "prever movimento"
+            "proximos 30 dias", "previsao de afluencia", "prever movimento",
+            "previsao para feriado", "previsao para feriados", "vendas nos feriados",
+            "previsao de vendas em feriados", "movimento no feriado", "movimento nos feriados"
         )
         if (asksSalesForecast) return answerSalesForecast(rawQuestion, snapshot)
 
@@ -676,6 +688,37 @@ internal object StudioMesaAdvisor {
             "Gestor económico (opcional)",
             "Ativa o Gestor económico nesta página para analisar indicadores mensais, ponto de equilíbrio, tesouraria a 30 dias, custo de receitas, desperdício, comparação de fornecedores, orçamento vs. realizado, consumo teórico vs. real, reposição e cenários de custo de pessoal. Os cálculos usam os valores que o proprietário introduz nesta sessão; não consultam bancos ou fornecedores, não alteram preços, não movimentam stock nem enviam encomendas.",
             "Assistente"
+        )
+    }
+
+    private fun answerUpcomingSpecialDays(snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
+        val today = java.time.LocalDate.now()
+        val upcoming = (1L..365L).mapNotNull { offset ->
+            val date = today.plusDays(offset)
+            RestaurantSalesInsights.holidayName(date, snapshot.salesSpecialDays)
+                ?.let { date to it }
+        }
+
+        if (upcoming.isEmpty()) {
+            return StudioMesaAssistantAnswer(
+                "Calendário sem datas especiais",
+                "Não encontrei feriados nacionais ou eventos locais configurados nos próximos 12 meses. Confirma o calendário municipal e acrescenta festas, concertos ou jogos na secção Análise.",
+                "Análise"
+            )
+        }
+
+        val lines = upcoming.joinToString("\n") { (date, name) ->
+            "• $date — $name"
+        }
+        val source = if (snapshot.isDemo) "calendário nacional e eventos de demonstração" else
+            "calendário nacional e eventos configurados para este restaurante"
+        return StudioMesaAssistantAnswer(
+            "Próximos feriados e eventos",
+            "Nos próximos 12 meses, com base no $source:\n$lines\n\n" +
+                "Os feriados nacionais são calculados pelo calendário legal português. O Carnaval e o feriado municipal são facultativos e dependem do enquadramento aplicável. " +
+                "As datas locais só aparecem se estiverem configuradas neste dispositivo. " +
+                "A existência de um feriado/evento não prova que o restaurante estará aberto nem que terá maior movimento; o efeito nas vendas só é estimado com histórico comparável.",
+            "Análise"
         )
     }
 
