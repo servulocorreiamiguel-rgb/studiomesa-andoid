@@ -12,6 +12,7 @@ import java.util.Locale
  */
 internal object AssistantAutomaticMemoryPolicy {
     const val MAX_MEMORY_CHARS = 2500
+    const val MAX_CONTEXT_MEMORY_CHARS = 700
     private const val MAX_FACT_CHARS = 220
 
     private val extractionPatterns = listOf(
@@ -74,6 +75,27 @@ internal object AssistantAutomaticMemoryPolicy {
         val updated = if (current.isBlank()) entry else "$current\n$entry"
         if (updated.length > MAX_MEMORY_CHARS) return null
         return updated
+    }
+
+    /**
+     * Returns only complete, most-recent memory notes that fit the model prompt budget.
+     * The full encrypted memory remains available to the user in the Memory screen.
+     */
+    fun contextSnippet(existingMemory: String, maxChars: Int = MAX_CONTEXT_MEMORY_CHARS): String {
+        require(maxChars > 0) { "O limite de contexto da Memória tem de ser positivo." }
+        val notes = existingMemory.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .toList()
+        val selected = mutableListOf<String>()
+        var used = 0
+        for (note in notes.asReversed()) {
+            val extra = note.length + if (selected.isEmpty()) 0 else 1
+            if (used + extra > maxChars) continue
+            selected.add(note)
+            used += extra
+        }
+        return selected.asReversed().joinToString("\\n")
     }
 
     private fun containsSensitiveData(value: String): Boolean {
