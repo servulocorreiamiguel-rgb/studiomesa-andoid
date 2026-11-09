@@ -38,6 +38,17 @@ class AssistantAutomaticMemoryPolicyTest {
     }
 
     @Test
+    fun promptMemoryKeepsRecentCompleteNotesWithinItsBudget() {
+        val memory = (1..8).joinToString("\\n") { "• preferência estável número $it" }
+        val snippet = AssistantAutomaticMemoryPolicy.contextSnippet(memory, 70)
+
+        assertTrue(snippet.length <= 70)
+        assertTrue(snippet.contains("número 8"))
+        assertFalse(snippet.contains("número 1"))
+        assertTrue(snippet.lineSequence().all { it.startsWith("• ") })
+    }
+
+    @Test
     fun mergesNewFactsWithoutReplacingExistingNotesOrDuplicatingThem() {
         val existing = "Restaurante de peixe"
         val updated = AssistantAutomaticMemoryPolicy.merge(
