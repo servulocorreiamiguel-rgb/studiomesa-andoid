@@ -2002,8 +2002,8 @@ class MainActivity : ComponentActivity() {
             appendLine(AssistantGeneralConversationPolicy.SYSTEM_INSTRUCTION)
             if (economicAssistant) {
                 appendLine("FUNÇÃO: Assistente económico. Analisa receitas, despesas, custos, tesouraria, compras e fornecedores com os dados disponíveis.")
-                appendLine("Consulta get_supplier_invoice_summary apenas para metadados; não lê PDFs/OCR nem prova pagamentos. Nunca alteres ou pagues faturas.")
-                appendLine("Usa calculate_restaurant_economics para calcular indicadores mensais, custos por dose, desperdício, orçamentos, consumo, pessoal e reposição. Usa apenas valores explícitos; pergunta pelo que falta. Mostra as entradas usadas e pede confirmação: a origem não é verificada pela ferramenta e os valores não vêm automaticamente do POS ou da contabilidade.")
+                appendLine("Consulta get_supplier_invoice_summary apenas para metadados. Se pedirem um período, usa issue_date_from e issue_date_to em AAAA-MM-DD. Separa aprovadas, pendentes e rejeitadas; nunca somes pendentes/rejeitadas como despesas aprovadas. Uma fatura aprovada não prova pagamento; não lê PDFs/OCR e não alteres nem pagues faturas.")
+                appendLine("Usa calculate_restaurant_economics para calcular indicadores mensais, custos por dose, desperdício, orçamentos, consumo, pessoal e reposição. Usa apenas valores explícitos; pergunta pelo que falta. Mostra inputs_used e informa que a origem dos parâmetros não é verificada. Compras/faturas não são automaticamente custo alimentar consumido. Os valores não vêm automaticamente do POS ou da contabilidade.")
             } else {
                 appendLine("FUNÇÃO: assistente geral. Responde também a assuntos gerais; não transformes todas as perguntas em perguntas de restauração.")
                 if (ownerInvoiceAccess) {

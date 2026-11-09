@@ -22,6 +22,9 @@ class AssistantGeneralConversationPolicyTest {
         assertTrue(instruction.contains("erros ortográficos"))
         assertTrue(instruction.contains("histórico recente"))
         assertTrue(instruction.contains("pergunta quando faltar informação essencial"))
+        assertTrue(instruction.contains("começa pela resposta direta"))
+        assertTrue(instruction.contains("valores usados, unidades e fórmula"))
+        assertTrue(instruction.contains("não confundas compras/faturas com consumo alimentar"))
     }
 
     @Test

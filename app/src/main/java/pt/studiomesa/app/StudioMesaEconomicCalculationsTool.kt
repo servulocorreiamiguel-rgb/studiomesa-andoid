@@ -73,6 +73,7 @@ internal class StudioMesaEconomicCalculationsTool : OpenApiTool {
             .put("operation", operation)
             .put("data_source", "parâmetros recebidos do modelo; a origem dos valores não é verificada pela ferramenta")
             .put("confirmation_required", true)
+            .put("requires_manual_review", true)
             .put("source_verified", false)
             .put("inputs_used", inputSnapshot(params))
             .put("read_only", true)

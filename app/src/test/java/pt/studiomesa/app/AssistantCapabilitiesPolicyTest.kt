@@ -39,6 +39,8 @@ class AssistantCapabilitiesPolicyTest {
         assertTrue(answer.contains("reservas e referências de preço"))
         assertTrue(answer.contains("Analisar stock"))
         assertTrue(answer.contains("modelo generativo local está instalado"))
+        assertTrue(answer.contains("ponto de equilíbrio"))
+        assertTrue(answer.contains("separando aprovadas, pendentes e rejeitadas"))
     }
 
     @Test
@@ -72,6 +74,8 @@ class AssistantCapabilitiesPolicyTest {
         ).orEmpty()
         assertTrue(owner.contains("Assistente económico"))
         assertTrue(owner.contains("apenas de leitura"))
+        assertTrue(owner.contains("tesouraria projetada"))
+        assertTrue(owner.contains("período de emissão"))
     }
 
 }

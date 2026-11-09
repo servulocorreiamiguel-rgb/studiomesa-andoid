@@ -66,12 +66,13 @@ internal object AssistantCapabilitiesPolicy {
                 appendLine("• Analisar stock, movimentos, custos e indicadores de desempenho.")
             }
             if (features.canAccessInvoices) {
-                appendLine("• Consultar o arquivo de faturas importadas através do Assistente económico e distinguir documentos pendentes, confirmados e rejeitados. A consulta é apenas de leitura.")
+                appendLine("• Usar o Gestor Económico para calcular resultado simplificado, ponto de equilíbrio, tesouraria projetada, custo por dose, desperdício, desvios de orçamento, consumo e reposição a partir dos valores fornecidos.")
+                appendLine("• Consultar faturas por fornecedor, estado e período de emissão, separando aprovadas, pendentes e rejeitadas. A consulta é apenas de leitura; aprovação não significa pagamento.")
             }
             appendLine("• Usar o histórico e a memória para manter contexto entre conversas neste restaurante.")
             if (features.localModelInstalled) {
                 appendLine()
-                appendLine("O modelo generativo local está instalado: podes fazer perguntas abertas e continuar a conversa no próprio telemóvel, mesmo sem Internet.")
+                appendLine("O modelo generativo local está instalado. A geração de respostas corre no telemóvel; pode funcionar sem Internet. A pesquisa pública e a sincronização cloud são operações separadas e exigem ligação, sendo a sincronização sujeita à autorização do proprietário.")
             } else {
                 appendLine()
                 appendLine("O modelo generativo local ainda não está instalado. Sem ele, algumas respostas ficam limitadas às funções e regras já disponíveis na aplicação.")
