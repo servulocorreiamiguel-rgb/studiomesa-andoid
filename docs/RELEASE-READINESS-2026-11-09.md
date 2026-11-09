@@ -11,6 +11,7 @@ Esta fotografia foi feita por leitura do repositório, estado remoto do Supabase
 ## IA e análise de vendas
 
 - O modelo generativo principal é `LFM2.5-1.2B-Instruct` INT4 e corre localmente no dispositivo. É um modelo de terceiros, não um modelo criado pelo StudioMesa.
+- O modo económico usa agora uma instrução de sistema compacta separada da instrução geral, para manter disponíveis as regras críticas de consulta de faturas, cálculos, análise semanal, previsão e ação `holiday_calendar` dentro do limite de contexto do modelo local. A memória relevante no modo económico fica limitada a 300 caracteres.
 - A função `studiomesa-assistant` está ativa com JWT, mas responde HTTP 410 (`CLOUD_AI_DISABLED`); não recebe mensagens do assistente principal.
 - As ferramentas locais incluem análise económica determinística, referência de preço, metadados de faturas, dados operacionais e análise de vendas. As ferramentas são apenas de leitura.
 - A análise semanal usa pedidos em estado `Concluído`, data de criação e valor/quantidade válidos. Exclui o dia atual e dias sem dados não são interpretados como zero.
