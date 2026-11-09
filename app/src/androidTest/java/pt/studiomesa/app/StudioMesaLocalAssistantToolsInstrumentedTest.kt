@@ -1,6 +1,7 @@
 package pt.studiomesa.app
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import java.math.BigDecimal
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -11,6 +12,45 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class StudioMesaLocalAssistantToolsInstrumentedTest {
+
+    @Test
+    fun publicWebSearchRejectsPrivateDataBeforeCallingTheProvider() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val tool = StudioMesaWebSearchTool(context)
+        val privateQueries = listOf(
+            "Procura informação sobre miguel@example.com",
+            "Procura informação sobre o NIF 501234560",
+            "Procura informação sobre o telefone 912345678",
+            "Procura informação sobre o IBAN PT50000000000000000000000"
+        )
+
+        privateQueries.forEach { query ->
+            val result = JSONObject(tool.execute(JSONObject().put("query", query).toString()))
+            assertTrue("A pesquisa não devia aceitar dados privados: $query", result.has("error"))
+        }
+
+        val definition = JSONObject(tool.getToolDescriptionJsonString())
+        assertTrue(definition.getString("description").contains("Nunca envies dados privados"))
+    }
+
+    @Test
+    fun wikipediaSearchRejectsPrivateDataBeforeNetworkAccess() {
+        val tool = StudioMesaWikipediaSearchTool()
+        val privateQueries = listOf(
+            "Procura miguel@example.com",
+            "Procura o NIF 501234560",
+            "Procura o telefone 912345678",
+            "Procura o IBAN PT50000000000000000000000"
+        )
+
+        privateQueries.forEach { query ->
+            val result = JSONObject(tool.execute(JSONObject().put("query", query).toString()))
+            assertTrue("A Wikipédia não devia receber dados privados: $query", result.has("error"))
+        }
+
+        val definition = JSONObject(tool.getToolDescriptionJsonString())
+        assertTrue(definition.getString("description").contains("nunca dados internos"))
+    }
 
     @Test
     fun priceReferenceToolCalculatesWithoutChangingTheMenu() {
