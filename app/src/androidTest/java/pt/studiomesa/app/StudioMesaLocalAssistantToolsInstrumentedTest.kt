@@ -442,6 +442,38 @@ Frango | 3 | 4 | 5""")
 
 
     @Test
+    fun salesForecastToolListsNationalHolidaysAndConfiguredRestaurantEvents() {
+        val eventDate = java.time.LocalDate.now().plusDays(12)
+        val snapshot = StudioMesaAssistantSnapshot(
+            isDemo = false,
+            restaurantConfigured = true,
+            menuItems = emptyList(),
+            salesSpecialDays = listOf(
+                RestaurantSpecialDay(eventDate, "Festival do bairro")
+            )
+        )
+        val tool = StudioMesaSalesForecastTool(snapshot)
+        val definition = JSONObject(tool.getToolDescriptionJsonString())
+        assertTrue(definition.getJSONObject("parameters")
+            .getJSONObject("properties").getJSONObject("action")
+            .getJSONArray("enum").toString().contains("holiday_calendar"))
+
+        val result = JSONObject(
+            tool.execute(JSONObject().put("action", "holiday_calendar").toString())
+        )
+        assertTrue(result.getBoolean("read_only"))
+        assertEquals(365, result.getInt("days_ahead"))
+        val days = result.getJSONArray("upcoming_special_days")
+        val event = (0 until days.length())
+            .map { days.getJSONObject(it) }
+            .single { it.getString("date") == eventDate.toString() }
+        assertEquals("Festival do bairro", event.getString("name"))
+        assertTrue(event.getBoolean("custom_restaurant_event"))
+        assertTrue(result.getString("warning").contains("são facultativos"))
+        assertTrue(days.toString().contains("Ano Novo") || days.toString().contains("Restauração da Independência"))
+    }
+
+    @Test
     fun salesForecastToolUsesRealSnapshotAndDoesNotInventValuesWithoutHistory() {
         val zone = java.time.ZoneId.systemDefault()
         val tomorrow = java.time.LocalDate.now(zone).plusDays(1)
