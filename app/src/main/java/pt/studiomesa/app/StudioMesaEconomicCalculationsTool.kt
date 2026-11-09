@@ -23,11 +23,11 @@ internal class StudioMesaEconomicCalculationsTool : OpenApiTool {
             .put("operation", JSONObject()
                 .put("type", "string")
                 .put("enum", operations)
-                .put("description", "Cálculo pretendido. Escolhe a operação que corresponde ao pedido."))
+                .put("description", "Cálculo pretendido. Escolhe a operação que corresponde ao pedido. monthly_analysis exige mensal_net_sales, food_cost_consumed_including_waste, monthly_payroll, other_fixed_costs, other_variable_costs e target_food_cost_percent. recipe_cost exige raw_lines e target_food_cost_percent. As restantes operações exigem raw_lines. Se faltar qualquer dado, não inventes: pergunta ao proprietário antes de chamar a ferramenta."))
             .put("raw_lines", JSONObject()
                 .put("type", "string")
                 .put("description", "Para recipe_cost: ingrediente | quantidade por dose | preço por unidade | desperdício %. waste_log: artigo | quantidade | custo por unidade | motivo. supplier_quotes: artigo | fornecedor | unidade | quantidade embalagem | preço embalagem. budget_variance: categoria | orçamento | valor real. usage_variance: artigo | consumo teórico | consumo real | custo por unidade. labour_plan: horas previstas | custo total por hora | vendas esperadas | objetivo pessoal %. reorder: stock atual | consumo diário | prazo fornecedor em dias | dias de segurança."))
-            .put("target_food_cost_percent", number("Percentagem-alvo de custo alimentar entre 0 e 100; obrigatória em monthly_analysis e recipe_cost."))
+            .put("target_food_cost_percent", number("Percentagem-alvo de custo alimentar entre 0 e 100; obrigatória em monthly_analysis e recipe_cost.").put("maximum", 100).put("exclusiveMinimum", true))
             .put("monthly_net_sales", number("Vendas mensais sem IVA, no período analisado."))
             .put("food_cost_consumed_including_waste", number("Custo alimentar consumido, já incluindo desperdício."))
             .put("monthly_payroll", number("Custo mensal de pessoal no mesmo período."))
@@ -73,6 +73,8 @@ internal class StudioMesaEconomicCalculationsTool : OpenApiTool {
             .put("operation", operation)
             .put("data_source", "parâmetros recebidos do modelo; a origem dos valores não é verificada pela ferramenta")
             .put("confirmation_required", true)
+            .put("source_verified", false)
+            .put("inputs_used", inputSnapshot(params))
             .put("read_only", true)
             .put("result", result)
             .put("warning", "Estimativa matemática baseada apenas nos valores introduzidos. Confirma período, unidades, IVA e origem dos dados antes de decidir.")
@@ -259,6 +261,27 @@ internal class StudioMesaEconomicCalculationsTool : OpenApiTool {
             .put("suggested_order_quantity", a.suggestedOrderQuantity.toPlainString())
             .put("coverage_days", a.totalCoverageDays)
             .put("warning", "Quantidade indicativa. Confirma stock físico, embalagem, mínimo de encomenda e prazo do fornecedor. Não faz encomendas.")
+    }
+
+    private fun inputSnapshot(params: JSONObject): JSONObject {
+        val allowed = listOf(
+            "raw_lines", "target_food_cost_percent", "monthly_net_sales",
+            "food_cost_consumed_including_waste", "monthly_payroll", "other_fixed_costs",
+            "other_variable_costs", "recorded_waste_cost", "cash_available_now",
+            "expected_receipts_next_30_days", "payments_due_next_30_days",
+            "weekly_net_sales_history"
+        )
+        val snapshot = JSONObject()
+        allowed.forEach { key ->
+            if (params.has(key) && !params.isNull(key)) {
+                val value = params.opt(key)
+                if (value is String && value.length > 50_000) {
+                    throw IllegalArgumentException("O campo $key excede o limite de texto.")
+                }
+                snapshot.put(key, value)
+            }
+        }
+        return snapshot
     }
 
     private fun requiredText(p: JSONObject, key: String): String =
