@@ -97,7 +97,20 @@ internal class StudioMesaEconomicCalculationsTool : OpenApiTool {
             weeklyNetSalesHistory = RestaurantEconomicManager.parseWeeklySales(p.optString("weekly_net_sales_history"))
         )
         val a = RestaurantEconomicManager.analyze(input)
+        val inputsUsed = JSONObject()
+            .put("monthly_net_sales_eur", input.monthlyNetSales.toPlainString())
+            .put("food_cost_consumed_including_waste_eur", input.foodCostConsumedIncludingWaste.toPlainString())
+            .put("monthly_payroll_eur", input.monthlyPayroll.toPlainString())
+            .put("other_fixed_costs_eur", input.otherFixedCosts.toPlainString())
+            .put("other_variable_costs_eur", input.otherVariableCosts.toPlainString())
+            .put("target_food_cost_percent", input.targetFoodCostPercent.toPlainString())
+            .putNullable("recorded_waste_cost_eur", input.recordedWasteCost)
+            .putNullable("cash_available_now_eur", input.cashAvailableNow)
+            .putNullable("expected_receipts_next_30_days_eur", input.expectedReceiptsNext30Days)
+            .putNullable("payments_due_next_30_days_eur", input.paymentsDueNext30Days)
+            .put("weekly_net_sales_history", JSONArray(input.weeklyNetSalesHistory.map { it.toPlainString() }))
         return JSONObject()
+            .put("inputs_used", inputsUsed)
             .put("food_cost_percent", a.foodCostPercent.toPlainString())
             .put("payroll_percent", a.payrollPercent.toPlainString())
             .put("prime_cost_percent", a.primeCostPercent.toPlainString())
@@ -190,7 +203,16 @@ internal class StudioMesaEconomicCalculationsTool : OpenApiTool {
                 .put("variance_eur", row.variance.toPlainString())
                 .putNullable("variance_percent", row.variancePercent))
         }
-        return JSONObject().put("categories", rows).put("category_count", all.size).put("truncated", all.size > 30)
+        val budgetTotal = all.fold(BigDecimal.ZERO) { sum, row -> sum.add(row.budget) }
+        val actualTotal = all.fold(BigDecimal.ZERO) { sum, row -> sum.add(row.actual) }
+        val varianceTotal = actualTotal.subtract(budgetTotal).setScale(2, RoundingMode.HALF_UP)
+        return JSONObject()
+            .put("categories", rows)
+            .put("category_count", all.size)
+            .put("truncated", all.size > 30)
+            .put("budget_total_eur", budgetTotal.toPlainString())
+            .put("actual_total_eur", actualTotal.toPlainString())
+            .put("variance_total_eur", varianceTotal.toPlainString())
             .put("interpretation", "Desvio positivo significa valor real acima do orçamento; negativo significa abaixo. Interpreta conforme a categoria.")
     }
 
@@ -206,7 +228,13 @@ internal class StudioMesaEconomicCalculationsTool : OpenApiTool {
                 .put("unit_cost_eur", row.unitCost.toPlainString())
                 .put("variance_cost_eur", row.varianceCost.toPlainString()))
         }
-        return JSONObject().put("items", rows).put("item_count", all.size).put("truncated", all.size > 30)
+        val totalVarianceCost = all.fold(BigDecimal.ZERO) { sum, row -> sum.add(row.varianceCost) }
+            .setScale(2, RoundingMode.HALF_UP)
+        return JSONObject()
+            .put("items", rows)
+            .put("item_count", all.size)
+            .put("truncated", all.size > 30)
+            .put("total_variance_cost_eur", totalVarianceCost.toPlainString())
             .put("interpretation", "Desvio positivo significa maior consumo real do que o teórico; pode refletir desperdício, porções, ofertas, perdas ou erros de registo.")
     }
 
