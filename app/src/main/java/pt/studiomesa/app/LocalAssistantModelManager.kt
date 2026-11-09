@@ -240,7 +240,13 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     // An Engine and its Conversation belong to one user conversation.
                     // LiteRT-LM 0.18/LFM2 can retain short-convolution state when a second
                     // Conversation is created on an already-used Engine.
-                    createdEngine.initialize()
+                    try {
+                        createdEngine.initialize()
+                    } catch (error: Exception) {
+                        // Do not leak native runtime resources if model/backend initialisation fails.
+                        runCatching { createdEngine.close() }
+                        throw error
+                    }
 
                     val dataTool = StudioMesaRestaurantDataTool(snapshot)
                     val priceTool = StudioMesaPriceReferenceTool(snapshot)
