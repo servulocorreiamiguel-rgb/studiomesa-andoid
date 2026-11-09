@@ -2,8 +2,8 @@
 
 **Data da verificação:** 9 de novembro de 2026  
 **Projeto Supabase:** `svwvkfsyevuyabelrtjk` (`eu-west-1`, `ACTIVE_HEALTHY`)  
-**Branch Android:** `security/privacy-sync-consent-20261109`  
-**PR:** #98 — alterações de privacidade e melhoria da IA  
+**Branch Android:** `main`  
+**Integração:** PR #98 integrada por squash no commit `5fc1526c64ef4bf589a5bd4211dc876aa2d38265`  
 **Decisão:** NÃO LIBERADO PARA VENDA/PRODUÇÃO.
 
 Esta fotografia foi feita por leitura do repositório, estado remoto do Supabase, Edge Functions, Security Advisor e workflow GitHub Actions. Não foi executado qualquer `db push`, alteração ao Auth, alteração ao Storage, deploy de função ou upgrade do plano durante esta verificação.
@@ -20,7 +20,8 @@ Esta fotografia foi feita por leitura do repositório, estado remoto do Supabase
 - Os feriados nacionais portugueses são reconhecidos por regra de calendário. O Carnaval é facultativo. Feriados municipais e eventos locais são configurados pelo proprietário no ecrã Análise.
 - O calendário municipal/eventos é guardado localmente no dispositivo e ainda não sincroniza com outros dispositivos.
 - O motor de previsão, o reconhecimento de feriados, as ferramentas económicas e o parser de faturas têm testes unitários e instrumentados. O teste de interface Premium valida a abertura do ecrã, a configuração de um evento e a sua presença na previsão.
-- **CI concluída com sucesso em 9/11/2026:** workflow `42690365320`, commit `e3f9edff57c1c98c5a90e68cdb6654790ef9e765`. Passaram compilação das cinco variantes, testes unitários das cinco variantes, Android Lint, replay de migrações e testes de autorização/RLS, validação de configuração de release com chave temporária de CI e smoke tests completos em Android 8/API 26 e Android 16/API 36. Os artefactos desta execução são APKs debug de demonstração e relatórios de teste, não builds comerciais assinadas.
+- **CI integral do código antes da integração concluída com sucesso em 9/11/2026:** workflow `42690365320`, commit `e3f9edff57c1c98c5a90e68cdb6654790ef9e765`. Passaram compilação das cinco variantes, testes unitários das cinco variantes, Android Lint, replay de migrações e testes de autorização/RLS, validação de configuração de release com chave temporária de CI e smoke tests completos em Android 8/API 26 e Android 16/API 36. Os artefactos desta execução são APKs debug de demonstração e relatórios de teste, não builds comerciais assinadas.
+- A CI disparada pelo merge para o commit exato `5fc1526c64ef4bf589a5bd4211dc876aa2d38265` está a ser verificada separadamente; a release comercial exige essa confirmação em `main`.
 - A CI não executa inferência real do modelo LFM2.5 em telemóvel físico. Velocidade, memória, aquecimento, estabilidade prolongada e qualidade de resposta no OPPO A5m e noutros equipamentos ainda exigem teste físico.
 - A pesquisa Web é separada do modelo local. `studiomesa-web-search` está ativa com JWT obrigatório; requer `SEARXNG_BASE_URL` HTTPS configurado. A presença efetiva do segredo não foi confirmada nesta leitura. A função rejeita alguns padrões comuns de dados pessoais, mas nenhum filtro é completo.
 - OCR de faturas é local. O resumo económico usa metadados aprovados/pendentes/rejeitados; aprovação pelo proprietário não prova pagamento nem dedutibilidade fiscal.
