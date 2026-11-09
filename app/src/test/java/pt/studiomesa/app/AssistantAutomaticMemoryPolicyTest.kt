@@ -50,6 +50,15 @@ class AssistantAutomaticMemoryPolicyTest {
     }
 
     @Test
+    fun defaultContextBudgetCanCarryTheLongestAllowedStableFact() {
+        val memory = "• " + "x".repeat(220)
+        val snippet = AssistantAutomaticMemoryPolicy.contextSnippet(memory)
+
+        assertEquals(memory, snippet)
+        assertTrue(snippet.length <= AssistantAutomaticMemoryPolicy.MAX_CONTEXT_MEMORY_CHARS)
+    }
+
+    @Test
     fun mergesNewFactsWithoutReplacingExistingNotesOrDuplicatingThem() {
         val existing = "Restaurante de peixe"
         val updated = AssistantAutomaticMemoryPolicy.merge(
