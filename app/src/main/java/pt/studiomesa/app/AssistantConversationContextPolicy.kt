@@ -20,7 +20,7 @@ internal object AssistantConversationContextPolicy {
             val limit = AssistantGeneralConversationPolicy.MAX_HISTORY_MESSAGE_CHARS
             val clean = if (raw.length > limit) "…" + raw.takeLast(limit - 1) else raw
             val separator = if (selectedNewestFirst.isEmpty()) 0 else 1
-            if (usedChars + separator + clean.length > MAX_TOTAL_HISTORY_CHARS) continue
+            if (usedChars + separator + clean.length > MAX_TOTAL_HISTORY_CHARS) break
             selectedNewestFirst.add(AssistantPromptTurn(turn.role, clean))
             usedChars += separator + clean.length
         }
