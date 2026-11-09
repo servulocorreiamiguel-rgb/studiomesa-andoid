@@ -1734,8 +1734,18 @@ class MainActivity : ComponentActivity() {
     private fun formatInvoiceEuro(value: BigDecimal): String =
         NumberFormat.getCurrencyInstance(Locale("pt", "PT")).format(value)
 
+    private fun assistantCloudSyncPreferenceKey(): String {
+        val ownerId = backendPrefs.getString("user_id", "").orEmpty()
+        val restaurantId = backendRestaurantId()
+        return "assistant_cloud_sync_enabled_${ownerId}_${restaurantId}"
+    }
+
     private fun assistantCloudSyncEnabled(): Boolean =
-        backendPrefs.getBoolean("assistant_cloud_sync_enabled", false)
+        backendPrefs.getBoolean(assistantCloudSyncPreferenceKey(), false)
+
+    private fun setAssistantCloudSyncEnabled(enabled: Boolean) {
+        backendPrefs.edit().putBoolean(assistantCloudSyncPreferenceKey(), enabled).apply()
+    }
 
     /**
      * Cloud sync is off by default. The owner must explicitly enable it after
@@ -1769,7 +1779,7 @@ class MainActivity : ComponentActivity() {
                     syncAssistantCloud(silent = false, force = true)
                 }
                 .setNeutralButton("Desativar") { _, _ ->
-                    backendPrefs.edit().putBoolean("assistant_cloud_sync_enabled", false).apply()
+                    setAssistantCloudSyncEnabled(false)
                     Toast.makeText(
                         this,
                         "Novas sincronizações desativadas. A cópia já enviada continua no Supabase até ser eliminada.",
@@ -1789,7 +1799,7 @@ class MainActivity : ComponentActivity() {
                         "não são apagados automaticamente."
                 )
                 .setPositiveButton("Aceitar e ativar") { _, _ ->
-                    backendPrefs.edit().putBoolean("assistant_cloud_sync_enabled", true).apply()
+                    setAssistantCloudSyncEnabled(true)
                     syncAssistantCloud(silent = false, force = true)
                 }
                 .setNegativeButton("Manter apenas neste dispositivo", null)
