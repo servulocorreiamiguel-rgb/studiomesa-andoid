@@ -92,7 +92,7 @@ internal object RestaurantAssistantIntentClassifier {
             "valor por dia da semana", "dia da semana com mais vendas", "dia da semana com maior faturacao",
             "qual dia da semana vende mais", "que dia da semana vende mais",
             "qual dia teve mais vendas", "dia com mais vendas",
-            "dia de maior afluencia", "dia com maior afluencia", "dias de maior afluencia",
+            "dia de maior afluencia", "dia com maior afluencia", "dias de maior afluencia", "dias sao de maior afluencia",
             "dias mais movimentados"),
         rule(RestaurantAssistantIntent.ECONOMIC_MANAGER, 10,
             "previsao de vendas", "prever vendas", "quanto vou vender", "quanto vamos vender",

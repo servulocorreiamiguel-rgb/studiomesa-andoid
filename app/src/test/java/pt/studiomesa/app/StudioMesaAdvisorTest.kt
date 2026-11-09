@@ -631,7 +631,7 @@ class StudioMesaAdvisorTest {
         assertFalse(answer.response.contains("Sopa"))
     }
 
-    @Test fun futureSalesQuestionsUseClearlyLabeledFourWeekReferenceInsteadOfHistoricalPeriodError() {
+    @Test fun futureSalesQuestionsDoNotInventForecastsWithoutComparableHistory() {
         val questions = listOf(
             "Previsão de vendas para amanhã",
             "Previsão de vendas da próxima semana",
@@ -639,9 +639,10 @@ class StudioMesaAdvisorTest {
         )
         questions.forEach { question ->
             val answer = StudioMesaAdvisor.answerQuestion(question, snapshot())
-            assertEquals("$question -> ${answer.title}", "Referência simples de vendas", answer.title)
-            assertTrue(answer.response.contains("últimas quatro semanas"))
-            assertFalse(answer.response.contains("Período de vendas não confirmado"))
+            assertEquals("$question -> ${answer.title}", "Previsão sem histórico suficiente", answer.title)
+            assertTrue(answer.response.contains("valores inventados"))
+            assertFalse(answer.response.contains("últimas quatro semanas"))
+            assertEquals("Análise", answer.actionPage)
         }
     }
 
