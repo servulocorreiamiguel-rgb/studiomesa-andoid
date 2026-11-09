@@ -76,7 +76,8 @@ class StudioMesaLocalAssistantToolsInstrumentedTest {
 
         val data = result.getJSONObject("result")
         assertTrue(result.getBoolean("read_only"))
-        assertEquals("valores fornecidos nesta pergunta", result.getString("data_source"))
+        assertTrue(result.getString("data_source").contains("origem dos valores não é verificada"))
+        assertTrue(result.getBoolean("confirmation_required"))
         assertEquals("35.0", data.getString("food_cost_percent"))
         assertEquals("30.0", data.getString("payroll_percent"))
         assertEquals("65.0", data.getString("prime_cost_percent"))
@@ -98,19 +99,19 @@ class StudioMesaLocalAssistantToolsInstrumentedTest {
 
         val recipe = execute(
             "recipe_cost",
-            "carne | 0.2 | 10 | 5\\nbatata | 0.15 | 2 | 0",
+            "carne | 0.2 | 10 | 5\nbatata | 0.15 | 2 | 0",
             BigDecimal("30")
         ).getJSONObject("result")
         assertEquals("2.41", recipe.getString("total_cost_per_portion_eur"))
         assertEquals("8.02", recipe.getString("suggested_price_at_target_eur"))
 
-        val waste = execute("waste_log", "arroz | 2 | 3 | estragado\\nfrango | 1 | 5 | validade")
+        val waste = execute("waste_log", "arroz | 2 | 3 | estragado\nfrango | 1 | 5 | validade")
             .getJSONObject("result")
         assertEquals("11.00", waste.getString("total_recorded_waste_eur"))
 
         val suppliers = execute(
             "supplier_quotes",
-            "Arroz | Fornecedor A | kg | 5 | 10\\nArroz | Fornecedor B | kg | 10 | 18"
+            "Arroz | Fornecedor A | kg | 5 | 10\nArroz | Fornecedor B | kg | 10 | 18"
         ).getJSONObject("result").getJSONArray("comparisons").getJSONObject(0)
         assertEquals("Fornecedor B", suppliers.getString("lowest_unit_price_supplier"))
 
