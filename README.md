@@ -8,7 +8,7 @@
 >
 > **Segurança observada:** o Security Advisor ainda apresenta 42 avisos sobre funções `SECURITY DEFINER` executáveis por utilizadores autenticados, 11 tabelas RLS sem políticas e a proteção contra palavras-passe comprometidas desativada. As funções foram revistas quanto a validação de utilizador e `search_path`; não revogar permissões em bloco. A lista de avisos não substitui um teste de intrusão independente.
 >
-> **Bloqueios antes da venda:** reconciliação das migrações e testes E2E do backend, configuração e teste de OAuth/SMTP, chave e assinatura comercial definitivas, política de privacidade e Data Safety final, revisão de termos/DPA/licenças, backups/restauro, testes físicos e uma estratégia de publicação Play compatível com as regras atuais. Ver [auditoria de prontidão de 09/11/2026](docs/RELEASE-READINESS-2026-11-09.md), [gate comercial](docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md) e [bloqueios anteriores](docs/RELEASE-BLOCKERS-VERIFIED-2026-11-06.md).
+> **Bloqueios antes da venda:** reconciliação das migrações e testes E2E do backend, configuração e teste de OAuth/SMTP, chave e assinatura comercial definitivas, política de privacidade e Data Safety final, revisão de termos/DPA/licenças, backups/restauro, testes físicos e uma estratégia de publicação Play compatível com as regras atuais. Ver [auditoria de prontidão de 09/11/2026](docs/RELEASE-READINESS-2026-11-09.md), [gate comercial atualizado](docs/COMMERCIAL-RELEASE-GATE-2026-11-09.md), [configuração de release](RELEASE-SETUP.md) e [bloqueios anteriores](docs/RELEASE-BLOCKERS-VERIFIED-2026-11-06.md).
 ## O que ainda falta antes da venda ou utilização em serviço real
 
 - Testes ponta a ponta em telemóveis reais, incluindo vários dispositivos, utilizadores, perda de internet, sessões expiradas e erros de servidor. A compilação de um APK não substitui esses testes.
@@ -35,7 +35,7 @@
 - [Lista de entrada em funcionamento](COMMERCIAL-ONBOARDING-CHECKLIST.md).
 - [Termos B2B](TERMS-OF-SERVICE-TEMPLATE.md), [licença de software](B2B-SOFTWARE-LICENSE-TEMPLATE.md) e [DPA](DATA-PROCESSING-AGREEMENT-TEMPLATE.md) — rascunhos para revisão jurídica.
 - [Inventário de licenças de terceiros](THIRD-PARTY-NOTICES.md).
-- [Gate de lançamento](docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md) — a versão continua não liberada para piloto/venda.
+- [Gate de lançamento](docs/COMMERCIAL-RELEASE-GATE-2026-11-09.md) — estado atual após integração da IA e da melhoria de privacidade; continua sem autorização para piloto/venda.
 
 ## Configuração técnica
 
