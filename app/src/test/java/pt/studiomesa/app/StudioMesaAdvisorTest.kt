@@ -810,6 +810,24 @@ class StudioMesaAdvisorTest {
         assertTrue(answer.response.contains("não pagamentos recebidos"))
     }
 
+    @Test fun economicAssistantListsNationalHolidaysAndConfiguredLocalEvents() {
+        val eventDate = LocalDate.now().plusDays(12)
+        val answer = StudioMesaAdvisor.answerQuestion(
+            "Quais são os próximos feriados e eventos locais?",
+            snapshot(
+                salesSpecialDays = listOf(RestaurantSpecialDay(eventDate, "Festa da cidade"))
+            )
+        )
+
+        assertEquals("Próximos feriados e eventos", answer.title)
+        assertTrue(answer.response.contains("Festa da cidade"))
+        assertTrue(answer.response.contains(eventDate.toString()))
+        assertTrue(answer.response.contains("Ano Novo") || answer.response.contains("Natal") ||
+            answer.response.contains("Dia da Restauração da Independência"))
+        assertTrue(answer.response.contains("Carnaval e o feriado municipal são facultativos"))
+        assertTrue(answer.response.contains("não prova"))
+    }
+
     @Test fun economicAssistantDoesNotInventAWeekdayProfileOrForecastWithoutHistory() {
         val profile = StudioMesaAdvisor.answerQuestion("Vendas por dia da semana", snapshot())
         val forecast = StudioMesaAdvisor.answerQuestion("Prever vendas para a próxima semana", snapshot())
