@@ -24,6 +24,7 @@ class AssistantGeneralConversationPolicyTest {
         assertTrue(instruction.contains("pergunta quando faltar informação essencial"))
         assertTrue(instruction.contains("começa pela resposta direta"))
         assertTrue(instruction.contains("valores usados, unidades e fórmula"))
+        assertTrue(instruction.contains("calculate_exact_math"))
         assertTrue(instruction.contains("não confundas compras/faturas com consumo alimentar"))
     }
 
