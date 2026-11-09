@@ -7,7 +7,7 @@ package pt.studiomesa.app
 internal data class AssistantPromptTurn(val role: String, val content: String)
 
 internal object AssistantConversationContextPolicy {
-    const val MAX_TOTAL_HISTORY_CHARS = 1_800
+    const val MAX_TOTAL_HISTORY_CHARS = 1_200
 
     fun compactHistory(history: List<LocalAssistantModelManager.Turn>): List<AssistantPromptTurn> {
         val selectedNewestFirst = mutableListOf<AssistantPromptTurn>()
