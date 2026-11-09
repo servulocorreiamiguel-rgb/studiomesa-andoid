@@ -69,6 +69,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
     private var priceReferenceTool: StudioMesaPriceReferenceTool? = null
     private var supplierInvoiceTool: StudioMesaSupplierInvoiceTool? = null
     private var economicAssistantBridgeTool: StudioMesaEconomicAssistantBridgeTool? = null
+    private var economicCalculationsTool: StudioMesaEconomicCalculationsTool? = null
     @Volatile private var downloading = false
     @Volatile private var closed = false
     private var verifiedThisProcess = false
@@ -249,12 +250,14 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     val bridgeTool = if (!economicMode && economicBridgeEnabled) {
                         invoiceTool?.let(::StudioMesaEconomicAssistantBridgeTool)
                     } else null
+                    val calculationsTool = if (economicMode) StudioMesaEconomicCalculationsTool() else null
                     val enabledTools = mutableListOf(tool(dataTool), tool(priceTool))
                     if (economicMode && invoiceTool != null) {
                         enabledTools.add(tool(invoiceTool))
                     } else if (bridgeTool != null) {
                         enabledTools.add(tool(bridgeTool))
                     }
+                    if (calculationsTool != null) enabledTools.add(tool(calculationsTool))
                     enabledTools.add(tool(StudioMesaWikipediaSearchTool()))
                     enabledTools.add(tool(StudioMesaWebSearchTool(appContext)))
                     val initialMessages = AssistantConversationContextPolicy.compactHistory(history)
@@ -293,6 +296,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     priceReferenceTool = priceTool
                     supplierInvoiceTool = invoiceTool
                     economicAssistantBridgeTool = bridgeTool
+                    economicCalculationsTool = calculationsTool
                 }
 
                 // Keep the conversation's native history, but refresh the read-only tool
@@ -305,6 +309,9 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                 if (economicMode) {
                     supplierInvoiceTool?.updateSnapshot(snapshot)
                         ?: throw IllegalStateException("A ferramenta de faturas não está disponível no modo económico.")
+                    if (economicCalculationsTool == null) {
+                        throw IllegalStateException("A calculadora económica não está disponível nesta sessão.")
+                    }
                 } else if (economicBridgeEnabled) {
                     economicAssistantBridgeTool?.updateSnapshot(snapshot)
                         ?: throw IllegalStateException("A ligação ao Assistente económico não está disponível.")
@@ -352,6 +359,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         priceReferenceTool = null
         supplierInvoiceTool = null
         economicAssistantBridgeTool = null
+        economicCalculationsTool = null
 
         try {
             currentConversation?.close()
