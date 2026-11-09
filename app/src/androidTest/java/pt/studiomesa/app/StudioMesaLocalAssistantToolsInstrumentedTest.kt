@@ -122,8 +122,8 @@ class StudioMesaLocalAssistantToolsInstrumentedTest {
         val budgetSummary = execute("budget_variance", """Alimentação | 1000 | 1200
 Renda | 500 | 450""")
             .getJSONObject("result")
-        assertEquals("1500", budgetSummary.getString("budget_total_eur"))
-        assertEquals("1650", budgetSummary.getString("actual_total_eur"))
+        assertEquals("1500.00", budgetSummary.getString("budget_total_eur"))
+        assertEquals("1650.00", budgetSummary.getString("actual_total_eur"))
         assertEquals("150.00", budgetSummary.getString("variance_total_eur"))
 
         val usage = execute("usage_variance", "Arroz | 10 | 12 | 2")
