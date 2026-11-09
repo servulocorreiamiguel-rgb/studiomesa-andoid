@@ -9,7 +9,7 @@ class AssistantGeneralConversationPolicyTest {
     fun instructionClearlySupportsGeneralTopicsBeyondRestaurantManagement() {
         val instruction = AssistantGeneralConversationPolicy.SYSTEM_INSTRUCTION.lowercase()
         assertTrue(instruction.contains("assistente conversacional de uso geral"))
-        assertTrue(instruction.contains("não te limites a restauração"))
+        assertTrue(instruction.contains("não te limites à restauração"))
         assertTrue(instruction.contains("programação"))
         assertTrue(instruction.contains("matemática, ciências"))
         assertTrue(instruction.contains("traduções"))
@@ -46,7 +46,7 @@ class AssistantGeneralConversationPolicyTest {
     fun instructionDescribesTheOwnerOnlyReadOnlyEconomicBridge() {
         val instruction = AssistantGeneralConversationPolicy.SYSTEM_INSTRUCTION.lowercase()
         assertTrue(instruction.contains("consult_economic_assistant"))
-        assertTrue(instruction.contains("apenas para o proprietário autenticado"))
+        assertTrue(instruction.contains("está disponível apenas para o proprietário autenticado"))
         assertTrue(instruction.contains("nunca tentes aprovar"))
     }
 
