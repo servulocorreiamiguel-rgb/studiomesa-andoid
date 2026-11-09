@@ -18,8 +18,8 @@ internal class StudioMesaSalesForecastTool(snapshot: StudioMesaAssistantSnapshot
                 "action",
                 JSONObject()
                     .put("type", "string")
-                    .put("enum", JSONArray().put("weekday_profile").put("forecast").put("full_report"))
-                    .put("description", "weekday_profile compara os sete dias da semana; forecast prevê os próximos dias; full_report devolve ambos.")
+                    .put("enum", JSONArray().put("weekday_profile").put("forecast").put("full_report").put("holiday_calendar"))
+                    .put("description", "weekday_profile compara os sete dias da semana; forecast prevê até 30 dias; full_report devolve ambos; holiday_calendar lista os feriados nacionais e eventos locais configurados para os próximos 12 meses.")
             )
             .put(
                 "days_ahead",
@@ -33,7 +33,7 @@ internal class StudioMesaSalesForecastTool(snapshot: StudioMesaAssistantSnapshot
             .put("name", "analyze_sales_patterns_and_forecast")
             .put(
                 "description",
-                "Analisa o valor nominal dos pedidos concluídos por dia da semana, identifica os dias que historicamente têm mais linhas de pedidos e prevê valores para os próximos dias. Usa datas de criação e valores dos pedidos já carregados na StudioMesa; não consulta bancos, pagamentos, clientes ou sistemas externos. Reconhece automaticamente os feriados nacionais portugueses e o Carnaval facultativo; os feriados municipais e eventos locais têm de ser configurados no ecrã Análise. A previsão usa médias dos dias comparáveis mais recentes e, com amostra suficiente, uma tendência limitada a ±15%. Mostra sempre o número de dias de amostra e a confiança. A afluência é aproximada por linhas de pedidos, não por pessoas. Não assume que um dia sem registos teve vendas zero. Nunca apresentes valores previstos como garantidos nem como pagamentos recebidos."
+                "Ferramenta local e só de leitura. action=weekday_profile compara os sete dias da semana; action=forecast estima valores até 30 dias; action=full_report devolve ambos; action=holiday_calendar lista os feriados nacionais e eventos locais configurados nos próximos 365 dias. A análise usa datas de criação e valores dos pedidos concluídos já carregados na StudioMesa; não consulta bancos, pagamentos, clientes ou sistemas externos. Reconhece os feriados nacionais obrigatórios portugueses e o Carnaval facultativo; o feriado municipal e eventos locais têm de ser configurados pelo proprietário na secção Análise. A previsão usa médias dos dias comparáveis mais recentes e, com amostra suficiente, uma tendência limitada a ±15%. Mostra sempre o número de amostras e a confiança. A afluência é aproximada por linhas de pedidos, não por pessoas. Não assume que um dia sem registos teve vendas zero. Nunca apresentes valores previstos como garantidos nem como pagamentos recebidos."
             )
             .put("parameters", JSONObject()
                 .put("type", "object")
@@ -45,13 +45,45 @@ internal class StudioMesaSalesForecastTool(snapshot: StudioMesaAssistantSnapshot
     override fun execute(paramsJsonString: String): String = runCatching {
         val params = JSONObject(paramsJsonString)
         val action = params.optString("action", "full_report").ifBlank { "full_report" }
-        if (action !in setOf("weekday_profile", "forecast", "full_report")) {
+        if (action !in setOf("weekday_profile", "forecast", "full_report", "holiday_calendar")) {
             return@runCatching error("Ação de análise de vendas inválida.")
         }
-        val daysAhead = if (params.has("days_ahead")) params.optInt("days_ahead", -1) else 14
-        if (daysAhead !in 1..30) return@runCatching error("Escolhe um período entre 1 e 30 dias.")
 
         val current = snapshot
+        if (action == "holiday_calendar") {
+            val today = java.time.LocalDate.now()
+            val specialDays = JSONArray()
+            (1L..365L).forEach { offset ->
+                val date = today.plusDays(offset)
+                val name = RestaurantSalesInsights.holidayName(date, current.salesSpecialDays) ?: return@forEach
+                specialDays.put(
+                    JSONObject()
+                        .put("date", date.toString())
+                        .put("weekday", date.dayOfWeek.getDisplayName(
+                            java.time.format.TextStyle.FULL,
+                            java.util.Locale("pt", "PT")
+                        ))
+                        .put("name", name)
+                        .put("custom_restaurant_event", current.salesSpecialDays.any { it.date == date })
+                        .put("facultative", name.contains("facultativo", ignoreCase = true))
+                )
+            }
+            return@runCatching JSONObject()
+                .put("action", "holiday_calendar")
+                .put("days_ahead", 365)
+                .put("upcoming_special_days", specialDays)
+                .put("count", specialDays.length())
+                .put("read_only", true)
+                .put("source", "calendário nacional português e datas locais configuradas")
+                .put(
+                    "warning",
+                    "Carnaval e feriado municipal são facultativos. Eventos locais só aparecem se o proprietário os configurar neste dispositivo. Uma data especial não prova que o restaurante estará aberto ou terá mais movimento."
+                )
+                .toString()
+        }
+
+        val daysAhead = if (params.has("days_ahead")) params.optInt("days_ahead", -1) else 14
+        if (daysAhead !in 1..30) return@runCatching error("Escolhe um período entre 1 e 30 dias.")
         val report = RestaurantSalesInsights.analyze(
             orders = current.salesHistory,
             daysAhead = daysAhead,
