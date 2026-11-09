@@ -27,14 +27,15 @@ O repositório `litert-community` é uma conversão comunitária e declara não 
 
 - Variante: `LFM2.5-1.2B-Instruct_int4.litertlm`.
 - Tamanho esperado: 736 015 744 bytes.
-- SHA-256 esperado: `a28b5c59ac204e2e51c1f98d2d6db6982f0e12da59a268fe498edcb33237e906`.
-- URL: [Hugging Face — ficheiro INT4](https://huggingface.co/litert-community/LFM2.5-1.2B-Instruct/resolve/main/LFM2.5-1.2B-Instruct_int4.litertlm).
+- SHA-256 esperado: `e904729a8a8a0160658cb7cd22992e270a0547c05cc45b08c47ece5c0e29425b`.
+- URL fixo da aplicação (revisão imutável `d23bed4d8871e970d9d4d7de087377a90ecb1b4e`): [Hugging Face — ficheiro INT4](https://huggingface.co/litert-community/LFM2.5-1.2B-Instruct/resolve/d23bed4d8871e970d9d4d7de087377a90ecb1b4e/LFM2.5-1.2B-Instruct_int4.litertlm).
+- O SHA-256 acima coincide com o manifesto publicado do artefacto INT4. A aplicação verifica o hash antes da inferência.
 - A aplicação transfere o ficheiro para armazenamento privado e confirma tamanho e SHA-256 antes de o aceitar.
 - O modelo é descarregado a pedido; não está incluído no APK.
 
 ## Privacidade e utilização
 
-A geração do texto continua local. A pesquisa enciclopédica pode consultar a Wikipédia. A integração de pesquisa geral na Web usa uma Edge Function autenticada do Supabase e o fornecedor Tavily. A aplicação envia apenas uma pergunta pública curta; não envia o histórico completo nem o contexto operacional da StudioMesa. A chave Tavily fica guardada nos Secrets do servidor e nunca é incluída no APK. A pesquisa geral requer sessão iniciada e configuração de TAVILY_API_KEY no Supabase. O plano gratuito anunciado pelo Tavily tem um limite mensal; não é utilização ilimitada. Os resultados incluem excertos, ligações e, quando disponível, a data de publicação. São pistas para verificação, não uma garantia de verdade. A IA deve comparar fontes independentes, preferir fontes primárias e admitir quando não consegue confirmar uma afirmação.
+A geração do texto continua local. A pesquisa enciclopédica pode consultar a Wikipédia. A pesquisa geral na Web usa uma Edge Function autenticada do Supabase e um endpoint SearXNG configurado pelo operador através do segredo `SEARXNG_BASE_URL`. A aplicação envia apenas uma pergunta pública curta; não envia o histórico completo nem o contexto operacional da StudioMesa. O endpoint tem de usar HTTPS e a API JSON. Se não estiver configurado, a ferramenta devolve indisponibilidade em vez de simular resultados. A Edge Function bloqueia padrões comuns de emails, números de telefone, NIF/NIPC e IBAN, mas esse filtro não deteta todos os dados confidenciais. Os resultados incluem excertos, ligações e, quando disponível, a data de publicação. São pistas para verificação, não uma garantia de verdade. A IA deve comparar fontes independentes, preferir fontes primárias e admitir quando não consegue confirmar uma afirmação.
 
 Depois da instalação, a inferência é executada localmente. As mensagens, o histórico e o contexto selecionado para o modelo não são enviados a um serviço externo de IA por esta funcionalidade. A transferência inicial do ficheiro requer Internet e consome cerca de 736 MB de dados.
 
@@ -42,9 +43,9 @@ Depois da instalação, a inferência é executada localmente. As mensagens, o h
 
 O modelo generativo e o runtime processam as perguntas no próprio dispositivo. Existe, separadamente, um componente `AssistantCloudSyncCoordinator` que pode sincronizar conversas e Memória do proprietário com o Supabase quando a migration e as tabelas correspondentes estiverem instaladas. Essa sincronização não envia o conteúdo ao fornecedor do modelo nem a uma API externa de inferência, mas cria uma cópia cloud protegida por autenticação/RLS; **não é encriptação ponta a ponta**.
 
-Em 6 de novembro de 2026, as tabelas de sincronização ainda não existem no projeto Supabase alojado. Portanto, a sync cloud não está operacional nesse ambiente e não deve ser anunciada como ativa até reconciliação/deployment e teste E2E aprovados.
+Em 9 de novembro de 2026, as tabelas de sincronização já existem no projeto Supabase ligado. No código comercial em revisão, a sincronização do histórico/Memória está desligada por defeito e só é ativada após consentimento explícito do proprietário; a cópia cloud é protegida por autenticação/RLS, mas não é cifrada ponta a ponta. Desativar a opção impede novos envios, mas não apaga automaticamente cópias já enviadas.
 
-Quando o utilizador aciona a ferramenta de pesquisa, a aplicação pode enviar uma consulta genérica à Wikipédia. Isto é uma chamada pública separada da geração local; não deve conter histórico, prompts completos, faturas, contactos ou dados internos.
+Quando o utilizador aciona as ferramentas de pesquisa pública, pode ser enviada uma consulta genérica à Wikipédia ou ao endpoint SearXNG configurado. Estas chamadas são separadas da geração local; não devem conter histórico, prompts completos, faturas, contactos ou dados internos.
 
 A execução local não garante que as respostas estejam corretas. O modelo pode falhar, inventar informação ou não compreender contextos complexos. Verificar os cálculos e decisões importantes. A IA não substitui um contabilista certificado nem executa alterações financeiras ou operacionais.
 
