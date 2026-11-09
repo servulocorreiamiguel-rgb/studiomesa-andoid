@@ -119,7 +119,8 @@ class StudioMesaLocalAssistantToolsInstrumentedTest {
         val budget = execute("budget_variance", "Alimentação | 1000 | 1200")
             .getJSONObject("result").getJSONArray("categories").getJSONObject(0)
         assertEquals("200.00", budget.getString("variance_eur"))
-        val budgetSummary = execute("budget_variance", "Alimentação | 1000 | 1200;Renda | 500 | 450")
+        val budgetSummary = execute("budget_variance", """Alimentação | 1000 | 1200
+Renda | 500 | 450""")
             .getJSONObject("result")
         assertEquals("1500", budgetSummary.getString("budget_total_eur"))
         assertEquals("1650", budgetSummary.getString("actual_total_eur"))
@@ -128,7 +129,8 @@ class StudioMesaLocalAssistantToolsInstrumentedTest {
         val usage = execute("usage_variance", "Arroz | 10 | 12 | 2")
             .getJSONObject("result").getJSONArray("items").getJSONObject(0)
         assertEquals("4.00", usage.getString("variance_cost_eur"))
-        val usageSummary = execute("usage_variance", "Arroz | 10 | 12 | 2\\nFrango | 3 | 4 | 5")
+        val usageSummary = execute("usage_variance", """Arroz | 10 | 12 | 2
+Frango | 3 | 4 | 5""")
             .getJSONObject("result")
         assertEquals("9.00", usageSummary.getString("total_variance_cost_eur"))
 
