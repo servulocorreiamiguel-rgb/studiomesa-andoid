@@ -1,11 +1,12 @@
 # StudioMesa — preparação para lançamento comercial
-> **Fotografia atual — 06/11/2026: NÃO LIBERADO PARA VENDA.** O workflow gera cinco AABs/APKs comerciais assinados quando houver package ID, keystore e secrets, mas não publica na Google Play. Os APKs debug normais são apenas demonstrações.
->
-> **Bloqueio backend:** 53 ficheiros locais vs 54 versões remotas (48 comuns, cinco só locais e seis só remotas). Faltam no backend as tabelas de fichas técnicas, permissões granulares, sync do assistente, arquivo de faturas e bucket privado. Não aplicar migrations antes de reconciliar o histórico, testar backup/restauro e ensaiar o replay numa cópia descartável.
->
-> **Privacidade/Auth:** os drafts estão em `PRIVACY-POLICY-TEMPLATE.md` e `DATA-SAFETY-DRAFT.md`. A página externa de eliminação usa `resetPasswordForEmail` + PKCE, mas o percurso completo ainda não foi testado com contas descartáveis. SMTP/OAuth não foram confirmados.
->
-> **Requisitos Play consultados em 06/11/2026:** novas apps/updates desde 31/08/2026 exigem target Android 16/API 36; o projeto já define targetSdk 36. O titular da conta tem de ter pelo menos 18 anos; a taxa oficial de registo é US$25 uma vez. Para contas pessoais novas após 13/11/2023, há o requisito de 12 testers em closed test durante 14 dias contínuos. Confirmar sempre o tipo/data da conta nas páginas oficiais.
+
+> **Estado verificado em 09/11/2026: NÃO LIBERADO PARA VENDA/PRODUÇÃO.** A IA local e as novas análises estão integradas em `main`. A CI integral do código Android passou na revisão #98 (workflow `42690365320`, SHA de código `e3f9edff57c1c98c5a90e68cdb6654790ef9e765`). A execução de CI do commit de merge em `main` está a ser confirmada separadamente. Os artefactos debug são apenas demonstrações, não releases comerciais assinadas.
+
+> **Backend — estado real de 09/11/2026:** 55 ficheiros de migração no repositório e 63 versões remotas no Supabase: 51 prefixos comuns, quatro migrações só locais e doze só remotas. Os prefixos comuns não provam igualdade do SQL. Não executar `db push` até recuperar as migrações remotas em falta no repositório, comparar conteúdo/esquema, fazer backup/restauro e ensaiar a sequência canónica numa cópia isolada. As tabelas de histórico/Memória do assistente e de metadados de faturas existem com RLS; o bucket `studiomesa-invoices` é privado. As tabelas de fichas técnicas/ingredientes e permissões granulares ainda não foram encontradas no backend alojado.
+
+> **Privacidade/Auth:** a sincronização cloud de histórico/Memória está desligada por defeito e requer consentimento do proprietário; a cópia não tem cifragem ponta a ponta. OCR é local. O fluxo completo OAuth/SMTP, recuperação e eliminação de conta ainda exige testes E2E com contas descartáveis. A política de privacidade e a Data Safety continuam drafts, com placeholders legais/retention/subcontratantes.
+
+> **Release:** o workflow `.github/workflows/commercial-release.yml` está preparado para criar cinco AABs e cinco APKs assinados, mas exige o package ID definitivo, a keystore privada e os GitHub Actions secrets/variable. A validação CI usa uma chave temporária descartável; não é a chave comercial. O workflow não publica automaticamente na Google Play.
 
 ## Toolchain Android
 
