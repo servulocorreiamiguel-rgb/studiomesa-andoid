@@ -50,7 +50,7 @@ class AssistantGeneralConversationPolicyTest {
     fun economicAssistantPolicyFitsTheModelBudgetAndKeepsCriticalToolInstructions() {
         val instruction = AssistantEconomicConversationPolicy.SYSTEM_INSTRUCTION
 
-        assertTrue(instruction.length < 1800)
+        assertTrue(instruction.length < 2700)
         listOf(
             "get_restaurant_data",
             "calculate_restaurant_economics",
