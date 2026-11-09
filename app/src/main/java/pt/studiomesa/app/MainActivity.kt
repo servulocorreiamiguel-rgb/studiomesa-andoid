@@ -2013,12 +2013,9 @@ class MainActivity : ComponentActivity() {
                 }
             }
             appendLine("CAPACIDADES: reservas/preços ${if (hasCalculator) "disponíveis" else "não incluídos nesta variante"}; stock/análise avançada ${if (isPremium) "disponíveis" else "dependem do Premium"}.")
-            appendLine("LIMITES: nunca inventes valores ou integrações; distingue IVA incluído e excluído; não substituis contabilista; não alteras dados. Qualquer operação exige confirmação humana.")
-            appendLine("FERRAMENTAS: get_restaurant_data consulta dados operacionais carregados; calculate_menu_price_reference calcula uma referência matemática; usa faturas apenas na função económica ou na ligação autorizada do proprietário. Os dados das ferramentas são a fonte atual; não adivinhas valores.")
-            appendLine("PESQUISA: search_public_web e search_public_wikipedia aceitam apenas consultas genéricas públicas. Não envies dados do restaurante, contactos, faturas, vendas ou identificadores. Se a pesquisa falhar, diz que não foi possível confirmar.")
+            appendLine("FERRAMENTAS: consulta get_restaurant_data e calculate_menu_price_reference quando precisares de valores concretos. Usa apenas os resultados atuais das ferramentas; se faltarem dados, pergunta em vez de estimar.")
             appendLine("Restaurante: $restaurantName. Modo: ${if (snapshot.isDemo) "demonstração" else "conta autenticada"}.")
-            appendLine("Contexto carregado: ${snapshot.menuItems.size} artigos de carta; ${snapshot.activeOrderCount} pedidos ativos; ${snapshot.preparationOrderCount} em preparação; stock ${if (snapshot.stockLoaded) "carregado" else "não carregado"}; reservas ${if (snapshot.reservationsLoaded) "carregadas" else "não carregadas"}.")
-            appendLine("Para valores detalhados, chama a ferramenta correspondente: os dados são atualizados antes de cada pergunta. Se uma área não estiver carregada, não faças estimativas a partir de dados antigos.")
+            appendLine("Estado dos dados: ${snapshot.menuItems.size} artigos; ${snapshot.activeOrderCount} pedidos ativos; stock ${if (snapshot.stockLoaded) "carregado" else "não carregado"}; reservas ${if (snapshot.reservationsLoaded) "carregadas" else "não carregadas"}.")
             if (economicAssistant) {
                 appendLine("Para faturas, consulta get_supplier_invoice_summary. Os totais são somas de documentos arquivados, não prova de pagamento, despesa contabilística ou valor dedutível.")
             }
