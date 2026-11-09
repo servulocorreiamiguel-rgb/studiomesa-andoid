@@ -71,11 +71,20 @@ internal object SupplierInvoiceTextParser {
             ?.takeIf(::isValidPortugueseVatNumber).orEmpty()
         val invoiceNumber = invoicePattern.find(text)?.groupValues?.getOrNull(1)
             ?.trimEnd('.', ':', ';', ',').orEmpty()
-        val issueDate = extractDate(lines, listOf("data da fatura", "data de emissao", "data emissao", "date", "data"))
+        val issueDate = extractDate(
+            lines,
+            labels = listOf("data da fatura", "data de emissao", "data emissao", "date", "data"),
+            excludedLabels = listOf("vencimento", "due date", "data limite")
+        )
         val dueDate = extractDate(lines, listOf("data de vencimento", "vencimento", "due date", "data limite"))
-        val total = extractLabeledAmount(lines, listOf(
-            "total a pagar", "total da fatura", "total da factura", "valor total", "total com iva", "total eur", "total"
-        ))
+        val total = extractLabeledAmount(
+            lines,
+            labels = listOf(
+                "total a pagar", "total da fatura", "total da factura",
+                "total geral", "total documento", "valor total", "total com iva", "total eur", "total"
+            ),
+            excludedLabels = listOf("iva", "vat", "imposto", "base tributavel", "base tributável", "subtotal", "desconto", "retencao", "retenção")
+        )
         val net = extractLabeledAmount(lines, listOf(
             "base tributavel", "base tributável", "subtotal", "valor sem iva", "total liquido", "total líquido"
         ))
@@ -139,20 +148,48 @@ internal object SupplierInvoiceTextParser {
         return runCatching { BigDecimal(value).setScale(2, RoundingMode.HALF_UP) }.getOrNull()
     }
 
-    private fun extractLabeledAmount(lines: List<String>, labels: List<String>): BigDecimal? {
-        for (line in lines.asReversed()) {
-            val normalized = normalize(line)
-            if (labels.none { normalized.contains(normalize(it)) }) continue
-            amountPattern.findAll(line).mapNotNull { parseAmount(it.value) }.lastOrNull()?.let { return it }
+    private fun extractLabeledAmount(
+        lines: List<String>,
+        labels: List<String>,
+        excludedLabels: List<String> = emptyList()
+    ): BigDecimal? {
+        // Match specific labels first. A generic "total" must never match "Total IVA",
+        // "Subtotal" or another tax/discount line.
+        for (label in labels) {
+            for (line in lines.asReversed()) {
+                val normalized = normalize(line)
+                if (excludedLabels.any { normalize(it) in normalized }) continue
+                val matchesLabel = if (normalize(label) == "total") {
+                    normalized == "total" ||
+                        normalized.startsWith("total:") ||
+                        normalized.startsWith("total -") ||
+                        normalized.startsWith("total #") ||
+                        normalized.matches(Regex("""^total\s+\d.*$"""))
+                } else {
+                    normalize(label) in normalized
+                }
+                if (!matchesLabel) continue
+                amountPattern.findAll(line).mapNotNull { parseAmount(it.value) }
+                    .lastOrNull()?.let { return it }
+            }
         }
         return null
     }
 
-    private fun extractDate(lines: List<String>, labels: List<String>): String {
-        for (line in lines) {
-            val normalized = normalize(line)
-            if (labels.none { normalized.contains(normalize(it)) }) continue
-            datePattern.find(line)?.groupValues?.getOrNull(1)?.let { parseDate(it)?.let { iso -> return iso } }
+    private fun extractDate(
+        lines: List<String>,
+        labels: List<String>,
+        excludedLabels: List<String> = emptyList()
+    ): String {
+        // Prefer explicit labels and exclude maturity/due-date rows from issue-date lookup.
+        for (label in labels) {
+            for (line in lines) {
+                val normalized = normalize(line)
+                if (excludedLabels.any { normalize(it) in normalized }) continue
+                if (normalize(label) !in normalized) continue
+                datePattern.find(line)?.groupValues?.getOrNull(1)
+                    ?.let { parseDate(it)?.let { iso -> return iso } }
+            }
         }
         return ""
     }
