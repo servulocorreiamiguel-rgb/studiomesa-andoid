@@ -2014,12 +2014,9 @@ class MainActivity : ComponentActivity() {
             }
             appendLine("Restaurante: $restaurantName. Modo: ${if (snapshot.isDemo) "demonstração" else "conta autenticada"}.")
             appendLine("Estado: ${snapshot.menuItems.size} artigos; ${snapshot.activeOrderCount} pedidos ativos; stock ${if (snapshot.stockLoaded) "carregado" else "não carregado"}; reservas ${if (snapshot.reservationsLoaded) "carregadas" else "não carregadas"}.")
-            if (economicAssistant && promptMemory.isNotBlank()) {
+            if (promptMemory.isNotBlank()) {
                 appendLine("MEMÓRIA RELEVANTE:")
-                appendLine(promptMemory)
-            } else if (promptMemory.isNotBlank()) {
-                appendLine("MEMÓRIA RELEVANTE:")
-                appendLine(promptMemory)
+                appendLine(promptMemory.take(if (economicAssistant) 300 else 600))
             }
         }.trim()
     }
