@@ -10,8 +10,8 @@ Esta matriz ajuda a preparar a declaração Data safety. Não substitui a respos
 - Backend Supabase na região EU West 1.
 - O modelo generativo LFM2.5-1.2B-Instruct corre localmente depois de ser descarregado.
 - O modelo pode acionar uma pesquisa genérica na Wikipédia; só essa consulta pública é enviada à Wikimedia.
-- O código inclui sincronização opcional do histórico/Memória para o Supabase, mas as tabelas necessárias não existem atualmente no projeto alojado.
-- O OCR de PDFs/imagens é local. O código inclui upload de documento e metadados para Storage/Supabase, mas a tabela e o bucket ainda não existem no projeto alojado.
+- A sincronização do histórico/Memória existe no backend Supabase, é limitada ao proprietário por RLS e passa a ficar desligada por defeito, exigindo ativação explícita na aplicação. A cópia cloud não é cifrada ponta a ponta.
+- O OCR de PDFs/imagens é local. Quando o proprietário arquiva a fatura no servidor, o documento original e os metadados são enviados para a tabela de faturas e para o bucket privado `studiomesa-invoices`, com políticas de acesso limitadas ao proprietário.
 
 ## Matriz preliminar
 
@@ -23,8 +23,8 @@ Esta matriz ajuda a preparar a declaração Data safety. Não substitui a respos
 | Pedidos, mesas, carta, preços, custos, stock e movimentos | Operação e gestão | Android + Supabase | Backend; alguns dados disponíveis à equipa autorizada | Rever quais campos são pessoais, comerciais e partilhados com o cliente |
 | Reservas, nome, número de pessoas, hora, mesa, notas e contacto opcional | Pedidos/gestão de reserva | Android + Supabase | Backend e equipa autorizada do restaurante | Fluxo implementado; validar E2E e retenção |
 | Pontos, cartões, QR e recompensas | Fidelização | Android + Supabase, conforme a funcionalidade ativa | Backend e equipa autorizada; o cliente vê apenas os dados da própria associação | Conferir as funcionalidades efetivamente incluídas no binário/plano |
-| Perguntas, respostas, títulos e Memória da IA | Histórico e assistência | Android local; cloud sync opcional de proprietário | O modelo recebe contexto local; quando a sync cloud estiver ativa, conteúdo é enviado ao Supabase e não é E2E cifrado | Sync cloud não está ativa no backend atual; reavaliar após deployment |
-| PDFs/imagens, OCR e metadados de faturas | Arquivo e análise de faturas | OCR no Android; metadados cifrados localmente; cloud opcional | Futuro Storage privado/Supabase apenas depois da migration/bucket e autenticação owner | Upload cloud indisponível no backend atual; não declarar como ativo até validar |
+| Perguntas, respostas, títulos e Memória da IA | Histórico e assistência | Android local cifrado; cloud sync opcional por ativação explícita do proprietário | Inferência no modelo local; quando o proprietário ativa cloud sync, o conteúdo é enviado ao Supabase e não é E2E cifrado | Validar o controlo da sincronização na versão binária final |
+| PDFs/imagens, OCR e metadados de faturas | Arquivo e análise de faturas | OCR no Android; metadados cifrados localmente; arquivo cloud quando o proprietário o solicita | Documento original e metadados no Supabase; bucket privado e políticas de Storage limitadas ao proprietário | Confirmar o fluxo de aprovação, upload, leitura e eliminação com contas descartáveis |
 | Consultas genéricas da Wikipédia | Pesquisa pública a pedido do utilizador | Android + Wikimedia | Apenas a consulta pública curta; não incluir dados privados de restaurante | Confirmar logs/termos do fornecedor e classificação |
 | Modelo de IA (ficheiro INT4) | Instalar capacidade generativa offline | Android + alojamento público do modelo | Download do ficheiro de modelo; sem prompts/histórico para o fornecedor | Confirmar a URL/hash na release final |
 | Dados técnicos/logs de segurança | Segurança, diagnóstico e prevenção de abuso | Android + fornecedores do backend | Depende dos logs configurados no Supabase/serviços | Inventariar logs, retenção e fornecedores antes de declarar |
@@ -44,7 +44,7 @@ Esta matriz ajuda a preparar a declaração Data safety. Não substitui a respos
 
 - Não foi confirmado um fornecedor SMTP de produção.
 - O fluxo de eliminação de conta está implementado no código, mas o fluxo completo por email/PKCE e a eliminação com contas descartáveis continuam sem validação E2E.
-- A sincronização do histórico/Memória e o arquivo cloud de faturas ainda não estão ativos no projeto Supabase alojado.
+- A sincronização do histórico/Memória requer ativação explícita; o arquivo cloud de faturas é iniciado pelo proprietário. Validar ambos com contas descartáveis antes de publicar.
 - Não existe gateway de pagamento, analytics ou publicidade comercial configurada no código analisado; confirmar dependências transitivas e configuração do release final antes de marcar qualquer resposta como definitiva.
 - Os prazos de retenção, fundamentos jurídicos, subprocessadores e transferências internacionais continuam por definir pelo responsável legal.
 
