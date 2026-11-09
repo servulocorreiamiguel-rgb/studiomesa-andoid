@@ -95,7 +95,7 @@ internal object AssistantAutomaticMemoryPolicy {
             selected.add(note)
             used += extra
         }
-        return selected.asReversed().joinToString("\\n")
+        return selected.asReversed().joinToString("\n")
     }
 
     private fun containsSensitiveData(value: String): Boolean {
