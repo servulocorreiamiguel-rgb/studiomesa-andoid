@@ -198,8 +198,8 @@ internal class StudioMesaEconomicCalculationsTool : OpenApiTool {
         all.take(30).forEach { row ->
             rows.put(JSONObject()
                 .put("category", row.category)
-                .put("budget_eur", row.budget.toPlainString())
-                .put("actual_eur", row.actual.toPlainString())
+                .put("budget_eur", row.budget.setScale(2, RoundingMode.HALF_UP).toPlainString())
+                .put("actual_eur", row.actual.setScale(2, RoundingMode.HALF_UP).toPlainString())
                 .put("variance_eur", row.variance.toPlainString())
                 .putNullable("variance_percent", row.variancePercent))
         }
@@ -210,8 +210,8 @@ internal class StudioMesaEconomicCalculationsTool : OpenApiTool {
             .put("categories", rows)
             .put("category_count", all.size)
             .put("truncated", all.size > 30)
-            .put("budget_total_eur", budgetTotal.toPlainString())
-            .put("actual_total_eur", actualTotal.toPlainString())
+            .put("budget_total_eur", budgetTotal.setScale(2, RoundingMode.HALF_UP).toPlainString())
+            .put("actual_total_eur", actualTotal.setScale(2, RoundingMode.HALF_UP).toPlainString())
             .put("variance_total_eur", varianceTotal.toPlainString())
             .put("interpretation", "Desvio positivo significa valor real acima do orçamento; negativo significa abaixo. Interpreta conforme a categoria.")
     }
