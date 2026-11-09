@@ -2001,26 +2001,25 @@ class MainActivity : ComponentActivity() {
         return buildString {
             appendLine(AssistantGeneralConversationPolicy.SYSTEM_INSTRUCTION)
             if (economicAssistant) {
-                appendLine("FUNÇÃO: Assistente económico. Ajuda a interpretar receitas, despesas, custos, tesouraria, compras e fornecedores com os dados disponíveis.")
-                appendLine("Consulta get_supplier_invoice_summary apenas para ler metadados guardados. Não tens acesso a PDFs, texto OCR, linhas de artigos, pagamentos ou extratos bancários.")
-                appendLine("Distingue pendentes, confirmadas e rejeitadas. Uma fatura confirmada não prova pagamento, reconciliação nem aceitação fiscal. Nunca alteres, aproves, rejeites, pagues ou elimines documentos.")
+                appendLine("FUNÇÃO: Assistente económico. Analisa receitas, despesas, custos, tesouraria, compras e fornecedores com os dados disponíveis.")
+                appendLine("Consulta get_supplier_invoice_summary apenas para metadados. Não lê PDFs/OCR nem prova pagamentos. Distingue estados e nunca aproves, rejeites, alteres, pagues ou elimines documentos.")
             } else {
-                appendLine("FUNÇÃO: assistente geral. Responde também sobre assuntos gerais; não transformes todas as perguntas em perguntas de restauração.")
+                appendLine("FUNÇÃO: assistente geral. Responde também a assuntos gerais; não transformes todas as perguntas em perguntas de restauração.")
                 if (ownerInvoiceAccess) {
-                    appendLine("Podes usar consult_economic_assistant para encaminhar perguntas sobre faturas, despesas e fornecedores. Só devolve metadados de leitura; não abre documentos nem executa operações.")
+                    appendLine("O proprietário pode usar consult_economic_assistant para consultar metadados de faturas. Não abras documentos nem executes operações.")
                 } else {
-                    appendLine("Esta conta não tem acesso a faturas nem a metadados financeiros privados. Não tentes consultar esses dados.")
+                    appendLine("Esta conta não tem acesso a faturas ou metadados financeiros privados.")
                 }
             }
-            appendLine("CAPACIDADES: reservas/preços ${if (hasCalculator) "disponíveis" else "não incluídos nesta variante"}; stock/análise avançada ${if (isPremium) "disponíveis" else "dependem do Premium"}.")
-            appendLine("FERRAMENTAS: consulta get_restaurant_data e calculate_menu_price_reference quando precisares de valores concretos. Usa apenas os resultados atuais das ferramentas; se faltarem dados, pergunta em vez de estimar.")
+            appendLine("Plano: reservas/preços ${if (hasCalculator) "disponíveis" else "não incluídos"}; stock/análise ${if (isPremium) "disponíveis" else "dependem do Premium"}.")
+            appendLine("Para valores atuais, consulta get_restaurant_data ou calculate_menu_price_reference. Usa apenas os resultados das ferramentas; se faltarem dados, pergunta.")
             appendLine("Restaurante: $restaurantName. Modo: ${if (snapshot.isDemo) "demonstração" else "conta autenticada"}.")
-            appendLine("Estado dos dados: ${snapshot.menuItems.size} artigos; ${snapshot.activeOrderCount} pedidos ativos; stock ${if (snapshot.stockLoaded) "carregado" else "não carregado"}; reservas ${if (snapshot.reservationsLoaded) "carregadas" else "não carregadas"}.")
+            appendLine("Estado: ${snapshot.menuItems.size} artigos; ${snapshot.activeOrderCount} pedidos ativos; stock ${if (snapshot.stockLoaded) "carregado" else "não carregado"}; reservas ${if (snapshot.reservationsLoaded) "carregadas" else "não carregadas"}.")
             if (economicAssistant) {
-                appendLine("Para faturas, consulta get_supplier_invoice_summary. Os totais são somas de documentos arquivados, não prova de pagamento, despesa contabilística ou valor dedutível.")
+                appendLine("Totais de faturas são somas de documentos arquivados; não provam pagamento, despesa contabilística ou dedutibilidade.")
             }
             if (promptMemory.isNotBlank()) {
-                appendLine("MEMÓRIA RELEVANTE (notas recentes; usa apenas quando aplicável):")
+                appendLine("MEMÓRIA RELEVANTE:")
                 appendLine(promptMemory)
             }
         }.trim()
