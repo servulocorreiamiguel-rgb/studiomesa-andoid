@@ -19,7 +19,9 @@ Esta fotografia foi feita por leitura do repositório, estado remoto do Supabase
 - A afluência é estimada pelo número de linhas de pedidos concluídos; não equivale a pessoas, clientes ou reservas. O valor é nominal e não confirma pagamentos recebidos.
 - Os feriados nacionais portugueses são reconhecidos por regra de calendário. O Carnaval é facultativo. Feriados municipais e eventos locais são configurados pelo proprietário no ecrã Análise.
 - O calendário municipal/eventos é guardado localmente no dispositivo e ainda não sincroniza com outros dispositivos.
-- O motor de previsão e as regras do assistente têm testes unitários e instrumentados acrescentados na revisão. O teste de interface Premium valida a abertura do ecrã, a configuração de um evento e a sua presença na previsão. O resultado final da CI do commit mais recente deve ser consultado antes da integração.
+- O motor de previsão, o reconhecimento de feriados, as ferramentas económicas e o parser de faturas têm testes unitários e instrumentados. O teste de interface Premium valida a abertura do ecrã, a configuração de um evento e a sua presença na previsão.
+- **CI concluída com sucesso em 9/11/2026:** workflow `42690365320`, commit `e3f9edff57c1c98c5a90e68cdb6654790ef9e765`. Passaram compilação das cinco variantes, testes unitários das cinco variantes, Android Lint, replay de migrações e testes de autorização/RLS, validação de configuração de release com chave temporária de CI e smoke tests completos em Android 8/API 26 e Android 16/API 36. Os artefactos desta execução são APKs debug de demonstração e relatórios de teste, não builds comerciais assinadas.
+- A CI não executa inferência real do modelo LFM2.5 em telemóvel físico. Velocidade, memória, aquecimento, estabilidade prolongada e qualidade de resposta no OPPO A5m e noutros equipamentos ainda exigem teste físico.
 - A pesquisa Web é separada do modelo local. `studiomesa-web-search` está ativa com JWT obrigatório; requer `SEARXNG_BASE_URL` HTTPS configurado. A presença efetiva do segredo não foi confirmada nesta leitura. A função rejeita alguns padrões comuns de dados pessoais, mas nenhum filtro é completo.
 - OCR de faturas é local. O resumo económico usa metadados aprovados/pendentes/rejeitados; aprovação pelo proprietário não prova pagamento nem dedutibilidade fiscal.
 - A sincronização cloud do histórico/Memória está desligada por defeito e requer consentimento; a cópia cloud é protegida por RLS, mas não tem cifragem ponta a ponta.
@@ -106,6 +108,7 @@ A auditoria não é um pentest independente e não garante ausência de vulnerab
 
 ## Próximas verificações
 
-- Consultar o workflow da revisão #98 e exigir sucesso dos jobs de build, unit tests, lint, replay de migrações e smoke tests Android 8/16.
-- Só depois integrar a PR e construir uma nova versão para testes.
+- A CI integral da revisão #98 terminou com sucesso no commit `e3f9edff57c1c98c5a90e68cdb6654790ef9e765`; confirmar novamente o estado da PR antes de integrar.
+- Depois da integração, exigir nova CI completa em `main` e produzir uma nova build de demonstração para os testes físicos.
+- Não executar `db push` nem assinar/distribuir a versão comercial enquanto a divergência de migrações, os bloqueios legais/Auth e a chave definitiva não estiverem resolvidos.
 - Resolver os bloqueios de base de dados e lançamento por etapas, sem alterar a produção por tentativa.
