@@ -1999,33 +1999,25 @@ class MainActivity : ComponentActivity() {
         val promptMemory = AssistantAutomaticMemoryPolicy.contextSnippet(memory)
 
         return buildString {
-            appendLine(AssistantGeneralConversationPolicy.SYSTEM_INSTRUCTION)
             if (economicAssistant) {
-                appendLine("FUNÇÃO: Assistente económico. Analisa receitas, despesas, custos, tesouraria, compras e fornecedores com os dados disponíveis.")
-                appendLine("Consulta get_supplier_invoice_summary apenas para metadados. Se pedirem um período, usa issue_date_from e issue_date_to em AAAA-MM-DD. Separa aprovadas, pendentes e rejeitadas; nunca somes pendentes/rejeitadas como despesas aprovadas. Uma fatura aprovada não prova pagamento; não lê PDFs/OCR e não alteres nem pagues faturas.")
-                appendLine("Usa calculate_restaurant_economics para calcular indicadores mensais, custos por dose, desperdício, orçamentos, consumo, pessoal e reposição. Usa apenas valores explícitos; pergunta pelo que falta. Mostra inputs_used e informa que a origem dos parâmetros não é verificada. Compras/faturas não são automaticamente custo alimentar consumido. Os valores não vêm automaticamente do POS ou da contabilidade.")
-                appendLine("Usa analyze_sales_patterns_and_forecast para comparar os sete dias da semana, identificar os dias com maior afluência e prever valores nominais dos próximos dias. A previsão usa apenas pedidos concluídos, amostras observadas e tendência limitada; mostra sempre confiança e número de dias comparáveis. Não chames valor previsto a pagamento recebido.")
-                appendLine("Reconhece automaticamente os feriados nacionais portugueses. Para a pergunta «quais são os próximos feriados?» ou «que eventos locais estão configurados?», chama analyze_sales_patterns_and_forecast com action=holiday_calendar e lista as datas devolvidas. Carnaval e feriado municipal são facultativos; eventos locais só aparecem se estiverem configurados pelo proprietário na secção Análise. Para perguntas sobre vendas nesses dias, chama a mesma ferramenta com action=forecast e indica se o efeito do feriado foi ou não medido no histórico.")
+                appendLine(AssistantEconomicConversationPolicy.SYSTEM_INSTRUCTION)
             } else {
+                appendLine(AssistantGeneralConversationPolicy.SYSTEM_INSTRUCTION)
                 appendLine("FUNÇÃO: assistente geral. Responde também a assuntos gerais; não transformes todas as perguntas em perguntas de restauração.")
                 if (ownerInvoiceAccess) {
                     appendLine("O proprietário pode usar consult_economic_assistant para consultar metadados de faturas. Não abras documentos nem executes operações.")
                 } else {
                     appendLine("Esta conta não tem acesso a faturas ou metadados financeiros privados.")
                 }
-            }
-            if (!economicAssistant) {
                 appendLine("Plano: reservas/preços ${if (hasCalculator) "disponíveis" else "não incluídos"}; stock/análise ${if (isPremium) "disponíveis" else "dependem do Premium"}.")
                 appendLine("Para valores atuais, consulta get_restaurant_data ou calculate_menu_price_reference. Usa apenas os resultados das ferramentas; se faltarem dados, pergunta.")
-            } else {
-                appendLine("Para números operacionais consulta get_restaurant_data; para cenários financeiros usa a calculadora local e valores explícitos.")
             }
             appendLine("Restaurante: $restaurantName. Modo: ${if (snapshot.isDemo) "demonstração" else "conta autenticada"}.")
             appendLine("Estado: ${snapshot.menuItems.size} artigos; ${snapshot.activeOrderCount} pedidos ativos; stock ${if (snapshot.stockLoaded) "carregado" else "não carregado"}; reservas ${if (snapshot.reservationsLoaded) "carregadas" else "não carregadas"}.")
-            if (economicAssistant) {
-                appendLine("Totais de faturas são somas de documentos arquivados; não provam pagamento, despesa contabilística ou dedutibilidade.")
-            }
-            if (promptMemory.isNotBlank()) {
+            if (economicAssistant && promptMemory.isNotBlank()) {
+                appendLine("MEMÓRIA RELEVANTE:")
+                appendLine(promptMemory)
+            } else if (promptMemory.isNotBlank()) {
                 appendLine("MEMÓRIA RELEVANTE:")
                 appendLine(promptMemory)
             }
