@@ -40,7 +40,9 @@ internal data class StudioMesaAssistantSnapshot(
     val reservationsLoaded: Boolean = false,
     val pendingReservations: Int = 0,
     val salesLines: List<AssistantSaleLine> = emptyList(),
-    val supplierInvoices: List<SupplierInvoiceRecord> = emptyList()
+    val supplierInvoices: List<SupplierInvoiceRecord> = emptyList(),
+    val salesHistory: List<SalesAnalysisOrder> = emptyList(),
+    val salesSpecialDays: List<RestaurantSpecialDay> = emptyList()
 )
 internal enum class AssistantPriority { URGENT, ATTENTION, TIP }
 internal data class AssistantRecommendation(
@@ -500,6 +502,39 @@ internal object StudioMesaAdvisor {
             )
         }
 
+        val asksHolidayCalendar = containsAny(
+            q,
+            "quais os proximos feriados", "quais sao os proximos feriados",
+            "proximos feriados", "feriados proximos", "que feriados se aproximam",
+            "quais feriados se aproximam", "que feriados temos",
+            "quais feriados temos", "calendario de feriados", "feriados nacionais",
+            "feriado municipal", "eventos locais", "proximos eventos locais"
+        )
+        if (asksHolidayCalendar) return answerUpcomingSpecialDays(snapshot)
+
+        val asksWeekdaySales = containsAny(
+            q,
+            "vendas por dia da semana", "ganhos por dia da semana",
+            "receitas por dia da semana", "valor por dia da semana",
+            "dia da semana com mais vendas", "dia da semana com maior faturacao",
+            "qual dia da semana vende mais", "que dia da semana vende mais",
+            "qual dia teve mais vendas", "dia com mais vendas",
+            "dia de maior afluencia", "dia com maior afluencia",
+            "dias de maior afluencia", "dias mais movimentados"
+        )
+        if (asksWeekdaySales) return answerWeekdaySales(snapshot)
+
+        val asksSalesForecast = containsAny(
+            q,
+            "previsao de vendas", "prever vendas", "quanto vou vender", "quanto vamos vender",
+            "quanto venderei", "quanto venderemos", "vendas previstas", "estimativa de vendas",
+            "projecao de vendas", "vendas da proxima semana", "proximo mes",
+            "proximos 30 dias", "previsao de afluencia", "prever movimento",
+            "previsao para feriado", "previsao para feriados", "vendas nos feriados",
+            "previsao de vendas em feriados", "movimento no feriado", "movimento nos feriados"
+        )
+        if (asksSalesForecast) return answerSalesForecast(rawQuestion, snapshot)
+
         if (containsAny(q, "quanto me custou") ||
             (containsAny(q, "quanto me custa") && findMenuItemCandidates(rawQuestion, snapshot.menuItems).isNotEmpty())) {
             val candidates = findMenuItemCandidates(rawQuestion, snapshot.menuItems)
@@ -653,6 +688,145 @@ internal object StudioMesaAdvisor {
             "Gestor económico (opcional)",
             "Ativa o Gestor económico nesta página para analisar indicadores mensais, ponto de equilíbrio, tesouraria a 30 dias, custo de receitas, desperdício, comparação de fornecedores, orçamento vs. realizado, consumo teórico vs. real, reposição e cenários de custo de pessoal. Os cálculos usam os valores que o proprietário introduz nesta sessão; não consultam bancos ou fornecedores, não alteram preços, não movimentam stock nem enviam encomendas.",
             "Assistente"
+        )
+    }
+
+    private fun answerUpcomingSpecialDays(snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
+        val today = java.time.LocalDate.now()
+        val upcoming = (1L..365L).mapNotNull { offset ->
+            val date = today.plusDays(offset)
+            RestaurantSalesInsights.holidayName(date, snapshot.salesSpecialDays)
+                ?.let { date to it }
+        }
+
+        if (upcoming.isEmpty()) {
+            return StudioMesaAssistantAnswer(
+                "Calendário sem datas especiais",
+                "Não encontrei feriados nacionais ou eventos locais configurados nos próximos 12 meses. Confirma o calendário municipal e acrescenta festas, concertos ou jogos na secção Análise.",
+                "Análise"
+            )
+        }
+
+        val lines = upcoming.joinToString("\n") { (date, name) ->
+            "• $date — $name"
+        }
+        val source = if (snapshot.isDemo) "calendário nacional e eventos de demonstração" else
+            "calendário nacional e eventos configurados para este restaurante"
+        return StudioMesaAssistantAnswer(
+            "Próximos feriados e eventos",
+            "Nos próximos 12 meses, com base no $source:\n$lines\n\n" +
+                "Os feriados nacionais são calculados pelo calendário legal português. O Carnaval e o feriado municipal são facultativos e dependem do enquadramento aplicável. " +
+                "As datas locais só aparecem se estiverem configuradas neste dispositivo. " +
+                "A existência de um feriado/evento não prova que o restaurante estará aberto nem que terá maior movimento; o efeito nas vendas só é estimado com histórico comparável.",
+            "Análise"
+        )
+    }
+
+    private fun answerWeekdaySales(snapshot: StudioMesaAssistantSnapshot): StudioMesaAssistantAnswer {
+        val report = runCatching {
+            RestaurantSalesInsights.analyze(
+                orders = snapshot.salesHistory,
+                daysAhead = 1,
+                configuredSpecialDays = snapshot.salesSpecialDays
+            )
+        }.getOrElse {
+            return StudioMesaAssistantAnswer(
+                "Análise semanal indisponível",
+                "Não foi possível analisar o histórico carregado. Atualiza a secção Análise e confirma que os pedidos têm datas, valores e estado válidos.",
+                "Análise"
+            )
+        }
+        if (!report.hasUsableHistory) {
+            return StudioMesaAssistantAnswer(
+                "Ainda sem histórico de vendas suficiente",
+                "Não existem pedidos concluídos com data e valor válidos suficientes para comparar os dias da semana. Regista pedidos reais, conclui-os e volta a consultar. Não vou inventar ganhos nem assumir que dias sem registos tiveram vendas zero.",
+                "Análise"
+            )
+        }
+
+        val weekdayDetails = report.weekdaySales.joinToString("\n") { day ->
+            val average = day.averageDailyNominalValue?.let(::euro) ?: "Sem dados"
+            val traffic = if (day.isUsuallyHighTraffic) " · padrão de maior afluência" else ""
+            "${day.label.replaceFirstChar { it.uppercase(Locale("pt", "PT")) }}: " +
+                "$average de valor médio por dia observado · ${day.observedDays} dia(s) com registos · " +
+                "${day.completedOrderLines} linha(s) concluída(s)$traffic."
+        }
+        val highTraffic = report.weekdaySales.filter { it.isUsuallyHighTraffic }
+            .joinToString(", ") { it.label }
+            .ifBlank { "Ainda não há um padrão de maior afluência confirmado." }
+        val source = if (snapshot.isDemo) "dados locais de demonstração" else "histórico carregado do restaurante"
+
+        return StudioMesaAssistantAnswer(
+            "Vendas por dia da semana",
+            "Analisei $source. Valores nominais agrupados pela data de criação dos pedidos atualmente marcados como concluídos:\n" +
+                "$weekdayDetails\n\n" +
+                "Dia com maior valor médio: ${report.mostRevenueWeekday ?: "Sem dados"}. " +
+                "Dias com padrão de maior afluência: $highTraffic.\n\n" +
+                "Importante: isto não confirma pagamentos recebidos nem faturação contabilística. " +
+                "A afluência é aproximada pelo número de linhas de pedidos concluídos, não pelo número de clientes. " +
+                "Dias sem registos não são assumidos como dias com vendas zero.",
+            "Análise"
+        )
+    }
+
+    private fun answerSalesForecast(
+        rawQuestion: String,
+        snapshot: StudioMesaAssistantSnapshot
+    ): StudioMesaAssistantAnswer {
+        val q = normalizeLookupText(rawQuestion)
+        val daysAhead = when {
+            containsAny(q, "30 dias", "proximo mes", "proximos 30 dias") -> 30
+            containsAny(q, "14 dias", "duas semanas", "duas proximas semanas") -> 14
+            else -> 7
+        }
+        val report = runCatching {
+            RestaurantSalesInsights.analyze(
+                orders = snapshot.salesHistory,
+                daysAhead = daysAhead,
+                configuredSpecialDays = snapshot.salesSpecialDays
+            )
+        }.getOrElse {
+            return StudioMesaAssistantAnswer(
+                "Previsão de vendas indisponível",
+                "Não foi possível calcular a previsão com o histórico carregado. Atualiza a secção Análise e confirma as datas e os valores dos pedidos.",
+                "Análise"
+            )
+        }
+        if (!report.hasUsableHistory) {
+            return StudioMesaAssistantAnswer(
+                "Previsão sem histórico suficiente",
+                "Ainda não existem pedidos concluídos com datas e valores válidos para prever as vendas. A previsão só fica disponível quando houver registos reais comparáveis. Não vou substituir dados em falta por valores inventados.",
+                "Análise"
+            )
+        }
+
+        val forecastLines = report.forecasts.joinToString("\n") { day ->
+            val value = day.nominalValue?.let(::euro) ?: "Sem amostra comparável"
+            val confidence = when (day.confidence) {
+                SalesForecastConfidence.NONE -> "sem dados comparáveis"
+                SalesForecastConfidence.LOW -> "baixa"
+                SalesForecastConfidence.MEDIUM -> "média"
+                SalesForecastConfidence.HIGH -> "alta"
+            }
+            buildString {
+                append(day.date).append(" · ").append(day.weekdayLabel).append(": ").append(value)
+                append(" · confiança ").append(confidence)
+                append(" · ").append(day.comparableDays).append(" dia(s) comparável(is)")
+                day.specialDayName?.let { append(" · ").append(it) }
+                if (day.isHighTraffic) append(" · padrão de maior afluência")
+            }
+        }
+        val source = if (snapshot.isDemo) "dados locais de demonstração" else "histórico carregado do restaurante"
+
+        return StudioMesaAssistantAnswer(
+            "Previsão de vendas baseada no histórico",
+            "Previsão para os próximos $daysAhead dias com base em $source:\n$forecastLines\n\n" +
+                "A estimativa usa dias comparáveis da mesma semana e, quando há amostra suficiente, uma tendência recente limitada a ±15%. " +
+                "Reconhece feriados nacionais portugueses e eventos que o restaurante tenha configurado. " +
+                "O efeito específico de um feriado só é considerado medido quando existem pelo menos duas ocorrências históricas comparáveis. " +
+                "Os valores são estimativas nominais de pedidos por data de criação, não pagamentos recebidos nem garantias de procura. " +
+                "A afluência é aproximada por linhas de pedidos, não por pessoas.",
+            "Análise"
         )
     }
 

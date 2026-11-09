@@ -8,11 +8,12 @@ class AssistantGeneralConversationPolicyTest {
     @Test
     fun instructionClearlySupportsGeneralTopicsBeyondRestaurantManagement() {
         val instruction = AssistantGeneralConversationPolicy.SYSTEM_INSTRUCTION.lowercase()
-        assertTrue(instruction.contains("assistente conversacional de uso geral"))
-        assertTrue(instruction.contains("não te limites a restauração"))
-        assertTrue(instruction.contains("programação"))
+        assertTrue(instruction.contains("assistente conversacional geral"))
+        assertTrue(instruction.contains("não te limites à restauração"))
         assertTrue(instruction.contains("matemática, ciências"))
-        assertTrue(instruction.contains("traduções"))
+        assertTrue(instruction.contains("programação"))
+        assertTrue(instruction.contains("línguas"))
+        assertTrue(instruction.contains("assuntos gerais"))
     }
 
     @Test
@@ -20,7 +21,10 @@ class AssistantGeneralConversationPolicyTest {
         val instruction = AssistantGeneralConversationPolicy.SYSTEM_INSTRUCTION.lowercase()
         assertTrue(instruction.contains("erros ortográficos"))
         assertTrue(instruction.contains("histórico recente"))
-        assertTrue(instruction.contains("faz uma pergunta curta"))
+        assertTrue(instruction.contains("pergunta quando faltar informação essencial"))
+        assertTrue(instruction.contains("começa pela resposta direta"))
+        assertTrue(instruction.contains("valores usados, unidades e fórmula"))
+        assertTrue(instruction.contains("não confundas compras/faturas com consumo alimentar"))
     }
 
     @Test
@@ -38,14 +42,43 @@ class AssistantGeneralConversationPolicyTest {
         assertTrue(AssistantGeneralConversationPolicy.MAX_HISTORY_MESSAGE_CHARS > 300)
         assertTrue(AssistantGeneralConversationPolicy.MAX_HISTORY_MESSAGES *
             AssistantGeneralConversationPolicy.MAX_HISTORY_MESSAGE_CHARS <= 4000)
+        assertTrue(AssistantGeneralConversationPolicy.SYSTEM_INSTRUCTION.length <= 2200)
+        assertTrue(AssistantConversationContextPolicy.MAX_TOTAL_HISTORY_CHARS <= 2000)
+    }
+
+    @Test
+    fun economicAssistantPolicyFitsTheModelBudgetAndKeepsCriticalToolInstructions() {
+        val instruction = AssistantEconomicConversationPolicy.SYSTEM_INSTRUCTION
+
+        assertTrue(instruction.length < 2700)
+        listOf(
+            "get_restaurant_data",
+            "calculate_restaurant_economics",
+            "get_supplier_invoice_summary",
+            "issue_date_from",
+            "approved",
+            "pending_review",
+            "rejected",
+            "analyze_sales_patterns_and_forecast",
+            "weekday_profile",
+            "forecast",
+            "full_report",
+            "holiday_calendar",
+            "próximos 365 dias",
+            "não inventes números",
+            "não alteres preços"
+        ).forEach { required ->
+            assertTrue("Falta instrução essencial: $required", instruction.contains(required, ignoreCase = true))
+        }
     }
 
     @Test
     fun instructionDescribesTheOwnerOnlyReadOnlyEconomicBridge() {
         val instruction = AssistantGeneralConversationPolicy.SYSTEM_INSTRUCTION.lowercase()
         assertTrue(instruction.contains("consult_economic_assistant"))
-        assertTrue(instruction.contains("apenas para o proprietário autenticado"))
+        assertTrue(instruction.contains("está disponível apenas para o proprietário autenticado"))
         assertTrue(instruction.contains("nunca tentes aprovar"))
+        assertTrue(instruction.contains("não alegues que viste pdfs ou ocr"))
     }
 
 }

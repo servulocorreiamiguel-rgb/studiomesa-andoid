@@ -7,7 +7,8 @@
 - **Modelo:** LFM2.5-1.2B-Instruct INT4, artefacto `LFM2.5-1.2B-Instruct_int4.litertlm`.
 - **Origem do ficheiro:** comunidade `litert-community` no Hugging Face, conversão/quantização do modelo LFM publicado pela Liquid AI.
 - **Tamanho esperado:** 736 015 744 bytes.
-- **SHA-256 esperado:** `a28b5c59ac204e2e51c1f98d2d6db6982f0e12da59a268fe498edcb33237e906`.
+- **SHA-256 esperado:** `e904729a8a8a0160658cb7cd22992e270a0547c05cc45b08c47ece5c0e29425b`.
+- **URL imutável usada pela aplicação:** [Hugging Face — ficheiro INT4, revisão d23bed4d](https://huggingface.co/litert-community/LFM2.5-1.2B-Instruct/resolve/d23bed4d8871e970d9d4d7de087377a90ecb1b4e/LFM2.5-1.2B-Instruct_int4.litertlm).
 - **Licença indicada pelo repositório do modelo:** LFM Open License v1.0. Esta licença tem condições específicas, incluindo condições ligadas à receita anual da organização e outras obrigações. Não assumir elegibilidade comercial até conhecer a entidade que vai comercializar o produto e confirmar os termos integrais.
 - **Referências:** [modelo INT4 e metadados](https://huggingface.co/litert-community/LFM2.5-1.2B-Instruct) · [ficheiro de licença](https://huggingface.co/litert-community/LFM2.5-1.2B-Instruct/blob/main/LICENSE) · [documentação de terceiros do modelo](docs/THIRD-PARTY-AI-MODEL.md).
 
@@ -39,9 +40,9 @@ Referências consultadas: [Maven Central — Coroutines 1.10.2](https://central.
 
 ## Toolchain e dependências de desenvolvimento
 
-- Android Gradle Plugin: 8.10.0.
+- Android Gradle Plugin: 8.13.2.
 - Kotlin Android plugin: 2.3.0.
-- Gradle wrapper: 8.11.1.
+- Gradle wrapper/CI: 8.13.
 - JDK: Java 17.
 - Android SDK/Build Tools: API 36 / Build Tools 36.0.0 nas verificações de release.
 

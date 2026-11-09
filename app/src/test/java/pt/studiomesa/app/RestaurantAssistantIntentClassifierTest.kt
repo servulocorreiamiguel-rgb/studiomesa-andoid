@@ -31,6 +31,21 @@ class RestaurantAssistantIntentClassifierTest {
         }
     }
 
+    @Test fun routesHolidayCalendarAndEventQuestionsToEconomicManager() {
+        val questions = listOf(
+            "Quais são os próximos feriados?",
+            "Que feriados nacionais temos?",
+            "Quais eventos locais estão configurados?"
+        )
+        questions.forEach { question ->
+            assertEquals(
+                "$question -> ${RestaurantAssistantIntentClassifier.classify(question)}",
+                RestaurantAssistantIntent.ECONOMIC_MANAGER,
+                RestaurantAssistantIntentClassifier.classify(question).intent
+            )
+        }
+    }
+
     @Test fun keepsGeneralDailyBriefingSeparateFromEconomicSummary() {
         assertEquals(
             RestaurantAssistantIntent.DAILY_BRIEFING,
@@ -170,6 +185,24 @@ class RestaurantAssistantIntentClassifierTest {
         cases.forEach { (question, expected) ->
             assertEquals("$question -> ${RestaurantAssistantIntentClassifier.classify(question)}",
                 expected, RestaurantAssistantIntentClassifier.classify(question).intent)
+        }
+    }
+
+    @Test fun routesWeekdaySalesAndTrafficQuestionsToEconomicManager() {
+        val cases = listOf(
+            "Vendas por dia da semana",
+            "Ganhos por dia da semana",
+            "Qual dia da semana vende mais?",
+            "Qual dia da semana teve mais vendas?",
+            "Que dias são de maior afluência?",
+            "Quais são os dias mais movimentados?"
+        )
+        cases.forEach { question ->
+            assertEquals(
+                question,
+                RestaurantAssistantIntent.ECONOMIC_MANAGER,
+                RestaurantAssistantIntentClassifier.classify(question).intent
+            )
         }
     }
 

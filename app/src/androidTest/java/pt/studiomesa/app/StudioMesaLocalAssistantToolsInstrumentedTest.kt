@@ -1,6 +1,7 @@
 package pt.studiomesa.app
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import java.math.BigDecimal
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -11,6 +12,159 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class StudioMesaLocalAssistantToolsInstrumentedTest {
+
+    @Test
+    fun publicWebSearchRejectsPrivateDataBeforeCallingTheProvider() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val tool = StudioMesaWebSearchTool(context)
+        val privateQueries = listOf(
+            "Procura informação sobre miguel@example.com",
+            "Procura informação sobre o NIF 501234560",
+            "Procura informação sobre o telefone 912345678",
+            "Procura informação sobre o IBAN PT50000000000000000000000"
+        )
+
+        privateQueries.forEach { query ->
+            val result = JSONObject(tool.execute(JSONObject().put("query", query).toString()))
+            assertTrue("A pesquisa não devia aceitar dados privados: $query", result.has("error"))
+        }
+
+        val definition = JSONObject(tool.getToolDescriptionJsonString())
+        assertTrue(definition.getString("description").contains("Nunca envies dados privados"))
+    }
+
+    @Test
+    fun wikipediaSearchRejectsPrivateDataBeforeNetworkAccess() {
+        val tool = StudioMesaWikipediaSearchTool()
+        val privateQueries = listOf(
+            "Procura miguel@example.com",
+            "Procura o NIF 501234560",
+            "Procura o telefone 912345678",
+            "Procura o IBAN PT50000000000000000000000"
+        )
+
+        privateQueries.forEach { query ->
+            val result = JSONObject(tool.execute(JSONObject().put("query", query).toString()))
+            assertTrue("A Wikipédia não devia receber dados privados: $query", result.has("error"))
+        }
+
+        val definition = JSONObject(tool.getToolDescriptionJsonString())
+        assertTrue(definition.getString("description").contains("nunca dados internos"))
+    }
+
+    @Test
+    fun economicCalculationsToolAnalyzesMonthlyMetricsDeterministically() {
+        val tool = StudioMesaEconomicCalculationsTool()
+        val result = JSONObject(
+            tool.execute(
+                JSONObject()
+                    .put("operation", "monthly_analysis")
+                    .put("monthly_net_sales", 10000)
+                    .put("food_cost_consumed_including_waste", 3500)
+                    .put("monthly_payroll", 3000)
+                    .put("other_fixed_costs", 1000)
+                    .put("other_variable_costs", 500)
+                    .put("target_food_cost_percent", 30)
+                    .put("recorded_waste_cost", 200)
+                    .put("cash_available_now", 500)
+                    .put("expected_receipts_next_30_days", 1000)
+                    .put("payments_due_next_30_days", 1200)
+                    .put("weekly_net_sales_history", "1000;1100;1200;1300")
+                    .toString()
+            )
+        )
+
+        val data = result.getJSONObject("result")
+        assertTrue(result.getBoolean("read_only"))
+        assertTrue(result.getString("data_source").contains("origem dos valores não é verificada"))
+        assertTrue(result.getBoolean("confirmation_required"))
+        assertTrue(result.getBoolean("requires_manual_review"))
+        assertFalse(result.getBoolean("source_verified"))
+        assertEquals("10000", result.getJSONObject("inputs_used").getString("monthly_net_sales"))
+        assertEquals("35.0", data.getString("food_cost_percent"))
+        assertEquals("30.0", data.getString("payroll_percent"))
+        assertEquals("65.0", data.getString("prime_cost_percent"))
+        assertEquals("10000", data.getJSONObject("inputs_used").getString("monthly_net_sales_eur"))
+        assertEquals("2000.00", data.getString("estimated_operating_result_eur"))
+        assertEquals("6666.67", data.getString("estimated_break_even_sales_eur"))
+        assertEquals("300.00", data.getString("projected_cash_in_30_days_eur"))
+        assertEquals("1150.00", data.getString("forecast_next_week_sales_eur"))
+        assertTrue(data.getJSONArray("warnings").length() >= 3)
+    }
+
+    @Test
+    fun economicCalculationsToolSupportsRecipeWasteQuotesBudgetUsageLabourAndReorder() {
+        val tool = StudioMesaEconomicCalculationsTool()
+        fun execute(operation: String, rawLines: String, target: BigDecimal? = null): JSONObject {
+            val params = JSONObject().put("operation", operation).put("raw_lines", rawLines)
+            if (target != null) params.put("target_food_cost_percent", target)
+            return JSONObject(tool.execute(params.toString()))
+        }
+
+        val recipe = execute(
+            "recipe_cost",
+            "carne | 0.2 | 10 | 5\nbatata | 0.15 | 2 | 0",
+            BigDecimal("30")
+        ).getJSONObject("result")
+        assertEquals("2.41", recipe.getString("total_cost_per_portion_eur"))
+        assertEquals("8.02", recipe.getString("suggested_price_at_target_eur"))
+
+        val waste = execute("waste_log", "arroz | 2 | 3 | estragado\nfrango | 1 | 5 | validade")
+            .getJSONObject("result")
+        assertEquals("11.00", waste.getString("total_recorded_waste_eur"))
+
+        val suppliers = execute(
+            "supplier_quotes",
+            "Arroz | Fornecedor A | kg | 5 | 10\nArroz | Fornecedor B | kg | 10 | 18"
+        ).getJSONObject("result").getJSONArray("comparisons").getJSONObject(0)
+        assertEquals("Fornecedor B", suppliers.getString("lowest_unit_price_supplier"))
+
+        val budget = execute("budget_variance", "Alimentação | 1000 | 1200")
+            .getJSONObject("result").getJSONArray("categories").getJSONObject(0)
+        assertEquals("200.00", budget.getString("variance_eur"))
+        val budgetSummary = execute("budget_variance", """Alimentação | 1000 | 1200
+Renda | 500 | 450""")
+            .getJSONObject("result")
+        assertEquals("1500.00", budgetSummary.getString("budget_total_eur"))
+        assertEquals("1650.00", budgetSummary.getString("actual_total_eur"))
+        assertEquals("150.00", budgetSummary.getString("variance_total_eur"))
+
+        val usage = execute("usage_variance", "Arroz | 10 | 12 | 2")
+            .getJSONObject("result").getJSONArray("items").getJSONObject(0)
+        assertEquals("4.00", usage.getString("variance_cost_eur"))
+        val usageSummary = execute("usage_variance", """Arroz | 10 | 12 | 2
+Frango | 3 | 4 | 5""")
+            .getJSONObject("result")
+        assertEquals("9.00", usageSummary.getString("total_variance_cost_eur"))
+
+        val labour = execute("labour_plan", "160 | 12 | 10000 | 30")
+            .getJSONObject("result")
+        assertEquals("19.2", labour.getString("estimated_payroll_percent"))
+
+        val reorder = execute("reorder", "5 | 2 | 3 | 2")
+            .getJSONObject("result")
+        assertEquals("5.000", reorder.getString("suggested_order_quantity"))
+    }
+
+    @Test
+    fun economicCalculationsToolRejectsMissingOrInvalidInputsWithoutMutation() {
+        val tool = StudioMesaEconomicCalculationsTool()
+        val missing = JSONObject(tool.execute(JSONObject().put("operation", "monthly_analysis").toString()))
+        assertTrue(missing.has("error"))
+        assertTrue(missing.getBoolean("read_only"))
+
+        val invalid = JSONObject(
+            tool.execute(
+                JSONObject()
+                    .put("operation", "recipe_cost")
+                    .put("raw_lines", "carne | 0.2 | 10 | 110")
+                    .put("target_food_cost_percent", 30)
+                    .toString()
+            )
+        )
+        assertTrue(invalid.has("error"))
+        assertTrue(invalid.getBoolean("read_only"))
+    }
 
     @Test
     fun priceReferenceToolCalculatesWithoutChangingTheMenu() {
@@ -92,8 +246,8 @@ class StudioMesaLocalAssistantToolsInstrumentedTest {
         assertTrue(result.getBoolean("read_only"))
     }
     @Test
-    fun invoiceToolSummarisesOnlyImportedDocumentsAndNeverWrites() {
-        val invoice = SupplierInvoiceRecord(
+    fun invoiceToolSeparatesReviewStatusesAndFiltersIssueDateRange() {
+        val approved = SupplierInvoiceRecord(
             id = "00000000-0000-0000-0000-000000000001",
             supplierName = "Mercearia Central",
             supplierVatNumber = "501234560",
@@ -115,26 +269,81 @@ class StudioMesaLocalAssistantToolsInstrumentedTest {
             createdAtMillis = 1_700_000_000_000L,
             updatedAtMillis = 1_700_000_000_000L
         )
-        val snapshot = StudioMesaAssistantSnapshot(
-            isDemo = false,
-            restaurantConfigured = true,
-            menuItems = emptyList(),
-            supplierInvoices = listOf(invoice)
+        val pending = approved.copy(
+            id = "00000000-0000-0000-0000-000000000002",
+            supplierName = "Distribuidor Norte",
+            invoiceNumber = "FT/2026/002",
+            issueDate = "2026-11-07",
+            netAmount = "40.65",
+            vatAmount = "9.35",
+            totalAmount = "50.00",
+            reviewStatus = "pending_review"
         )
-        val tool = StudioMesaSupplierInvoiceTool(snapshot)
+        val rejected = approved.copy(
+            id = "00000000-0000-0000-0000-000000000003",
+            supplierName = "Fornecedor Antigo",
+            invoiceNumber = "FT/2026/003",
+            issueDate = "2026-10-31",
+            netAmount = "100.00",
+            vatAmount = "23.00",
+            totalAmount = "999.00",
+            reviewStatus = "rejected"
+        )
+        val tool = StudioMesaSupplierInvoiceTool(
+            StudioMesaAssistantSnapshot(
+                isDemo = false,
+                restaurantConfigured = true,
+                menuItems = emptyList(),
+                supplierInvoices = listOf(approved, pending, rejected)
+            )
+        )
+
         val result = JSONObject(
-            tool.execute(JSONObject().put("status", "approved").toString())
+            tool.execute(
+                JSONObject()
+                    .put("issue_date_from", "2026-11-01")
+                    .put("issue_date_to", "2026-11-30")
+                    .toString()
+            )
         )
-        assertEquals(1, result.getInt("count"))
-        assertEquals("123.00", result.getString("gross_total_eur"))
+        assertEquals(2, result.getInt("count"))
+        assertEquals("2026-11-01", result.getString("issue_date_from"))
+        assertEquals("2026-11-30", result.getString("issue_date_to"))
+        assertEquals("173.00", result.getString("gross_total_eur"))
+        assertEquals("123.00", result.getString("approved_gross_total_eur"))
+        assertEquals("50.00", result.getString("pending_review_gross_total_eur"))
+        assertEquals("0.00", result.getString("rejected_gross_total_eur"))
         assertEquals(1, result.getInt("approved"))
-        assertTrue(result.getBoolean("read_only"))
-        assertTrue(result.getString("warning").contains("Não prova pagamento"))
-        val filtered = JSONObject(
-            tool.execute(JSONObject().put("supplier", "outro").toString())
+        assertEquals(1, result.getInt("pending_review"))
+        assertEquals(0, result.getInt("rejected"))
+        assertTrue(result.getString("warning").contains("não prova pagamento"))
+
+        val pendingOnly = JSONObject(
+            tool.execute(
+                JSONObject()
+                    .put("status", "pending_review")
+                    .put("issue_date_from", "2026-11-06")
+                    .toString()
+            )
         )
-        assertEquals(0, filtered.getInt("count"))
+        assertEquals(1, pendingOnly.getInt("count"))
+        assertEquals("50.00", pendingOnly.getString("gross_total_eur"))
+
+        val invalidRange = JSONObject(
+            tool.execute(
+                JSONObject()
+                    .put("issue_date_from", "2026-11-30")
+                    .put("issue_date_to", "2026-11-01")
+                    .toString()
+            )
+        )
+        assertTrue(invalidRange.has("error"))
+
+        val definition = JSONObject(tool.getToolDescriptionJsonString())
+        assertTrue(definition.getString("description").contains("intervalo de datas de emissão"))
+        assertTrue(definition.getString("description").contains("documentos rejeitados"))
     }
+
 
     @Test
     fun localToolsUseTheLatestSnapshotAfterEachChatTurn() {
@@ -230,5 +439,103 @@ class StudioMesaLocalAssistantToolsInstrumentedTest {
         assertFalse(result.toString().contains("private/path"))
         assertFalse(result.toString().contains("texto OCR"))
     }
+
+
+    @Test
+    fun salesForecastToolListsNationalHolidaysAndConfiguredRestaurantEvents() {
+        val eventDate = java.time.LocalDate.now().plusDays(12)
+        val snapshot = StudioMesaAssistantSnapshot(
+            isDemo = false,
+            restaurantConfigured = true,
+            menuItems = emptyList(),
+            salesSpecialDays = listOf(
+                RestaurantSpecialDay(eventDate, "Festival do bairro")
+            )
+        )
+        val tool = StudioMesaSalesForecastTool(snapshot)
+        val definition = JSONObject(tool.getToolDescriptionJsonString())
+        assertTrue(definition.getJSONObject("parameters")
+            .getJSONObject("properties").getJSONObject("action")
+            .getJSONArray("enum").toString().contains("holiday_calendar"))
+
+        val result = JSONObject(
+            tool.execute(JSONObject().put("action", "holiday_calendar").toString())
+        )
+        assertTrue(result.getBoolean("read_only"))
+        assertEquals(365, result.getInt("days_ahead"))
+        val days = result.getJSONArray("upcoming_special_days")
+        val event = (0 until days.length())
+            .map { days.getJSONObject(it) }
+            .single { it.getString("date") == eventDate.toString() }
+        assertEquals("Festival do bairro", event.getString("name"))
+        assertTrue(event.getBoolean("custom_restaurant_event"))
+        assertTrue(result.getString("warning").contains("são facultativos"))
+        assertTrue(days.toString().contains("Ano Novo") || days.toString().contains("Restauração da Independência"))
+    }
+
+    @Test
+    fun salesForecastToolUsesRealSnapshotAndDoesNotInventValuesWithoutHistory() {
+        val zone = java.time.ZoneId.systemDefault()
+        val tomorrow = java.time.LocalDate.now(zone).plusDays(1)
+        val history = (1L..8L).map { weeksBack ->
+            val date = tomorrow.minusWeeks(weeksBack)
+            SalesAnalysisOrder(
+                createdAtMillis = date.atTime(12, 0).atZone(zone).toInstant().toEpochMilli(),
+                status = "Concluído",
+                unitAmount = if (weeksBack <= 4L) 120.0 else 100.0,
+                quantity = 1
+            )
+        }
+        val snapshot = StudioMesaAssistantSnapshot(
+            isDemo = false,
+            restaurantConfigured = true,
+            menuItems = emptyList(),
+            salesHistory = history
+        )
+        val tool = StudioMesaSalesForecastTool(snapshot)
+        val definition = JSONObject(tool.getToolDescriptionJsonString())
+        assertEquals("analyze_sales_patterns_and_forecast", definition.getString("name"))
+
+        val profile = JSONObject(
+            tool.execute(JSONObject().put("action", "weekday_profile").toString())
+        )
+        assertEquals(7, profile.getJSONArray("weekday_profile").length())
+        val tomorrowLabel = tomorrow.dayOfWeek.getDisplayName(
+            java.time.format.TextStyle.FULL,
+            java.util.Locale("pt", "PT")
+        )
+        val weekdayRows = profile.getJSONArray("weekday_profile")
+        val tomorrowProfile = (0 until weekdayRows.length())
+            .map { weekdayRows.getJSONObject(it) }
+            .single { it.getString("weekday") == tomorrowLabel }
+        assertEquals(8, tomorrowProfile.getInt("observed_days"))
+        assertFalse(tomorrowProfile.getBoolean("usually_high_traffic"))
+        assertFalse(profile.getBoolean("no_history"))
+
+        val forecast = JSONObject(
+            tool.execute(
+                JSONObject()
+                    .put("action", "forecast")
+                    .put("days_ahead", 7)
+                    .toString()
+            )
+        )
+        val firstDay = forecast.getJSONArray("forecast_days").getJSONObject(0)
+        assertEquals(tomorrow.toString(), firstDay.getString("date"))
+        assertEquals(8, firstDay.getInt("comparable_days"))
+        assertEquals("Alta", firstDay.getString("confidence"))
+
+        tool.updateSnapshot(snapshot.copy(salesHistory = emptyList()))
+        val emptyHistory = JSONObject(
+            tool.execute(JSONObject().put("action", "full_report").toString())
+        )
+        assertTrue(emptyHistory.getBoolean("no_history"))
+        assertEquals(
+            JSONObject.NULL,
+            emptyHistory.getJSONArray("forecast_days")
+                .optJSONObject(0)?.opt("forecast_nominal_order_value_eur")
+        )
+    }
+
 
 }

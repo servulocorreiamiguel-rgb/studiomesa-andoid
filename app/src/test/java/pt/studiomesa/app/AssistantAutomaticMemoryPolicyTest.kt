@@ -2,6 +2,7 @@ package pt.studiomesa.app
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -35,6 +36,17 @@ class AssistantAutomaticMemoryPolicyTest {
         assertNull(AssistantAutomaticMemoryPolicy.extractStableFact("Lembra-te que a minha palavra-passe é segredo123."))
         assertNull(AssistantAutomaticMemoryPolicy.extractStableFact("Prefiro usar o meu IBAN PT50000000000000000000000."))
         assertNull(AssistantAutomaticMemoryPolicy.extractStableFact("Guarda que o meu telefone é 912345678."))
+    }
+
+    @Test
+    fun promptMemoryKeepsRecentCompleteNotesWithinItsBudget() {
+        val memory = (1..8).joinToString("\n") { "• preferência estável número $it" }
+        val snippet = AssistantAutomaticMemoryPolicy.contextSnippet(memory, 70)
+
+        assertTrue(snippet.length <= 70)
+        assertTrue(snippet.contains("número 8"))
+        assertFalse(snippet.contains("número 1"))
+        assertTrue(snippet.lineSequence().all { it.startsWith("• ") })
     }
 
     @Test

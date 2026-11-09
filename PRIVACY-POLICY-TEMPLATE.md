@@ -2,7 +2,7 @@
 
 <strong>ESTADO: RASCUNHO — NÃO PUBLICAR.</strong> Este documento é um modelo técnico, não um parecer jurídico. O responsável legal pela aplicação tem de preencher os campos em falta, confirmar os fornecedores e os períodos de conservação, validar o comportamento da versão que será distribuída e obter revisão jurídica adequada.
 
-**Versão do modelo:** 6 de novembro de 2026  
+**Versão do modelo:** 9 de novembro de 2026  
 **Aplicação:** StudioMesa — Gestão e Cliente
 
 ## 1. Responsável pelo tratamento
@@ -26,10 +26,10 @@ Consoante a funcionalidade e o papel da pessoa, podem ser tratados:
 - **Restaurante e equipa:** nome do restaurante, identificadores de restaurante, associação e papel de proprietário/funcionário, códigos de adesão, permissões, dados de configuração e histórico de ações suportado pela versão.
 - **Operação do restaurante:** mesas, zonas e capacidade; artigos e categorias da carta; preços e custos internos; pedidos, quantidades, notas, estados e tempos; reservas, nome, contacto opcional, data/hora, número de pessoas, duração, mesa atribuída e notas; artigos de stock, quantidades, unidades, custos unitários e movimentos.
 - **Clientes e fidelização:** nome de apresentação, identificadores/códigos de cartão, associação ao restaurante, saldo e histórico de pontos, QR temporários e histórico de recompensas quando essas funcionalidades estiverem ativadas.
-- **Conteúdo do assistente:** perguntas e respostas, títulos de conversas e notas da Memória. O histórico e a Memória são cifrados localmente com uma chave do Android Keystore. O código inclui uma sincronização cloud opcional para a conta proprietária; quando essa migração está implantada, o conteúdo é guardado no Supabase e protegido por autenticação/RLS. Essa cópia cloud **não é cifrada ponta a ponta**.
-- **Documentos e faturas de fornecedores:** PDFs/imagens escolhidos pelo utilizador; texto extraído por OCR local; nome e NIF/VAT do fornecedor, número e datas da fatura, base, IVA, total, avisos, estado de revisão, tamanho, tipo MIME e hash do documento. O texto bruto de OCR não é guardado pelo arquivo. A cópia local dos metadados é cifrada; a cópia cloud do documento/metadados só funciona depois de aplicar e validar a migração e o bucket privado.
+- **Conteúdo do assistente:** perguntas e respostas, títulos de conversas e notas da Memória. O histórico e a Memória são cifrados localmente com uma chave do Android Keystore. A sincronização cloud fica **desativada por defeito** e só é ativada após confirmação explícita do proprietário na aplicação. Quando ativada, o histórico e a Memória são enviados para o Supabase, protegidos por autenticação e RLS; a cópia cloud **não é cifrada ponta a ponta**. Desativar a sincronização impede novos envios, mas não elimina automaticamente cópias já enviadas.
+- **Documentos e faturas de fornecedores:** PDFs/imagens escolhidos pelo utilizador; texto extraído por OCR local; nome e NIF/VAT do fornecedor, número e datas da fatura, base, IVA, total, avisos, estado de revisão, tamanho, tipo MIME e hash do documento. O texto bruto de OCR não é guardado pelo arquivo. A cópia local dos metadados é cifrada. Quando o proprietário escolhe arquivar uma fatura no servidor, o documento original e os metadados são enviados para a tabela `restaurant_supplier_invoices` e para o bucket privado `studiomesa-invoices` do Supabase; as políticas atuais limitam o acesso ao proprietário do restaurante.
 - **Modelo local de IA:** o modelo LFM2.5-1.2B-Instruct INT4 é descarregado a pedido de um repositório público para armazenamento privado da aplicação, com verificação do tamanho e SHA-256. A inferência ocorre no dispositivo; esta função não envia o prompt, histórico ou dados do restaurante ao fornecedor do modelo.
-- **Pesquisa pública opcional:** quando o utilizador aciona a ferramenta de pesquisa da Wikipédia, é enviada uma consulta pública curta à Wikimedia. A aplicação não deve incluir nessa consulta nomes de clientes/funcionários, contactos, faturas, valores privados ou dados operacionais.
+- **Pesquisa pública opcional:** quando o utilizador aciona a pesquisa pública na Web, a consulta curta é enviada ao endpoint SearXNG configurado no backend. A função Web rejeita consultas que pareçam conter email, telefone, NIF ou IBAN. Este filtro não deteta toda a informação confidencial; não devem ser enviados nomes de clientes/funcionários, faturas, valores privados ou dados operacionais. Não declarar fornecedores de pesquisa adicionais sem verificar a implementação e a configuração da versão publicada.
 - **Ficheiros e permissões:** uma referência Android Storage Access Framework ao documento escolhido e a autorização concedida pelo utilizador para voltar a aceder ao ficheiro. A disponibilidade de uma referência local pode depender da persistência da permissão concedida pelo fornecedor de ficheiros.
 - **Dados técnicos e segurança:** informação necessária para manter sessões, prevenir duplicações, registar operações, proteger o serviço, diagnosticar falhas e processar pedidos de eliminação, conforme a configuração real dos fornecedores.
 
@@ -41,7 +41,7 @@ Não são recolhidos dados de cartão bancário nem processados pagamentos pela 
 
 **No backend:** a aplicação utiliza Supabase Auth e PostgreSQL na região `eu-west-1` do projeto atualmente ligado. As operações de restaurante configuradas sincronizam dados para o backend e usam RLS/RPCs para limitar o acesso por conta/restaurante. A localização e os subprocessadores têm de ser confirmados na configuração e nos contratos vigentes no momento da publicação.
 
-**Estado técnico que importa antes de publicar:** em 6 de novembro de 2026, o projeto Supabase alojado ainda não contém as tabelas de sincronização de histórico/Memória, a tabela de faturas nem o bucket privado `studiomesa-invoices`. Também lhe faltam a matriz granular de permissões e as tabelas de receitas. Assim, não anunciar estas funcionalidades cloud como ativas até reconciliar o histórico de migrations e fazer um deployment aprovado. A política final tem de descrever exatamente a configuração que estiver ativa na release, não apenas o código da branch.
+**Estado técnico verificado em 9 de novembro de 2026:** o projeto Supabase atualmente ligado contém as tabelas de sincronização do histórico/Memória, a tabela `restaurant_supplier_invoices` e o bucket `studiomesa-invoices`, que está privado. As políticas consultadas limitam o histórico/Memória e o arquivo de faturas ao proprietário do restaurante. A sincronização do assistente passa a exigir ativação explícita na aplicação. A política final tem de ser novamente comparada com a versão binária e a configuração efetivamente ativa no momento da publicação; a existência de tabelas não substitui testes de autorização com contas separadas.
 
 ## 5. Finalidades e fundamentos
 
@@ -65,7 +65,7 @@ Os dados podem ser disponibilizados:
 
 - ao restaurante a que o utilizador está associado, de acordo com o papel e as permissões aplicáveis;
 - ao fornecedor de alojamento/autenticação Supabase e respetivos subcontratantes, conforme os termos e o DPA contratados;
-- à Wikimedia apenas quando é acionada a ferramenta pública de pesquisa;
+- ao endpoint SearXNG configurado, apenas quando o utilizador aciona a pesquisa pública, recebendo a consulta de pesquisa e não o histórico completo;
 - ao alojamento público do modelo apenas para descarregar o ficheiro do modelo, não para receber prompts;
 - a outros fornecedores apenas se vierem a ser integrados e devidamente declarados.
 
@@ -73,7 +73,7 @@ Os dados podem ser disponibilizados:
 
 ## 7. Segurança
 
-A aplicação usa autenticação, armazenamento privado, cifragem local em componentes relevantes, Android Keystore, RLS e verificações do lado do servidor. A sincronização cloud do assistente, quando ativada, é protegida por RLS, mas não é cifrada ponta a ponta. O modelo local verifica o hash do ficheiro descarregado. Nenhuma destas medidas constitui garantia absoluta de segurança ou substitui auditoria independente, testes e configuração segura do serviço.
+A aplicação usa autenticação, armazenamento privado, cifragem local em componentes relevantes, Android Keystore, RLS e verificações do lado do servidor. A sincronização cloud do assistente é desativada por defeito e, quando ativada pelo proprietário, é protegida por RLS, mas não é cifrada ponta a ponta. Os documentos de faturas ficam num bucket privado com políticas de acesso de proprietário. O modelo local verifica o hash do ficheiro descarregado. Nenhuma destas medidas constitui garantia absoluta de segurança ou substitui auditoria independente, testes e configuração segura do serviço.
 
 Antes de recolher dados reais, devem ser validados os privilégios das RPCs, isolamento entre restaurantes, sessões, permissões, backups/restauro, eliminação e configuração de email/Auth.
 

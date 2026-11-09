@@ -331,14 +331,30 @@ internal class StudioMesaSupplierInvoiceTool(
             .put("type", "string")
             .put("enum", JSONArray().put("all").put("pending_review").put("approved").put("rejected"))
             .put("description", "Estado da revisão. Por omissão usa all.")
+        val dateFrom = JSONObject()
+            .put("type", "string")
+            .put("description", "Data inicial inclusiva da emissão, em AAAA-MM-DD. Omitir se não for pedida.")
+            .put("pattern", "^\\d{4}-\\d{2}-\\d{2}$")
+        val dateTo = JSONObject()
+            .put("type", "string")
+            .put("description", "Data final inclusiva da emissão, em AAAA-MM-DD. Omitir se não for pedida.")
+            .put("pattern", "^\\d{4}-\\d{2}-\\d{2}$")
         val parameters = JSONObject()
             .put("type", "object")
-            .put("properties", JSONObject().put("supplier", supplier).put("status", status))
+            .put("properties", JSONObject()
+                .put("supplier", supplier)
+                .put("status", status)
+                .put("issue_date_from", dateFrom)
+                .put("issue_date_to", dateTo))
         return JSONObject()
             .put("name", "get_supplier_invoice_summary")
             .put(
                 "description",
-                "Consulta metadados das faturas de fornecedores importadas para o arquivo do restaurante, incluindo documentos pendentes, aprovados ou rejeitados. É apenas leitura: não aprova, rejeita, altera, paga ou apaga faturas. Não revela o texto OCR, as linhas de artigos nem o caminho privado dos ficheiros. Os totais são somas dos documentos arquivados, não prova de pagamento, reconciliação bancária ou lançamento contabilístico."
+                "Consulta apenas metadados das faturas de fornecedores importadas para o arquivo do restaurante. " +
+                    "Pode filtrar por fornecedor, estado de revisão e intervalo de datas de emissão (limites inclusivos, AAAA-MM-DD). " +
+                    "É apenas leitura: não aprova, rejeita, altera, paga ou apaga faturas. Não revela texto OCR, linhas de artigos nem caminhos privados. " +
+                    "Distingue sempre valores de faturas aprovadas, pendentes e rejeitadas. Nunca somes documentos rejeitados como despesas aprovadas; " +
+                    "pendentes devem ser apresentados à parte. Uma fatura aprovada pelo proprietário não prova pagamento, reconciliação bancária ou dedutibilidade fiscal."
             )
             .put("parameters", parameters)
             .toString()
@@ -351,19 +367,39 @@ internal class StudioMesaSupplierInvoiceTool(
         if (statusFilter !in setOf("all", "pending_review", "approved", "rejected")) {
             return@runCatching JSONObject().put("error", "Estado de fatura inválido.").toString()
         }
+
+        val fromDate = parseOptionalIssueDate(params.optString("issue_date_from"))
+        val toDate = parseOptionalIssueDate(params.optString("issue_date_to"))
+        if (fromDate != null && toDate != null && fromDate.isAfter(toDate)) {
+            return@runCatching JSONObject()
+                .put("error", "A data inicial não pode ser posterior à data final.")
+                .put("read_only", true)
+                .toString()
+        }
+
         val rows = snapshot.supplierInvoices.filter { invoice ->
+            val issueDate = runCatching { java.time.LocalDate.parse(invoice.issueDate) }.getOrNull()
             (supplierQuery.isBlank() || invoice.supplierName.contains(supplierQuery, ignoreCase = true)) &&
-                (statusFilter == "all" || invoice.reviewStatus == statusFilter)
+                (statusFilter == "all" || invoice.reviewStatus == statusFilter) &&
+                (fromDate == null || (issueDate != null && !issueDate.isBefore(fromDate))) &&
+                (toDate == null || (issueDate != null && !issueDate.isAfter(toDate)))
         }.sortedByDescending { it.issueDate }
-        val gross = rows.fold(BigDecimal.ZERO) { total, invoice ->
+
+        fun sumGross(selected: List<SupplierInvoiceRecord>) = selected.fold(BigDecimal.ZERO) { total, invoice ->
             total.add(invoice.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO)
         }.setScale(2, RoundingMode.HALF_UP)
-        val net = rows.fold(BigDecimal.ZERO) { total, invoice ->
+
+        fun sumNet(selected: List<SupplierInvoiceRecord>) = selected.fold(BigDecimal.ZERO) { total, invoice ->
             total.add(invoice.netAmount?.toBigDecimalOrNull() ?: BigDecimal.ZERO)
         }.setScale(2, RoundingMode.HALF_UP)
-        val vat = rows.fold(BigDecimal.ZERO) { total, invoice ->
+
+        fun sumVat(selected: List<SupplierInvoiceRecord>) = selected.fold(BigDecimal.ZERO) { total, invoice ->
             total.add(invoice.vatAmount?.toBigDecimalOrNull() ?: BigDecimal.ZERO)
         }.setScale(2, RoundingMode.HALF_UP)
+
+        val approvedRows = rows.filter { it.reviewStatus == "approved" }
+        val pendingRows = rows.filter { it.reviewStatus == "pending_review" }
+        val rejectedRows = rows.filter { it.reviewStatus == "rejected" }
         val items = JSONArray()
         rows.take(20).forEach { invoice ->
             items.put(
@@ -379,26 +415,46 @@ internal class StudioMesaSupplierInvoiceTool(
                     .put("document_verified_by_owner", invoice.reviewStatus == "approved")
             )
         }
+
         JSONObject()
             .put("count", rows.size)
-            .put("pending_review", rows.count { it.reviewStatus == "pending_review" })
-            .put("approved", rows.count { it.reviewStatus == "approved" })
-            .put("rejected", rows.count { it.reviewStatus == "rejected" })
-            .put("net_total_eur", net.toPlainString())
-            .put("vat_total_eur", vat.toPlainString())
-            .put("gross_total_eur", gross.toPlainString())
+            .put("pending_review", pendingRows.size)
+            .put("approved", approvedRows.size)
+            .put("rejected", rejectedRows.size)
+            .put("gross_total_eur", sumGross(rows).toPlainString())
+            .put("net_total_eur", sumNet(rows).toPlainString())
+            .put("vat_total_eur", sumVat(rows).toPlainString())
+            .put("approved_gross_total_eur", sumGross(approvedRows).toPlainString())
+            .put("pending_review_gross_total_eur", sumGross(pendingRows).toPlainString())
+            .put("rejected_gross_total_eur", sumGross(rejectedRows).toPlainString())
             .put("supplier_filter", supplierQuery)
             .put("status_filter", statusFilter)
+            .put("issue_date_from", params.optString("issue_date_from").trim().takeIf { it.isNotEmpty() } ?: JSONObject.NULL)
+            .put("issue_date_to", params.optString("issue_date_to").trim().takeIf { it.isNotEmpty() } ?: JSONObject.NULL)
             .put("documents", items)
             .put("truncated", rows.size > 20)
             .put("read_only", true)
-            .put("warning", "Soma os valores extraídos e guardados. Não prova pagamento, dedutibilidade fiscal ou reconciliação bancária.")
+            .put(
+                "warning",
+                "gross_total_eur soma todos os estados selecionados. Para análise financeira, approved_gross_total_eur, " +
+                    "pending_review_gross_total_eur e rejected_gross_total_eur estão separados. Uma fatura aprovada não prova pagamento, " +
+                    "dedutibilidade fiscal ou reconciliação bancária."
+            )
             .toString()
     }.getOrElse {
-        JSONObject().put("error", "Não foi possível consultar as faturas importadas.").toString()
+        JSONObject().put("error", "Não foi possível consultar as faturas importadas.").put("read_only", true).toString()
+    }
+
+    private fun parseOptionalIssueDate(raw: String): java.time.LocalDate? {
+        val value = raw.trim()
+        if (value.isBlank()) return null
+        require(value.matches(Regex("^\\d{4}-\\d{2}-\\d{2}$"))) {
+            "Usa datas de emissão no formato AAAA-MM-DD."
+        }
+        return runCatching { java.time.LocalDate.parse(value) }
+            .getOrElse { throw IllegalArgumentException("A data de emissão não é válida.") }
     }
 }
-
 
 /**
  * A narrow bridge from the general assistant to the economic assistant.

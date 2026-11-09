@@ -69,6 +69,8 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
     private var priceReferenceTool: StudioMesaPriceReferenceTool? = null
     private var supplierInvoiceTool: StudioMesaSupplierInvoiceTool? = null
     private var economicAssistantBridgeTool: StudioMesaEconomicAssistantBridgeTool? = null
+    private var economicCalculationsTool: StudioMesaEconomicCalculationsTool? = null
+    private var salesForecastTool: StudioMesaSalesForecastTool? = null
     @Volatile private var downloading = false
     @Volatile private var closed = false
     private var verifiedThisProcess = false
@@ -198,6 +200,9 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
             val result = runCatching {
                 require(conversationId.isNotBlank()) { "A conversa não está identificada." }
                 require(userMessage.isNotBlank()) { "A mensagem está vazia." }
+                require(userMessage.length <= MAX_USER_MESSAGE_CHARS) {
+                    "A pergunta é demasiado longa para o modelo local (${MAX_USER_MESSAGE_CHARS} caracteres). Divide-a em duas mensagens para evitar perder contexto."
+                }
                 require(isModelInstalled()) { "Transfere primeiro o modelo de IA local." }
 
                 if (!verifiedThisProcess) {
@@ -236,7 +241,13 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     // An Engine and its Conversation belong to one user conversation.
                     // LiteRT-LM 0.18/LFM2 can retain short-convolution state when a second
                     // Conversation is created on an already-used Engine.
-                    createdEngine.initialize()
+                    try {
+                        createdEngine.initialize()
+                    } catch (error: Exception) {
+                        // Do not leak native runtime resources if model/backend initialisation fails.
+                        runCatching { createdEngine.close() }
+                        throw error
+                    }
 
                     val dataTool = StudioMesaRestaurantDataTool(snapshot)
                     val priceTool = StudioMesaPriceReferenceTool(snapshot)
@@ -246,24 +257,21 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     val bridgeTool = if (!economicMode && economicBridgeEnabled) {
                         invoiceTool?.let(::StudioMesaEconomicAssistantBridgeTool)
                     } else null
+                    val calculationsTool = if (economicMode) StudioMesaEconomicCalculationsTool() else null
+                    val salesForecast = if (economicMode) StudioMesaSalesForecastTool(snapshot) else null
                     val enabledTools = mutableListOf(tool(dataTool), tool(priceTool))
                     if (economicMode && invoiceTool != null) {
                         enabledTools.add(tool(invoiceTool))
                     } else if (bridgeTool != null) {
                         enabledTools.add(tool(bridgeTool))
                     }
+                    if (calculationsTool != null) enabledTools.add(tool(calculationsTool))
+                    if (salesForecast != null) enabledTools.add(tool(salesForecast))
                     enabledTools.add(tool(StudioMesaWikipediaSearchTool()))
                     enabledTools.add(tool(StudioMesaWebSearchTool(appContext)))
-                    val initialMessages = history
-                        .takeLast(MAX_HISTORY_MESSAGES)
-                        .mapNotNull { turn ->
-                            val clean = turn.content.trim().take(MAX_HISTORY_MESSAGE_CHARS)
-                            when {
-                                clean.isBlank() -> null
-                                turn.role == "user" -> Message.user(clean)
-                                turn.role == "assistant" -> Message.model(clean)
-                                else -> null
-                            }
+                    val initialMessages = AssistantConversationContextPolicy.compactHistory(history)
+                        .map { turn ->
+                            if (turn.role == "user") Message.user(turn.content) else Message.model(turn.content)
                         }
 
                     val createdConversation = try {
@@ -297,6 +305,8 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     priceReferenceTool = priceTool
                     supplierInvoiceTool = invoiceTool
                     economicAssistantBridgeTool = bridgeTool
+                    economicCalculationsTool = calculationsTool
+                    salesForecastTool = salesForecast
                 }
 
                 // Keep the conversation's native history, but refresh the read-only tool
@@ -309,6 +319,11 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                 if (economicMode) {
                     supplierInvoiceTool?.updateSnapshot(snapshot)
                         ?: throw IllegalStateException("A ferramenta de faturas não está disponível no modo económico.")
+                    if (economicCalculationsTool == null) {
+                        throw IllegalStateException("A calculadora económica não está disponível nesta sessão.")
+                    }
+                    salesForecastTool?.updateSnapshot(snapshot)
+                        ?: throw IllegalStateException("A análise semanal e previsão de vendas não está disponível nesta sessão.")
                 } else if (economicBridgeEnabled) {
                     economicAssistantBridgeTool?.updateSnapshot(snapshot)
                         ?: throw IllegalStateException("A ligação ao Assistente económico não está disponível.")
@@ -320,7 +335,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                 val answer = StringBuilder()
                 runBlocking {
                     activeConversation.sendMessageAsync(
-                        Message.user(userMessage.take(MAX_USER_MESSAGE_CHARS))
+                        Message.user(userMessage)
                     ).collect { chunk ->
                         val text = chunk.toString()
                         if (text.isNotEmpty()) {
@@ -356,6 +371,8 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         priceReferenceTool = null
         supplierInvoiceTool = null
         economicAssistantBridgeTool = null
+        economicCalculationsTool = null
+        salesForecastTool = null
 
         try {
             currentConversation?.close()
@@ -409,8 +426,8 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         const val MAX_HISTORY_MESSAGES = AssistantGeneralConversationPolicy.MAX_HISTORY_MESSAGES
         const val MAX_SESSION_USER_TURNS = 2
         const val MAX_HISTORY_MESSAGE_CHARS = AssistantGeneralConversationPolicy.MAX_HISTORY_MESSAGE_CHARS
-        const val MAX_SYSTEM_INSTRUCTION_CHARS = 3800
-        const val MAX_USER_MESSAGE_CHARS = 1600
+        const val MAX_SYSTEM_INSTRUCTION_CHARS = 3200
+        const val MAX_USER_MESSAGE_CHARS = 1200
         const val MINIMUM_FREE_SPACE_BYTES = 128L * 1024L * 1024L
         const val BUFFER_SIZE = 1024 * 1024
     }

@@ -754,4 +754,40 @@ class MainActivitySmokeTest {
         }
     }
 
+
+    @Test
+    fun premiumAnalysisShowsWeekdayForecastAndSavesLocalSpecialEvent() {
+        assumeFalse("Customer variant has its own navigation.", isCustomerVariant())
+        assumeTrue(
+            "Only the Premium plan exposes the Analysis screen.",
+            InstrumentationRegistry.getInstrumentation().targetContext.packageName.contains(".premium.")
+        )
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withContentDescription("Abrir menu de navegação")).perform(click())
+            onView(withContentDescription("Abrir secção Análise")).perform(scrollTo(), click())
+
+            onView(withText("Valor nominal por dia da semana"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+            onView(withText("Previsão dos próximos 7 dias"))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+            onView(withText("Configurar feriados municipais e eventos locais"))
+                .perform(scrollTo(), click())
+
+            onView(withText("Feriados municipais e eventos"))
+                .check(matches(isDisplayed()))
+            val tomorrow = java.time.LocalDate.now().plusDays(1).toString()
+            onView(withHint("2027-06-24 | São João\n2027-09-15 | Festa local"))
+                .perform(replaceText("$tomorrow | Evento de teste"))
+            onView(withText("Guardar")).perform(click())
+
+            onView(withText(containsString("Feriado/evento: Evento de teste")))
+                .perform(scrollTo())
+                .check(matches(isDisplayed()))
+        }
+    }
+
+
 }

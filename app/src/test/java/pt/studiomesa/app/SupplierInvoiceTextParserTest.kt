@@ -39,6 +39,83 @@ class SupplierInvoiceTextParserTest {
     }
 
     @Test
+    fun doesNotConfuseDueDateWithIssueDateWhenDueDateAppearsFirst() {
+        val draft = SupplierInvoiceTextParser.parse(
+            """
+                FORNECEDOR: Mercearia Central Lda
+                FATURA FT/2026/000124
+                Data de vencimento: 20/11/2026
+                Data da fatura: 05/11/2026
+                Base tributável: 100,00 €
+                Total a pagar: 123,00 €
+                Total IVA: 23,00 €
+            """.trimIndent()
+        )
+
+        assertEquals("2026-11-05", draft.issueDate)
+        assertEquals("2026-11-20", draft.dueDate)
+        assertEquals(BigDecimal("123.00"), draft.totalAmount)
+        assertEquals(BigDecimal("23.00"), draft.vatAmount)
+        assertNull(draft.arithmeticWarning())
+    }
+
+    @Test
+    fun genericTotalLabelDoesNotCaptureVatOrSubtotalLines() {
+        val draft = SupplierInvoiceTextParser.parse(
+            """
+                FORNECEDOR: Distribuidor Norte
+                FATURA FT/2026/000125
+                Data da fatura: 06/11/2026
+                Subtotal: 90,00 €
+                Total a pagar: 110,00 €
+                IVA total: 20,00 €
+            """.trimIndent()
+        )
+
+        assertEquals(BigDecimal("110.00"), draft.totalAmount)
+        assertEquals(BigDecimal("20.00"), draft.vatAmount)
+        assertNull(draft.arithmeticWarning())
+    }
+
+    @Test
+    fun recognizesTotalIncludingVatWithoutMistakingItForTheVatAmount() {
+        val draft = SupplierInvoiceTextParser.parse(
+            """
+                FORNECEDOR: Mercearia Central Lda
+                FATURA FT/2026/000126
+                Data da fatura: 07/11/2026
+                Base tributável: 100,00 €
+                IVA: 23,00 €
+                Total com IVA: 123,00 €
+            """.trimIndent()
+        )
+
+        assertEquals(BigDecimal("100.00"), draft.netAmount)
+        assertEquals(BigDecimal("23.00"), draft.vatAmount)
+        assertEquals(BigDecimal("123.00"), draft.totalAmount)
+        assertNull(draft.arithmeticWarning())
+    }
+
+    @Test
+    fun recognizesCompactTotalWithVatLabelAndIgnoresTaxTotalLine() {
+        val draft = SupplierInvoiceTextParser.parse(
+            """
+                FORNECEDOR: Distribuidor Norte
+                FATURA FT/2026/000127
+                Data da fatura: 08/11/2026
+                Base tributável: 50,00 €
+                Total IVA: 11,50 €
+                Total c/ IVA: 61,50 €
+            """.trimIndent()
+        )
+
+        assertEquals(BigDecimal("50.00"), draft.netAmount)
+        assertEquals(BigDecimal("11.50"), draft.vatAmount)
+        assertEquals(BigDecimal("61.50"), draft.totalAmount)
+        assertNull(draft.arithmeticWarning())
+    }
+
+    @Test
     fun rejectsInvalidPortugueseVatNumber() {
         assertTrue(SupplierInvoiceTextParser.isValidPortugueseVatNumber("501234560"))
         assertFalse(SupplierInvoiceTextParser.isValidPortugueseVatNumber("501234568"))
