@@ -243,8 +243,8 @@ Frango | 3 | 4 | 5""")
         assertTrue(result.getBoolean("read_only"))
     }
     @Test
-    fun invoiceToolSummarisesOnlyImportedDocumentsAndNeverWrites() {
-        val invoice = SupplierInvoiceRecord(
+    fun invoiceToolSeparatesReviewStatusesAndFiltersIssueDateRange() {
+        val approved = SupplierInvoiceRecord(
             id = "00000000-0000-0000-0000-000000000001",
             supplierName = "Mercearia Central",
             supplierVatNumber = "501234560",
@@ -266,26 +266,79 @@ Frango | 3 | 4 | 5""")
             createdAtMillis = 1_700_000_000_000L,
             updatedAtMillis = 1_700_000_000_000L
         )
-        val snapshot = StudioMesaAssistantSnapshot(
-            isDemo = false,
-            restaurantConfigured = true,
-            menuItems = emptyList(),
-            supplierInvoices = listOf(invoice)
+        val pending = approved.copy(
+            id = "00000000-0000-0000-0000-000000000002",
+            supplierName = "Distribuidor Norte",
+            invoiceNumber = "FT/2026/002",
+            issueDate = "2026-11-07",
+            netAmount = "40.65",
+            vatAmount = "9.35",
+            totalAmount = "50.00",
+            reviewStatus = "pending_review"
         )
-        val tool = StudioMesaSupplierInvoiceTool(snapshot)
+        val rejected = approved.copy(
+            id = "00000000-0000-0000-0000-000000000003",
+            supplierName = "Fornecedor Antigo",
+            invoiceNumber = "FT/2026/003",
+            issueDate = "2026-10-31",
+            netAmount = "100.00",
+            vatAmount = "23.00",
+            totalAmount = "999.00",
+            reviewStatus = "rejected"
+        )
+        val tool = StudioMesaSupplierInvoiceTool(
+            StudioMesaAssistantSnapshot(
+                isDemo = false,
+                restaurantConfigured = true,
+                menuItems = emptyList(),
+                supplierInvoices = listOf(approved, pending, rejected)
+            )
+        )
+
         val result = JSONObject(
-            tool.execute(JSONObject().put("status", "approved").toString())
+            tool.execute(
+                JSONObject()
+                    .put("issue_date_from", "2026-11-01")
+                    .put("issue_date_to", "2026-11-30")
+                    .toString()
+            )
         )
-        assertEquals(1, result.getInt("count"))
-        assertEquals("123.00", result.getString("gross_total_eur"))
+        assertEquals(2, result.getInt("count"))
+        assertEquals("173.00", result.getString("gross_total_eur"))
+        assertEquals("123.00", result.getString("approved_gross_total_eur"))
+        assertEquals("50.00", result.getString("pending_review_gross_total_eur"))
+        assertEquals("0.00", result.getString("rejected_gross_total_eur"))
         assertEquals(1, result.getInt("approved"))
-        assertTrue(result.getBoolean("read_only"))
-        assertTrue(result.getString("warning").contains("Não prova pagamento"))
-        val filtered = JSONObject(
-            tool.execute(JSONObject().put("supplier", "outro").toString())
+        assertEquals(1, result.getInt("pending_review"))
+        assertEquals(0, result.getInt("rejected"))
+        assertTrue(result.getString("warning").contains("não prova pagamento"))
+
+        val pendingOnly = JSONObject(
+            tool.execute(
+                JSONObject()
+                    .put("status", "pending_review")
+                    .put("issue_date_from", "2026-11-06")
+                    .toString()
+            )
         )
-        assertEquals(0, filtered.getInt("count"))
+        assertEquals(1, pendingOnly.getInt("count"))
+        assertEquals("50.00", pendingOnly.getString("gross_total_eur"))
+
+        val invalidRange = JSONObject(
+            tool.execute(
+                JSONObject()
+                    .put("issue_date_from", "2026-11-30")
+                    .put("issue_date_to", "2026-11-01")
+                    .toString()
+            )
+        )
+        assertTrue(invalidRange.has("error"))
+
+        val definition = JSONObject(tool.getToolDescriptionJsonString())
+        assertTrue(definition.getString("description").contains("intervalo de datas de emissão"))
+        assertTrue(definition.getString("description").contains("documentos rejeitados"))
     }
+
 
     @Test
     fun localToolsUseTheLatestSnapshotAfterEachChatTurn() {
