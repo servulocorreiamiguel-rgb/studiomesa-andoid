@@ -440,4 +440,70 @@ Frango | 3 | 4 | 5""")
         assertFalse(result.toString().contains("texto OCR"))
     }
 
+
+    @Test
+    fun salesForecastToolUsesRealSnapshotAndDoesNotInventValuesWithoutHistory() {
+        val zone = java.time.ZoneId.systemDefault()
+        val tomorrow = java.time.LocalDate.now(zone).plusDays(1)
+        val history = (1L..8L).map { weeksBack ->
+            val date = tomorrow.minusWeeks(weeksBack)
+            SalesAnalysisOrder(
+                createdAtMillis = date.atTime(12, 0).atZone(zone).toInstant().toEpochMilli(),
+                status = "Concluído",
+                unitAmount = if (weeksBack <= 4L) 120.0 else 100.0,
+                quantity = 1
+            )
+        }
+        val snapshot = StudioMesaAssistantSnapshot(
+            isDemo = false,
+            restaurantConfigured = true,
+            menuItems = emptyList(),
+            salesHistory = history
+        )
+        val tool = StudioMesaSalesForecastTool(snapshot)
+        val definition = JSONObject(tool.getToolDescriptionJsonString())
+        assertEquals("analyze_sales_patterns_and_forecast", definition.getString("name"))
+
+        val profile = JSONObject(
+            tool.execute(JSONObject().put("action", "weekday_profile").toString())
+        )
+        assertEquals(7, profile.getJSONArray("weekday_profile").length())
+        val tomorrowLabel = tomorrow.dayOfWeek.getDisplayName(
+            java.time.format.TextStyle.FULL,
+            java.util.Locale("pt", "PT")
+        )
+        val weekdayRows = profile.getJSONArray("weekday_profile")
+        val tomorrowProfile = (0 until weekdayRows.length())
+            .map { weekdayRows.getJSONObject(it) }
+            .single { it.getString("weekday") == tomorrowLabel }
+        assertEquals(8, tomorrowProfile.getInt("observed_days"))
+        assertFalse(tomorrowProfile.getBoolean("usually_high_traffic"))
+        assertFalse(profile.getBoolean("no_history"))
+
+        val forecast = JSONObject(
+            tool.execute(
+                JSONObject()
+                    .put("action", "forecast")
+                    .put("days_ahead", 7)
+                    .toString()
+            )
+        )
+        val firstDay = forecast.getJSONArray("forecast_days").getJSONObject(0)
+        assertEquals(tomorrow.toString(), firstDay.getString("date"))
+        assertEquals(8, firstDay.getInt("comparable_days"))
+        assertEquals("Alta", firstDay.getString("confidence"))
+
+        tool.updateSnapshot(snapshot.copy(salesHistory = emptyList()))
+        val emptyHistory = JSONObject(
+            tool.execute(JSONObject().put("action", "full_report").toString())
+        )
+        assertTrue(emptyHistory.getBoolean("no_history"))
+        assertEquals(
+            JSONObject.NULL,
+            emptyHistory.getJSONArray("forecast_days")
+                .optJSONObject(0)?.opt("forecast_nominal_order_value_eur")
+        )
+    }
+
+
 }

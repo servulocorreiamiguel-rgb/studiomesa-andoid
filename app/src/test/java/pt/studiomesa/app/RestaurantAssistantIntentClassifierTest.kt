@@ -173,6 +173,24 @@ class RestaurantAssistantIntentClassifierTest {
         }
     }
 
+    @Test fun routesWeekdaySalesAndTrafficQuestionsToEconomicManager() {
+        val cases = listOf(
+            "Vendas por dia da semana",
+            "Ganhos por dia da semana",
+            "Qual dia da semana vende mais?",
+            "Qual dia da semana teve mais vendas?",
+            "Que dias são de maior afluência?",
+            "Quais são os dias mais movimentados?"
+        )
+        cases.forEach { question ->
+            assertEquals(
+                question,
+                RestaurantAssistantIntent.ECONOMIC_MANAGER,
+                RestaurantAssistantIntentClassifier.classify(question).intent
+            )
+        }
+    }
+
     @Test fun identifiesDatedSalesAcrossDaysWeeksMonthsAndYears() {
         val datedQuestions = listOf(
             "Quanto vendi no domingo passado?",

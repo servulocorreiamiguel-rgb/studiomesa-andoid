@@ -1,6 +1,9 @@
 package pt.studiomesa.app
 
 import java.math.BigDecimal
+import java.time.DayOfWeek
+import java.time.LocalDate
+import java.time.ZoneId
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -12,14 +15,27 @@ class StudioMesaAdvisorTest {
         stockAvailable: Boolean = false, stockLoaded: Boolean = false,
         stockItems: List<AssistantStockItem> = emptyList(),
         reservationsAvailable: Boolean = false, reservationsLoaded: Boolean = false, pendingReservations: Int = 0,
-        salesLines: List<AssistantSaleLine> = emptyList()
+        salesLines: List<AssistantSaleLine> = emptyList(),
+        salesHistory: List<SalesAnalysisOrder> = emptyList(),
+        salesSpecialDays: List<RestaurantSpecialDay> = emptyList()
     ) = StudioMesaAssistantSnapshot(
         isDemo = demo, restaurantConfigured = configured, menuItems = menu,
         activeOrderCount = activeOrders, preparationOrderCount = activeOrders.coerceAtMost(1),
         stockFeatureAvailable = stockAvailable, stockLoaded = stockLoaded, stockItems = stockItems,
         reservationsFeatureAvailable = reservationsAvailable, reservationsLoaded = reservationsLoaded,
-        pendingReservations = pendingReservations, salesLines = salesLines
+        pendingReservations = pendingReservations, salesLines = salesLines,
+        salesHistory = salesHistory, salesSpecialDays = salesSpecialDays
     )
+
+    private fun historicOrder(date: LocalDate, amount: Double = 100.0): SalesAnalysisOrder {
+        val zone = ZoneId.systemDefault()
+        return SalesAnalysisOrder(
+            createdAtMillis = date.atTime(12, 0).atZone(zone).toInstant().toEpochMilli(),
+            status = "Concluído",
+            unitAmount = amount,
+            quantity = 1
+        )
+    }
 
     @Test fun suggestedSellingPriceUsesChosenCostShareAndRoundsToCents() {
         assertEquals(BigDecimal("10.67"), StudioMesaAdvisor.recommendedSellingPrice(BigDecimal("3.20"), BigDecimal("30")))
@@ -741,5 +757,67 @@ class StudioMesaAdvisorTest {
         assertEquals("Análise", answer.actionPage)
         assertFalse(answer.response.contains("Triagem indicativa"))
     }
+
+
+    @Test fun economicAssistantComparesHistoricalValuesForEachWeekdayWithoutModel() {
+        val zone = ZoneId.systemDefault()
+        val today = LocalDate.now(zone)
+        val monday = today.with(java.time.temporal.TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+            .minusWeeks(1)
+        val history = buildList {
+            for (weeksBack in 0L..3L) {
+                val sampleMonday = monday.minusWeeks(weeksBack)
+                add(historicOrder(sampleMonday, 10.0))
+                add(historicOrder(sampleMonday.plusDays(4), 15.0))
+                add(historicOrder(sampleMonday.plusDays(4), 15.0))
+            }
+        }
+
+        val answer = StudioMesaAdvisor.answerQuestion(
+            "Vendas por dia da semana",
+            snapshot(salesHistory = history)
+        )
+
+        assertEquals("Vendas por dia da semana", answer.title)
+        assertTrue(answer.response.contains("sexta-feira"))
+        assertTrue(answer.response.contains("30,00"))
+        assertTrue(answer.response.contains("Dia com maior valor médio"))
+        assertTrue(answer.response.contains("não confirma pagamentos recebidos"))
+        assertEquals("Análise", answer.actionPage)
+    }
+
+    @Test fun economicAssistantForecastUsesActualHistoryAndShowsConfidence() {
+        val zone = ZoneId.systemDefault()
+        val today = LocalDate.now(zone)
+        val history = buildList {
+            for (dayOffset in 1L..7L) {
+                for (weeksBack in 1L..4L) {
+                    add(historicOrder(today.plusDays(dayOffset).minusWeeks(weeksBack), 100.0))
+                }
+            }
+        }
+
+        val answer = StudioMesaAdvisor.answerQuestion(
+            "Previsão de vendas para a próxima semana",
+            snapshot(salesHistory = history)
+        )
+
+        assertEquals("Previsão de vendas baseada no histórico", answer.title)
+        assertTrue(answer.response.contains(today.plusDays(1).toString()))
+        assertTrue(answer.response.contains("confiança média"))
+        assertTrue(answer.response.contains("dia(s) comparável(is)"))
+        assertTrue(answer.response.contains("não pagamentos recebidos"))
+    }
+
+    @Test fun economicAssistantDoesNotInventAWeekdayProfileOrForecastWithoutHistory() {
+        val profile = StudioMesaAdvisor.answerQuestion("Vendas por dia da semana", snapshot())
+        val forecast = StudioMesaAdvisor.answerQuestion("Prever vendas para a próxima semana", snapshot())
+
+        assertEquals("Ainda sem histórico de vendas suficiente", profile.title)
+        assertTrue(profile.response.contains("Não vou inventar"))
+        assertEquals("Previsão sem histórico suficiente", forecast.title)
+        assertTrue(forecast.response.contains("valores inventados"))
+    }
+
 
 }
