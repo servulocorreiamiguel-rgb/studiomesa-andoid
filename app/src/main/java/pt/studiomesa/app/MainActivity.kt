@@ -2012,8 +2012,12 @@ class MainActivity : ComponentActivity() {
                     appendLine("Esta conta não tem acesso a faturas ou metadados financeiros privados.")
                 }
             }
-            appendLine("Plano: reservas/preços ${if (hasCalculator) "disponíveis" else "não incluídos"}; stock/análise ${if (isPremium) "disponíveis" else "dependem do Premium"}.")
-            appendLine("Para valores atuais, consulta get_restaurant_data ou calculate_menu_price_reference. Usa apenas os resultados das ferramentas; se faltarem dados, pergunta.")
+            if (!economicAssistant) {
+                appendLine("Plano: reservas/preços ${if (hasCalculator) "disponíveis" else "não incluídos"}; stock/análise ${if (isPremium) "disponíveis" else "dependem do Premium"}.")
+                appendLine("Para valores atuais, consulta get_restaurant_data ou calculate_menu_price_reference. Usa apenas os resultados das ferramentas; se faltarem dados, pergunta.")
+            } else {
+                appendLine("Para números operacionais consulta get_restaurant_data; para cenários financeiros usa a calculadora local e valores explícitos.")
+            }
             appendLine("Restaurante: $restaurantName. Modo: ${if (snapshot.isDemo) "demonstração" else "conta autenticada"}.")
             appendLine("Estado: ${snapshot.menuItems.size} artigos; ${snapshot.activeOrderCount} pedidos ativos; stock ${if (snapshot.stockLoaded) "carregado" else "não carregado"}; reservas ${if (snapshot.reservationsLoaded) "carregadas" else "não carregadas"}.")
             if (economicAssistant) {
