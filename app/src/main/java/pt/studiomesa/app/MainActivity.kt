@@ -2004,6 +2004,8 @@ class MainActivity : ComponentActivity() {
                 appendLine("FUNÇÃO: Assistente económico. Analisa receitas, despesas, custos, tesouraria, compras e fornecedores com os dados disponíveis.")
                 appendLine("Consulta get_supplier_invoice_summary apenas para metadados. Se pedirem um período, usa issue_date_from e issue_date_to em AAAA-MM-DD. Separa aprovadas, pendentes e rejeitadas; nunca somes pendentes/rejeitadas como despesas aprovadas. Uma fatura aprovada não prova pagamento; não lê PDFs/OCR e não alteres nem pagues faturas.")
                 appendLine("Usa calculate_restaurant_economics para calcular indicadores mensais, custos por dose, desperdício, orçamentos, consumo, pessoal e reposição. Usa apenas valores explícitos; pergunta pelo que falta. Mostra inputs_used e informa que a origem dos parâmetros não é verificada. Compras/faturas não são automaticamente custo alimentar consumido. Os valores não vêm automaticamente do POS ou da contabilidade.")
+                appendLine("Usa analyze_sales_patterns_and_forecast para comparar os sete dias da semana, identificar os dias com maior afluência e prever valores nominais dos próximos dias. A previsão usa apenas pedidos concluídos, amostras observadas e tendência limitada; mostra sempre confiança e número de dias comparáveis. Não chames valor previsto a pagamento recebido.")
+                appendLine("Reconhece automaticamente os feriados nacionais portugueses. Carnaval é facultativo. Feriados municipais e eventos (festas, concertos, jogos, época local) só contam se estiverem configurados no ecrã Análise; nunca inventes datas ou efeitos de eventos.")
             } else {
                 appendLine("FUNÇÃO: assistente geral. Responde também a assuntos gerais; não transformes todas as perguntas em perguntas de restauração.")
                 if (ownerInvoiceAccess) {
@@ -2189,7 +2191,8 @@ class MainActivity : ComponentActivity() {
                 canAccessInvoices = economicAssistant || (
                     hasRemoteRestaurant() && backendToken().isNotBlank() &&
                         backendPrefs.getString("restaurant_role", "") == "owner"
-                )
+                ),
+                canAccessEconomicTools = economicAssistant
             )
         )?.let { return it }
 
@@ -6926,6 +6929,39 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun salesSpecialDaysStorageKey(): String {
+        val restaurantScope = backendRestaurantId().ifBlank { "local-demo" }
+        return "sales_special_days_" + restaurantScope
+    }
+
+    private fun configuredSalesSpecialDays(): List<RestaurantSpecialDay> =
+        RestaurantSalesInsights.parseSpecialDays(
+            backendPrefs.getString(salesSpecialDaysStorageKey(), "").orEmpty()
+        )
+
+    private fun assistantSalesHistory(remote: Boolean): List<SalesAnalysisOrder> {
+        if (remote) {
+            val orders = remoteOrders()
+            return (0 until orders.length()).mapNotNull { index ->
+                val order = orders.optJSONObject(index) ?: return@mapNotNull null
+                SalesAnalysisOrder(
+                    createdAtMillis = parseOrderTimestamp(order.optString("created_at")),
+                    status = order.optString("status", "Aberto"),
+                    unitAmount = order.optDouble("amount", Double.NaN),
+                    quantity = order.optInt("quantity", 1)
+                )
+            }
+        }
+        return store.getOrders().map { order ->
+            SalesAnalysisOrder(
+                createdAtMillis = order.createdAt,
+                status = order.status,
+                unitAmount = order.amount,
+                quantity = order.quantity
+            )
+        }
+    }
+
     private fun assistantSnapshot(): StudioMesaAssistantSnapshot {
         val remote = hasRemoteRestaurant()
         val menu = (if (remote) remoteMenuEntries() else store.getMenu()).map { item ->
@@ -7004,6 +7040,8 @@ class MainActivity : ComponentActivity() {
             reservationsLoaded = reservationsAreLoaded,
             pendingReservations = pendingReservations,
             salesLines = salesLines,
+            salesHistory = assistantSalesHistory(remote),
+            salesSpecialDays = configuredSalesSpecialDays(),
             supplierInvoices = runCatching {
                 supplierInvoiceStore.list(assistantChatScope())
             }.getOrDefault(emptyList())
@@ -8064,6 +8102,200 @@ class MainActivity : ComponentActivity() {
         Toast.makeText(this, "Rascunho copiado. Revê antes de publicar.", Toast.LENGTH_SHORT).show()
     }
 
+    private fun salesEuro(value: BigDecimal?): String {
+        if (value == null) return "Sem dados"
+        return value.setScale(2, java.math.RoundingMode.HALF_UP)
+            .toPlainString().replace('.', ',') + " €"
+    }
+
+    private fun salesForecastConfidenceLabel(value: SalesForecastConfidence): String = when (value) {
+        SalesForecastConfidence.NONE -> "sem dados"
+        SalesForecastConfidence.LOW -> "baixa"
+        SalesForecastConfidence.MEDIUM -> "média"
+        SalesForecastConfidence.HIGH -> "alta"
+    }
+
+    private fun renderSalesPatternAnalysis(
+        container: LinearLayout,
+        orders: List<SalesAnalysisOrder>,
+        remoteMode: Boolean
+    ) {
+        val specialDays = configuredSalesSpecialDays()
+        val report = RestaurantSalesInsights.analyze(
+            orders = orders,
+            daysAhead = 7,
+            configuredSpecialDays = specialDays
+        )
+
+        if (!remoteMode || backendPrefs.getString("restaurant_role", "").orEmpty() == "owner") {
+            container.addView(
+                secondaryButton("Configurar feriados municipais e eventos locais") {
+                    showSalesSpecialDaysDialog()
+                },
+                LinearLayout.LayoutParams(-1, dp(44))
+            )
+            addGap(container, 6)
+        }
+
+        val weekdayCard = makeCard(16)
+        weekdayCard.addView(label("Valor nominal por dia da semana", 15f, true, forest))
+        addGap(weekdayCard, 4)
+        weekdayCard.addView(label(
+            "Média por dia observado e total acumulado. Só conta pedidos concluídos com data e valor válidos; não representa pagamentos recebidos.",
+            11.5f, false, muted
+        ))
+        report.weekdaySales.forEach { day ->
+            addDivider(weekdayCard)
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            val details = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+            }
+            details.addView(label(
+                day.label.replaceFirstChar { it.uppercase(Locale("pt", "PT")) },
+                13f, true, ink
+            ))
+            details.addView(label(
+                "${day.observedDays} dia(s) com registos · ${day.completedOrderLines} linhas concluídas",
+                10.5f, false, muted
+            ))
+            if (day.isUsuallyHighTraffic) {
+                details.addView(label("Padrão de maior afluência", 10f, true, forestSoft))
+            }
+            row.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
+            row.addView(label(
+                salesEuro(day.averageDailyNominalValue),
+                13f, true, forest
+            ))
+            weekdayCard.addView(row)
+            if (day.observedDays > 0) {
+                weekdayCard.addView(label(
+                    "Total histórico: ${salesEuro(day.totalNominalValue)}",
+                    10.5f, false, muted
+                ))
+            }
+        }
+        if (!report.hasUsableHistory) {
+            addGap(weekdayCard, 6)
+            weekdayCard.addView(label(
+                "Ainda não há histórico de pedidos concluídos. A previsão só aparece depois de existirem registos reais; não são criados valores de demonstração.",
+                12f, false, muted
+            ))
+        } else {
+            addGap(weekdayCard, 6)
+            weekdayCard.addView(label(
+                "Dia com maior valor médio: ${report.mostRevenueWeekday ?: "Sem dados"}. Dia com mais movimento médio: ${report.highestTrafficWeekday ?: "Sem dados"}.",
+                11.5f, true, forestSoft
+            ))
+        }
+        container.addView(weekdayCard, cardParams())
+        addGap(container, 7)
+
+        val forecastCard = makeCard(16)
+        forecastCard.addView(label("Previsão dos próximos 7 dias", 15f, true, forest))
+        addGap(forecastCard, 4)
+        forecastCard.addView(label(
+            "Estimativa baseada nos últimos dias comparáveis. A confiança depende da quantidade de histórico.",
+            11.5f, false, muted
+        ))
+        report.forecasts.forEach { day ->
+            addDivider(forecastCard)
+            val heading = "${day.date} · ${day.weekdayLabel}"
+            val value = salesEuro(day.nominalValue)
+            forecastCard.addView(label(heading, 12.5f, true, ink))
+            forecastCard.addView(label(
+                "$value · ${day.expectedOrderLines?.toPlainString() ?: "—"} linhas previstas · confiança ${salesForecastConfidenceLabel(day.confidence)}",
+                11.5f, false, forestSoft
+            ))
+            if (!day.specialDayName.isNullOrBlank()) {
+                forecastCard.addView(label("Feriado/evento: ${day.specialDayName}", 10.5f, true, copper))
+            }
+            if (day.isHighTraffic) {
+                forecastCard.addView(label("Padrão histórico de maior afluência", 10.5f, true, forestSoft))
+            }
+            forecastCard.addView(label(day.explanation, 10.5f, false, muted))
+        }
+        container.addView(forecastCard, cardParams())
+
+        if (report.busiestHistoricalDays.isNotEmpty()) {
+            addGap(container, 7)
+            val peakCard = makeCard(14)
+            peakCard.addView(label("Dias historicamente mais movimentados", 14f, true, forest))
+            report.busiestHistoricalDays.take(3).forEach { day ->
+                addDivider(peakCard)
+                addMetric(
+                    peakCard,
+                    day.date.toString() + " · ${day.completedOrderLines} linhas",
+                    salesEuro(day.nominalValue)
+                )
+            }
+            container.addView(peakCard, cardParams())
+        }
+        if (report.invalidOrderLines > 0 || report.excludedUndatedOrFutureLines > 0) {
+            addGap(container, 5)
+            container.addView(emptyCard(
+                "${report.invalidOrderLines} linha(s) com valores/quantidades inválidos e ${report.excludedUndatedOrFutureLines} linha(s) sem data válida ou futuras foram excluídas da previsão."
+            ), cardParams())
+        }
+    }
+
+    private fun showSalesSpecialDaysDialog() {
+        val existing = RestaurantSalesInsights.formatSpecialDays(configuredSalesSpecialDays())
+        val editor = EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            setSingleLine(false)
+            minLines = 4
+            maxLines = 10
+            setText(existing)
+            hint = "2027-06-24 | São João\n2027-09-15 | Festa local"
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(6), dp(20), dp(4))
+            addView(label(
+                "Uma data por linha, no formato AAAA-MM-DD | nome. Usa isto para o feriado municipal, festas, concertos, jogos ou outros eventos que possam alterar o movimento.",
+                12f, false, muted
+            ))
+            addGap(this, 8)
+            addView(editor, LinearLayout.LayoutParams(-1, dp(150)))
+            addGap(this, 5)
+            addView(label(
+                "Os feriados nacionais são reconhecidos automaticamente. Estas datas personalizadas ficam guardadas apenas neste dispositivo.",
+                10.5f, false, muted
+            ))
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Feriados municipais e eventos")
+            .setView(content)
+            .setNegativeButton("Cancelar", null)
+            .setNeutralButton("Limpar") { _, _ ->
+                backendPrefs.edit().remove(salesSpecialDaysStorageKey()).apply()
+                renderApp()
+            }
+            .setPositiveButton("Guardar") { _, _ ->
+                val raw = editor.text.toString().trim()
+                val nonBlankLines = raw.lines().count { it.isNotBlank() }
+                val parsed = RestaurantSalesInsights.parseSpecialDays(raw)
+                if (parsed.size != nonBlankLines) {
+                    Toast.makeText(
+                        this,
+                        "Há linhas inválidas ou datas repetidas. Usa AAAA-MM-DD | nome.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return@setPositiveButton
+                }
+                backendPrefs.edit()
+                    .putString(salesSpecialDaysStorageKey(), RestaurantSalesInsights.formatSpecialDays(parsed))
+                    .apply()
+                Toast.makeText(this, "Calendário especial guardado neste dispositivo.", Toast.LENGTH_SHORT).show()
+                renderApp()
+            }
+            .show()
+    }
+
     private fun renderAnalysis(container: LinearLayout) {
         val remoteMode = hasRemoteRestaurant()
         pageIntro(
@@ -8182,6 +8414,7 @@ class MainActivity : ComponentActivity() {
             if (avgCostRatio.isNaN()) "Sem dados" else String.format(Locale("pt", "PT"), "%.1f%%", avgCostRatio)
         )
         container.addView(metrics, cardParams())
+        renderSalesPatternAnalysis(container, orders, remoteMode)
 
         if (summary.ordersWithInvalidTimestampsExcluded > 0 && selectedAnalysisPeriod != SalesAnalysisPeriod.ALL_TIME) {
             addGap(container, 4)

@@ -12,7 +12,8 @@ internal object AssistantCapabilitiesPolicy {
         val hasReservationsAndPricing: Boolean,
         val isPremium: Boolean,
         val localModelInstalled: Boolean,
-        val canAccessInvoices: Boolean = false
+        val canAccessInvoices: Boolean = false,
+        val canAccessEconomicTools: Boolean = false
     )
 
     private val capabilityPhrases = listOf(
@@ -65,8 +66,12 @@ internal object AssistantCapabilitiesPolicy {
             if (features.isPremium) {
                 appendLine("• Analisar stock, movimentos, custos e indicadores de desempenho.")
             }
-            if (features.canAccessInvoices) {
+            if (features.canAccessEconomicTools) {
                 appendLine("• Usar o Gestor Económico para calcular resultado simplificado, ponto de equilíbrio, tesouraria projetada, custo por dose, desperdício, desvios de orçamento, consumo e reposição a partir dos valores fornecidos.")
+                appendLine("• Analisar valores nominais de pedidos concluídos por dia da semana, identificar dias com maior afluência e prever até 30 dias com amostras e nível de confiança.")
+                appendLine("• Reconhecer feriados nacionais portugueses, incluindo os móveis; feriados municipais e eventos locais podem ser configurados na Análise.")
+            }
+            if (features.canAccessInvoices) {
                 appendLine("• Consultar faturas por fornecedor, estado e período de emissão, separando aprovadas, pendentes e rejeitadas. A consulta é apenas de leitura; aprovação não significa pagamento.")
             }
             appendLine("• Usar o histórico e a memória para manter contexto entre conversas neste restaurante.")

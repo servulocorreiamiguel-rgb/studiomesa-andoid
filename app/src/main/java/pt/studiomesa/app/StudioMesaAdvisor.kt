@@ -40,7 +40,9 @@ internal data class StudioMesaAssistantSnapshot(
     val reservationsLoaded: Boolean = false,
     val pendingReservations: Int = 0,
     val salesLines: List<AssistantSaleLine> = emptyList(),
-    val supplierInvoices: List<SupplierInvoiceRecord> = emptyList()
+    val supplierInvoices: List<SupplierInvoiceRecord> = emptyList(),
+    val salesHistory: List<SalesAnalysisOrder> = emptyList(),
+    val salesSpecialDays: List<RestaurantSpecialDay> = emptyList()
 )
 internal enum class AssistantPriority { URGENT, ATTENTION, TIP }
 internal data class AssistantRecommendation(

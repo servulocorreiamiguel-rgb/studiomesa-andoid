@@ -33,13 +33,17 @@ class AssistantCapabilitiesPolicyTest {
             AssistantCapabilitiesPolicy.Features(
                 hasReservationsAndPricing = true,
                 isPremium = true,
-                localModelInstalled = true
+                localModelInstalled = true,
+                canAccessInvoices = true,
+                canAccessEconomicTools = true
             )
         ).orEmpty()
         assertTrue(answer.contains("reservas e referências de preço"))
         assertTrue(answer.contains("Analisar stock"))
         assertTrue(answer.contains("modelo generativo local está instalado"))
         assertTrue(answer.contains("ponto de equilíbrio"))
+        assertTrue(answer.contains("prever até 30 dias"))
+        assertTrue(answer.contains("feriados nacionais portugueses"))
         assertTrue(answer.contains("separando aprovadas, pendentes e rejeitadas"))
     }
 
@@ -66,16 +70,27 @@ class AssistantCapabilitiesPolicyTest {
             "O que consegues fazer?",
             standardFeatures
         ).orEmpty()
-        assertFalse(standard.contains("Assistente económico"))
+        assertFalse(standard.contains("Gestor Económico"))
 
-        val owner = AssistantCapabilitiesPolicy.answer(
+        val ownerGeneral = AssistantCapabilitiesPolicy.answer(
             "O que consegues fazer?",
             standardFeatures.copy(canAccessInvoices = true)
         ).orEmpty()
-        assertTrue(owner.contains("Assistente económico"))
-        assertTrue(owner.contains("apenas de leitura"))
-        assertTrue(owner.contains("tesouraria projetada"))
-        assertTrue(owner.contains("período de emissão"))
+        assertFalse(ownerGeneral.contains("Gestor Económico"))
+        assertTrue(ownerGeneral.contains("Consultar faturas por fornecedor"))
+        assertTrue(ownerGeneral.contains("apenas de leitura"))
+
+        val ownerEconomic = AssistantCapabilitiesPolicy.answer(
+            "O que consegues fazer?",
+            standardFeatures.copy(
+                canAccessInvoices = true,
+                canAccessEconomicTools = true
+            )
+        ).orEmpty()
+        assertTrue(ownerEconomic.contains("Gestor Económico"))
+        assertTrue(ownerEconomic.contains("tesouraria projetada"))
+        assertTrue(ownerEconomic.contains("período de emissão"))
+        assertTrue(ownerEconomic.contains("prever até 30 dias"))
     }
 
 }

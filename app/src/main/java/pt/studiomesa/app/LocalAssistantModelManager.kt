@@ -70,6 +70,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
     private var supplierInvoiceTool: StudioMesaSupplierInvoiceTool? = null
     private var economicAssistantBridgeTool: StudioMesaEconomicAssistantBridgeTool? = null
     private var economicCalculationsTool: StudioMesaEconomicCalculationsTool? = null
+    private var salesForecastTool: StudioMesaSalesForecastTool? = null
     @Volatile private var downloading = false
     @Volatile private var closed = false
     private var verifiedThisProcess = false
@@ -257,6 +258,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                         invoiceTool?.let(::StudioMesaEconomicAssistantBridgeTool)
                     } else null
                     val calculationsTool = if (economicMode) StudioMesaEconomicCalculationsTool() else null
+                    val salesForecast = if (economicMode) StudioMesaSalesForecastTool(snapshot) else null
                     val enabledTools = mutableListOf(tool(dataTool), tool(priceTool))
                     if (economicMode && invoiceTool != null) {
                         enabledTools.add(tool(invoiceTool))
@@ -264,6 +266,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                         enabledTools.add(tool(bridgeTool))
                     }
                     if (calculationsTool != null) enabledTools.add(tool(calculationsTool))
+                    if (salesForecast != null) enabledTools.add(tool(salesForecast))
                     enabledTools.add(tool(StudioMesaWikipediaSearchTool()))
                     enabledTools.add(tool(StudioMesaWebSearchTool(appContext)))
                     val initialMessages = AssistantConversationContextPolicy.compactHistory(history)
@@ -303,6 +306,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     supplierInvoiceTool = invoiceTool
                     economicAssistantBridgeTool = bridgeTool
                     economicCalculationsTool = calculationsTool
+                    salesForecastTool = salesForecast
                 }
 
                 // Keep the conversation's native history, but refresh the read-only tool
@@ -318,6 +322,8 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     if (economicCalculationsTool == null) {
                         throw IllegalStateException("A calculadora económica não está disponível nesta sessão.")
                     }
+                    salesForecastTool?.updateSnapshot(snapshot)
+                        ?: throw IllegalStateException("A análise semanal e previsão de vendas não está disponível nesta sessão.")
                 } else if (economicBridgeEnabled) {
                     economicAssistantBridgeTool?.updateSnapshot(snapshot)
                         ?: throw IllegalStateException("A ligação ao Assistente económico não está disponível.")
@@ -366,6 +372,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         supplierInvoiceTool = null
         economicAssistantBridgeTool = null
         economicCalculationsTool = null
+        salesForecastTool = null
 
         try {
             currentConversation?.close()
