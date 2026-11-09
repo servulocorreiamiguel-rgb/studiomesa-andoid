@@ -39,6 +39,19 @@ A geração do texto continua local. A pesquisa enciclopédica pode consultar a 
 
 Depois da instalação, a inferência é executada localmente. As mensagens, o histórico e o contexto selecionado para o modelo não são enviados a um serviço externo de IA por esta funcionalidade. A transferência inicial do ficheiro requer Internet e consome cerca de 736 MB de dados.
 
+## Ferramentas económicas locais
+
+No modo Assistente Económico, o modelo pode chamar a ferramenta local `calculate_restaurant_economics`. A ferramenta usa o motor determinístico `RestaurantEconomicManager` e suporta análise mensal, custo por receita, desperdício registado, comparação de fornecedores, desvios de orçamento, consumo teórico vs. real, cenário de custo de pessoal e reposição indicativa de stock.
+
+A ferramenta:
+- executa cálculos no dispositivo, sem enviar os parâmetros a um serviço externo;
+- só calcula os parâmetros que recebe na chamada; não consulta automaticamente POS, banco, contabilidade ou documentos;
+- identifica a origem dos valores como não verificada e pede confirmação ao utilizador antes de tratar o resultado como um dado do negócio;
+- é apenas de leitura: não altera preços, stock, faturas, pagamentos, encomendas ou outros registos;
+- devolve avisos e limitações, por exemplo que um custo de pessoal estimado não é uma escala de trabalho nem aconselhamento laboral, e que uma quantidade de reposição não faz uma encomenda.
+
+A ferramenta de consulta de faturas continua separada e devolve metadados do arquivo. Não dá ao modelo acesso ao PDF original nem ao texto bruto de OCR.
+
 ## Sincronização cloud separada da inferência
 
 O modelo generativo e o runtime processam as perguntas no próprio dispositivo. Existe, separadamente, um componente `AssistantCloudSyncCoordinator` que pode sincronizar conversas e Memória do proprietário com o Supabase quando a migration e as tabelas correspondentes estiverem instaladas. Essa sincronização não envia o conteúdo ao fornecedor do modelo nem a uma API externa de inferência, mas cria uma cópia cloud protegida por autenticação/RLS; **não é encriptação ponta a ponta**.
