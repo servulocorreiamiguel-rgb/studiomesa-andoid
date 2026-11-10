@@ -11,7 +11,7 @@ Esta fotografia prevalece sobre os registos históricos abaixo. O gate comercial
 - [x] Projeto Supabase alojado está ACTIVE_HEALTHY, na região eu-west-1; foram observadas 26 tabelas com RLS ativo.
 - [x] Histórico, mensagens, Memória e metadados de faturas existem no Supabase. O bucket studiomesa-invoices também existe, é privado e limita ficheiros a 25 MiB e PDF/JPEG/PNG/WebP. O percurso completo de sincronização/upload/leitura/eliminação ainda exige testes E2E.
 - [x] Inspeção read-only de privilégios confirmou que as 11 tabelas assinaladas com RLS sem políticas não concedem privilégios diretos de SELECT/INSERT/UPDATE/DELETE a anon ou authenticated; manter o modelo RPC-only/privado e voltar a verificar após qualquer migration.
-- [ ] Reconciliar 55 migrations locais com 63 versões remotas: 51 versões comuns por comparar por SQL integral, quatro só locais e doze só remotas. Não executar db push até recuperar/comparar o histórico, preparar backup e demonstrar restauro num ambiente separado.
+- [ ] Reconciliar 62 migrations locais com 63 versões remotas: 58 versões comuns por comparar por SQL integral, quatro só locais e cinco só remotas. Sete originais foram recuperados de branches históricas; não executar db push até comparar o histórico, preparar backup e demonstrar restauro num ambiente separado.
 - [ ] Resolver, após reconciliação e deployment aprovado, as três tabelas/RPCs ainda ausentes: public.restaurant_recipes, public.restaurant_recipe_ingredients e private.restaurant_staff_permissions.
 - [ ] Rever individualmente as 42 funções SECURITY DEFINER executáveis por authenticated. A consulta encontrou 47 funções no total, todas com auth.uid() e search_path vazio; nenhuma é executável por anon. Isto não substitui revisão de autorização e testes com contas de dois restaurantes.
 - [ ] Decidir como resolver a proteção contra palavras-passe comprometidas desativada; não alterar o plano Supabase sem aprovação explícita de custo.
@@ -30,9 +30,9 @@ Esta fotografia prevalece sobre os registos históricos abaixo. O gate comercial
 
 ## Registos históricos — não usar como estado atual
 
-Os registos e checkboxes abaixo foram escritos em 29/10 e 05/11/2026. Alguns referem estados do código e do Supabase que mudaram desde então. Servem apenas para histórico; em caso de conflito, prevalece a fotografia atual acima e o gate de lançamento de 06/11/2026.
+Os registos e checkboxes abaixo foram escritos em 29/10 e 05/11/2026. Alguns referem estados do código e do Supabase que mudaram desde então. Servem apenas para histórico; em caso de conflito, prevalece a fotografia atual acima e o gate de lançamento de 10/11/2026.
 
-**Nota:** os registos abaixo são históricos (29/10 e 05/11/2026). Quando diferirem da fotografia atual, prevalece o topo deste ficheiro e `docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md`, não o relatório de 04/11.
+**Nota:** os registos abaixo são históricos (29/10 e 05/11/2026). Quando diferirem da fotografia atual, prevalece o topo deste ficheiro e `docs/COMMERCIAL-RELEASE-GATE-2026-11-10.md`, não o relatório de 04/11.
 
 
 **Estado de lançamento nesta revisão: não pronto para operação comercial real.**  
