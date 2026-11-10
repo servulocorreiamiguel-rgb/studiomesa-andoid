@@ -75,14 +75,31 @@ jobs:
             app/build/outputs/apk/**/release/*.apk
 """
 
-SAFE_ANDROID_WORKFLOW = """      - name: Verify temporary CI AAB and APK
+SAFE_ANDROID_WORKFLOW = """      - name: Validate commercial release configuration
         run: |
-          verification_output="$(jarsigner -verify "$AAB_PATH" 2>&1)" || exit 1
-          if ! grep -Fq "jar verified." <<< "$verification_output"; then
-            exit 1
-          fi
-          assembleEssencialRestauranteRelease
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$APK_PATH"
+          gradle --no-daemon \\
+            -PstudiomesaCommercialRelease=true \\
+            bundleEssencialRestauranteRelease \\
+            bundleProfissionalRestauranteRelease \\
+            bundleProfissionalClienteRelease \\
+            bundlePremiumRestauranteRelease \\
+            bundlePremiumClienteRelease \\
+            assembleEssencialRestauranteRelease \\
+            assembleProfissionalRestauranteRelease \\
+            assembleProfissionalClienteRelease \\
+            assemblePremiumRestauranteRelease \\
+            assemblePremiumClienteRelease
+          mapfile -d '' bundles < <(find app/build/outputs/bundle -type f -name '*.aab' -print0)
+          if [ "${#bundles[@]}" -ne 5 ]; then exit 1; fi
+          for aab in "${bundles[@]}"; do
+            verification_output="$(jarsigner -verify "$aab" 2>&1)" || exit 1
+            if ! grep -Fq "jar verified." <<< "$verification_output"; then exit 1; fi
+          done
+          mapfile -d '' apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' -print0)
+          if [ "${#apks[@]}" -ne 5 ]; then exit 1; fi
+          for apk in "${apks[@]}"; do
+            "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$apk"
+          done
 
       - name: Upload debug APK
         uses: actions/upload-artifact@0000000000000000000000000000000000000000
@@ -175,7 +192,7 @@ class CommercialReleaseWorkflowAuditTests(unittest.TestCase):
             any("apksigner" in error for error in audit_workflow(changed))
         )
 
-    def test_android_ci_demo_artifact_excludes_temporary_release_apk(self) -> None:
+    def test_android_ci_builds_and_verifies_all_five_release_variants(self) -> None:
         self.assertEqual([], audit_ci_test_bundle(SAFE_ANDROID_WORKFLOW))
         changed = SAFE_ANDROID_WORKFLOW.replace(
             "path: app/build/outputs/apk/**/debug/*.apk",
@@ -184,6 +201,35 @@ class CommercialReleaseWorkflowAuditTests(unittest.TestCase):
         self.assertTrue(
             any("only debug APKs" in error or "exclude release APKs" in error
                 for error in audit_ci_test_bundle(changed))
+        )
+
+    def test_android_ci_rejects_missing_release_variant(self) -> None:
+        changed = SAFE_ANDROID_WORKFLOW.replace(
+            "bundlePremiumClienteRelease \\\\",
+            "bundlePremiumClienteRelease_REMOVED \\\\",
+        )
+        self.assertTrue(
+            any("all five temporary signed AAB and APK variants" in error
+                for error in audit_ci_test_bundle(changed))
+        )
+
+    def test_android_ci_rejects_incomplete_aab_count_check(self) -> None:
+        changed = SAFE_ANDROID_WORKFLOW.replace(
+            'if [ "${#bundles[@]}" -ne 5 ]; then exit 1; fi',
+            'if [ "${#bundles[@]}" -ne 4 ]; then exit 1; fi',
+        )
+        self.assertTrue(
+            any("exactly five temporary commercial AABs" in error
+                for error in audit_ci_test_bundle(changed))
+        )
+
+    def test_android_ci_rejects_missing_apk_signature_verification(self) -> None:
+        changed = SAFE_ANDROID_WORKFLOW.replace(
+            '"$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$apk"',
+            'echo "APK verification removed"',
+        )
+        self.assertTrue(
+            any("apksigner" in error for error in audit_ci_test_bundle(changed))
         )
 
     def test_android_ci_must_verify_its_temporary_aab_signature(self) -> None:
