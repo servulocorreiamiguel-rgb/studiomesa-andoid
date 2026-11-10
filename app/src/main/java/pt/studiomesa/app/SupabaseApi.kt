@@ -265,7 +265,7 @@ object SupabaseApi {
             val page = JSONArray(
                 call(
                     "GET",
-                    "/rest/v1/restaurant_assistant_messages?select=id,restaurant_id,conversation_id,role,content,created_by,created_at&restaurant_id=eq.$restaurant&order=created_at.asc&limit=$requestedLimit&offset=$offset",
+                    "/rest/v1/restaurant_assistant_messages?select=id,restaurant_id,conversation_id,role,content,created_by,created_at&restaurant_id=eq.$restaurant&order=created_at.asc,id.asc&limit=$requestedLimit&offset=$offset",
                     accessToken = token
                 )
             )
