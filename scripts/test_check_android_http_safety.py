@@ -19,6 +19,8 @@ val responseLimitBytes = if (success) MAX_INVOICE_DOCUMENT_BYTES else MAX_STORAG
 require(bytes.size in 1..MAX_INVOICE_DOCUMENT_BYTES)
 ResponseBodyReader.requireDeclaredLengthWithinLimit(connection.contentLengthLong, responseLimitBytes)
 val bytes = ResponseBodyReader.readBytes(stream, responseLimitBytes)
+AssistantMessagePaginationPolicy.nextOffset(currentOffset = offset, requestedLimit = limit, returnedRows = page.length(), totalRows = combined.length())
+val historyQuery = "&order=created_at.asc,id.asc&limit=$requestedLimit&offset=$offset"
 throw BackendHttpException(code, path, ApiErrorMessage.sanitize(message, code))
 """
 
@@ -100,6 +102,21 @@ class AndroidHttpSafetyAuditTests(unittest.TestCase):
             'API_KEY = "sb_secret_do_not_ship"',
         )
         self.assertTrue(any("publishable" in error.lower() for error in audit_http_client(changed)))
+
+
+    def test_rejects_unpaginated_assistant_message_history(self) -> None:
+        changed = SAFE_CLIENT.replace(
+            "AssistantMessagePaginationPolicy.nextOffset(currentOffset = offset, requestedLimit = limit, returnedRows = page.length(), totalRows = combined.length())",
+            "return JSONArray(call(\"GET\", \"/restaurant_assistant_messages?limit=5000\"))",
+        )
+        self.assertTrue(any("bounded pages" in error for error in audit_http_client(changed)))
+
+    def test_requires_stable_order_and_offset_for_assistant_history_pages(self) -> None:
+        changed = SAFE_CLIENT.replace(
+            "&order=created_at.asc,id.asc&limit=$requestedLimit&offset=$offset",
+            "&order=created_at.asc&limit=5000",
+        )
+        self.assertTrue(any("stable ordering" in error for error in audit_http_client(changed)))
 
 
 if __name__ == "__main__":
