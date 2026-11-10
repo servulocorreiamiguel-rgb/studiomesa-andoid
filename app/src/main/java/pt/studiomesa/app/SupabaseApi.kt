@@ -14,6 +14,8 @@ import java.net.URLEncoder
 object SupabaseApi {
     private const val BASE_URL = "https://svwvkfsyevuyabelrtjk.supabase.co"
     private const val API_KEY = "sb_publishable_ioJIukpwd0_Fyajd41QL_Q_M6WKE0UH"
+    private const val MAX_INVOICE_DOCUMENT_BYTES = 25 * 1024 * 1024
+    private const val MAX_STORAGE_ERROR_BODY_BYTES = 64 * 1024
 
     data class Session(val accessToken: String, val userId: String, val email: String, val refreshToken: String)
 
@@ -180,9 +182,29 @@ object SupabaseApi {
                 connection.outputStream.use { it.write(payload) }
             }
             val code = connection.responseCode
-            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-            val bytes = stream?.use { it.readBytes() } ?: ByteArray(0)
-            if (code !in 200..299) {
+            val success = code in 200..299
+            val stream = if (success) connection.inputStream else connection.errorStream
+            val responseLimitBytes = if (success) {
+                MAX_INVOICE_DOCUMENT_BYTES
+            } else {
+                MAX_STORAGE_ERROR_BODY_BYTES
+            }
+            val bytes = try {
+                ResponseBodyReader.requireDeclaredLengthWithinLimit(
+                    connection.contentLengthLong,
+                    responseLimitBytes
+                )
+                ResponseBodyReader.readBytes(stream, responseLimitBytes)
+            } catch (error: IllegalStateException) {
+                // Preserve the HTTP status/path error while declining to buffer an
+                // oversized Storage error body. Successful document responses fail closed.
+                if (!success && error.message == "A resposta do servidor excede o limite permitido.") {
+                    ByteArray(0)
+                } else {
+                    throw error
+                }
+            }
+            if (!success) {
                 val message = runCatching {
                     val error = JSONObject(String(bytes, Charsets.UTF_8))
                     sequenceOf("message", "msg", "error")
@@ -275,7 +297,7 @@ object SupabaseApi {
         require(restaurantId.matches(Regex("^[0-9a-fA-F-]{36}$")))
         require(invoiceId.matches(Regex("^[0-9a-fA-F-]{36}$")))
         require(mimeType in setOf("application/pdf", "image/jpeg", "image/png", "image/webp"))
-        require(bytes.size in 1..(25 * 1024 * 1024))
+        require(bytes.size in 1..MAX_INVOICE_DOCUMENT_BYTES)
         require(sha256.matches(Regex("^[a-f0-9]{64}$")))
         val extension = when (mimeType) {
             "application/pdf" -> "pdf"
@@ -302,7 +324,7 @@ object SupabaseApi {
         require(!objectPath.contains("..") && objectPath.split("/").size == 3)
         val encodedPath = objectPath.split("/").joinToString("/") { URLEncoder.encode(it, "UTF-8") }
         return binaryStorageRequest("GET", "/storage/v1/object/authenticated/studiomesa-invoices/$encodedPath", token)
-            .also { require(it.size <= 25 * 1024 * 1024) { "O documento excede 25 MB." } }
+            .also { require(it.size <= MAX_INVOICE_DOCUMENT_BYTES) { "O documento excede 25 MB." } }
     }
 
     fun insertSupplierInvoice(token: String, row: JSONObject): JSONObject {
