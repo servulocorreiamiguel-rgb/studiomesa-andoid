@@ -6,6 +6,10 @@ plugins {
 // Optional cloud GPT-OSS must stay off until the provider, privacy and billing gates are approved.
 val advancedAssistantCloudEnabled = providers.gradleProperty("studiomesaAdvancedAssistantCloudEnabled").orNull == "true"
 
+// Google/Microsoft buttons are intentionally deferred until after the first sale.
+// Keep the existing OAuth/PKCE implementation so it can be enabled later without rewriting auth.
+val socialLoginButtonsEnabled = providers.gradleProperty("studiomesaSocialLoginButtonsEnabled").orNull == "true"
+
 // Commercial builds are opt-in. Ordinary debug builds retain the existing preview package IDs.
 val commercialRelease = providers.gradleProperty("studiomesaCommercialRelease").orNull == "true"
 val releaseApplicationId = providers.gradleProperty("studiomesaReleaseApplicationId").orNull
@@ -49,6 +53,7 @@ android {
         versionCode = 7
         versionName = "1.5.0"
         buildConfigField("boolean", "ADVANCED_ASSISTANT_CLOUD_ENABLED", advancedAssistantCloudEnabled.toString())
+        buildConfigField("boolean", "SOCIAL_LOGIN_BUTTONS_ENABLED", socialLoginButtonsEnabled.toString())
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
