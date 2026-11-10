@@ -3,6 +3,9 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// Optional cloud GPT-OSS must stay off until the provider, privacy and billing gates are approved.
+val advancedAssistantCloudEnabled = providers.gradleProperty("studiomesaAdvancedAssistantCloudEnabled").orNull == "true"
+
 // Commercial builds are opt-in. Ordinary debug builds retain the existing preview package IDs.
 val commercialRelease = providers.gradleProperty("studiomesaCommercialRelease").orNull == "true"
 val releaseApplicationId = providers.gradleProperty("studiomesaReleaseApplicationId").orNull
@@ -45,6 +48,7 @@ android {
         targetSdk = 36
         versionCode = 7
         versionName = "1.5.0"
+        buildConfigField("boolean", "ADVANCED_ASSISTANT_CLOUD_ENABLED", advancedAssistantCloudEnabled.toString())
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
