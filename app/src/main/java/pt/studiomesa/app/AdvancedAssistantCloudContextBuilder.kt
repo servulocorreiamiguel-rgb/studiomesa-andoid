@@ -4,13 +4,15 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Builds the only restaurant data allowed to leave the device for the opt-in cloud model.
- * Never includes supplier invoices, OCR, customer records, staff, reservation details or memory.
+ * Builds the minimised data allowed to leave the device for the opt-in cloud model.
+ * Never includes supplier invoices, OCR, customer records, staff or reservation details.
+ * A short user-controlled memory snippet is added only after renewed opt-in consent.
  */
 internal object AdvancedAssistantCloudContextBuilder {
     fun build(
         snapshot: StudioMesaAssistantSnapshot,
-        nowMillis: Long = System.currentTimeMillis()
+        nowMillis: Long = System.currentTimeMillis(),
+        memorySnippet: String = ""
     ): JSONObject {
         val menu = JSONArray()
         snapshot.menuItems.take(25).forEach { item ->
@@ -99,6 +101,11 @@ internal object AdvancedAssistantCloudContextBuilder {
             .put("stock_items", stock)
             .put("pending_reservations_count", if (snapshot.reservationsLoaded) snapshot.pendingReservations else JSONObject.NULL)
             .put("sales", sales)
+            .apply {
+                val safeMemorySnippet = memorySnippet.trim()
+                    .take(AssistantAutomaticMemoryPolicy.MAX_CONTEXT_MEMORY_CHARS)
+                if (safeMemorySnippet.isNotBlank()) put("assistant_memory", safeMemorySnippet)
+            }
             .put(
                 "limitations",
                 JSONArray()
