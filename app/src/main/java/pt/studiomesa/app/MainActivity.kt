@@ -1068,21 +1068,31 @@ class MainActivity : ComponentActivity() {
         ).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(dp(100), -2))
         composerArea.addView(optionsRow, LinearLayout.LayoutParams(-1, -2))
         if (isRemoteRestaurantOwner()) {
-            composerArea.addView(secondaryButton(
-                if (advancedAssistantEnabled()) "GPT-OSS 120B online · desligar" else "Ativar IA avançada · GPT-OSS 120B"
-            ) {
-                requestAdvancedAssistant()
-            }, LinearLayout.LayoutParams(-1, dp(40)))
-            composerArea.addView(label(
-                if (advancedAssistantEnabled())
-                    "Online: perguntas normais enviam histórico recente, Memória curta e indicadores agregados. Pesquisa pública envia só a pergunta atual. Nunca envia faturas, OCR, clientes ou reservas detalhadas."
-                else
-                    "Opcional. A IA local continua disponível; o modo online usa um fornecedor externo e limites gratuitos.",
-                8.5f, false, muted
-            ).apply {
-                gravity = Gravity.CENTER
-                setPadding(dp(2), dp(3), dp(2), 0)
-            })
+            if (advancedAssistantCloudAvailable()) {
+                composerArea.addView(secondaryButton(
+                    if (advancedAssistantEnabled()) "GPT-OSS 120B online · desligar" else "Ativar IA avançada · GPT-OSS 120B"
+                ) {
+                    requestAdvancedAssistant()
+                }, LinearLayout.LayoutParams(-1, dp(40)))
+                composerArea.addView(label(
+                    if (advancedAssistantEnabled())
+                        "Online: perguntas normais enviam histórico recente, Memória curta e indicadores agregados. Pesquisa pública envia só a pergunta atual. Nunca envia faturas, OCR, clientes ou reservas detalhadas."
+                    else
+                        "Opcional. A IA local continua disponível. O serviço online tem custos por tokens e depende de quotas externas.",
+                    8.5f, false, muted
+                ).apply {
+                    gravity = Gravity.CENTER
+                    setPadding(dp(2), dp(3), dp(2), 0)
+                })
+            } else {
+                composerArea.addView(label(
+                    "GPT-OSS 120B online ainda não está ativo nesta versão. A IA local continua disponível.",
+                    8.5f, false, muted
+                ).apply {
+                    gravity = Gravity.CENTER
+                    setPadding(dp(2), dp(3), dp(2), 0)
+                })
+            }
         }
         composerArea.addView(label(
             if (assistantDeepThinkingEnabled && modelInstalled)
@@ -1771,11 +1781,23 @@ class MainActivity : ComponentActivity() {
             backendRestaurantId().isNotBlank() &&
             backendPrefs.getString("restaurant_role", "") == "owner"
 
+    private fun advancedAssistantCloudAvailable(): Boolean =
+        BuildConfig.ADVANCED_ASSISTANT_CLOUD_ENABLED
+
     private fun advancedAssistantEnabled(): Boolean =
-        isRemoteRestaurantOwner() &&
+        advancedAssistantCloudAvailable() &&
+            isRemoteRestaurantOwner() &&
             backendPrefs.getBoolean(advancedAssistantPreferenceKey(), false)
 
     private fun requestAdvancedAssistant() {
+        if (!advancedAssistantCloudAvailable()) {
+            Toast.makeText(
+                this,
+                "A IA avançada online ainda não foi configurada. Usa a IA local nesta versão.",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
         if (!isRemoteRestaurantOwner()) {
             Toast.makeText(
                 this,
@@ -1798,7 +1820,7 @@ class MainActivity : ComponentActivity() {
                     "Quando pedes pesquisa pública na Web ou informação atual, o servidor envia apenas a pergunta atual: não envia histórico, Memória nem dados do restaurante. A ferramenta Browser Search pode pesquisar na Web; a ferramenta Code Interpreter pode executar Python para apoiar cálculos e análise. Ambas são executadas na infraestrutura da Groq.\n\n" +
                     "Não são enviados PDFs, imagens de faturas, texto OCR, nomes/contactos de clientes, detalhes de reservas, dados de funcionários ou dados bancários. O filtro automático de identificadores é apenas uma proteção adicional e não garante anonimização total.\n\n" +
                     "A documentação da Groq indica que os pedidos de inferência não são retidos por defeito. Em situações limitadas de fiabilidade ou prevenção de abuso, entradas e saídas podem ser registadas até 30 dias; a organização pode ativar Zero Data Retention nas definições de dados da Groq. Dados retidos são armazenados em buckets GCP nos EUA. A pesquisa e a execução de código têm condições próprias e não estão disponíveis em endpoints regionais/soberanos.\n\n" +
-                    "O escalão gratuito tem limites que podem mudar; não existe garantia de quota ou utilização comercial gratuita. Esta função não deve ser usada com dados reais nem vendida até existir revisão de privacidade, DPA, avaliação dos subcontratantes e configuração do fornecedor. A chave privada fica apenas nos segredos do servidor Supabase."
+                    "A tarifa publicada para o GPT-OSS 120B na Groq é USD 0,15 por milhão de tokens de entrada e USD 0,60 por milhão de tokens de saída; os preços, quotas e condições podem mudar. Não assumas utilização gratuita nem limites suficientes para produção. Antes de ativar, define limites de despesa na conta do fornecedor. Esta função não deve receber dados reais nem ser vendida até existir revisão de privacidade, DPA, avaliação dos subcontratantes e configuração do fornecedor. A chave privada fica apenas nos segredos do servidor Supabase."
             )
             .setNegativeButton("Cancelar", null)
             .setPositiveButton("Aceito e ativar") { _, _ ->
