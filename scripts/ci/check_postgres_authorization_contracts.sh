@@ -1427,6 +1427,45 @@ then
   exit 1
 fi
 
+# The same permission protects invoice-QR issuance and the staff-facing loyalty catalogue/history.
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.issue_loyalty_invoice_qr(
+  '$MEMBER_A'::uuid, 20.00, 'CI-revoked-loyalty-permission', '77777777-7777-4777-8777-777777777779'::uuid
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: staff issued an invoice QR after loyalty permission was disabled." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*) FROM public.get_restaurant_loyalty_rewards('$RESTAURANT_A'::uuid);
+COMMIT;
+SQL
+then
+  echo "ERROR: staff read the restaurant loyalty catalogue after loyalty permission was disabled." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*) FROM public.get_restaurant_loyalty_reward_redemptions('$RESTAURANT_A'::uuid);
+COMMIT;
+SQL
+then
+  echo "ERROR: staff read customer reward redemptions after loyalty permission was disabled." >&2
+  exit 1
+fi
+
 psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
