@@ -24,6 +24,7 @@ class AssistantGeneralConversationPolicyTest {
         assertTrue(instruction.contains("pergunta quando faltar informação essencial"))
         assertTrue(instruction.contains("começa pela resposta direta"))
         assertTrue(instruction.contains("valores usados, unidades e fórmula"))
+        assertTrue(instruction.contains("calculate_exact_math"))
         assertTrue(instruction.contains("não confundas compras/faturas com consumo alimentar"))
     }
 
@@ -54,6 +55,7 @@ class AssistantGeneralConversationPolicyTest {
         listOf(
             "get_restaurant_data",
             "calculate_restaurant_economics",
+            "calculate_exact_math",
             "get_supplier_invoice_summary",
             "issue_date_from",
             "approved",

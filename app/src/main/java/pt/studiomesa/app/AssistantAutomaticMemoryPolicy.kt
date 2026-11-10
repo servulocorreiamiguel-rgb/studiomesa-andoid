@@ -12,7 +12,7 @@ import java.util.Locale
  */
 internal object AssistantAutomaticMemoryPolicy {
     const val MAX_MEMORY_CHARS = 2500
-    const val MAX_CONTEXT_MEMORY_CHARS = 200
+    const val MAX_CONTEXT_MEMORY_CHARS = 350
     private const val MAX_FACT_CHARS = 220
 
     private val extractionPatterns = listOf(
