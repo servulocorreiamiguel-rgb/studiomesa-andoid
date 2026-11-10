@@ -83,11 +83,13 @@ As 51 versões comuns não foram consideradas equivalentes só pelo prefixo/time
 Risco identificado: `binaryStorageRequest` usava `readBytes()` sem limite, verificando o tamanho do documento só depois de o corpo ser integralmente carregado para memória.
 
 Correção proposta em PR separada:
+- Limitar respostas JSON normais a 4 MiB e corpos JSON de erro a 64 KiB.
+- Paginar o download do histórico do assistente em blocos de 100 mensagens, ordenados de forma estável por data e ID, com teto de 5 000 mensagens.
 - Limitar a leitura incremental de documentos Storage a 25 MiB.
 - Rejeitar `Content-Length` anunciado acima do limite antes de ler o stream.
 - Manter a verificação de tamanho mesmo quando o servidor não envia ou declara incorretamente `Content-Length`.
 - Limitar corpos de erro de Storage a 64 KiB, preservando HTTP status/path e mensagens sanitizadas.
-- Acrescentar testes unitários ao leitor binário e testes estáticos para impedir regressões de transporte, HTTPS e chaves privilegiadas no cliente.
+- Acrescentar testes unitários para o leitor binário e para a paginação, além de testes estáticos para impedir regressões de transporte, HTTPS, chaves privilegiadas e consultas de histórico sem paginação.
 
 Estado da CI do commit atual `dae6766eb494aa8beac61c78140f7fcfc7750cff`: em validação à hora da atualização deste documento. Não marcar os passos como aprovados até os quatro jobs de CI terminarem com sucesso.
 
