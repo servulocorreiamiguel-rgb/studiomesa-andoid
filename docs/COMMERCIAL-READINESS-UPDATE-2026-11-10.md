@@ -1,4 +1,4 @@
-> **CI mais recente — 10/11/2026, 15:55 UTC: SUCESSO.** A execução [42844678804](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42844678804), no commit `210f4199502484d4b7c350851f5de003632db9ed`, terminou com os quatro jobs em sucesso. Passaram compilação das cinco variantes de demonstração, testes unitários, Android Lint, validação de cinco AAB/APKs com chave CI temporária, replay de migrations e autorização numa base PostgreSQL isolada e testes de interface em emuladores Android 8 (API 26) e Android 16 (API 36). Os APKs publicados como artefacto são **debug/demo**, não são releases comerciais e não usam a chave definitiva do titular. Esta CI não valida OAuth real, SMTP, dados do Supabase alojado, execução no OPPO A5m, DPA ou aprovação legal.
+> **CI mais recente — 10/11/2026, 16:38 UTC: SUCESSO.** A execução [42852321328](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42852321328), no commit `68da629fc3ecb0a68fea220b0a89b139d033f381`, terminou com os quatro jobs em sucesso. Passaram compilação das cinco variantes de demonstração, testes unitários, Android Lint, validação de cinco AAB/APKs com chave CI temporária, replay de migrations e autorização numa base PostgreSQL isolada e testes de interface em emuladores Android 8 (API 26) e Android 16 (API 36). Os APKs publicados como artefacto são **debug/demo**, não são releases comerciais e não usam a chave definitiva do titular. Esta CI não valida OAuth real, SMTP, dados do Supabase alojado, execução no OPPO A5m, DPA ou aprovação legal.
 >
 # StudioMesa — atualização de preparação comercial
 
@@ -55,7 +55,7 @@ A fotografia read-only de 10/11/2026 confirma:
 - As políticas RLS atuais das tabelas `restaurant_assistant_conversations`, `restaurant_assistant_messages`, `restaurant_assistant_memory` e `restaurant_supplier_invoices` exigem associação `owner` ao mesmo `restaurant_id` e `auth.uid()`. As inserções verificam também `created_by`/`updated_by`, e as mensagens têm de pertencer a uma conversa ativa do mesmo restaurante. Funcionários não recebem acesso direto a estes registos via Data API; a separação entre duas contas reais ainda precisa de testes E2E.
 - O Advisor de desempenho continua a assinalar quatro chaves estrangeiras sem índice e 45 índices sem utilização observada. Não remover nem criar índices indiscriminadamente sem analisar carga, planos e impacto.
 - A proteção contra palavras-passe comprometidas continua desativada no Supabase Auth; é necessário decidir a ativação e confirmar eventuais requisitos de plano/custo.
-- A organização Supabase está no plano `Free`. A tabela oficial de preços indica que Social OAuth (Google/Microsoft) e SMTP personalizado estão incluídos no Free, enquanto a proteção contra palavras-passe comprometidas não está. Assim, configurar Google/Outlook e SMTP não exige por si só passar ao Pro; exige credenciais criadas nos fornecedores e configuração correta de URLs de retorno. A proteção contra palavras-passe comprometidas exige Pro ou superior. Não foi feito upgrade: https://supabase.com/pricing e https://supabase.com/docs/guides/auth/password-security.
+- A organização Supabase está no plano `Free`. O primeiro lançamento usa email/palavra-passe: é obrigatório configurar SMTP próprio e confirmação de email. Os botões Google/Microsoft ficam ocultos e só serão ativados depois da primeira venda; a configuração OAuth é uma melhoria posterior, não um bloqueio do primeiro lançamento. A proteção contra palavras-passe comprometidas exige Pro ou superior. Não foi feito upgrade: https://supabase.com/pricing e https://supabase.com/docs/guides/auth/password-security.
 - O workflow GitHub `supabase-keepalive.yml` está configurado para quatro chamadas diárias a uma RPC read-only que apenas devolve `true`. Foram encontradas sete execuções agendadas concluídas com sucesso; a mais recente foi [42782343177](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42782343177), às 08:24 UTC de 10/11/2026. O plano Free pode pausar projetos após uma semana de inatividade; o heartbeat reduz esse risco, mas GitHub Actions não fornece garantia de execução pontual nem SLA: https://supabase.com/pricing.
 - O histórico remoto não está integralmente reconciliado com os ficheiros do repositório. Não executar `db push`, `migration repair`, reset ou deployment de migrations até comparar SQL/objetos e provar backup e restauro num ambiente separado.
 
@@ -63,7 +63,7 @@ A fotografia read-only de 10/11/2026 confirma:
 
 Ainda não estão demonstrados, com contas descartáveis e percurso ponta a ponta:
 - registo, confirmação de email, SMTP, login, recuperação PKCE, refresh, logout, expiração e revogação;
-- Google/Microsoft OAuth e URLs de retorno;
+- Google/Microsoft OAuth e URLs de retorno ficam adiados até depois da primeira venda; os botões não aparecem na versão inicial.
 - isolamento entre dois restaurantes para proprietário, funcionário e cliente;
 - reservas, pedidos, cozinha, fidelização, resgates, campanhas e eliminação de conta;
 - sincronização do histórico/memória entre dispositivos, conflitos, rede interrompida e eliminação/tombstones;
@@ -84,7 +84,7 @@ Ainda não estão demonstrados, com contas descartáveis e percurso ponta a pont
 1. Passar uma nova CI integral depois das alterações que desativam a IA cloud por omissão e atualizam a divulgação dos custos.
 2. Executar os testes físicos do modelo local e da aplicação em aparelhos representativos, incluindo OPPO A5m.
 3. Obter/confirmar o backup e o restauro do Supabase; reconciliar individualmente as migrations e as definições do catálogo antes de qualquer alteração remota.
-4. Configurar e testar SMTP/OAuth e todos os percursos E2E com contas e dados fictícios de dois restaurantes.
+4. Configurar SMTP e testar os percursos de email/conta E2E com contas e dados fictícios de dois restaurantes. Depois da primeira venda, ativar e testar Google/Microsoft OAuth, se for necessário.
 5. Decidir se o serviço GPT-OSS online será incluído no produto. Caso sim, configurar a conta/chave Groq, limites de despesa, proteção contra abuso, DPA e divulgação; publicar a Edge Function só depois da revisão.
 6. Confirmar a licença do modelo local e todas as licenças/transitivas das dependências, SBOM e avisos de terceiros para a entidade que vai distribuir.
 7. Escolher o identificador de pacote, criar e salvaguardar o keystore comercial, executar o workflow assinado e validar atualização/distribuição.

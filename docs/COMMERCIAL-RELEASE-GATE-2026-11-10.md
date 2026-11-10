@@ -1,4 +1,4 @@
-> **CI mais recente — 10/11/2026, 15:55 UTC: SUCESSO.** A execução [42844678804](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42844678804), no commit `210f4199502484d4b7c350851f5de003632db9ed`, terminou com os quatro jobs em sucesso. Passaram compilação das cinco variantes de demonstração, testes unitários, Android Lint, validação de cinco AAB/APKs com chave CI temporária, replay de migrations e autorização numa base PostgreSQL isolada e testes de interface em emuladores Android 8 (API 26) e Android 16 (API 36). Os APKs publicados como artefacto são **debug/demo**, não são releases comerciais e não usam a chave definitiva do titular. Esta CI não valida OAuth real, SMTP, dados do Supabase alojado, execução no OPPO A5m, DPA ou aprovação legal.
+> **CI mais recente — 10/11/2026, 16:38 UTC: SUCESSO.** A execução [42852321328](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42852321328), no commit `68da629fc3ecb0a68fea220b0a89b139d033f381`, terminou com os quatro jobs em sucesso. Passaram compilação das cinco variantes de demonstração, testes unitários, Android Lint, validação de cinco AAB/APKs com chave CI temporária, replay de migrations e autorização numa base PostgreSQL isolada e testes de interface em emuladores Android 8 (API 26) e Android 16 (API 36). Os APKs publicados como artefacto são **debug/demo**, não são releases comerciais e não usam a chave definitiva do titular. Esta CI não valida OAuth real, SMTP, dados do Supabase alojado, execução no OPPO A5m, DPA ou aprovação legal.
 >
 > **Atualização de estado — após a integração da PR #106, 10/11/2026.** A CI integral do commit `c217bfdfb4fccb30b2e71f0e844f8b1dbbe18327` passou os quatro jobs (build/testes das cinco variantes, Lint, replay PostgreSQL/autorização e emuladores Android 8/16): [execução 42834074139](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42834074139). Foram entretanto adicionadas alterações para manter a IA cloud GPT-OSS desativada por omissão e divulgar os custos atuais; estas alterações exigem nova CI antes de assinar uma release.
 >
@@ -51,8 +51,8 @@ A consulta read-only de 10/11/2026 confirmou que o projeto alojado não tem as t
 - [ ] Decidir como tratar a proteção de palavras-passe comprometidas desativada. Confirmar plano/configuração suportados; não assumir que é grátis.
 
 ### Autenticação e ponta a ponta
-- [ ] Configurar SMTP e confirmação de email.
-- [ ] Configurar credenciais OAuth Google/Microsoft e Redirect URLs.
+- [ ] Configurar SMTP próprio e confirmação de email para o início de sessão por email/palavra-passe.
+- [~] Google/Microsoft OAuth: os botões ficam ocultos na primeira versão e só serão ativados depois da primeira venda; credenciais e Redirect URLs ficam fora do gate inicial.
 - [ ] Testar registo, login, refresh, logout, expiração/revogação, recovery PKCE/OTP, troca de dispositivo e mudança de conta.
 - [ ] Testar com contas descartáveis de dois restaurantes: proprietário A/B, funcionário A, cliente A/B e acesso negado entre tenants.
 - [ ] Testar E2E reservas, pedidos, cozinha, fidelização, resgates, campanhas e consentimento de marketing.

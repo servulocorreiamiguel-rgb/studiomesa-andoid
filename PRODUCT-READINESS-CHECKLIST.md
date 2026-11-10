@@ -15,7 +15,8 @@ Esta fotografia prevalece sobre os registos históricos abaixo. O gate comercial
 - [ ] Resolver, após reconciliação e deployment aprovado, as três tabelas/RPCs ainda ausentes: public.restaurant_recipes, public.restaurant_recipe_ingredients e private.restaurant_staff_permissions.
 - [ ] Rever individualmente as 42 funções SECURITY DEFINER executáveis por authenticated. A consulta encontrou 47 funções no total, todas com auth.uid() e search_path vazio; nenhuma é executável por anon. Isto não substitui revisão de autorização e testes com contas de dois restaurantes.
 - [ ] Decidir como resolver a proteção contra palavras-passe comprometidas desativada; não alterar o plano Supabase sem aprovação explícita de custo.
-- [ ] Configurar/validar SMTP, confirmação de email, OAuth/Redirect URLs e executar testes E2E de registo, sessão, recuperação, logout e eliminação de contas descartáveis.
+- [ ] Configurar/validar SMTP próprio e confirmação de email; executar testes E2E de registo, sessão, recuperação, logout e eliminação de contas descartáveis.
+- [~] Google/Microsoft OAuth: botões ocultos na primeira versão e ativação adiada até depois da primeira venda; a implementação PKCE mantém-se no código e exige credenciais/URLs e testes quando for reativada.
 - [ ] Testar pedidos, reservas, stock, fidelização, campanhas, faturas, sincronização entre dispositivos, perda de rede e isolamento entre dois restaurantes.
 - [ ] Finalizar política de privacidade, Data Safety, termos, DPA, subcontratantes, retenção, licenças/avisos e suporte com os dados reais do responsável legal.
 - [ ] Definir os package IDs finais e a estratégia de distribuição; confirmar a chave comercial e secrets/variables sem expor material privado.

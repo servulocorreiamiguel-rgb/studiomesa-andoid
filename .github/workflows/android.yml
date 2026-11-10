@@ -2,7 +2,7 @@ name: Build StudioMesa Android APK
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "release/**"]
   pull_request:
     branches: ["main", "integration/non-ai-core-2026-11-05"]
   workflow_dispatch:
