@@ -14,6 +14,8 @@ import java.net.URLEncoder
 object SupabaseApi {
     private const val BASE_URL = "https://svwvkfsyevuyabelrtjk.supabase.co"
     private const val API_KEY = "sb_publishable_ioJIukpwd0_Fyajd41QL_Q_M6WKE0UH"
+    private const val MAX_JSON_RESPONSE_BYTES = 4 * 1024 * 1024
+    private const val MAX_JSON_ERROR_BODY_BYTES = 64 * 1024
     private const val MAX_INVOICE_DOCUMENT_BYTES = 25 * 1024 * 1024
     private const val MAX_STORAGE_ERROR_BODY_BYTES = 64 * 1024
 
@@ -65,9 +67,19 @@ object SupabaseApi {
                 connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
             }
             val code = connection.responseCode
-            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-            val text = ResponseBodyReader.read(stream)
-            if (code !in 200..299) {
+            val success = code in 200..299
+            val stream = if (success) connection.inputStream else connection.errorStream
+            val responseLimitBytes = if (success) MAX_JSON_RESPONSE_BYTES else MAX_JSON_ERROR_BODY_BYTES
+            val text = try {
+                ResponseBodyReader.read(stream, responseLimitBytes)
+            } catch (error: IllegalStateException) {
+                if (!success && error.message == "A resposta do servidor excede o limite permitido.") {
+                    ""
+                } else {
+                    throw error
+                }
+            }
+            if (!success) {
                 // Only show recognized message fields. Never surface an arbitrary HTML or
                 // proxy response body to the user, and always cap the displayed message.
                 val message = try {
@@ -140,9 +152,19 @@ object SupabaseApi {
                 connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
             }
             val code = connection.responseCode
-            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-            val response = ResponseBodyReader.read(stream)
-            if (code !in 200..299) {
+            val success = code in 200..299
+            val stream = if (success) connection.inputStream else connection.errorStream
+            val responseLimitBytes = if (success) MAX_JSON_RESPONSE_BYTES else MAX_JSON_ERROR_BODY_BYTES
+            val response = try {
+                ResponseBodyReader.read(stream, responseLimitBytes)
+            } catch (error: IllegalStateException) {
+                if (!success && error.message == "A resposta do servidor excede o limite permitido.") {
+                    ""
+                } else {
+                    throw error
+                }
+            }
+            if (!success) {
                 val message = runCatching {
                     val error = JSONObject(response)
                     sequenceOf("message", "msg", "error_description")
