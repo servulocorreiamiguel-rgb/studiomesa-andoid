@@ -75,3 +75,27 @@
 - [ ] Verify every recorded status against the final commit and latest live queries.
 - [x] No live migrations, function deployments, Auth changes, Storage changes or plan upgrades were performed.
 
+
+
+---
+
+### Task 4: Bound JSON responses and paginate assistant history
+
+**Files:**
+- Modify: `app/src/main/java/pt/studiomesa/app/SupabaseApi.kt`
+- Create: `app/src/main/java/pt/studiomesa/app/AssistantMessagePaginationPolicy.kt`
+- Create: `app/src/test/java/pt/studiomesa/app/AssistantMessagePaginationPolicyTest.kt`
+- Modify: `scripts/check_android_http_safety.py`
+- Modify: `scripts/test_check_android_http_safety.py`
+
+**Behavior:**
+- Limit successful JSON API bodies to 4 MiB and error bodies to 64 KiB.
+- Keep assistant message download pages to 100 rows, with stable `created_at,id` ordering.
+- Stop at the existing local-history ceiling of 5,000 messages.
+- Test full/short pages, cap handling, invalid offsets and the maximum serialized page budget.
+
+- [x] Add the bounded pagination policy and deterministic unit tests.
+- [x] Implement paginated history download in `SupabaseApi.listAssistantMessages`.
+- [x] Apply separate success/error limits to both JSON request paths.
+- [x] Add static guardrails for stable ordering, offsets, bounded JSON bodies and page limit.
+- [ ] Run the complete unit, Lint, PostgreSQL authorization and Android emulator CI for the final branch commit.
