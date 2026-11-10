@@ -1793,14 +1793,14 @@ class MainActivity : ComponentActivity() {
 
         AlertDialog.Builder(this)
             .setTitle("Ativar IA avançada online")
-                        .setMessage(
+                                    .setMessage(
                 "O StudioMesa vai usar o modelo GPT-OSS 120B da OpenAI através da Groq. Nas perguntas normais, são enviados ao fornecedor a pergunta atual, até 10 perguntas recentes escritas por ti, um resumo dos dados operacionais e uma versão curta da Memória guardada.\n\n" +
                     "Quando pedes pesquisa pública na Web ou informação atual, o servidor envia apenas a pergunta atual: não envia histórico, Memória nem dados do restaurante. A ferramenta Browser Search pode pesquisar na Web; a ferramenta Code Interpreter pode executar Python para apoiar cálculos e análise. Ambas são executadas na infraestrutura da Groq.\n\n" +
                     "Não são enviados PDFs, imagens de faturas, texto OCR, nomes/contactos de clientes, detalhes de reservas, dados de funcionários ou dados bancários. O filtro automático de identificadores é apenas uma proteção adicional e não garante anonimização total.\n\n" +
-                    "A documentação da Groq indica que os pedidos de inferência não são retidos por defeito, mas podem existir registos temporários até 30 dias para fiabilidade/prevenção de abuso, salvo configuração Zero Data Retention. Dados retidos podem ser armazenados nos EUA. A pesquisa e a execução de código têm condições próprias e não estão disponíveis em endpoints regionais/soberanos.\n\n" +
+                    "A documentação da Groq indica que os pedidos de inferência não são retidos por defeito. Em situações limitadas de fiabilidade ou prevenção de abuso, entradas e saídas podem ser registadas até 30 dias; a organização pode ativar Zero Data Retention nas definições de dados da Groq. Dados retidos são armazenados em buckets GCP nos EUA. A pesquisa e a execução de código têm condições próprias e não estão disponíveis em endpoints regionais/soberanos.\n\n" +
                     "O escalão gratuito tem limites que podem mudar; não existe garantia de quota ou utilização comercial gratuita. Esta função não deve ser usada com dados reais nem vendida até existir revisão de privacidade, DPA, avaliação dos subcontratantes e configuração do fornecedor. A chave privada fica apenas nos segredos do servidor Supabase."
             )
-.setNegativeButton("Cancelar", null)
+            .setNegativeButton("Cancelar", null)
             .setPositiveButton("Aceito e ativar") { _, _ ->
                 backendPrefs.edit().putBoolean(advancedAssistantPreferenceKey(), true).apply()
                 renderAssistantChatScreen()
