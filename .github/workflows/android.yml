@@ -127,6 +127,17 @@ jobs:
       - name: Run unit tests for every distributed variant
         run: gradle --no-daemon testEssencialRestauranteDebugUnitTest testProfissionalRestauranteDebugUnitTest testProfissionalClienteDebugUnitTest testPremiumRestauranteDebugUnitTest testPremiumClienteDebugUnitTest
 
+      - name: Upload unit test reports, including failures
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: StudioMesa-Unit-Test-Reports
+          path: |
+            app/build/test-results/**/*.xml
+            app/build/reports/tests/**/*.html
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Run Android lint
         timeout-minutes: 10
         run: gradle --no-daemon lint
