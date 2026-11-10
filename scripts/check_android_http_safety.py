@@ -8,6 +8,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 API_CLIENT = ROOT / "app" / "src" / "main" / "java" / "pt" / "studiomesa" / "app" / "SupabaseApi.kt"
+ANDROID_MANIFEST = ROOT / "app" / "src" / "main" / "AndroidManifest.xml"
+FILE_PROVIDER_PATHS = ROOT / "app" / "src" / "main" / "res" / "xml" / "studiomesa_file_paths.xml"
 
 
 def audit_http_client(source: str) -> list[str]:
@@ -83,7 +85,31 @@ def audit_http_client(source: str) -> list[str]:
     return errors
 
 
+def audit_android_manifest(manifest: str, file_paths: str) -> list[str]:
+    errors: list[str] = []
+    for fragment, message in (
+        ('android:allowBackup="false"', "Android cloud/device backup must remain disabled for private app data."),
+        ('android:usesCleartextTraffic="false"', "Android cleartext traffic must be disabled."),
+        ('android:name="androidx.core.content.FileProvider"', "Invoice sharing must use Android FileProvider."),
+    ):
+        if fragment not in manifest:
+            errors.append(message)
+
+    provider_start = manifest.find('android:name="androidx.core.content.FileProvider"')
+    provider_end = manifest.find("/>", provider_start) if provider_start >= 0 else -1
+    provider_config = manifest[provider_start:provider_end] if provider_start >= 0 and provider_end > provider_start else ""
+    if 'android:exported="false"' not in provider_config:
+        errors.append("The invoice FileProvider must not be exported.")
+
+    if '<cache-path name="invoice_cache" path="invoices/" />' not in file_paths:
+        errors.append("The invoice FileProvider must remain limited to cache/invoices/.")
+    if any(fragment in file_paths for fragment in ("<root-path", "<external-path", "<external-files-path", "<files-path")):
+        errors.append("The invoice FileProvider must not expose broad or external filesystem paths.")
+    return errors
+
+
 def main() -> int:
+
     try:
         source = API_CLIENT.read_text(encoding="utf-8")
     except OSError as exc:
@@ -91,6 +117,13 @@ def main() -> int:
         return 2
 
     errors = audit_http_client(source)
+    try:
+        manifest = ANDROID_MANIFEST.read_text(encoding="utf-8")
+        provider_paths = FILE_PROVIDER_PATHS.read_text(encoding="utf-8")
+    except OSError as exc:
+        print(f"Could not read Android manifest/FileProvider paths: {exc}", file=sys.stderr)
+        return 2
+    errors.extend(audit_android_manifest(manifest, provider_paths))
     if errors:
         print("Android HTTP safety audit failed:")
         for error in errors:
@@ -99,7 +132,7 @@ def main() -> int:
 
     print(
         "Android HTTP safety audit passed: HTTPS, publishable client key, no redirects/cache, "
-        "bounded JSON and binary responses, early Content-Length rejection and sanitized errors."
+        "bounded JSON and binary responses, early Content-Length rejection, sanitized errors, disabled cleartext traffic and restricted invoice FileProvider."
     )
     return 0
 
