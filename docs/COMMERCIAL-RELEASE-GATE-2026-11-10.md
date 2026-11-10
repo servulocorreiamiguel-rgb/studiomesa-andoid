@@ -4,7 +4,7 @@
 **Código principal auditado:** `52f858ad293f4ce557758fab60fdcc3a9321d6cf` (merge da PR #105 em `main`).  
 **Revisão de segurança:** PR #105 — `release/commercial-hardening-2026-11-10`, integrada por squash.  
 **CI da PR #105:** execução `42782322112`, commit `4588aae932e880146094a0385392440b914bae5b`, todos os quatro jobs concluídos com sucesso.  
-**CI do código Android:** [execução `42792956250`](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42792956250), commit `0177c6aa3e62c5e70b20f620be4576858ab67837`, passou os quatro jobs. **CI da reposição de migrations:** [execução `42798060079`](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42798060079), commit `6679123447b6c967ecc1017549e5ea2118e0e0f7`; o replay PostgreSQL/autorização passou, mas a validação Android ainda estava em curso na última consulta. Os APKs são debug/demo, não release comercial assinada.  
+**CI do código Android:** [execução `42792956250`](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42792956250), commit `0177c6aa3e62c5e70b20f620be4576858ab67837`, passou os quatro jobs. A execução [42799443309](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42799443309) passou os auditores estáticos, compilação, testes unitários e Lint, e o replay PostgreSQL também passou; foi cancelada durante a validação comercial quando a migration duplicada foi removida. A execução atual [42800159352](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42800159352) está a validar a versão limpa. Os APKs são debug/demo, não release comercial assinada.  
 **Decisão:** **NÃO LIBERADO para piloto com dados reais, venda ou publicação.**
 
 ## O que está verificado
@@ -24,7 +24,7 @@
 - [x] Auditoria read-only do Supabase a 10/11/2026: projeto `ACTIVE_HEALTHY`, 63 versões remotas, 26 tabelas com RLS ativo e bucket de faturas privado. As tabelas de histórico/Memória/metadados de faturas existem; as tabelas ausentes são receitas, ingredientes e permissões granulares. A inspeção confirmou que as 11 tabelas RLS sem políticas não concedem privilégios diretos a `anon`/`authenticated`.
 - [x] Advisor atual consultado: 42 funções `SECURITY DEFINER` executáveis por `authenticated`, 11 tabelas RLS sem políticas, proteção de palavras-passe comprometidas desativada, quatro FKs sem índice de cobertura e 45 índices sem utilização observada. Os avisos exigem revisão individual; não foram aplicadas revogações ou alterações de esquema.
 - [x] CI do código Android (`42792956250`) terminou com quatro jobs em sucesso. Inclui build e testes unitários das cinco variantes, Android Lint, auditorias de segurança, replay PostgreSQL/autorização e smoke tests Android 8/16. Os APKs são debug/demo.
-- [x] Recuperados no GitHub sete ficheiros originais de migrations, com os hashes das branches de origem, no commit `6679123447b6c967ecc1017549e5ea2118e0e0f7`. O repositório passou de 55 para 62 ficheiros locais; as versões comuns passaram de 51 para 58 e as versões remotas sem ficheiro passaram de 12 para cinco. Nenhum SQL foi aplicado ao Supabase alojado.
+- [x] Recuperados no GitHub sete ficheiros originais de migrations, com hashes das branches de origem, e removida uma cópia local byte-idêntica à versão remota. O repositório passou de 55 para 61 ficheiros; existem 58 versões comuns, três local-only e cinco remote-only. Nenhum SQL foi aplicado ao Supabase alojado.
 
 ### Backend incompatível com funcionalidades opcionais
 
@@ -33,7 +33,7 @@ A consulta read-only de 10/11/2026 confirmou que o projeto alojado não tem as t
 ## Bloqueios obrigatórios
 
 ### Backend e dados
-- [ ] Reconciliar 62 ficheiros locais com 63 versões remotas: comparar o SQL integral das 58 versões comuns, explicar as quatro locais-only e recuperar/comparar as cinco remote-only (`20261102103246`, `20261102103627`, `20261102104650`, `20261102113719`, `20261102113944`).
+- [ ] Reconciliar 61 ficheiros locais com 63 versões remotas: comparar o SQL integral das 58 versões comuns, explicar as três local-only (`20261030111815`, `20261102103000`, `20261104100000`) e recuperar/comparar as cinco remote-only (`20261102103246`, `20261102103627`, `20261102104650`, `20261102113719`, `20261102113944`).
 - [ ] Produzir backup e demonstrar restauro num projeto separado antes de qualquer alteração ao projeto alojado.
 - [ ] Resolver/deployar com sequência canónica as tabelas em falta: recipes, recipe ingredients e granular staff permissions.
 - [ ] Rever as 42 funções `SECURITY DEFINER` sinalizadas pelo Supabase Advisor individualmente. Não revogar EXECUTE em bloco.
