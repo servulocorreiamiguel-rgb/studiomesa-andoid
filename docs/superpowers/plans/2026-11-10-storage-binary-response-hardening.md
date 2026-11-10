@@ -72,7 +72,7 @@
 - Update: `docs/COMMERCIAL-RELEASE-GATE-2026-11-09.md` only by superseding it with a dated note, without marking external blockers complete.
 
 - [x] Record the read-only Supabase audit, migration drift, RLS/Storage posture and external launch blockers in the security and commercial release reports.
-- [ ] Verify every recorded status against the final commit and latest live queries.
+- [x] Verify the read-only Supabase schema, RLS/Storage posture and launch blockers against current live queries.
 - [x] No live migrations, function deployments, Auth changes, Storage changes or plan upgrades were performed.
 
 
@@ -98,7 +98,7 @@
 - [x] Implement paginated history download in `SupabaseApi.listAssistantMessages`.
 - [x] Apply separate success/error limits to both JSON request paths.
 - [x] Add static guardrails for stable ordering, offsets, bounded JSON bodies and page limit.
-- [ ] Run the complete unit, Lint, PostgreSQL authorization and Android emulator CI for the final branch commit.
+- [ ] Run the complete unit, Lint, PostgreSQL authorization and Android emulator CI for the final PR #105 head.
 
 
 ---
@@ -114,4 +114,4 @@
 - [x] Keep Android backup disabled for app-private session/history/invoice metadata.
 - [x] Require invoice `FileProvider` to remain non-exported and scoped only to `cache/invoices/`.
 - [x] Add static regression tests for cleartext, backup, provider export and external/root path exposure.
-- [ ] Run final CI on the final PR head.
+- [ ] Run final CI on the final PR #105 head and verify every job is successful.
