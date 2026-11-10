@@ -1,32 +1,34 @@
 # StudioMesa — lista de preparação para uso profissional
 
-**Estado atual em 10/11/2026: CÓDIGO COM CI APROVADA; NÃO LIBERADO PARA PILOTO COM DADOS REAIS, VENDA OU PRODUÇÃO.**
+**Estado auditado em 10/11/2026: NÃO LIBERADA para venda operacional, piloto com dados reais ou produção.** A alteração para ocultar Google/Microsoft já foi integrada na `main` pela PR #107 (commit `38058cee6a4febc3faf37c527cb6ea4615fb4da3`). A CI de `main` acionada após o merge ainda estava em execução na última consulta.
 
-Esta fotografia prevalece sobre os registos históricos abaixo. O gate comercial atualizado é [docs/COMMERCIAL-RELEASE-GATE-2026-11-10.md](docs/COMMERCIAL-RELEASE-GATE-2026-11-10.md).
+A fotografia detalhada mais recente está em [docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-10.md](docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-10.md). Esta secção prevalece sobre os registos históricos abaixo.
 
 - [x] Cinco variantes Android configuradas; compileSdk/targetSdk 36, minSdk 24, Java 17 e versão 1.5.0.
-- [x] CI da main para o código Android em 0177c6aa3e62c5e70b20f620be4576858ab67837 aprovada: quatro jobs, compilação e testes unitários das cinco variantes, Android Lint, auditorias de segurança, replay PostgreSQL/autorização e smoke tests Android 8 e Android 16.
-- [x] Endurecimento Android integrado: limites de leitura/respostas, paginação do histórico e proteção de transporte, com testes de regressão.
-- [x] IA generativa local LFM2.5-1.2B-Instruct INT4, calculadora determinística, ferramentas económicas, histórico/Memória locais cifrados e OCR local presentes no código. A qualidade/latência/temperatura do modelo ainda não foi testada fisicamente no OPPO A5m.
-- [x] Projeto Supabase alojado está ACTIVE_HEALTHY, na região eu-west-1; foram observadas 26 tabelas com RLS ativo.
-- [x] Histórico, mensagens, Memória e metadados de faturas existem no Supabase. O bucket studiomesa-invoices também existe, é privado e limita ficheiros a 25 MiB e PDF/JPEG/PNG/WebP. O percurso completo de sincronização/upload/leitura/eliminação ainda exige testes E2E.
-- [x] Inspeção read-only de privilégios confirmou que as 11 tabelas assinaladas com RLS sem políticas não concedem privilégios diretos de SELECT/INSERT/UPDATE/DELETE a anon ou authenticated; manter o modelo RPC-only/privado e voltar a verificar após qualquer migration.
-- [ ] Reconciliar 61 migrations locais com 63 versões remotas: 58 versões comuns por comparar por SQL integral, três só locais e cinco só remotas. Sete originais foram recuperados de branches históricas e uma cópia idêntica foi removida; não executar db push até comparar o histórico, preparar backup e demonstrar restauro num ambiente separado.
-- [ ] Resolver, após reconciliação e deployment aprovado, as três tabelas/RPCs ainda ausentes: public.restaurant_recipes, public.restaurant_recipe_ingredients e private.restaurant_staff_permissions.
-- [ ] Rever individualmente as 42 funções SECURITY DEFINER executáveis por authenticated. A consulta encontrou 47 funções no total, todas com auth.uid() e search_path vazio; nenhuma é executável por anon. Isto não substitui revisão de autorização e testes com contas de dois restaurantes.
-- [ ] Decidir como resolver a proteção contra palavras-passe comprometidas desativada; não alterar o plano Supabase sem aprovação explícita de custo.
-- [ ] Configurar/validar SMTP próprio e confirmação de email; executar testes E2E de registo, sessão, recuperação, logout e eliminação de contas descartáveis.
-- [~] Google/Microsoft OAuth: botões ocultos na primeira versão e ativação adiada até depois da primeira venda; a implementação PKCE mantém-se no código e exige credenciais/URLs e testes quando for reativada.
-- [ ] Testar pedidos, reservas, stock, fidelização, campanhas, faturas, sincronização entre dispositivos, perda de rede e isolamento entre dois restaurantes.
-- [ ] Finalizar política de privacidade, Data Safety, termos, DPA, subcontratantes, retenção, licenças/avisos e suporte com os dados reais do responsável legal.
-- [ ] Definir os package IDs finais e a estratégia de distribuição; confirmar a chave comercial e secrets/variables sem expor material privado.
-- [ ] Criar e testar a release assinada, verificar checksums/atualização e realizar testes físicos nos dispositivos suportados.
+- [x] CI da PR #107 passou os quatro jobs: compilação/testes, replay PostgreSQL/autorização, smoke tests Android 8 e Android 16. A CI de `main` após o merge ainda precisa de terminar com sucesso.
+- [x] Os botões Google/Microsoft estão ocultos por defeito; a implementação OAuth/PKCE foi preservada e adiada até depois da primeira venda.
+- [x] Projeto Supabase `ACTIVE_HEALTHY`, PostgreSQL 17.6.1.166, região eu-west-1; 26 tabelas com RLS ativo.
+- [x] Verificação SQL read-only: as 11 tabelas RLS sem políticas não concedem SELECT/INSERT/UPDATE/DELETE a `anon` nem `authenticated`.
+- [x] Verificação SQL read-only: 47 funções `SECURITY DEFINER`; 42 executáveis por `authenticated`, zero por `anon`; todas referenciam `auth.uid()` e têm `search_path = ''`. A revisão função a função continua obrigatória.
+- [ ] Reconciliar 61 ficheiros de migration locais com 63 versões remotas: 58 comuns, três só locais e cinco só remotas. Não executar `db push`, `migration repair` ou reset; comparar SQL integral, fazer backup e provar restauro antes de qualquer deployment.
+- [ ] Criar, reconciliar e testar as tabelas/RPCs ausentes: `public.restaurant_recipes`, `public.restaurant_recipe_ingredients` e `private.restaurant_staff_permissions`.
+- [ ] Rever individualmente as 42 funções `SECURITY DEFINER`, com testes de isolamento entre restaurantes e papéis. Os avisos do Advisor não devem ser resolvidos por revogações em bloco.
+- [ ] Resolver a proteção contra palavras-passe comprometidas desativada, depois de confirmar custo/plano.
+- [ ] Configurar SMTP próprio e confirmar email; testar registo, recuperação, sessão, logout e eliminação com contas descartáveis.
+- [x] Primeira versão sem Google/Microsoft; OAuth social explicitamente adiado para depois da primeira venda.
+- [ ] Testar E2E pedidos, reservas, cozinha, stock, fidelização, campanhas, faturas, sincronização, perda de rede e isolamento multi-restaurante.
+- [ ] Testar fisicamente no OPPO A5m e noutros Android o modelo local, instalação, desempenho, bateria, temperatura e atualização.
+- [ ] Publicar/validar apenas os serviços cloud necessários. A Edge Function `studiomesa-assistant` devolve HTTP 410; a IA avançada não está publicada; a pesquisa Web depende de `SEARXNG_BASE_URL` configurado.
+- [ ] Finalizar política de privacidade, termos, DPA, subcontratantes, retenção, eliminação, Data Safety, SBOM, licenças e suporte com a entidade responsável.
+- [ ] Escolher package IDs finais, guardar keystore comercial com backup seguro, configurar secrets/variables e gerar AAB/APKs assinados. Os artefactos regulares de CI são debug/demo.
+- [ ] Validar a release assinada, checksums, atualização e distribuição final.
 
-**Funcionalidades que não devem ser anunciadas como prontas para produção:** fichas técnicas/consumo automático de ingredientes e permissões granulares por funcionário (tabelas/RPCs ausentes); sincronização cloud de histórico/Memória e arquivo cloud de faturas (estruturas existem, mas o E2E ainda não está validado); previsões de vendas como valores contabilísticos ou pagamentos recebidos; integração com POS, pagamentos, faturação ou contabilidade (não implementada).
+**Não anunciar como funcionalidades comerciais já disponíveis:** fichas técnicas/consumo automático de ingredientes; permissões granulares de funcionários; IA cloud GPT-OSS; pesquisa Web até configurar/testar o motor; integração POS, pagamentos, impressoras, faturação, SAF-T ou contabilidade. O saldo de fidelização continua parcialmente manual. As previsões baseadas em pedidos não representam recebimentos bancários nem faturação contabilística.
 
-**Limites da IA:** o modelo é LFM2.5-1.2B-Instruct INT4, executado localmente, não é ChatGPT e não é equivalente ao ChatGPT Free. O OCR exige revisão humana; a previsão depende de amostras de pedidos concluídos e não demonstra recebimentos bancários/faturação.
+**Limites da IA:** a primeira versão usa o modelo local LFM2.5-1.2B-Instruct INT4; não é ChatGPT nem equivalente ao ChatGPT Free. OCR exige revisão humana. A licença do modelo e das dependências tem de ser confirmada pela entidade que fará a distribuição comercial.
 
-**Regra de lançamento:** um botão na interface, uma tabela criada ou um replay de migrations em CI não prova que o percurso real do cliente esteja validado. Não abrir piloto com dados pessoais/financeiros nem vender até os bloqueios do gate comercial estarem resolvidos.
+**Regra de lançamento:** a StudioMesa pode ser demonstrada com dados fictícios. Não deve receber dados reais de clientes ou restaurantes nem ser vendida como solução operacional até todos os bloqueios acima estarem resolvidos e testados.
+
 ---
 
 ## Registos históricos — não usar como estado atual
