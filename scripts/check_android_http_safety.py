@@ -50,6 +50,14 @@ def audit_http_client(source: str) -> list[str]:
     ):
         errors.append("Storage responses must reject an excessive Content-Length before reading the body.")
 
+    storage_start = source.find("private fun binaryStorageRequest")
+    storage_end = source.find("fun listAssistantConversations", storage_start)
+    storage_source = source[storage_start:storage_end] if storage_start >= 0 and storage_end > storage_start else ""
+    length_guard = storage_source.find("ResponseBodyReader.requireDeclaredLengthWithinLimit(")
+    stream_open = storage_source.find("val stream = if (success) connection.inputStream else connection.errorStream")
+    if not storage_source or length_guard < 0 or stream_open < 0 or length_guard > stream_open:
+        errors.append("Storage Content-Length must be checked before opening the response stream.")
+
     if not re.search(
         r"MAX_INVOICE_DOCUMENT_BYTES\s*=\s*25\s*\*\s*1024\s*\*\s*1024",
         source,
