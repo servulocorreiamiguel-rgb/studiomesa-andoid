@@ -41,10 +41,10 @@
 - Negative limits are rejected.
 - Limit is enforced while reading; exact limit is accepted, limit + 1 is rejected.
 
-- [ ] Add tests for exact-limit acceptance, over-limit rejection, null stream and zero-returning bulk reads.
-- [ ] Run the unit test before implementation; confirm it fails because `readBytes` does not exist.
-- [ ] Implement the minimal bounded byte reader in `ResponseBodyReader.kt`.
-- [ ] Refactor `read` to decode the bounded byte result as UTF-8 without changing its public behavior.
+- [x] Add tests for exact-limit acceptance, over-limit rejection, null stream and zero-returning bulk reads.
+- [x] Run the unit test before implementation; CI confirmed compilation fails because `readBytes` and `requireDeclaredLengthWithinLimit` did not exist.
+- [x] Implement the bounded byte reader in `ResponseBodyReader.kt`.
+- [x] Refactor `read` to decode the bounded byte result as UTF-8.
 - [ ] Run the focused test and the full unit-test suite for all five distributed variants.
 
 ### Task 2: Bound Storage responses
@@ -60,8 +60,8 @@
 - Limit error bodies to 64 KiB before attempting JSON message extraction.
 - Preserve existing `BackendHttpException` status/path and sanitized messages.
 
-- [ ] Add a testable helper for the declared-length guard if the existing reader tests cannot cover it without Android networking.
-- [ ] Implement the guard and bounded stream read.
+- [x] Add and test a deterministic helper for the declared-length guard.
+- [x] Implement the declared-length guard and bounded stream read in `SupabaseApi.kt`.
 - [ ] Verify the existing 25 MiB upload input validation and 25 MiB download result contract remain unchanged.
 - [ ] Run all five variant unit-test tasks, Android Lint and the complete Android emulator smoke workflow.
 
@@ -71,7 +71,7 @@
 - Create: `docs/SECURITY-AUDIT-2026-11-10.md`
 - Update: `docs/COMMERCIAL-RELEASE-GATE-2026-11-09.md` only by superseding it with a dated note, without marking external blockers complete.
 
-- [ ] Record the current read-only Supabase audit, exact migration drift, RLS/Storage posture, CI evidence and external launch blockers.
+- [x] Record the read-only Supabase audit, migration drift, RLS/Storage posture and external launch blockers in the security and commercial release reports.
 - [ ] Verify every recorded status against the final commit and latest live queries.
-- [ ] Do not run migrations, deploy functions, enable/disable Auth settings or upgrade the Free plan.
+- [x] No live migrations, function deployments, Auth changes, Storage changes or plan upgrades were performed.
 
