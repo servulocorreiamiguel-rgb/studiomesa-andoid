@@ -1,9 +1,11 @@
+> **CI mais recente — 10/11/2026, 15:55 UTC: SUCESSO.** A execução [42844678804](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42844678804), no commit `210f4199502484d4b7c350851f5de003632db9ed`, terminou com os quatro jobs em sucesso. Passaram compilação das cinco variantes de demonstração, testes unitários, Android Lint, validação de cinco AAB/APKs com chave CI temporária, replay de migrations e autorização numa base PostgreSQL isolada e testes de interface em emuladores Android 8 (API 26) e Android 16 (API 36). Os APKs publicados como artefacto são **debug/demo**, não são releases comerciais e não usam a chave definitiva do titular. Esta CI não valida OAuth real, SMTP, dados do Supabase alojado, execução no OPPO A5m, DPA ou aprovação legal.
+>
 # StudioMesa — atualização de preparação comercial
 
 **Data:** 10 de novembro de 2026  
 **Repositório:** `servulocorreiamiguel-rgb/studiomesa-andoid`  
 **Estado:** **NÃO AUTORIZADO para venda, piloto com dados reais ou publicação.**  
-**Última CI integral aprovada antes desta atualização:** execução [42834074139](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42834074139), commit `c217bfdfb4fccb30b2e71f0e844f8b1dbbe18327`. As alterações de gate descritas abaixo têm de passar uma nova CI antes de uma release.
+**Última CI integral:** execução [42844678804](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42844678804), commit `210f4199502484d4b7c350851f5de003632db9ed`, concluída em sucesso a 10/11/2026. Passaram os quatro jobs: build/testes, Lint e validação de assinatura temporária das cinco variantes, replay PostgreSQL/autorização e UI smoke tests em Android 8/16. Os APKs do artefacto são debug/demo; a assinatura comercial definitiva continua pendente.
 
 ## Trabalho confirmado
 
