@@ -1,8 +1,9 @@
 # StudioMesa — IA avançada GPT-OSS 120B
 
 **Data:** 10 de novembro de 2026  
-**Branch:** `feature/gpt-oss-agent-tools-2026-11-10`  
-**Estado do código:** integração Android e Edge Function preparadas numa branch de revisão; ainda não publicadas no Supabase nem configuradas com uma chave Groq.
+**Branch:** `main`  
+**Integração:** PR #106 integrada no commit `c217bfdfb4fccb30b2e71f0e844f8b1dbbe18327`.  
+**Estado de ativação:** a propriedade Gradle `studiomesaAdvancedAssistantCloudEnabled` está desativada por omissão; a interface não oferece o modo online enquanto o serviço não estiver configurado e aprovado. A Edge Function `studiomesa-advanced-assistant` ainda não está publicada no Supabase alojado e `GROQ_API_KEY` não está configurada.
 
 ## Objetivo e limites
 
@@ -49,6 +50,8 @@ O endpoint bloqueia padrões conhecidos de email, telefone, NIF e IBAN. Este fil
 - Pesquisa web: Browser Search integrado da Groq, alimentado por Exa.
 - Execução de código: Code Interpreter integrado da Groq, num ambiente sandbox.
 
+A tarifa publicada na página de modelos da Groq para GPT-OSS 120B é atualmente USD 0,15 por milhão de tokens de entrada e USD 0,60 por milhão de tokens de saída. Os preços, quotas e condições podem mudar; não existe garantia de uso gratuito contínuo. Antes da ativação, definir limites de despesa e prevenção de abuso. Fonte: https://console.groq.com/docs/models.
+
 A documentação da Groq indica que os pedidos de inferência não são retidos por defeito. Em situações limitadas de fiabilidade ou prevenção de abuso, entradas e saídas podem ser registadas até 30 dias; a organização pode ativar Zero Data Retention nas definições de dados. Dados retidos são armazenados em buckets GCP nos EUA. Browser Search e Code Interpreter não estão disponíveis em endpoints regionais/soberanos. Antes de dados reais, é necessária revisão do DPA, subcontratantes, transferências internacionais, base legal, transparência, retenção e configuração ZDR.
 
 O escalão gratuito tem limites que podem mudar; não existe garantia de quota contínua, SLA ou utilização comercial gratuita. As ferramentas integradas podem ter condições próprias.
@@ -73,4 +76,6 @@ O escalão gratuito tem limites que podem mudar; não existe garantia de quota c
 6. Rever DPA, política de privacidade, subcontratantes, transferências e retenção antes de dados reais.
 7. Executar testes físicos no OPPO A5m e medir latência, RAM, bateria e estabilidade da IA local.
 
-**Estado real:** o projeto Supabase consultado não tem ainda a Edge Function `studiomesa-advanced-assistant` publicada. O código nesta branch não ativa o serviço online por si só. Falta configurar a chave e publicar a função depois da revisão e aprovação. A IA local continua a ser o caminho alternativo.
+**Estado real:** o código da integração está em `main`, mas o modo cloud está desativado por omissão no Android. O projeto Supabase consultado não tem ainda a Edge Function `studiomesa-advanced-assistant` publicada e falta configurar `GROQ_API_KEY`. Não ativar para clientes até haver conta do fornecedor, limites de despesa, DPA, revisão de privacidade, testes de isolamento entre restaurantes e aprovação de release. A IA local continua a ser a opção disponível sem custo por mensagem, depois de transferido o modelo.
+
+A IA local utiliza LFM2.5-1.2B sob a LFM Open License v1.0. A Liquid AI condiciona a utilização comercial gratuita a receita anual inferior a USD 10 milhões para a entidade legal abrangida; acima desse limite é necessária uma licença comercial separada. Confirmar os termos integrais e a entidade distribuidora antes da venda: https://www.liquid.ai/lfm-license.
