@@ -49,7 +49,7 @@ O endpoint bloqueia padrões conhecidos de email, telefone, NIF e IBAN. Este fil
 - Pesquisa web: Browser Search integrado da Groq, alimentado por Exa.
 - Execução de código: Code Interpreter integrado da Groq, num ambiente sandbox.
 
-A documentação da Groq indica que os pedidos de inferência não são retidos por defeito, mas podem ser temporariamente registados até 30 dias para fiabilidade ou prevenção de abuso; a opção Zero Data Retention tem de ser verificada e configurada. A documentação também refere armazenamento nos EUA de dados retidos. Browser Search e Code Interpreter não estão disponíveis em endpoints regionais/soberanos. Antes de dados reais, é necessária revisão do DPA, subcontratantes, transferências internacionais, base legal, transparência, retenção e configuração ZDR.
+A documentação da Groq indica que os pedidos de inferência não são retidos por defeito. Em situações limitadas de fiabilidade ou prevenção de abuso, entradas e saídas podem ser registadas até 30 dias; a organização pode ativar Zero Data Retention nas definições de dados. Dados retidos são armazenados em buckets GCP nos EUA. Browser Search e Code Interpreter não estão disponíveis em endpoints regionais/soberanos. Antes de dados reais, é necessária revisão do DPA, subcontratantes, transferências internacionais, base legal, transparência, retenção e configuração ZDR.
 
 O escalão gratuito tem limites que podem mudar; não existe garantia de quota contínua, SLA ou utilização comercial gratuita. As ferramentas integradas podem ter condições próprias.
 
