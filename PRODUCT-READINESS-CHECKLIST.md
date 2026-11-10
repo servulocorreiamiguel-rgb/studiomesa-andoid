@@ -1,26 +1,31 @@
 # StudioMesa — lista de preparação para uso profissional
 
-**Estado atual em 06/11/2026: CÓDIGO AVANÇADO, NÃO PRONTO PARA PILOTO/VENDA.**
+**Estado atual em 10/11/2026: CÓDIGO COM CI APROVADA; NÃO LIBERADO PARA PILOTO COM DADOS REAIS, VENDA OU PRODUÇÃO.**
 
-Esta secção é a fotografia atual e sobrepõe-se aos registos históricos mais abaixo. A lista de bloqueios única e atualizada é [docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md](docs/COMMERCIAL-RELEASE-GATE-2026-11-06.md).
+Esta fotografia prevalece sobre os registos históricos abaixo. O gate comercial atualizado é [docs/COMMERCIAL-RELEASE-GATE-2026-11-10.md](docs/COMMERCIAL-RELEASE-GATE-2026-11-10.md).
 
-- [x] Cinco variantes Android no código; compileSdk/targetSdk 36, minSdk 24, Java 17 e versão 1.5.0.
-- [x] APKs debug de demonstração e workflow manual para cinco AABs/APKs assinados preparado; não publica automaticamente na Google Play.
-- [x] IA local LFM2.5-1.2B, histórico/Memória local cifrada, OCR local e ferramentas de leitura implementadas no código.
-- [x] Fluxo de reservas de cliente e restaurante presente no código. PR #86 foi integrada na main (commit `0770ad7`), com testes de regressão para sobreposição, capacidade, mesa inexistente, idempotência e ecrãs sem autenticação.
-- [x] CI #1332 terminou com os quatro jobs em sucesso: replay PostgreSQL/autorização, compilação, unit tests, Lint e smoke tests em Android 8 e Android 16. Os skips de interface são condicionados à variante/plano; as páginas de reservas executaram nas variantes que as incluem.
-- [ ] Reconciliar as 53 migrations locais com as 54 versões do Supabase alojado (48 comuns, cinco só locais e seis só remotas); backup/restauro e replay descartável antes de deployment.
-- [ ] Aplicar de forma aprovada as tabelas de receitas, permissões granulares, sync do assistente, faturas e bucket privado — atualmente ausentes no backend alojado.
-- [ ] Resolver o aviso Leaked Password Protection Disabled, com decisão consciente sobre upgrade Pro, SMTP, URLs Auth, OAuth e teste E2E.
-- [ ] Concluir política de privacidade, Data Safety, termos, DPA, retenção, licenças/avisos e suporte; os novos documentos desta branch continuam drafts.
-- [ ] Escolher package IDs, criar keystore fora do repositório e configurar os quatro secrets e a variável do release workflow.
-- [ ] Testes E2E no backend com contas descartáveis, restauro, eliminação, concorrência e isolamento entre restaurantes.
-- [ ] Teste físico no OPPO A5m fica deliberadamente para o utilizador; ainda não foi executado.
+- [x] Cinco variantes Android configuradas; compileSdk/targetSdk 36, minSdk 24, Java 17 e versão 1.5.0.
+- [x] CI da main para o código Android em 0177c6aa3e62c5e70b20f620be4576858ab67837 aprovada: quatro jobs, compilação e testes unitários das cinco variantes, Android Lint, auditorias de segurança, replay PostgreSQL/autorização e smoke tests Android 8 e Android 16.
+- [x] Endurecimento Android integrado: limites de leitura/respostas, paginação do histórico e proteção de transporte, com testes de regressão.
+- [x] IA generativa local LFM2.5-1.2B-Instruct INT4, calculadora determinística, ferramentas económicas, histórico/Memória locais cifrados e OCR local presentes no código. A qualidade/latência/temperatura do modelo ainda não foi testada fisicamente no OPPO A5m.
+- [x] Projeto Supabase alojado está ACTIVE_HEALTHY, na região eu-west-1; foram observadas 26 tabelas com RLS ativo.
+- [x] Histórico, mensagens, Memória e metadados de faturas existem no Supabase. O bucket studiomesa-invoices também existe, é privado e limita ficheiros a 25 MiB e PDF/JPEG/PNG/WebP. O percurso completo de sincronização/upload/leitura/eliminação ainda exige testes E2E.
+- [x] Inspeção read-only de privilégios confirmou que as 11 tabelas assinaladas com RLS sem políticas não concedem privilégios diretos de SELECT/INSERT/UPDATE/DELETE a anon ou authenticated; manter o modelo RPC-only/privado e voltar a verificar após qualquer migration.
+- [ ] Reconciliar 55 migrations locais com 63 versões remotas: 51 versões comuns por comparar por SQL integral, quatro só locais e doze só remotas. Não executar db push até recuperar/comparar o histórico, preparar backup e demonstrar restauro num ambiente separado.
+- [ ] Resolver, após reconciliação e deployment aprovado, as três tabelas/RPCs ainda ausentes: public.restaurant_recipes, public.restaurant_recipe_ingredients e private.restaurant_staff_permissions.
+- [ ] Rever individualmente as 42 funções SECURITY DEFINER executáveis por authenticated. A consulta encontrou 47 funções no total, todas com auth.uid() e search_path vazio; nenhuma é executável por anon. Isto não substitui revisão de autorização e testes com contas de dois restaurantes.
+- [ ] Decidir como resolver a proteção contra palavras-passe comprometidas desativada; não alterar o plano Supabase sem aprovação explícita de custo.
+- [ ] Configurar/validar SMTP, confirmação de email, OAuth/Redirect URLs e executar testes E2E de registo, sessão, recuperação, logout e eliminação de contas descartáveis.
+- [ ] Testar pedidos, reservas, stock, fidelização, campanhas, faturas, sincronização entre dispositivos, perda de rede e isolamento entre dois restaurantes.
+- [ ] Finalizar política de privacidade, Data Safety, termos, DPA, subcontratantes, retenção, licenças/avisos e suporte com os dados reais do responsável legal.
+- [ ] Definir os package IDs finais e a estratégia de distribuição; confirmar a chave comercial e secrets/variables sem expor material privado.
+- [ ] Criar e testar a release assinada, verificar checksums/atualização e realizar testes físicos nos dispositivos suportados.
 
-**Funcionalidades que não devem ser anunciadas como ativas no Supabase alojado:** fichas técnicas/consumo automático, matriz granular de permissões, sync cloud de histórico/Memória e arquivo cloud de faturas. As tabelas necessárias e o bucket privado ainda não existem.
+**Funcionalidades que não devem ser anunciadas como prontas para produção:** fichas técnicas/consumo automático de ingredientes e permissões granulares por funcionário (tabelas/RPCs ausentes); sincronização cloud de histórico/Memória e arquivo cloud de faturas (estruturas existem, mas o E2E ainda não está validado); previsões de vendas como valores contabilísticos ou pagamentos recebidos; integração com POS, pagamentos, faturação ou contabilidade (não implementada).
 
-**Regra:** um botão na interface ou um replay limpo na CI não prova que a funcionalidade esteja operacional no backend alojado. Não fazer deployment enquanto o histórico não estiver reconciliado e não existir backup/restauro verificado.
+**Limites da IA:** o modelo é LFM2.5-1.2B-Instruct INT4, executado localmente, não é ChatGPT e não é equivalente ao ChatGPT Free. O OCR exige revisão humana; a previsão depende de amostras de pedidos concluídos e não demonstra recebimentos bancários/faturação.
 
+**Regra de lançamento:** um botão na interface, uma tabela criada ou um replay de migrations em CI não prova que o percurso real do cliente esteja validado. Não abrir piloto com dados pessoais/financeiros nem vender até os bloqueios do gate comercial estarem resolvidos.
 ---
 
 ## Registos históricos — não usar como estado atual
