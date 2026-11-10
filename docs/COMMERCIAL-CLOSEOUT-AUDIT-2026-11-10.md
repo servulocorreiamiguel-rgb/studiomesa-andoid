@@ -1,3 +1,15 @@
+# Atualização da auditoria — recuperação das cinco migrações remotas
+
+**CI da `main` confirmada:** run [42886931540](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42886931540), commit `c206388d812fb696ff1d4076bbc2815f2838f5ec`, todos os quatro jobs concluídos com sucesso.
+
+**Recuperação documental em curso:** a PR #109 repõe os cinco ficheiros históricos da branch `feature/invoice-loyalty-qr` usando os identificadores das cinco versões do Supabase que antes só existiam remotamente. No branch de recuperação existem 66 ficheiros locais, 63 identificadores de versões remotas representados e três migrações locais ainda não aplicadas. A CI da PR tem de validar o replay. O conteúdo SQL original do histórico remoto não foi disponibilizado, por isso os ficheiros recuperados não podem ser declarados idênticos byte a byte.
+
+Os objetos de produção observados (tabela privada de QR de faturas, índices, funções internas de QR e funções privadas da loja de pontos) correspondem às funcionalidades dos ficheiros históricos. Não foi feita qualquer alteração ao projeto Supabase alojado.
+
+Ver [relatório de recuperação de migrações](MIGRATION-RECOVERY-2026-11-10.md). O gate de produção continua fechado.
+
+---
+
 # StudioMesa — auditoria de fecho comercial
 
 **Data da auditoria:** 10 de novembro de 2026  
