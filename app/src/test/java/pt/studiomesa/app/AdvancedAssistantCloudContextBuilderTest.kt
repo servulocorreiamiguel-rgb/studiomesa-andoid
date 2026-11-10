@@ -51,6 +51,7 @@ class AdvancedAssistantCloudContextBuilderTest {
         assertFalse(context.has("staff_records"))
         assertFalse(context.has("reservation_contacts"))
         assertFalse(context.has("conversation_memory"))
+        assertFalse(context.has("assistant_memory"))
     }
 
     @Test
@@ -91,4 +92,41 @@ class AdvancedAssistantCloudContextBuilderTest {
         assertFalse(context.has("supplier_invoices"))
         assertTrue(context.getJSONObject("sales").getBoolean("values_are_nominal_order_values_not_confirmed_payments"))
     }
+    @Test
+    fun includesOnlyBoundedMemorySnippetAfterExplicitCloudConsent() {
+        val context = AdvancedAssistantCloudContextBuilder.build(
+            StudioMesaAssistantSnapshot(
+                isDemo = false,
+                restaurantConfigured = true,
+                menuItems = emptyList()
+            ),
+            Instant.parse("2026-11-10T12:00:00Z").toEpochMilli(),
+            memorySnippet = "• Prefiro respostas em português europeu."
+        )
+
+        assertEquals(
+            "• Prefiro respostas em português europeu.",
+            context.getString("assistant_memory")
+        )
+        assertTrue(context.toString().length <= 12_000)
+    }
+
+    @Test
+    fun boundsCloudMemorySnippetToTheDocumentedContextBudget() {
+        val context = AdvancedAssistantCloudContextBuilder.build(
+            StudioMesaAssistantSnapshot(
+                isDemo = false,
+                restaurantConfigured = true,
+                menuItems = emptyList()
+            ),
+            Instant.parse("2026-11-10T12:00:00Z").toEpochMilli(),
+            memorySnippet = "x".repeat(500)
+        )
+
+        assertEquals(
+            AssistantAutomaticMemoryPolicy.MAX_CONTEXT_MEMORY_CHARS,
+            context.getString("assistant_memory").length
+        )
+    }
+
 }
