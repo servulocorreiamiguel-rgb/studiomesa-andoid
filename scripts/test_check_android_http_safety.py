@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from check_android_http_safety import audit_http_client
+from check_android_http_safety import audit_android_manifest, audit_http_client
 
 
 SAFE_CLIENT = """
@@ -34,6 +34,20 @@ AssistantMessagePaginationPolicy.nextOffset(currentOffset = offset, requestedLim
 val historyQuery = "&order=created_at.desc,id.desc&limit=$requestedLimit&offset=$offset"
 throw BackendHttpException(code, path, ApiErrorMessage.sanitize(message, code))
 """
+
+
+SAFE_MANIFEST = """
+<manifest>
+  <application
+    android:allowBackup="false"
+    android:usesCleartextTraffic="false">
+    <provider
+      android:name="androidx.core.content.FileProvider"
+      android:exported="false" />
+  </application>
+</manifest>
+"""
+SAFE_FILE_PROVIDER_PATHS = """<paths><cache-path name="invoice_cache" path="invoices/" /></paths>"""
 
 
 class AndroidHttpSafetyAuditTests(unittest.TestCase):
@@ -151,6 +165,31 @@ class AndroidHttpSafetyAuditTests(unittest.TestCase):
             "val stream = if (success) connection.inputStream else connection.errorStream\nResponseBodyReader.requireDeclaredLengthWithinLimit(connection.contentLengthLong, responseLimitBytes)",
         )
         self.assertTrue(any("before opening the response stream" in error for error in audit_http_client(changed)))
+
+    def test_accepts_restricted_android_manifest_and_invoice_provider(self) -> None:
+        self.assertEqual([], audit_android_manifest(SAFE_MANIFEST, SAFE_FILE_PROVIDER_PATHS))
+
+    def test_rejects_enabled_android_cleartext_traffic(self) -> None:
+        changed = SAFE_MANIFEST.replace('android:usesCleartextTraffic="false"', 'android:usesCleartextTraffic="true"')
+        self.assertTrue(any("cleartext traffic" in error for error in audit_android_manifest(changed, SAFE_FILE_PROVIDER_PATHS)))
+
+    def test_rejects_android_backup_for_private_app_data(self) -> None:
+        changed = SAFE_MANIFEST.replace('android:allowBackup="false"', 'android:allowBackup="true"')
+        self.assertTrue(any("backup must remain disabled" in error for error in audit_android_manifest(changed, SAFE_FILE_PROVIDER_PATHS)))
+
+    def test_rejects_exported_invoice_file_provider(self) -> None:
+        changed = SAFE_MANIFEST.replace('android:exported="false"', 'android:exported="true"')
+        self.assertTrue(any("must not be exported" in error for error in audit_android_manifest(changed, SAFE_FILE_PROVIDER_PATHS)))
+
+    def test_rejects_broad_invoice_file_provider_paths(self) -> None:
+        changed = SAFE_FILE_PROVIDER_PATHS.replace(
+            '<cache-path name="invoice_cache" path="invoices/" />',
+            '<external-path name="all_files" path="." />',
+        )
+        errors = audit_android_manifest(SAFE_MANIFEST, changed)
+        self.assertTrue(any("limited to cache/invoices" in error for error in errors))
+        self.assertTrue(any("broad or external" in error for error in errors))
+
 
 if __name__ == "__main__":
     unittest.main()
