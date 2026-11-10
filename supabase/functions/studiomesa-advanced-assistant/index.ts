@@ -30,7 +30,8 @@ function containsSensitiveIdentifier(value: string): boolean {
     /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(value) ||
     /\b(?:NIF|NIPC)\s*[:#]?\s*\d(?:[ .-]?\d){8}\b/i.test(value) ||
     /\bIBAN\s*[:#]?\s*[A-Z]{2}\d{2}[A-Z0-9 ]{10,30}\b/i.test(value) ||
-    /(?:\+351\s?)?9[1236](?:[ .-]?\d){7}\b/.test(value)
+    /(?:\+351\s?)?9[1236](?:[ .-]?\d){7}\b/.test(value) ||
+    /\b\d{9}\b/.test(value)
   );
 }
 
