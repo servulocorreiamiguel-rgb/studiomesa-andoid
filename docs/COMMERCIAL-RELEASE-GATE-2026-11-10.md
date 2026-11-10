@@ -4,7 +4,7 @@
 **Código principal auditado:** `52f858ad293f4ce557758fab60fdcc3a9321d6cf` (merge da PR #105 em `main`).  
 **Revisão de segurança:** PR #105 — `release/commercial-hardening-2026-11-10`, integrada por squash.  
 **CI da PR #105:** execução `42782322112`, commit `4588aae932e880146094a0385392440b914bae5b`, todos os quatro jobs concluídos com sucesso.  
-**CI mais recente em `main`:** [execução `42792956250`](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42792956250), commit `0177c6aa3e62c5e70b20f620be4576858ab67837`; os quatro jobs terminaram com sucesso. Incluiu build/testes das cinco variantes, Android Lint, auditorias de segurança, replay PostgreSQL/autorização e smoke tests em Android 8 e 16. O artefacto APK é de demonstração/debug, não uma release comercial assinada.  
+**CI do código Android:** [execução `42792956250`](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42792956250), commit `0177c6aa3e62c5e70b20f620be4576858ab67837`, passou os quatro jobs. **CI da reposição de migrations:** [execução `42798060079`](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42798060079), commit `6679123447b6c967ecc1017549e5ea2118e0e0f7`; o replay PostgreSQL/autorização passou, mas a validação Android ainda estava em curso na última consulta. Os APKs são debug/demo, não release comercial assinada.  
 **Decisão:** **NÃO LIBERADO para piloto com dados reais, venda ou publicação.**
 
 ## O que está verificado
@@ -21,9 +21,10 @@
 - [x] Análise semanal, previsão de sete dias, feriados nacionais, eventos locais configuráveis, padrões de maior afluência e cálculos económicos locais estão presentes na `main`, com testes associados. A comparação da PR #100 confirmou que a proposta antiga contém versões já existentes e versões ultrapassadas; a PR #100 foi fechada sem merge para proteger as melhorias posteriores do assistente.
 - [x] CI final da PR #105 (`42782322112`): compilação das cinco variantes, testes unitários de todas as variantes, Android Lint, validação da configuração comercial, replay PostgreSQL/autorização e smoke tests Android 8 e Android 16 — todos concluídos com sucesso.
 - [x] PR #105 integrada na `main` por squash no commit `52f858ad293f4ce557758fab60fdcc3a9321d6cf`.
-- [x] Auditoria read-only do Supabase às 10:06 UTC de 10/11/2026: projeto `ACTIVE_HEALTHY`, 63 migrações remotas, 26 tabelas com RLS ativo e bucket de faturas privado. A inspeção confirmou que as três tabelas opcionais continuam ausentes e que não existem privilégios diretos `anon`/`authenticated`/`PUBLIC` nas 11 tabelas sem políticas assinaladas pelo Advisor.
+- [x] Auditoria read-only do Supabase a 10/11/2026: projeto `ACTIVE_HEALTHY`, 63 versões remotas, 26 tabelas com RLS ativo e bucket de faturas privado. As tabelas de histórico/Memória/metadados de faturas existem; as tabelas ausentes são receitas, ingredientes e permissões granulares. A inspeção confirmou que as 11 tabelas RLS sem políticas não concedem privilégios diretos a `anon`/`authenticated`.
 - [x] Advisor atual consultado: 42 funções `SECURITY DEFINER` executáveis por `authenticated`, 11 tabelas RLS sem políticas, proteção de palavras-passe comprometidas desativada, quatro FKs sem índice de cobertura e 45 índices sem utilização observada. Os avisos exigem revisão individual; não foram aplicadas revogações ou alterações de esquema.
-- [x] CI mais recente da `main` (`42792956250`, commit `0177c6aa3e62c5e70b20f620be4576858ab67837`): os quatro jobs passaram. Os testes incluem build e testes unitários das cinco variantes, Android Lint, auditorias de segurança, replay de migrações/autorização e smoke tests Android 8/16. Os APKs publicados como artefacto são debug/demo.
+- [x] CI do código Android (`42792956250`) terminou com quatro jobs em sucesso. Inclui build e testes unitários das cinco variantes, Android Lint, auditorias de segurança, replay PostgreSQL/autorização e smoke tests Android 8/16. Os APKs são debug/demo.
+- [x] Recuperados no GitHub sete ficheiros originais de migrations, com os hashes das branches de origem, no commit `6679123447b6c967ecc1017549e5ea2118e0e0f7`. O repositório passou de 55 para 62 ficheiros locais; as versões comuns passaram de 51 para 58 e as versões remotas sem ficheiro passaram de 12 para cinco. Nenhum SQL foi aplicado ao Supabase alojado.
 
 ### Backend incompatível com funcionalidades opcionais
 
@@ -32,7 +33,7 @@ A consulta read-only de 10/11/2026 confirmou que o projeto alojado não tem as t
 ## Bloqueios obrigatórios
 
 ### Backend e dados
-- [ ] Reconciliar 55 migrations locais com 63 versões remotas; recuperar 12 remotas, rever as 4 locais que faltam e comparar o SQL integral das 51 versões comuns.
+- [ ] Reconciliar 62 ficheiros locais com 63 versões remotas: comparar o SQL integral das 58 versões comuns, explicar as quatro locais-only e recuperar/comparar as cinco remote-only (`20261102103246`, `20261102103627`, `20261102104650`, `20261102113719`, `20261102113944`).
 - [ ] Produzir backup e demonstrar restauro num projeto separado antes de qualquer alteração ao projeto alojado.
 - [ ] Resolver/deployar com sequência canónica as tabelas em falta: recipes, recipe ingredients e granular staff permissions.
 - [ ] Rever as 42 funções `SECURITY DEFINER` sinalizadas pelo Supabase Advisor individualmente. Não revogar EXECUTE em bloco.
