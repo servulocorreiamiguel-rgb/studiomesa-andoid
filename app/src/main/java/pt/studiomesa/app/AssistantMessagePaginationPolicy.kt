@@ -2,7 +2,7 @@ package pt.studiomesa.app
 
 /** Bounded pagination for owner-only assistant history downloads. */
 internal object AssistantMessagePaginationPolicy {
-    const val PAGE_SIZE = 200
+    const val PAGE_SIZE = 100
     const val MAX_MESSAGES = 5_000
 
     /**
