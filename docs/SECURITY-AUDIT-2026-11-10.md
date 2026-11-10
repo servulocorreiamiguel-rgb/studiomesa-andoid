@@ -37,15 +37,14 @@ As respetivas migrations estão no repositório local mas não constam do histó
 
 | Fonte | Número de versões |
 |---|---:|
-| Ficheiros locais em `supabase/migrations` após recuperação de sete originais | 62 |
+| Ficheiros locais em `supabase/migrations` após recuperação e deduplicação | 61 |
 | Histórico remoto no Supabase (10/11/2026) | 63 |
 | Prefixos/versões comuns | 58 |
-| Apenas no repositório | 4 |
+| Apenas no repositório | 3 |
 | Apenas no projeto alojado | 5 |
 
-Migrações apenas locais:
+Migrações apenas locais após recuperação/deduplicação:
 - `20261030111815`
-- `20261030120000`
 - `20261102103000`
 - `20261104100000`
 
@@ -56,12 +55,12 @@ Versões apenas remotas:
 - `20261102113719`
 - `20261102113944`
 
-Em 10/11/2026 foram recuperados sete ficheiros originais: `20261102082151` e as seis versões `20261108...` já não constam da lista remote-only. Os blobs recuperados mantêm exatamente os hashes das branches de origem. As 58 versões comuns ainda requerem comparação do SQL exato; as cinco versões remotas indicadas não foram recuperadas. Os candidatos locais de QR/loja com outros timestamps não são cópias comprovadas dos SQL históricos. **Não executar `supabase db push`, reset, merge, rebase ou migration manual no projeto alojado antes de reconciliar os conteúdos e testar backup/restauro.**
+Em 10/11/2026 foram recuperados sete ficheiros originais: `20261102082151` e as seis versões `20261108...` já não constam da lista remote-only. Os blobs recuperados mantêm exatamente os hashes das branches de origem. As 58 versões comuns ainda requerem comparação do SQL exato; as cinco versões remotas indicadas não foram recuperadas. A antiga versão local `20261030120000` tinha exatamente o mesmo blob Git que a versão remota `20261102082151`; a cópia local foi removida para evitar executar a mesma alteração duas vezes. Os candidatos locais de QR/loja com outros timestamps não são cópias comprovadas dos SQL históricos. **Não executar `supabase db push`, reset, merge, rebase ou migration manual no projeto alojado antes de reconciliar os conteúdos e testar backup/restauro.**
 
 ## 1.1. Revalidação read-only de 10/11/2026 às 10:11 UTC
 
 - Projeto Supabase: ACTIVE_HEALTHY, PostgreSQL 17, região eu-west-1; não foi criada qualquer branch de desenvolvimento e não foi executada nenhuma migration ou escrita de esquema nesta sessão.
-- Histórico após recuperação: 63 versões remotas; a main contém 62 ficheiros, com 58 versões comuns, quatro apenas locais e cinco apenas remotas. Os 58 prefixos comuns ainda não foram comparados pelo SQL integral. Sete ficheiros foram recuperados com hashes originais de branches Git históricas; nenhum foi aplicado ao Supabase.
+- Histórico após recuperação/deduplicação: 63 versões remotas; a main contém 61 ficheiros, com 58 versões comuns, três apenas locais e cinco apenas remotas. Os 58 prefixos comuns ainda não foram comparados pelo SQL integral. Sete ficheiros foram recuperados com hashes originais de branches Git históricas; um ficheiro duplicado foi removido. Nenhum foi aplicado ao Supabase.
 - As tabelas public.restaurant_assistant_conversations, public.restaurant_assistant_messages, public.restaurant_assistant_memory e public.restaurant_supplier_invoices existem com RLS ativo.
 - Bucket studiomesa-invoices: public=false, limite 25 MiB, tipos PDF/JPEG/PNG/WebP. As políticas atuais de SELECT/INSERT/DELETE exigem utilizador autenticado com papel owner no restaurante indicado no primeiro segmento do caminho.
 - O inventário SQL encontrou 47 funções SECURITY DEFINER no esquema public: 47 com referência a auth.uid(), 47 com search_path = '', zero com EXECUTE para anon e 42 com EXECUTE para authenticated. O Advisor assinala essas 42; a revisão funcional individual permanece obrigatória, não devendo ser tratadas como vulnerabilidade automaticamente nem revogadas em bloco.
@@ -81,21 +80,20 @@ Em 10/11/2026 foram recuperados sete ficheiros originais: `20261102082151` e as 
 - Chave cliente Android começa por `sb_publishable_`; pesquisa de repositório não encontrou `sb_secret_` nem `service_role` em código do cliente.
 - O modelo generativo corre localmente; a Edge Function `studiomesa-assistant` devolve HTTP 410 e não recebe prompts para inferência.
 
-## 3. Alteração de segurança nesta revisão — PR #105
+## 3. Alterações de segurança integradas na main — PR #105
 
-Risco identificado: `binaryStorageRequest` usava `readBytes()` sem limite, verificando o tamanho do documento só depois de o corpo ser integralmente carregado para memória.
+A PR #105 foi integrada na main. A correção mais importante protege o percurso de leitura de documentos Storage: o código anterior podia carregar o corpo inteiro em memória com readBytes() antes de verificar o tamanho.
 
-Correção proposta em PR separada:
-- Limitar respostas JSON normais a 4 MiB e corpos JSON de erro a 64 KiB.
-- Paginar o download do histórico do assistente em blocos de 100 mensagens, ordenados de forma estável por data e ID, com teto de 5 000 mensagens.
-- Limitar a leitura incremental de documentos Storage a 25 MiB.
-- Rejeitar `Content-Length` anunciado acima do limite antes de ler o stream.
-- Manter a verificação de tamanho mesmo quando o servidor não envia ou declara incorretamente `Content-Length`.
-- Limitar corpos de erro de Storage a 64 KiB, preservando HTTP status/path e mensagens sanitizadas.
-- Acrescentar testes unitários para o leitor binário e para a paginação, além de testes estáticos para impedir regressões de transporte, HTTPS, chaves privilegiadas e consultas de histórico sem paginação.
+A versão integrada:
+- Limita respostas JSON normais a 4 MiB e corpos JSON de erro a 64 KiB.
+- Pagina o download do histórico do assistente em blocos de 100 mensagens, ordenados de forma estável por data e ID, com teto de 5 000 mensagens.
+- Limita a leitura incremental de documentos Storage a 25 MiB.
+- Rejeita Content-Length anunciado acima do limite antes de ler o stream.
+- Mantém a verificação de tamanho mesmo quando o servidor não envia ou declara incorretamente Content-Length.
+- Limita corpos de erro de Storage a 64 KiB, preservando HTTP status/path e mensagens sanitizadas.
+- Inclui testes unitários para o leitor binário e paginação, e testes estáticos para transporte, HTTPS, chaves privilegiadas e consultas de histórico sem paginação.
 
-Evidência da CI anterior: run `42781541453`, commit de código `c72ffec461bc6de22780c12be75869a29234ff63`. Nesse commit, a compilação das cinco variantes, os testes unitários e o replay PostgreSQL/autorização passaram; o Lint ainda estava em execução, e o build de release/emuladores não tinham concluído. A atualização documental gera uma nova execução; só essa execução no commit final pode fechar o gate técnico.
-
+A CI de aplicação da main em 0177c6aa3e62c5e70b20f620be4576858ab67837 passou os quatro jobs. A execução posterior 42799443309 passou os auditores estáticos, compilação, testes unitários e Lint; o replay PostgreSQL também passou, mas a validação de release foi interrompida por uma atualização subsequente da main. A execução atual 42800159352 valida a versão com o histórico SQL deduplicado. A confirmação de release assinado de todas as variantes ainda depende dessa execução.
 ## 4. Riscos ainda não fechados
 
 1. **Migrações divergentes:** risco de alterar ou perder dados se forem aplicadas migrações sem reconciliar histórico e schema.
