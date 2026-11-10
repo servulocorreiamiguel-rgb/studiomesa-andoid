@@ -3380,9 +3380,16 @@ class MainActivity : ComponentActivity() {
                 }, LinearLayout.LayoutParams(-1, dp(48)))
                 if (isPremium && item.optString("id").isNotBlank()) {
                     addGap(card, 5)
-                    card.addView(secondaryButton("Configurar receita e ingredientes") {
-                        showRecipeDialog(item.optString("id"), item.optString("name"))
-                    }, LinearLayout.LayoutParams(-1, dp(48)))
+                    if (BackendSchemaFeatureGate.RECIPE_MANAGEMENT_ENABLED) {
+                        card.addView(secondaryButton("Configurar receita e ingredientes") {
+                            showRecipeDialog(item.optString("id"), item.optString("name"))
+                        }, LinearLayout.LayoutParams(-1, dp(48)))
+                    } else {
+                        card.addView(label(
+                            "Fichas técnicas e consumo automático de stock ainda não estão ativos neste servidor.",
+                            11f, false, muted
+                        ))
+                    }
                 }
                 addGap(card, 5)
                 card.addView(secondaryButton("Arquivar artigo") {
@@ -4260,9 +4267,16 @@ class MainActivity : ComponentActivity() {
                 ))
                 if (role == "staff") {
                     addGap(card, 8)
-                    card.addView(secondaryButton("Gerir permissões") {
-                        showStaffPermissionsDialog(userId, email)
-                    }, LinearLayout.LayoutParams(-1, dp(44)))
+                    if (BackendSchemaFeatureGate.GRANULAR_STAFF_PERMISSIONS_ENABLED) {
+                        card.addView(secondaryButton("Gerir permissões") {
+                            showStaffPermissionsDialog(userId, email)
+                        }, LinearLayout.LayoutParams(-1, dp(44)))
+                    } else {
+                        card.addView(label(
+                            "As permissões por área ainda não estão configuradas no servidor. O acesso dos funcionários permanece limitado até à ativação e validação do backend.",
+                            11f, false, muted
+                        ))
+                    }
                     addGap(card, 6)
                     card.addView(secondaryButton("Remover acesso") {
                         AlertDialog.Builder(this)

@@ -23,6 +23,10 @@
 - [x] PR #105 integrada na `main` por squash no commit `52f858ad293f4ce557758fab60fdcc3a9321d6cf`.
 - [ ] CI pós-merge da `main` (`42791471088`) ainda não concluída na última consulta: o job PostgreSQL/autorização passou; o job Android estava na etapa Android Lint.
 
+### Backend incompatível com funcionalidades opcionais
+
+A consulta read-only de 10/11/2026 confirmou que o projeto alojado não tem as tabelas `restaurant_recipes`, `restaurant_recipe_ingredients` e `private.restaurant_staff_permissions`. Também não existem as RPCs de leitura/alteração de permissões granulares nem as RPCs de gestão de ingredientes/ativação de receitas. A interface Android passou a ocultar a configuração de receitas e a não apresentar o botão de edição de permissões por área; apresenta um aviso explícito em vez de simular uma operação. Os funcionários continuam em modo *fail closed*: sem a resposta da autorização do servidor não recebem permissões por omissão. Estas funcionalidades só devem ser reativadas depois da reconciliação e do deployment aprovado do esquema, mais testes com contas de dois restaurantes.
+
 ## Bloqueios obrigatórios
 
 ### Backend e dados
