@@ -1,8 +1,10 @@
 # StudioMesa — gate de lançamento comercial
 
 **Data:** 10 de novembro de 2026  
-**Código principal auditado:** `2ce4ad461ada5f0881f9d3c7f6f9d7d547cefd28`  
-**Revisão de segurança:** PR #105 — `release/commercial-hardening-2026-11-10`  
+**Código principal auditado:** `52f858ad293f4ce557758fab60fdcc3a9321d6cf` (merge da PR #105 em `main`).  
+**Revisão de segurança:** PR #105 — `release/commercial-hardening-2026-11-10`, integrada por squash.  
+**CI da PR #105:** execução `42782322112`, commit `4588aae932e880146094a0385392440b914bae5b`, todos os quatro jobs concluídos com sucesso.  
+**CI pós-merge em `main`:** execução `42791471088`; o teste de migrações/autorização já passou; o job Android ainda estava a executar Android Lint na última consulta.  
 **Decisão:** **NÃO LIBERADO para piloto com dados reais, venda ou publicação.**
 
 ## O que está verificado
@@ -16,8 +18,10 @@
 - [x] Auth/Storage/Edge Functions foram consultados; as Edge Functions de eliminação/pesquisa exigem JWT; a função cloud de IA está desativada (HTTP 410).
 - [x] Histórico/Memória locais cifrados; sincronização cloud opcional e desligada por defeito, sem E2E.
 - [x] OCR local com revisão humana obrigatória; não aprova/paga documentos automaticamente.
-- [x] CI do código principal anteriormente passou build, 5 variantes, testes unitários, Android Lint, replay PostgreSQL/autorização e emuladores Android 8/16.
-- [ ] CI completa da PR #105 no commit final documental: cinco variantes, testes unitários, Lint, validação de configuração comercial, replay PostgreSQL/autorização e smoke tests Android 8/16. A execução anterior `42781541453` passou compilação, testes unitários e PostgreSQL/autorização, mas o Lint ficou sem conclusão verificável; não é aprovação final.
+- [x] Análise semanal, previsão de sete dias, feriados nacionais, eventos locais configuráveis, padrões de maior afluência e cálculos económicos locais estão presentes na `main`, com testes associados. A comparação da PR #100 confirmou que a proposta antiga contém versões já existentes e versões ultrapassadas; a PR #100 foi fechada sem merge para proteger as melhorias posteriores do assistente.
+- [x] CI final da PR #105 (`42782322112`): compilação das cinco variantes, testes unitários de todas as variantes, Android Lint, validação da configuração comercial, replay PostgreSQL/autorização e smoke tests Android 8 e Android 16 — todos concluídos com sucesso.
+- [x] PR #105 integrada na `main` por squash no commit `52f858ad293f4ce557758fab60fdcc3a9321d6cf`.
+- [ ] CI pós-merge da `main` (`42791471088`) ainda não concluída na última consulta: o job PostgreSQL/autorização passou; o job Android estava na etapa Android Lint.
 
 ## Bloqueios obrigatórios
 

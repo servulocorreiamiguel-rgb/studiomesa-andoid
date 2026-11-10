@@ -1,6 +1,6 @@
-> **Estado em 09/11/2026 — NÃO LIBERADO PARA VENDA/PRODUÇÃO.** A versão continua em revisão. A IA generativa principal corre no dispositivo com o modelo LFM2.5-1.2B-Instruct INT4; as perguntas, histórico e dados do restaurante não são enviados ao fornecedor do modelo. A análise de vendas por dia da semana, previsão de 7 dias, feriados nacionais, eventos configuráveis e padrões de maior afluência estão implementados no código. As previsões usam valores nominais de pedidos concluídos pela data de criação, não pagamentos confirmados.
+> **Estado em 10/11/2026 — NÃO LIBERADO PARA VENDA/PRODUÇÃO.** A versão principal já inclui a IA local LFM2.5-1.2B-Instruct INT4, análise semanal, previsão de sete dias, feriados nacionais, eventos locais configuráveis, padrões de maior afluência e cálculos económicos. As previsões usam valores nominais de pedidos concluídos pela data de criação; não representam pagamentos recebidos nem faturação contabilística.
 >
-> **CI da revisão #98:** workflow `42690365320` concluído com sucesso no commit `e3f9edff57c1c98c5a90e68cdb6654790ef9e765`. Compilação das cinco variantes, testes unitários, Android Lint, replay de migrações/autorização e smoke tests Android 8/16 passaram. Os APKs debug do artefacto são apenas demonstrações e não são builds comerciais assinadas. A inferência real do modelo ainda exige teste em telemóvel físico.
+> **Segurança Android:** PR #105 integrada na `main` no commit `52f858ad293f4ce557758fab60fdcc3a9321d6cf`. A CI da PR (`42782322112`) passou compilação das cinco variantes, testes unitários, Android Lint, validação da configuração comercial, replay PostgreSQL/autorização e smoke tests Android 8/16. A CI pós-merge em `main` (`42791471088`) ainda estava a executar Android Lint na última consulta; o job PostgreSQL/autorização já passou. APKs debug continuam a ser demonstrações, não releases comerciais assinadas. A inferência real do modelo ainda exige teste em telemóvel físico.
 >
 > **Supabase alojado — verificação de 09/11/2026:** projeto ativo e saudável, região `eu-west-1`, organização no plano Free. Existem 63 versões no histórico remoto e 55 ficheiros de migração nesta branch; 51 prefixos coincidem, quatro migrações só existem no repositório e doze só existem no servidor. Esta divergência bloqueia qualquer `db push` até reconciliação. As tabelas de histórico, mensagens, memória e metadados de faturas existem com RLS ativo; o bucket `studiomesa-invoices` é privado. As tabelas de fichas técnicas/ingredientes e de permissões granulares da equipa não foram encontradas no servidor.
 >
@@ -8,7 +8,7 @@
 >
 > **Segurança observada:** o Security Advisor ainda apresenta 42 avisos sobre funções `SECURITY DEFINER` executáveis por utilizadores autenticados, 11 tabelas RLS sem políticas e a proteção contra palavras-passe comprometidas desativada. As funções foram revistas quanto a validação de utilizador e `search_path`; não revogar permissões em bloco. A lista de avisos não substitui um teste de intrusão independente.
 >
-> **Bloqueios antes da venda:** reconciliação das migrações e testes E2E do backend, configuração e teste de OAuth/SMTP, chave e assinatura comercial definitivas, política de privacidade e Data Safety final, revisão de termos/DPA/licenças, backups/restauro, testes físicos e uma estratégia de publicação Play compatível com as regras atuais. Ver [auditoria de prontidão de 09/11/2026](docs/RELEASE-READINESS-2026-11-09.md), [gate comercial atualizado](docs/COMMERCIAL-RELEASE-GATE-2026-11-09.md), [configuração de release](RELEASE-SETUP.md) e [bloqueios anteriores](docs/RELEASE-BLOCKERS-VERIFIED-2026-11-06.md).
+> **Bloqueios antes da venda:** reconciliação das migrações e testes E2E do backend, configuração e teste de OAuth/SMTP, chave e assinatura comercial definitivas, política de privacidade e Data Safety final, revisão de termos/DPA/licenças, backups/restauro, testes físicos e uma estratégia de publicação Play compatível com as regras atuais. Ver [auditoria de prontidão de 09/11/2026](docs/RELEASE-READINESS-2026-11-09.md), [gate comercial atualizado](docs/COMMERCIAL-RELEASE-GATE-2026-11-10.md), [configuração de release](RELEASE-SETUP.md) e [bloqueios anteriores](docs/RELEASE-BLOCKERS-VERIFIED-2026-11-06.md).
 ## O que ainda falta antes da venda ou utilização em serviço real
 
 - Testes ponta a ponta em telemóveis reais, incluindo vários dispositivos, utilizadores, perda de internet, sessões expiradas e erros de servidor. A compilação de um APK não substitui esses testes.
@@ -35,7 +35,7 @@
 - [Lista de entrada em funcionamento](COMMERCIAL-ONBOARDING-CHECKLIST.md).
 - [Termos B2B](TERMS-OF-SERVICE-TEMPLATE.md), [licença de software](B2B-SOFTWARE-LICENSE-TEMPLATE.md) e [DPA](DATA-PROCESSING-AGREEMENT-TEMPLATE.md) — rascunhos para revisão jurídica.
 - [Inventário de licenças de terceiros](THIRD-PARTY-NOTICES.md).
-- [Gate de lançamento](docs/COMMERCIAL-RELEASE-GATE-2026-11-09.md) — estado atual após integração da IA e da melhoria de privacidade; continua sem autorização para piloto/venda.
+- [Gate de lançamento](docs/COMMERCIAL-RELEASE-GATE-2026-11-10.md) — estado atual após a integração do endurecimento Android; continua sem autorização para piloto/venda.
 
 ## Configuração técnica
 
