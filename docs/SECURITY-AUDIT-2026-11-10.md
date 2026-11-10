@@ -68,8 +68,8 @@ As 51 versões comuns não foram consideradas equivalentes só pelo prefixo/time
 
 ## 2. Proteções já existentes no cliente Android
 
-- `allowBackup=false` na aplicação Android.
-- `FileProvider` não exportado e limitado à pasta `cache/invoices/`.
+- `allowBackup=false` e `usesCleartextTraffic=false` na aplicação Android.
+- `FileProvider` não exportado e limitado à pasta `cache/invoices/`; a auditoria estática passa a bloquear a exposição de caminhos externos/root.
 - Sessões guardadas com AES-GCM e Android Keystore.
 - Histórico e Memória locais cifrados com AES-GCM; cópia cloud opcional e desligada por defeito desde a revisão de privacidade.
 - A sincronização cloud usa Auth e RLS, mas não é cifragem ponta a ponta. O conteúdo sincronizado pode ser tecnicamente acessível ao operador de backend com privilégios adequados; a app não deve prometer E2E.
@@ -83,11 +83,13 @@ As 51 versões comuns não foram consideradas equivalentes só pelo prefixo/time
 Risco identificado: `binaryStorageRequest` usava `readBytes()` sem limite, verificando o tamanho do documento só depois de o corpo ser integralmente carregado para memória.
 
 Correção proposta em PR separada:
+- Limitar respostas JSON normais a 4 MiB e corpos JSON de erro a 64 KiB.
+- Paginar o download do histórico do assistente em blocos de 100 mensagens, ordenados de forma estável por data e ID, com teto de 5 000 mensagens.
 - Limitar a leitura incremental de documentos Storage a 25 MiB.
 - Rejeitar `Content-Length` anunciado acima do limite antes de ler o stream.
 - Manter a verificação de tamanho mesmo quando o servidor não envia ou declara incorretamente `Content-Length`.
 - Limitar corpos de erro de Storage a 64 KiB, preservando HTTP status/path e mensagens sanitizadas.
-- Acrescentar testes unitários ao leitor binário e testes estáticos para impedir regressões de transporte, HTTPS e chaves privilegiadas no cliente.
+- Acrescentar testes unitários para o leitor binário e para a paginação, além de testes estáticos para impedir regressões de transporte, HTTPS, chaves privilegiadas e consultas de histórico sem paginação.
 
 Estado da CI do commit atual `dae6766eb494aa8beac61c78140f7fcfc7750cff`: em validação à hora da atualização deste documento. Não marcar os passos como aprovados até os quatro jobs de CI terminarem com sucesso.
 
