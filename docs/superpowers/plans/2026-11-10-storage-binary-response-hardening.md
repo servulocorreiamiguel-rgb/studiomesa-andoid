@@ -62,7 +62,7 @@
 
 - [x] Add and test a deterministic helper for the declared-length guard.
 - [x] Implement the declared-length guard and bounded stream read in `SupabaseApi.kt`.
-- [ ] Verify the existing 25 MiB upload input validation and 25 MiB download result contract remain unchanged.
+- [x] Verify the existing 25 MiB upload input validation and 25 MiB download result contract remain unchanged.
 - [ ] Run all five variant unit-test tasks, Android Lint and the complete Android emulator smoke workflow.
 
 ### Task 3: Record release evidence
@@ -99,3 +99,19 @@
 - [x] Apply separate success/error limits to both JSON request paths.
 - [x] Add static guardrails for stable ordering, offsets, bounded JSON bodies and page limit.
 - [ ] Run the complete unit, Lint, PostgreSQL authorization and Android emulator CI for the final branch commit.
+
+
+---
+
+### Task 5: Harden Android file-sharing and cleartext defaults
+
+**Files:**
+- Modify: `app/src/main/AndroidManifest.xml`
+- Modify: `scripts/check_android_http_safety.py`
+- Modify: `scripts/test_check_android_http_safety.py`
+
+- [x] Explicitly disable Android cleartext traffic for every variant.
+- [x] Keep Android backup disabled for app-private session/history/invoice metadata.
+- [x] Require invoice `FileProvider` to remain non-exported and scoped only to `cache/invoices/`.
+- [x] Add static regression tests for cleartext, backup, provider export and external/root path exposure.
+- [ ] Run final CI on the final PR head.
