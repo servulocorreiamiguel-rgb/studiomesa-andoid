@@ -17,7 +17,6 @@ private const val MAX_STORAGE_ERROR_BODY_BYTES = 64 * 1024
 instanceFollowRedirects = false
 useCaches = false
 val responseLimitBytes = if (success) MAX_JSON_RESPONSE_BYTES else MAX_JSON_ERROR_BODY_BYTES
-val responseLimitBytes = if (success) MAX_JSON_RESPONSE_BYTES else MAX_JSON_ERROR_BODY_BYTES
 val text = ResponseBodyReader.read(stream, responseLimitBytes)
 val responseLimitBytes = if (success) MAX_JSON_RESPONSE_BYTES else MAX_JSON_ERROR_BODY_BYTES
 val response = ResponseBodyReader.read(stream, responseLimitBytes)
@@ -26,7 +25,7 @@ require(bytes.size in 1..MAX_INVOICE_DOCUMENT_BYTES)
 ResponseBodyReader.requireDeclaredLengthWithinLimit(connection.contentLengthLong, responseLimitBytes)
 val bytes = ResponseBodyReader.readBytes(stream, responseLimitBytes)
 AssistantMessagePaginationPolicy.nextOffset(currentOffset = offset, requestedLimit = limit, returnedRows = page.length(), totalRows = combined.length())
-val historyQuery = "&order=created_at.asc&limit=5000"
+val historyQuery = "&order=created_at.desc,id.desc&limit=$requestedLimit&offset=$offset"
 throw BackendHttpException(code, path, ApiErrorMessage.sanitize(message, code))
 """
 
@@ -119,7 +118,7 @@ class AndroidHttpSafetyAuditTests(unittest.TestCase):
 
     def test_requires_stable_order_and_offset_for_assistant_history_pages(self) -> None:
         changed = SAFE_CLIENT.replace(
-            "&order=created_at.asc,id.asc&limit=$requestedLimit&offset=$offset",
+            "&order=created_at.desc,id.desc&limit=$requestedLimit&offset=$offset",
             "&order=created_at.asc&limit=5000",
         )
         self.assertTrue(any("stable ordering" in error for error in audit_http_client(changed)))
