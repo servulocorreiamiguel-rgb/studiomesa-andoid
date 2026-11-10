@@ -114,4 +114,4 @@
 - [x] Keep Android backup disabled for app-private session/history/invoice metadata.
 - [x] Require invoice `FileProvider` to remain non-exported and scoped only to `cache/invoices/`.
 - [x] Add static regression tests for cleartext, backup, provider export and external/root path exposure.
-- [ ] Run final CI on the final PR head.
+- [ ] Run final CI on the final PR head, including this Android manifest and FileProvider audit.
