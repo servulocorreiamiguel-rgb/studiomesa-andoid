@@ -19,6 +19,7 @@ def audit_http_client(source: str) -> list[str]:
         ("ResponseBodyReader.read(stream)", "HTTP response bodies must be read with a byte limit."),
         ("ApiErrorMessage.sanitize(message, code)", "HTTP error messages must be sanitized before display."),
         ("BackendHttpException(code, path,", "HTTP errors must preserve status/path metadata without exposing raw response bodies."),
+        ("ResponseBodyReader.readBytes(stream, responseLimitBytes)", "Private Storage responses must use the bounded byte reader."),
     )
     for fragment, message in required_fragments:
         if fragment not in source:
@@ -27,39 +28,35 @@ def audit_http_client(source: str) -> list[str]:
     if "stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()" in source:
         errors.append("Unbounded HTTP response reading is forbidden; use ResponseBodyReader.")
 
-    if not re.search(
-        r"ResponseBodyReader\\.readBytes\\s*\\(\\s*stream\\s*,\\s*responseLimitBytes\\s*\\)",
-        source,
-    ):
-        errors.append("Private Storage responses must use the bounded byte reader.")
     if re.search(
-        r"\\bstream\\s*\\??\\s*\\.use\\s*\\{\\s*it\\.readBytes\\s*\\(\\s*\\)\\s*\\}",
+        r"\bstream\s*\??\s*\.use\s*\{\s*it\.readBytes\s*\(\s*\)\s*\}",
         source,
     ):
         errors.append("Unbounded binary response reading is forbidden; use ResponseBodyReader.readBytes.")
 
     if not re.search(
-        r"ResponseBodyReader\\.requireDeclaredLengthWithinLimit\\s*"
-        r"\\(\\s*connection\\.contentLengthLong\\s*,\\s*responseLimitBytes\\s*\\)",
+        r"ResponseBodyReader\.requireDeclaredLengthWithinLimit\s*"
+        r"\(\s*connection\.contentLengthLong\s*,\s*responseLimitBytes\s*\)",
         source,
+        re.DOTALL,
     ):
         errors.append("Storage responses must reject an excessive Content-Length before reading the body.")
 
     if not re.search(
-        r"MAX_INVOICE_DOCUMENT_BYTES\\s*=\\s*25\\s*\\*\\s*1024\\s*\\*\\s*1024",
+        r"MAX_INVOICE_DOCUMENT_BYTES\s*=\s*25\s*\*\s*1024\s*\*\s*1024",
         source,
     ):
         errors.append("Invoice document responses must retain the exact 25 MiB limit.")
     if not re.search(
-        r"MAX_STORAGE_ERROR_BODY_BYTES\\s*=\\s*64\\s*\\*\\s*1024",
+        r"MAX_STORAGE_ERROR_BODY_BYTES\s*=\s*64\s*\*\s*1024",
         source,
     ):
         errors.append("Storage error bodies must be bounded to 64 KiB.")
 
-    if not re.search(r'\\bBASE_URL\\s*=\\s*"https://[^"]+"', source):
+    if not re.search(r'\bBASE_URL\s*=\s*"https://[^"]+"', source):
         errors.append("The Supabase API base URL must use HTTPS.")
 
-    api_key = re.search(r'\\bAPI_KEY\\s*=\\s*"([^"]+)"', source)
+    api_key = re.search(r'\bAPI_KEY\s*=\s*"([^"]+)"', source)
     if (
         api_key is None
         or not api_key.group(1).startswith("sb_publishable_")
