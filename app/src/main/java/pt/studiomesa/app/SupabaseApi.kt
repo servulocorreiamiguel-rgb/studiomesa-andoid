@@ -34,6 +34,37 @@ object SupabaseApi {
         ))
     }
 
+    /**
+     * Advanced owner-only reasoning. The model provider key never leaves the Edge Function.
+     * The caller sends only recent chat turns and an explicitly approved, minimised snapshot.
+     */
+    fun generateAdvancedAssistantReply(
+        token: String,
+        restaurantId: String,
+        messages: JSONArray,
+        restaurantContext: JSONObject
+    ): JSONObject {
+        require(token.isNotBlank()) { "Inicia sessão antes de usar a IA avançada." }
+        require(restaurantId.matches(Regex("^[0-9a-fA-F-]{36}$"))) { "O restaurante não está identificado corretamente." }
+        require(messages.length() in 1..12) { "O contexto da conversa excede o limite permitido." }
+        require(restaurantContext.toString().length <= 12_000) { "O resumo do restaurante excede o limite permitido." }
+        val response = call(
+            "POST",
+            "/functions/v1/studiomesa-advanced-assistant",
+            JSONObject()
+                .put("restaurant_id", restaurantId)
+                .put("messages", messages)
+                .put("restaurant_context", restaurantContext),
+            token,
+            readTimeoutMillis = 90_000
+        )
+        val result = JSONObject(response)
+        if (result.optString("reply").isBlank()) {
+            throw IllegalStateException("O modelo avançado não devolveu uma resposta válida.")
+        }
+        return result
+    }
+
     private fun call(
         method: String,
         path: String,

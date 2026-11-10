@@ -1,8 +1,8 @@
 package pt.studiomesa.app
 
 /**
- * Keeps recent conversation context bounded for the 4K-token on-device model.
- * Older messages are dropped first; only user/assistant turns are passed to the LLM.
+ * Keeps recent conversation context bounded for the compact on-device model.
+ * Older messages are dropped first; only user/assistant turns reach the LLM.
  */
 internal data class AssistantPromptTurn(val role: String, val content: String)
 

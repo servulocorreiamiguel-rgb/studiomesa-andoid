@@ -1063,10 +1063,27 @@ class MainActivity : ComponentActivity() {
             setMargins(0, 0, dp(6), 0)
         })
         optionsRow.addView(label(
-            if (assistantSending) "A analisar…" else if (modelInstalled) "IA offline" else "IA local por instalar",
-            9.5f, true, if (modelInstalled) forestSoft else muted
+            if (assistantSending) "A analisar…" else if (advancedAssistantEnabled()) "GPT-OSS online" else if (modelInstalled) "IA offline" else "IA local por instalar",
+            9.5f, true, if (advancedAssistantEnabled() || modelInstalled) forestSoft else muted
         ).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(dp(100), -2))
         composerArea.addView(optionsRow, LinearLayout.LayoutParams(-1, -2))
+        if (isRemoteRestaurantOwner()) {
+            composerArea.addView(secondaryButton(
+                if (advancedAssistantEnabled()) "GPT-OSS 120B online · desligar" else "Ativar IA avançada · GPT-OSS 120B"
+            ) {
+                requestAdvancedAssistant()
+            }, LinearLayout.LayoutParams(-1, dp(40)))
+            composerArea.addView(label(
+                if (advancedAssistantEnabled())
+                    "Online: envia as últimas mensagens e indicadores agregados do restaurante. Não envia faturas, OCR, clientes, reservas detalhadas ou Memória."
+                else
+                    "Opcional. A IA local continua disponível; o modo online usa um fornecedor externo e limites gratuitos.",
+                8.5f, false, muted
+            ).apply {
+                gravity = Gravity.CENTER
+                setPadding(dp(2), dp(3), dp(2), 0)
+            })
+        }
         composerArea.addView(label(
             if (assistantDeepThinkingEnabled && modelInstalled)
                 "Modo aprofundado: verifica dados e compara opções; não expõe raciocínio interno."
@@ -1743,6 +1760,53 @@ class MainActivity : ComponentActivity() {
     private fun assistantCloudSyncEnabled(): Boolean =
         backendPrefs.getBoolean(assistantCloudSyncPreferenceKey(), false)
 
+    private fun advancedAssistantPreferenceKey(): String {
+        val ownerId = backendPrefs.getString("user_id", "").orEmpty()
+        return "assistant_advanced_ai_enabled_${ownerId}_${backendRestaurantId()}"
+    }
+
+    private fun isRemoteRestaurantOwner(): Boolean =
+        backendToken().isNotBlank() &&
+            backendPrefs.getString("user_id", "").orEmpty().isNotBlank() &&
+            backendRestaurantId().isNotBlank() &&
+            backendPrefs.getString("restaurant_role", "") == "owner"
+
+    private fun advancedAssistantEnabled(): Boolean =
+        isRemoteRestaurantOwner() &&
+            backendPrefs.getBoolean(advancedAssistantPreferenceKey(), false)
+
+    private fun requestAdvancedAssistant() {
+        if (!isRemoteRestaurantOwner()) {
+            Toast.makeText(
+                this,
+                "A IA avançada online só está disponível para o proprietário autenticado.",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+        if (advancedAssistantEnabled()) {
+            backendPrefs.edit().putBoolean(advancedAssistantPreferenceKey(), false).apply()
+            Toast.makeText(this, "IA avançada desligada. As próximas respostas usam o modelo local.", Toast.LENGTH_LONG).show()
+            renderAssistantChatScreen()
+            return
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("Ativar IA avançada online")
+            .setMessage(
+                "O StudioMesa passará a usar o modelo GPT-OSS 120B da OpenAI, alojado pela Groq. Para responder, envia ao fornecedor a pergunta, até 10 mensagens recentes e um resumo de dados do restaurante: nomes/preços/custos da carta, stock e estatísticas agregadas de pedidos e previsões.\n\n" +
+                    "Não são enviados PDFs, faturas, texto OCR, dados de clientes, contactos/notas de reservas, dados de funcionários nem a Memória. Evita escrever identificadores pessoais ou bancários.\n\n" +
+                    "A Groq indica que, por defeito, não conserva os pedidos de inferência, mas pode registar temporariamente entradas/saídas até 30 dias para fiabilidade ou prevenção de abuso; os dados armazenados pelo serviço ficam nos EUA. Existe uma opção Zero Data Retention, que ainda tem de ser avaliada/configurada.\n\n" +
+                    "O escalão gratuito tem limites e pode recusar pedidos quando a quota se esgota. Este modo ainda não está autorizado para dados reais ou uso comercial até estarem concluídos o contrato/DPA, a revisão de privacidade e a configuração do fornecedor. A chave privada fica apenas no servidor Supabase, nunca no APK."
+            )
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Aceito e ativar") { _, _ ->
+                backendPrefs.edit().putBoolean(advancedAssistantPreferenceKey(), true).apply()
+                renderAssistantChatScreen()
+            }
+            .show()
+    }
+
     private fun setAssistantCloudSyncEnabled(enabled: Boolean) {
         backendPrefs.edit().putBoolean(assistantCloudSyncPreferenceKey(), enabled).apply()
     }
@@ -2094,6 +2158,73 @@ class MainActivity : ComponentActivity() {
             assistantComposerDraft = ""
             assistantChatAutoFollow = true
             assistantChatError = null
+
+            if (advancedAssistantEnabled()) {
+                if (!isRemoteRestaurantOwner()) {
+                    throw IllegalStateException("A IA avançada online só está disponível para o proprietário autenticado do restaurante.")
+                }
+                if (question.length > 1_600) {
+                    throw IllegalArgumentException("No modo online, cada mensagem pode ter no máximo 1 600 caracteres.")
+                }
+                val remoteHistory = assistantChatStore.readTurns(scope, conversationId)
+                    .dropLast(1)
+                    .takeLast(10)
+                val messages = JSONArray()
+                remoteHistory.forEach { turn ->
+                    if (turn.role == "user" || turn.role == "assistant") {
+                        val text = turn.content.trim().take(1_600)
+                        if (text.isNotBlank()) {
+                            messages.put(JSONObject().put("role", turn.role).put("content", text))
+                        }
+                    }
+                }
+                messages.put(JSONObject().put("role", "user").put("content", question))
+                val cloudContext = AdvancedAssistantCloudContextBuilder.build(assistantSnapshot())
+                val token = backendToken()
+                val restaurantId = backendRestaurantId()
+                val requestUserId = backendPrefs.getString("user_id", "").orEmpty()
+
+                assistantSending = true
+                renderApp()
+                Thread({
+                    val result = runCatching {
+                        SupabaseApi.generateAdvancedAssistantReply(
+                            token = token,
+                            restaurantId = restaurantId,
+                            messages = messages,
+                            restaurantContext = cloudContext
+                        ).optString("reply").trim()
+                    }
+                    runOnUiThread {
+                        if (isFinishing || isDestroyed) return@runOnUiThread
+                        assistantSending = false
+                        if (backendPrefs.getString("user_id", "").orEmpty() != requestUserId ||
+                            backendRestaurantId() != restaurantId) {
+                            renderApp()
+                            return@runOnUiThread
+                        }
+                        result.fold(
+                            onSuccess = { reply ->
+                                runCatching {
+                                    assistantChatStore.appendTurn(scope, conversationId, "assistant", reply)
+                                    syncAssistantCloud(silent = true)
+                                }.onFailure { error ->
+                                    assistantChatError = error.message ?: "A resposta chegou, mas não foi possível guardar o histórico."
+                                }
+                            },
+                            onFailure = { error ->
+                                assistantChatError = error.message?.take(500)
+                                    ?: "A IA avançada não está disponível. Verifica a configuração do servidor e tenta novamente."
+                            }
+                        )
+                        renderApp()
+                    }
+                }, "studiomesa-advanced-assistant").apply {
+                    isDaemon = true
+                    start()
+                }
+                return
+            }
 
             if (localAssistantModelManager.isModelInstalled()) {
                 assistantSending = true
