@@ -1793,7 +1793,7 @@ class MainActivity : ComponentActivity() {
 
         AlertDialog.Builder(this)
             .setTitle("Ativar IA avançada online")
-                                    .setMessage(
+            .setMessage(
                 "O StudioMesa vai usar o modelo GPT-OSS 120B da OpenAI através da Groq. Nas perguntas normais, são enviados ao fornecedor a pergunta atual, até 10 perguntas recentes escritas por ti, um resumo dos dados operacionais e uma versão curta da Memória guardada.\n\n" +
                     "Quando pedes pesquisa pública na Web ou informação atual, o servidor envia apenas a pergunta atual: não envia histórico, Memória nem dados do restaurante. A ferramenta Browser Search pode pesquisar na Web; a ferramenta Code Interpreter pode executar Python para apoiar cálculos e análise. Ambas são executadas na infraestrutura da Groq.\n\n" +
                     "Não são enviados PDFs, imagens de faturas, texto OCR, nomes/contactos de clientes, detalhes de reservas, dados de funcionários ou dados bancários. O filtro automático de identificadores é apenas uma proteção adicional e não garante anonimização total.\n\n" +
