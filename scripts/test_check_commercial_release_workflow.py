@@ -205,8 +205,8 @@ class CommercialReleaseWorkflowAuditTests(unittest.TestCase):
 
     def test_android_ci_rejects_missing_release_variant(self) -> None:
         changed = SAFE_ANDROID_WORKFLOW.replace(
-            "bundlePremiumClienteRelease \\\\",
-            "bundlePremiumClienteRelease_REMOVED \\\\",
+            "bundlePremiumClienteRelease",
+            "bundlePremiumClienteRelease_REMOVED",
         )
         self.assertTrue(
             any("all five temporary signed AAB and APK variants" in error
