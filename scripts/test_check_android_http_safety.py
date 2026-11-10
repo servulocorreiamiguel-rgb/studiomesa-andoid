@@ -17,7 +17,9 @@ private const val MAX_STORAGE_ERROR_BODY_BYTES = 64 * 1024
 instanceFollowRedirects = false
 useCaches = false
 val responseLimitBytes = if (success) MAX_JSON_RESPONSE_BYTES else MAX_JSON_ERROR_BODY_BYTES
-val text = ResponseBodyReader.read(stream, responseLimitBytes)
+val textResponseLimitBytes = if (success) MAX_JSON_RESPONSE_BYTES else MAX_JSON_ERROR_BODY_BYTES
+val text = ResponseBodyReader.read(stream, textResponseLimitBytes)
+val responseLimitBytes = if (success) MAX_JSON_RESPONSE_BYTES else MAX_JSON_ERROR_BODY_BYTES
 val response = ResponseBodyReader.read(stream, responseLimitBytes)
 val responseLimitBytes = if (success) MAX_INVOICE_DOCUMENT_BYTES else MAX_STORAGE_ERROR_BODY_BYTES
 require(bytes.size in 1..MAX_INVOICE_DOCUMENT_BYTES)
