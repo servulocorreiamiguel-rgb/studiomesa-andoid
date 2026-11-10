@@ -10,11 +10,15 @@ from check_android_http_safety import audit_http_client
 SAFE_CLIENT = """
 private const val BASE_URL = "https://example.supabase.co"
 private const val API_KEY = "sb_publishable_test_key"
+private const val MAX_JSON_RESPONSE_BYTES = 4 * 1024 * 1024
+private const val MAX_JSON_ERROR_BODY_BYTES = 64 * 1024
 private const val MAX_INVOICE_DOCUMENT_BYTES = 25 * 1024 * 1024
 private const val MAX_STORAGE_ERROR_BODY_BYTES = 64 * 1024
 instanceFollowRedirects = false
 useCaches = false
-val text = ResponseBodyReader.read(stream)
+val responseLimitBytes = if (success) MAX_JSON_RESPONSE_BYTES else MAX_JSON_ERROR_BODY_BYTES
+val text = ResponseBodyReader.read(stream, responseLimitBytes)
+val response = ResponseBodyReader.read(stream, responseLimitBytes)
 val responseLimitBytes = if (success) MAX_INVOICE_DOCUMENT_BYTES else MAX_STORAGE_ERROR_BODY_BYTES
 require(bytes.size in 1..MAX_INVOICE_DOCUMENT_BYTES)
 ResponseBodyReader.requireDeclaredLengthWithinLimit(connection.contentLengthLong, responseLimitBytes)
@@ -39,7 +43,7 @@ class AndroidHttpSafetyAuditTests(unittest.TestCase):
 
     def test_rejects_unbounded_response_reads(self) -> None:
         changed = SAFE_CLIENT.replace(
-            "ResponseBodyReader.read(stream)",
+            "ResponseBodyReader.read(stream, responseLimitBytes)",
             "stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()",
         )
         errors = audit_http_client(changed)
@@ -117,6 +121,21 @@ class AndroidHttpSafetyAuditTests(unittest.TestCase):
             "&order=created_at.asc&limit=5000",
         )
         self.assertTrue(any("stable ordering" in error for error in audit_http_client(changed)))
+
+
+    def test_requires_bounded_json_success_and_error_limits(self) -> None:
+        changed = SAFE_CLIENT.replace(
+            "MAX_JSON_ERROR_BODY_BYTES = 64 * 1024",
+            "MAX_JSON_ERROR_BODY_BYTES = 1024 * 1024",
+        )
+        self.assertTrue(any("JSON error bodies" in error for error in audit_http_client(changed)))
+
+    def test_requires_bounded_response_reader_in_both_json_request_paths(self) -> None:
+        changed = SAFE_CLIENT.replace(
+            "val response = ResponseBodyReader.read(stream, responseLimitBytes)",
+            "val response = stream.bufferedReader().readText()",
+        )
+        self.assertTrue(any("Both authenticated JSON request paths" in error for error in audit_http_client(changed)))
 
 
 if __name__ == "__main__":
