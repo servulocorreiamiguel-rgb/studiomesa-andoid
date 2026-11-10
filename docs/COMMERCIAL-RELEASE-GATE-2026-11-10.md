@@ -2,7 +2,7 @@
 
 **Data:** 10 de novembro de 2026  
 **Código principal auditado:** `2ce4ad461ada5f0881f9d3c7f6f9d7d547cefd28`  
-**Revisão de segurança:** PR #102 — `release/security-hardening-2026-11-10`  
+**Revisão de segurança:** PR #104 — `release/security-hardening-final-ci-2026-11-10`  
 **Decisão:** **NÃO LIBERADO para piloto com dados reais, venda ou publicação.**
 
 ## O que está verificado
@@ -17,7 +17,7 @@
 - [x] Histórico/Memória locais cifrados; sincronização cloud opcional e desligada por defeito, sem E2E.
 - [x] OCR local com revisão humana obrigatória; não aprova/paga documentos automaticamente.
 - [x] CI do código principal anteriormente passou build, 5 variantes, testes unitários, Android Lint, replay PostgreSQL/autorização e emuladores Android 8/16.
-- [ ] CI de PR #102 no commit final ainda tem de passar todos os jobs antes de integrar o hardening do Storage, os limites dos corpos JSON e a paginação do histórico do assistente.
+- [ ] CI de PR #104 no commit final ainda tem de passar todos os jobs antes de integrar o hardening do Storage, os limites dos corpos JSON, a paginação do histórico e a auditoria do Manifest/FileProvider. Ainda não foi publicado um check-run para o SHA final.
 
 ## Bloqueios obrigatórios
 
