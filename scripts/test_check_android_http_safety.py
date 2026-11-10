@@ -26,7 +26,7 @@ require(bytes.size in 1..MAX_INVOICE_DOCUMENT_BYTES)
 ResponseBodyReader.requireDeclaredLengthWithinLimit(connection.contentLengthLong, responseLimitBytes)
 val bytes = ResponseBodyReader.readBytes(stream, responseLimitBytes)
 AssistantMessagePaginationPolicy.nextOffset(currentOffset = offset, requestedLimit = limit, returnedRows = page.length(), totalRows = combined.length())
-val historyQuery = "&order=created_at.asc,id.asc&limit=$requestedLimit&offset=$offset"
+val historyQuery = "&order=created_at.asc&limit=5000"
 throw BackendHttpException(code, path, ApiErrorMessage.sanitize(message, code))
 """
 
