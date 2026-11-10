@@ -1,33 +1,32 @@
 # StudioMesa — lista de preparação para uso profissional
 
-**Estado auditado em 10/11/2026: NÃO LIBERADA para venda operacional, piloto com dados reais ou produção.** A alteração para ocultar Google/Microsoft já foi integrada na `main` pela PR #107 (commit `38058cee6a4febc3faf37c527cb6ea4615fb4da3`). A CI de `main` acionada após o merge ainda estava em execução na última consulta.
+**Estado auditado em 10/11/2026: NÃO LIBERADA para venda operacional, piloto com dados reais ou produção.** A PR #107 está integrada. A CI Android integral da `main`, commit `c206388d812fb696ff1d4076bbc2815f2838f5ec`, passou os quatro jobs: [run 42886931540](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42886931540).
 
-A fotografia detalhada mais recente está em [docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-10.md](docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-10.md). Esta secção prevalece sobre os registos históricos abaixo.
+A recuperação do histórico está em [docs/MIGRATION-RECOVERY-2026-11-10.md](docs/MIGRATION-RECOVERY-2026-11-10.md). A PR #109 repõe cinco fontes históricas com os identificadores remotos. Resultado no branch de recuperação: 66 ficheiros locais, 63 versões remotas agora representadas, três migrações apenas locais. A CI desta PR ainda tem de passar; não executar deployment de migrações no Supabase alojado.
 
 - [x] Cinco variantes Android configuradas; compileSdk/targetSdk 36, minSdk 24, Java 17 e versão 1.5.0.
-- [x] CI da PR #107 passou os quatro jobs: compilação/testes, replay PostgreSQL/autorização, smoke tests Android 8 e Android 16. A CI de `main` após o merge ainda precisa de terminar com sucesso.
-- [x] Os botões Google/Microsoft estão ocultos por defeito; a implementação OAuth/PKCE foi preservada e adiada até depois da primeira venda.
+- [x] PR #107 integrada; Google/Microsoft ocultos por defeito, OAuth/PKCE preservado para pós-primeira-venda.
+- [x] CI integral da main no commit `c206388d812fb696ff1d4076bbc2815f2838f5ec`: build/testes, replay PostgreSQL/autorização e smoke tests Android 8/16 passaram.
 - [x] Projeto Supabase `ACTIVE_HEALTHY`, PostgreSQL 17.6.1.166, região eu-west-1; 26 tabelas com RLS ativo.
-- [x] Verificação SQL read-only: as 11 tabelas RLS sem políticas não concedem SELECT/INSERT/UPDATE/DELETE a `anon` nem `authenticated`.
-- [x] Verificação SQL read-only: 47 funções `SECURITY DEFINER`; 42 executáveis por `authenticated`, zero por `anon`; todas referenciam `auth.uid()` e têm `search_path = ''`. A revisão função a função continua obrigatória.
-- [ ] Reconciliar 61 ficheiros de migration locais com 63 versões remotas: 58 comuns, três só locais e cinco só remotas. Não executar `db push`, `migration repair` ou reset; comparar SQL integral, fazer backup e provar restauro antes de qualquer deployment.
-- [ ] Criar, reconciliar e testar as tabelas/RPCs ausentes: `public.restaurant_recipes`, `public.restaurant_recipe_ingredients` e `private.restaurant_staff_permissions`.
-- [ ] Rever individualmente as 42 funções `SECURITY DEFINER`, com testes de isolamento entre restaurantes e papéis. Os avisos do Advisor não devem ser resolvidos por revogações em bloco.
-- [ ] Resolver a proteção contra palavras-passe comprometidas desativada, depois de confirmar custo/plano.
-- [ ] Configurar SMTP próprio e confirmar email; testar registo, recuperação, sessão, logout e eliminação com contas descartáveis.
-- [x] Primeira versão sem Google/Microsoft; OAuth social explicitamente adiado para depois da primeira venda.
-- [ ] Testar E2E pedidos, reservas, cozinha, stock, fidelização, campanhas, faturas, sincronização, perda de rede e isolamento multi-restaurante.
-- [ ] Testar fisicamente no OPPO A5m e noutros Android o modelo local, instalação, desempenho, bateria, temperatura e atualização.
-- [ ] Publicar/validar apenas os serviços cloud necessários. A Edge Function `studiomesa-assistant` devolve HTTP 410; a IA avançada não está publicada; a pesquisa Web depende de `SEARXNG_BASE_URL` configurado.
-- [ ] Finalizar política de privacidade, termos, DPA, subcontratantes, retenção, eliminação, Data Safety, SBOM, licenças e suporte com a entidade responsável.
-- [ ] Escolher package IDs finais, guardar keystore comercial com backup seguro, configurar secrets/variables e gerar AAB/APKs assinados. Os artefactos regulares de CI são debug/demo.
-- [ ] Validar a release assinada, checksums, atualização e distribuição final.
+- [x] 11 tabelas RLS sem políticas verificadas por SQL read-only: sem privilégios diretos SELECT/INSERT/UPDATE/DELETE para `anon` ou `authenticated`.
+- [x] 47 funções `SECURITY DEFINER`: 42 executáveis por authenticated, nenhuma por anon; todas referenciam `auth.uid()` e têm `search_path = ''`. A revisão lógica função a função e E2E multi-restaurante continuam pendentes.
+- [~] Cinco ficheiros remotos recuperados a partir da branch histórica `feature/invoice-loyalty-qr`, agora com os identificadores de versão remotos; CI de replay e comparação de esquema ainda obrigatórias. O SQL original armazenado no histórico remoto não foi disponibilizado para comparação byte a byte.
+- [ ] Comparar o esquema completo do replay com o Supabase alojado, preparar backup e provar restauro num projeto separado.
+- [ ] Avaliar as três migrações apenas locais: receitas/consumo de stock, permissões granulares de equipa e índices do consultor de preços. As tabelas `restaurant_recipes`, `restaurant_recipe_ingredients` e `restaurant_staff_permissions` continuam ausentes no servidor.
+- [ ] Rever individualmente as 42 funções privilegiadas e testar isolamento entre proprietários, funcionários, clientes e dois restaurantes.
+- [ ] Configurar SMTP próprio, confirmação de email, recuperação, sessão e logout; testar com contas descartáveis.
+- [ ] Testar E2E pedidos, reservas, cozinha, stock, fidelização, campanhas, faturas, sincronização, perda de rede e eliminação de conta.
+- [ ] Testar fisicamente no OPPO A5m e outros Android o modelo local, instalação, desempenho, bateria, temperatura e atualização.
+- [ ] IA cloud permanece desativada; pesquisa Web exige servidor SearXNG configurado e teste autenticado.
+- [ ] Finalizar política de privacidade, termos, DPA, subcontratantes, retenção, eliminação, Data Safety, SBOM, licenças e suporte.
+- [ ] Escolher package IDs finais, preparar keystore comercial com backup seguro e configurar secrets/variables.
+- [ ] Criar AAB/APKs assinados comerciais e testar atualização/distribuição; artefactos atuais são debug/demo.
 
-**Não anunciar como funcionalidades comerciais já disponíveis:** fichas técnicas/consumo automático de ingredientes; permissões granulares de funcionários; IA cloud GPT-OSS; pesquisa Web até configurar/testar o motor; integração POS, pagamentos, impressoras, faturação, SAF-T ou contabilidade. O saldo de fidelização continua parcialmente manual. As previsões baseadas em pedidos não representam recebimentos bancários nem faturação contabilística.
+**Não anunciar como funcionalidades comerciais prontas:** receitas/consumo automático de ingredientes, permissões granulares de funcionários, IA cloud, pesquisa Web não configurada, integração POS, pagamentos, impressoras, faturação, SAF-T ou contabilidade. As previsões baseadas em pedidos não representam recebimentos bancários nem faturação contabilística.
 
-**Limites da IA:** a primeira versão usa o modelo local LFM2.5-1.2B-Instruct INT4; não é ChatGPT nem equivalente ao ChatGPT Free. OCR exige revisão humana. A licença do modelo e das dependências tem de ser confirmada pela entidade que fará a distribuição comercial.
+**Limites da IA:** a primeira versão usa o modelo local LFM2.5-1.2B-Instruct INT4; não é ChatGPT nem equivalente ao ChatGPT Free. OCR exige revisão humana. Confirmar licença comercial do modelo e dependências com a entidade distribuidora.
 
-**Regra de lançamento:** a StudioMesa pode ser demonstrada com dados fictícios. Não deve receber dados reais de clientes ou restaurantes nem ser vendida como solução operacional até todos os bloqueios acima estarem resolvidos e testados.
+**Regra de lançamento:** a app pode ser demonstrada com dados fictícios. Não deve receber dados reais nem ser vendida como solução operacional até os bloqueios acima serem concluídos e testados.
 
 ---
 
