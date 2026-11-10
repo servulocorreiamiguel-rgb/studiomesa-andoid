@@ -48,9 +48,11 @@ internal object AssistantCapabilitiesPolicy {
         if (!asksAboutCapabilities) return null
 
         return buildString {
-            appendLine("Sou o Assistente StudioMesa. Posso ajudar-te a perceber e gerir melhor a operação do restaurante.")
+            appendLine("Sou o Assistente StudioMesa, um assistente de conversação geral e de apoio à gestão do restaurante.")
             appendLine()
             appendLine("Posso:")
+            appendLine("• Conversar sobre temas gerais, esclarecer dúvidas e explicar conceitos de forma adaptada à pergunta.")
+            appendLine("• Ajudar a estudar, escrever, traduzir, programar, planear e resolver problemas.")
             appendLine("• Explicar como utilizar a StudioMesa e as suas secções.")
             appendLine("• Analisar a carta, custos por dose, margens e preços, usando os dados disponíveis.")
             appendLine(
