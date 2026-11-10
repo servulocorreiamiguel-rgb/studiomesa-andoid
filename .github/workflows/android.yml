@@ -148,22 +148,40 @@ jobs:
             -PstudiomesaCommercialRelease=true \
             -PstudiomesaReleaseApplicationId=pt.studiomesa.ci \
             bundleEssencialRestauranteRelease \
-            assembleEssencialRestauranteRelease
-          AAB_PATH="$(find app/build/outputs/bundle -type f -name '*.aab' -print -quit)"
-          test -n "$AAB_PATH"
-          verification_output="$(jarsigner -verify "$AAB_PATH" 2>&1)" || {
-            printf '%s\n' "$verification_output"
-            echo "CI AAB signature verification command failed."
-            exit 1
-          }
-          printf '%s\n' "$verification_output"
-          if ! grep -Fq "jar verified." <<< "$verification_output"; then
-            echo "CI AAB is not confirmed as correctly signed."
+            bundleProfissionalRestauranteRelease \
+            bundleProfissionalClienteRelease \
+            bundlePremiumRestauranteRelease \
+            bundlePremiumClienteRelease \
+            assembleEssencialRestauranteRelease \
+            assembleProfissionalRestauranteRelease \
+            assembleProfissionalClienteRelease \
+            assemblePremiumRestauranteRelease \
+            assemblePremiumClienteRelease
+          mapfile -d '' bundles < <(find app/build/outputs/bundle -type f -name '*.aab' -print0)
+          if [ "${#bundles[@]}" -ne 5 ]; then
+            echo "Expected five signed commercial AABs, found ${#bundles[@]}."
             exit 1
           fi
-          APK_PATH="$(find app/build/outputs/apk/essencialRestaurante/release -type f -name '*.apk' -print -quit)"
-          test -n "$APK_PATH"
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$APK_PATH"
+          for aab in "${bundles[@]}"; do
+            verification_output="$(jarsigner -verify "$aab" 2>&1)" || {
+              printf '%s\n' "$verification_output"
+              echo "CI AAB signature verification command failed: $aab"
+              exit 1
+            }
+            printf '%s\n' "$verification_output"
+            if ! grep -Fq "jar verified." <<< "$verification_output"; then
+              echo "CI AAB is not confirmed as correctly signed: $aab"
+              exit 1
+            fi
+          done
+          mapfile -d '' apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' -print0)
+          if [ "${#apks[@]}" -ne 5 ]; then
+            echo "Expected five signed commercial APKs, found ${#apks[@]}."
+            exit 1
+          fi
+          for apk in "${apks[@]}"; do
+            "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$apk"
+          done
           rm -f "$KEYSTORE_PATH"
 
       - name: Upload debug APK
