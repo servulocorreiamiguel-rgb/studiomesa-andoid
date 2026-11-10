@@ -2,7 +2,7 @@
 
 **Data da observação:** 10 de novembro de 2026  
 **Projeto Supabase:** `svwvkfsyevuyabelrtjk` (região UE; plano Free)  
-**Código base auditado:** `main` em `2ce4ad461ada5f0881f9d3c7f6f9d7d547cefd28`  
+**Código Android auditado:** `main` em `0177c6aa3e62c5e70b20f620be4576858ab67837` (CI integral aprovada em 10/11/2026). A documentação comercial foi atualizada em commits posteriores; a CI desses commits documentais estava em execução na última consulta.  
 **Revisão de segurança em desenvolvimento:** PR #105, branch `release/commercial-hardening-2026-11-10`  
 **Decisão:** **não liberar para dados reais, piloto ou venda ainda**.
 
@@ -14,11 +14,10 @@ Este documento regista verificações feitas de forma read-only e alterações p
 |---|---|---|
 | Estado do projeto | Ativo/saudável na região UE | O serviço está ativo neste momento; não é garantia de disponibilidade |
 | Tabelas `public` e `private` | 26 tabelas base observadas; todas com RLS ativo | Não foi encontrada uma tabela sem RLS nestes esquemas |
-| Acesso direto `anon` | Sem SELECT/INSERT direto nas tabelas consultadas | Acesso público direto fechado |
-| Tabelas RLS sem políticas | 11 alertas INFO do Advisor | RLS sem políticas resulta em negação por defeito; algumas são tabelas privadas/RPC-only. Confirmar que continuam sem grants diretos antes de qualquer nova migration |
-| Funções `SECURITY DEFINER` | 42 alertas WARN para funções executáveis por `authenticated` | Não revogar em bloco: wrappers e funções internas têm propósitos distintos. Exige revisão função a função e testes negativos com contas descartáveis |
-| `anon` nas funções privilegiadas consultadas | Sem EXECUTE para as funções `SECURITY DEFINER` consultadas | Não foi encontrado acesso anónimo nessas funções |
-| `search_path` | `search_path=""` nas funções privilegiadas consultadas | Boa proteção contra shadowing de objetos; manter em futuras funções |
+| Tabelas RLS sem políticas | 11 alertas INFO do Advisor | A inspeção de privilégios confirmou ausência de SELECT/INSERT/UPDATE/DELETE diretos para `anon` e `authenticated` nas 11 tabelas; manter o acesso RPC-only/privado onde intencional |
+| Funções `SECURITY DEFINER` | 47 funções públicas observadas; 42 executáveis por `authenticated` | Todas as 47 referenciam `auth.uid()` e têm `search_path = ''`; 0 são executáveis por `anon`. A autorização de cada função continua a exigir revisão funcional e testes cross-tenant |
+| `search_path` | `search_path=""` nas 47 funções privilegiadas públicas consultadas | Boa proteção contra shadowing de objetos; manter em futuras funções |
+| Acesso direto a tabelas sinalizadas | Sem SELECT/INSERT/UPDATE/DELETE para `anon` nem `authenticated` nas 11 tabelas sem políticas | A ausência de políticas não fica aberta por permissões diretas de cliente nestas tabelas; confirmar após cada migration |
 | Proteção de palavras-passe comprometidas | Desativada no projeto | Bloqueio de autenticação/segurança por resolver. Confirmar plano e opções suportadas antes de mudar |
 | Bucket `studiomesa-invoices` | Privado; 25 MiB; PDF/JPEG/PNG/WebP | Não é público |
 | Políticas Storage | INSERT, SELECT e DELETE para utilizador autenticado que seja `owner` no restaurante indicado no primeiro segmento do caminho | Acesso aos ficheiros limitado ao proprietário do restaurante. Testes com contas reais de dois restaurantes continuam obrigatórios |
@@ -66,6 +65,17 @@ Versões apenas remotas:
 
 As 51 versões comuns não foram consideradas equivalentes só pelo prefixo/timestamp. É necessário comparar o SQL exato e recuperar as 12 versões remotas. **Não executar `supabase db push`, reset, merge, rebase ou migration manual no projeto alojado antes de reconciliar os conteúdos e testar backup/restauro.**
 
+## 1.1. Revalidação read-only de 10/11/2026 às 10:11 UTC
+
+- Projeto Supabase: ACTIVE_HEALTHY, PostgreSQL 17, região eu-west-1; não foi criada qualquer branch de desenvolvimento e não foi executada nenhuma migration ou escrita de esquema nesta sessão.
+- Histórico: 63 versões remotas; a branch main contém 55 ficheiros, com 51 versões comuns, quatro apenas locais e doze apenas remotas. Os 51 prefixos comuns ainda não foram comparados pelo SQL integral.
+- As tabelas public.restaurant_assistant_conversations, public.restaurant_assistant_messages, public.restaurant_assistant_memory e public.restaurant_supplier_invoices existem com RLS ativo.
+- Bucket studiomesa-invoices: public=false, limite 25 MiB, tipos PDF/JPEG/PNG/WebP. As políticas atuais de SELECT/INSERT/DELETE exigem utilizador autenticado com papel owner no restaurante indicado no primeiro segmento do caminho.
+- O inventário SQL encontrou 47 funções SECURITY DEFINER no esquema public: 47 com referência a auth.uid(), 47 com search_path = '', zero com EXECUTE para anon e 42 com EXECUTE para authenticated. O Advisor assinala essas 42; a revisão funcional individual permanece obrigatória, não devendo ser tratadas como vulnerabilidade automaticamente nem revogadas em bloco.
+- As 11 tabelas assinaladas pelo Advisor como RLS sem políticas não concedem SELECT/INSERT/UPDATE/DELETE diretamente a anon ou authenticated na consulta feita. Algumas são privadas/RPC-only; a superfície de cada função que as usa continua a necessitar de análise.
+- Performance Advisor: quatro FKs sem índice de cobertura e 45 índices sem utilização observada. Não remover índices apenas com base na estatística atual.
+- Security Advisor: a proteção contra palavras-passe comprometidas continua desativada. A organização está no plano Free; não foi alterado o plano nem assumido qualquer custo.
+- Não existem branches Supabase de desenvolvimento no projeto. A criação de uma branch pode gerar custo; não foi criada nem foi feito deployment. Não foi demonstrado backup/restauro e, por isso, não é seguro reconciliar o histórico ou alterar o esquema de produção nesta sessão.
 ## 2. Proteções já existentes no cliente Android
 
 - `allowBackup=false` e `usesCleartextTraffic=false` na aplicação Android.
