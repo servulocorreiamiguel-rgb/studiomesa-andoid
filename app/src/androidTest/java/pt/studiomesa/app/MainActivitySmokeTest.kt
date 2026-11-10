@@ -576,6 +576,8 @@ class MainActivitySmokeTest {
                 .check(matches(isDisplayed()))
             onView(withText("Iniciar sessão"))
                 .check(matches(isDisplayed()))
+            onView(withText("Continuar com Google")).check(doesNotExist())
+            onView(withText("Continuar com Microsoft (Outlook)")).check(doesNotExist())
         }
     }
 
