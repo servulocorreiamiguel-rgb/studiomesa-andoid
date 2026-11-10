@@ -10,7 +10,7 @@ class AssistantMessagePaginationPolicyTest {
     fun keepsPageAndTotalLimitsWithinTheJsonResponseBudget() {
         assertEquals(100, AssistantMessagePaginationPolicy.PAGE_SIZE)
         assertEquals(5_000, AssistantMessagePaginationPolicy.MAX_MESSAGES)
-        assertTrue(AssistantMessagePaginationPolicy.PAGE_SIZE * 6_000 * 4 < 4 * 1024 * 1024)
+        assertTrue(AssistantMessagePaginationPolicy.PAGE_SIZE * 6_000 * 6 + AssistantMessagePaginationPolicy.PAGE_SIZE * 1024 < 4 * 1024 * 1024)
     }
 
     @Test
