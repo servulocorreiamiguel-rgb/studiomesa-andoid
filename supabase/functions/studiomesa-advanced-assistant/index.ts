@@ -148,10 +148,10 @@ Deno.serve(async (req: Request) => {
     return json({ code: "INVALID_MESSAGES", error: "O histórico enviado excede os limites permitidos." }, 400);
   }
 
-  const messages: Array<{ role: "user" | "assistant"; content: string }> = [];
+  const messages: Array<{ role: "user"; content: string }> = [];
   let totalMessageChars = 0;
   for (const message of body.messages) {
-    if (!isRecord(message) || (message.role !== "user" && message.role !== "assistant") ||
+    if (!isRecord(message) || message.role !== "user" ||
         typeof message.content !== "string") {
       return json({ code: "INVALID_MESSAGES", error: "O histórico contém uma mensagem inválida." }, 400);
     }

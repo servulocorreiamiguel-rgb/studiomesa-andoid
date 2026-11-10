@@ -23,7 +23,7 @@ Foi preparada uma opção avançada baseada no **gpt-oss-120b**, modelo de pesos
 ## Dados enviados e excluídos
 
 **Enviados, após ativação explícita:**
-- Mensagem atual e até dez mensagens recentes.
+- Pergunta atual e até dez perguntas recentes escritas pelo utilizador; respostas anteriores do assistente nunca são encaminhadas, para evitar reenviar metadados de faturas devolvidos por ferramentas locais.
 - Nome/categoria dos artigos, preço e custo unitário registados.
 - Quantidades e limites de stock, apenas se a cache estiver atualizada.
 - Número de pedidos ativos/em preparação e número agregado de reservas pendentes.

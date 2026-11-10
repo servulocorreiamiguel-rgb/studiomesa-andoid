@@ -1075,7 +1075,7 @@ class MainActivity : ComponentActivity() {
             }, LinearLayout.LayoutParams(-1, dp(40)))
             composerArea.addView(label(
                 if (advancedAssistantEnabled())
-                    "Online: envia as últimas mensagens e indicadores agregados do restaurante. Não envia faturas, OCR, clientes, reservas detalhadas ou Memória."
+                    "Online: envia as últimas perguntas que escreveste e indicadores agregados do restaurante. Não envia faturas, OCR, clientes, reservas detalhadas ou Memória."
                 else
                     "Opcional. A IA local continua disponível; o modo online usa um fornecedor externo e limites gratuitos.",
                 8.5f, false, muted
@@ -1794,7 +1794,7 @@ class MainActivity : ComponentActivity() {
         AlertDialog.Builder(this)
             .setTitle("Ativar IA avançada online")
             .setMessage(
-                "O StudioMesa passará a usar o modelo GPT-OSS 120B da OpenAI, alojado pela Groq. Para responder, envia ao fornecedor a pergunta, até 10 mensagens recentes e um resumo de dados do restaurante: nomes/preços/custos da carta, stock e estatísticas agregadas de pedidos e previsões.\n\n" +
+                "O StudioMesa passará a usar o modelo GPT-OSS 120B da OpenAI, alojado pela Groq. Para responder, envia ao fornecedor a pergunta atual, até 10 perguntas recentes escritas por ti e um resumo de dados do restaurante: nomes/preços/custos da carta, stock e estatísticas agregadas de pedidos e previsões.\n\n" +
                     "Não são enviados PDFs, faturas, texto OCR, dados de clientes, contactos/notas de reservas, dados de funcionários nem a Memória. Evita escrever identificadores pessoais ou bancários.\n\n" +
                     "A Groq indica que, por defeito, não conserva os pedidos de inferência, mas pode registar temporariamente entradas/saídas até 30 dias para fiabilidade ou prevenção de abuso; os dados armazenados pelo serviço ficam nos EUA. Existe uma opção Zero Data Retention, que ainda tem de ser avaliada/configurada.\n\n" +
                     "O escalão gratuito tem limites e pode recusar pedidos quando a quota se esgota. Este modo ainda não está autorizado para dados reais ou uso comercial até estarem concluídos o contrato/DPA, a revisão de privacidade e a configuração do fornecedor. A chave privada fica apenas no servidor Supabase, nunca no APK."
@@ -2170,11 +2170,13 @@ class MainActivity : ComponentActivity() {
                     .dropLast(1)
                     .takeLast(10)
                 val messages = JSONArray()
+                // Only forward questions typed by the user. Previous assistant replies can
+                // contain invoice metadata returned by local tools and must stay on-device.
                 remoteHistory.forEach { turn ->
-                    if (turn.role == "user" || turn.role == "assistant") {
+                    if (turn.role == "user") {
                         val text = turn.content.trim().take(1_600)
                         if (text.isNotBlank()) {
-                            messages.put(JSONObject().put("role", turn.role).put("content", text))
+                            messages.put(JSONObject().put("role", "user").put("content", text))
                         }
                     }
                 }
