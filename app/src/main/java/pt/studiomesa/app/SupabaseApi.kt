@@ -205,17 +205,18 @@ object SupabaseApi {
             }
             val code = connection.responseCode
             val success = code in 200..299
-            val stream = if (success) connection.inputStream else connection.errorStream
             val responseLimitBytes = if (success) {
                 MAX_INVOICE_DOCUMENT_BYTES
             } else {
                 MAX_STORAGE_ERROR_BODY_BYTES
             }
+            // Reject an oversized declared body before opening the response stream.
             val bytes = try {
                 ResponseBodyReader.requireDeclaredLengthWithinLimit(
                     connection.contentLengthLong,
                     responseLimitBytes
                 )
+                val stream = if (success) connection.inputStream else connection.errorStream
                 ResponseBodyReader.readBytes(stream, responseLimitBytes)
             } catch (error: IllegalStateException) {
                 // Preserve the HTTP status/path error while declining to buffer an
