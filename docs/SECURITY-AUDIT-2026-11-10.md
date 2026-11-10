@@ -3,7 +3,7 @@
 **Data da observação:** 10 de novembro de 2026  
 **Projeto Supabase:** `svwvkfsyevuyabelrtjk` (região UE; plano Free)  
 **Código base auditado:** `main` em `2ce4ad461ada5f0881f9d3c7f6f9d7d547cefd28`  
-**Revisão de segurança em desenvolvimento:** PR #102, branch `release/security-hardening-2026-11-10`  
+**Revisão de segurança em desenvolvimento:** PR #104, branch `release/security-hardening-final-ci-2026-11-10`  
 **Decisão:** **não liberar para dados reais, piloto ou venda ainda**.
 
 Este documento regista verificações feitas de forma read-only e alterações propostas em código. Não representa uma certificação, auditoria jurídica, pentest independente ou garantia de segurança absoluta.
@@ -78,7 +78,7 @@ As 51 versões comuns não foram consideradas equivalentes só pelo prefixo/time
 - Chave cliente Android começa por `sb_publishable_`; pesquisa de repositório não encontrou `sb_secret_` nem `service_role` em código do cliente.
 - O modelo generativo corre localmente; a Edge Function `studiomesa-assistant` devolve HTTP 410 e não recebe prompts para inferência.
 
-## 3. Alteração de segurança nesta revisão — PR #102
+## 3. Alteração de segurança nesta revisão — PR #104
 
 Risco identificado: `binaryStorageRequest` usava `readBytes()` sem limite, verificando o tamanho do documento só depois de o corpo ser integralmente carregado para memória.
 
@@ -91,7 +91,7 @@ Correção proposta em PR separada:
 - Limitar corpos de erro de Storage a 64 KiB, preservando HTTP status/path e mensagens sanitizadas.
 - Acrescentar testes unitários para o leitor binário e para a paginação, além de testes estáticos para impedir regressões de transporte, HTTPS, chaves privilegiadas e consultas de histórico sem paginação.
 
-Estado da CI do commit atual `dae6766eb494aa8beac61c78140f7fcfc7750cff`: em validação à hora da atualização deste documento. Não marcar os passos como aprovados até os quatro jobs de CI terminarem com sucesso.
+Estado da CI: a última execução observada foi a #42779130652, num commit anterior da PR predecessora, e falhou apenas no teste da fixture estática que representava as duas leituras JSON limitadas. A fixture, a ordenação paginada e os controlos do Manifest foram depois corrigidos. O commit atual da PR #104 ainda não tem check-run publicado pelo GitHub; por isso, a compilação/unit tests/Lint/emuladores do SHA final permanecem **não verificados**. A verificação estática de 26 condições feita diretamente sobre os ficheiros atuais passou, mas não substitui execução da CI.
 
 ## 4. Riscos ainda não fechados
 
