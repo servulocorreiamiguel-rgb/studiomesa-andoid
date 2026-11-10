@@ -51,7 +51,7 @@ def audit_http_client(source: str) -> list[str]:
         r"MAX_STORAGE_ERROR_BODY_BYTES\s*=\s*64\s*\*\s*1024",
         source,
     ):
-        errors.append("Storage error bodies must be bounded to 64 KiB.")
+        errors.append("Storage error body must be bounded to 64 KiB.")
 
     if not re.search(r'\bBASE_URL\s*=\s*"https://[^"]+"', source):
         errors.append("The Supabase API base URL must use HTTPS.")
