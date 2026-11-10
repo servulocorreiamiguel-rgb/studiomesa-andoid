@@ -4,15 +4,50 @@ from __future__ import annotations
 
 import unittest
 
-from check_android_http_safety import audit_http_client
+from check_android_http_safety import audit_android_manifest, audit_http_client
 
 
 SAFE_CLIENT = """
+private const val BASE_URL = "https://example.supabase.co"
+private const val API_KEY = "sb_publishable_test_key"
+private const val MAX_JSON_RESPONSE_BYTES = 4 * 1024 * 1024
+private const val MAX_JSON_ERROR_BODY_BYTES = 64 * 1024
+private const val MAX_INVOICE_DOCUMENT_BYTES = 25 * 1024 * 1024
+private const val MAX_STORAGE_ERROR_BODY_BYTES = 64 * 1024
 instanceFollowRedirects = false
 useCaches = false
-val text = ResponseBodyReader.read(stream)
+val responseLimitBytes = if (success) MAX_JSON_RESPONSE_BYTES else MAX_JSON_ERROR_BODY_BYTES
+val text = ResponseBodyReader.read(stream, responseLimitBytes)
+val responseLimitBytes = if (success) MAX_JSON_RESPONSE_BYTES else MAX_JSON_ERROR_BODY_BYTES
+val response = ResponseBodyReader.read(stream, responseLimitBytes)
+private fun binaryStorageRequest(method: String, path: String) {
+val code = connection.responseCode
+val success = code in 200..299
+val responseLimitBytes = if (success) MAX_INVOICE_DOCUMENT_BYTES else MAX_STORAGE_ERROR_BODY_BYTES
+require(bytes.size in 1..MAX_INVOICE_DOCUMENT_BYTES)
+ResponseBodyReader.requireDeclaredLengthWithinLimit(connection.contentLengthLong, responseLimitBytes)
+val stream = if (success) connection.inputStream else connection.errorStream
+val bytes = ResponseBodyReader.readBytes(stream, responseLimitBytes)
+}
+fun listAssistantConversations() {}
+AssistantMessagePaginationPolicy.nextOffset(currentOffset = offset, requestedLimit = limit, returnedRows = page.length(), totalRows = combined.length())
+val historyQuery = "&order=created_at.desc,id.desc&limit=$requestedLimit&offset=$offset"
 throw BackendHttpException(code, path, ApiErrorMessage.sanitize(message, code))
 """
+
+
+SAFE_MANIFEST = """
+<manifest>
+  <application
+    android:allowBackup="false"
+    android:usesCleartextTraffic="false">
+    <provider
+      android:name="androidx.core.content.FileProvider"
+      android:exported="false" />
+  </application>
+</manifest>
+"""
+SAFE_FILE_PROVIDER_PATHS = """<paths><cache-path name="invoice_cache" path="invoices/" /></paths>"""
 
 
 class AndroidHttpSafetyAuditTests(unittest.TestCase):
@@ -29,7 +64,7 @@ class AndroidHttpSafetyAuditTests(unittest.TestCase):
 
     def test_rejects_unbounded_response_reads(self) -> None:
         changed = SAFE_CLIENT.replace(
-            "ResponseBodyReader.read(stream)",
+            "ResponseBodyReader.read(stream, responseLimitBytes)",
             "stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()",
         )
         errors = audit_http_client(changed)
@@ -46,6 +81,114 @@ class AndroidHttpSafetyAuditTests(unittest.TestCase):
     def test_requires_http_error_metadata(self) -> None:
         changed = SAFE_CLIENT.replace("BackendHttpException(code, path,", "IllegalStateException(")
         self.assertTrue(any("status/path metadata" in error for error in audit_http_client(changed)))
+
+
+    def test_rejects_unbounded_binary_storage_response_reads(self) -> None:
+        changed = SAFE_CLIENT.replace(
+            "ResponseBodyReader.readBytes(stream, responseLimitBytes)",
+            "stream?.use { it.readBytes() } ?: ByteArray(0)",
+        )
+        errors = audit_http_client(changed)
+        self.assertTrue(any("bounded byte reader" in error for error in errors))
+        self.assertTrue(any("Unbounded binary response reading" in error for error in errors))
+
+    def test_requires_content_length_early_rejection_for_storage_responses(self) -> None:
+        changed = SAFE_CLIENT.replace(
+            "ResponseBodyReader.requireDeclaredLengthWithinLimit(connection.contentLengthLong, responseLimitBytes)",
+            "val ignoredLength = connection.contentLengthLong",
+        )
+        self.assertTrue(any("Content-Length" in error for error in audit_http_client(changed)))
+
+    def test_requires_fixed_25_mib_invoice_response_limit(self) -> None:
+        changed = SAFE_CLIENT.replace(
+            "MAX_INVOICE_DOCUMENT_BYTES = 25 * 1024 * 1024",
+            "MAX_INVOICE_DOCUMENT_BYTES = 100 * 1024 * 1024",
+        )
+        self.assertTrue(any("25 MiB" in error for error in audit_http_client(changed)))
+
+    def test_requires_bounded_storage_error_body(self) -> None:
+        changed = SAFE_CLIENT.replace(
+            "MAX_STORAGE_ERROR_BODY_BYTES = 64 * 1024",
+            "MAX_STORAGE_ERROR_BODY_BYTES = 1024 * 1024",
+        )
+        self.assertTrue(any("error body" in error.lower() for error in audit_http_client(changed)))
+
+
+    def test_rejects_non_https_backend_endpoint(self) -> None:
+        changed = SAFE_CLIENT.replace(
+            'BASE_URL = "https://example.supabase.co"',
+            'BASE_URL = "http://example.supabase.co"',
+        )
+        self.assertTrue(any("HTTPS" in error for error in audit_http_client(changed)))
+
+    def test_rejects_privileged_backend_key_in_android_client(self) -> None:
+        changed = SAFE_CLIENT.replace(
+            'API_KEY = "sb_publishable_test_key"',
+            'API_KEY = "sb_secret_do_not_ship"',
+        )
+        self.assertTrue(any("publishable" in error.lower() for error in audit_http_client(changed)))
+
+
+    def test_rejects_unpaginated_assistant_message_history(self) -> None:
+        changed = SAFE_CLIENT.replace(
+            "AssistantMessagePaginationPolicy.nextOffset(currentOffset = offset, requestedLimit = limit, returnedRows = page.length(), totalRows = combined.length())",
+            "return JSONArray(call(\"GET\", \"/restaurant_assistant_messages?limit=5000\"))",
+        )
+        self.assertTrue(any("bounded pages" in error for error in audit_http_client(changed)))
+
+    def test_requires_stable_order_and_offset_for_assistant_history_pages(self) -> None:
+        changed = SAFE_CLIENT.replace(
+            "&order=created_at.desc,id.desc&limit=$requestedLimit&offset=$offset",
+            "&order=created_at.asc&limit=5000",
+        )
+        self.assertTrue(any("stable ordering" in error for error in audit_http_client(changed)))
+
+
+    def test_requires_bounded_json_success_and_error_limits(self) -> None:
+        changed = SAFE_CLIENT.replace(
+            "MAX_JSON_ERROR_BODY_BYTES = 64 * 1024",
+            "MAX_JSON_ERROR_BODY_BYTES = 1024 * 1024",
+        )
+        self.assertTrue(any("JSON error bodies" in error for error in audit_http_client(changed)))
+
+    def test_requires_bounded_response_reader_in_both_json_request_paths(self) -> None:
+        changed = SAFE_CLIENT.replace(
+            "val response = ResponseBodyReader.read(stream, responseLimitBytes)",
+            "val response = stream.bufferedReader().readText()",
+        )
+        self.assertTrue(any("Both authenticated JSON request paths" in error for error in audit_http_client(changed)))
+
+
+    def test_rejects_storage_stream_opened_before_declared_length_guard(self) -> None:
+        changed = SAFE_CLIENT.replace(
+            "ResponseBodyReader.requireDeclaredLengthWithinLimit(connection.contentLengthLong, responseLimitBytes)\nval stream = if (success) connection.inputStream else connection.errorStream",
+            "val stream = if (success) connection.inputStream else connection.errorStream\nResponseBodyReader.requireDeclaredLengthWithinLimit(connection.contentLengthLong, responseLimitBytes)",
+        )
+        self.assertTrue(any("before opening the response stream" in error for error in audit_http_client(changed)))
+
+    def test_accepts_restricted_android_manifest_and_invoice_provider(self) -> None:
+        self.assertEqual([], audit_android_manifest(SAFE_MANIFEST, SAFE_FILE_PROVIDER_PATHS))
+
+    def test_rejects_enabled_android_cleartext_traffic(self) -> None:
+        changed = SAFE_MANIFEST.replace('android:usesCleartextTraffic="false"', 'android:usesCleartextTraffic="true"')
+        self.assertTrue(any("cleartext traffic" in error for error in audit_android_manifest(changed, SAFE_FILE_PROVIDER_PATHS)))
+
+    def test_rejects_android_backup_for_private_app_data(self) -> None:
+        changed = SAFE_MANIFEST.replace('android:allowBackup="false"', 'android:allowBackup="true"')
+        self.assertTrue(any("backup must remain disabled" in error for error in audit_android_manifest(changed, SAFE_FILE_PROVIDER_PATHS)))
+
+    def test_rejects_exported_invoice_file_provider(self) -> None:
+        changed = SAFE_MANIFEST.replace('android:exported="false"', 'android:exported="true"')
+        self.assertTrue(any("must not be exported" in error for error in audit_android_manifest(changed, SAFE_FILE_PROVIDER_PATHS)))
+
+    def test_rejects_broad_invoice_file_provider_paths(self) -> None:
+        changed = SAFE_FILE_PROVIDER_PATHS.replace(
+            '<cache-path name="invoice_cache" path="invoices/" />',
+            '<external-path name="all_files" path="." />',
+        )
+        errors = audit_android_manifest(SAFE_MANIFEST, changed)
+        self.assertTrue(any("limited to cache/invoices" in error for error in errors))
+        self.assertTrue(any("broad or external" in error for error in errors))
 
 
 if __name__ == "__main__":

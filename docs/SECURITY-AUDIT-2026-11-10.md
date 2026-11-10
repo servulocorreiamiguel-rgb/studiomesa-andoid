@@ -3,7 +3,7 @@
 **Data da observação:** 10 de novembro de 2026  
 **Projeto Supabase:** `svwvkfsyevuyabelrtjk` (região UE; plano Free)  
 **Código base auditado:** `main` em `2ce4ad461ada5f0881f9d3c7f6f9d7d547cefd28`  
-**Revisão de segurança em desenvolvimento:** PR #102, branch `release/security-hardening-2026-11-10`  
+**Revisão de segurança em desenvolvimento:** PR #105, branch `release/commercial-hardening-2026-11-10`  
 **Decisão:** **não liberar para dados reais, piloto ou venda ainda**.
 
 Este documento regista verificações feitas de forma read-only e alterações propostas em código. Não representa uma certificação, auditoria jurídica, pentest independente ou garantia de segurança absoluta.
@@ -68,8 +68,8 @@ As 51 versões comuns não foram consideradas equivalentes só pelo prefixo/time
 
 ## 2. Proteções já existentes no cliente Android
 
-- `allowBackup=false` na aplicação Android.
-- `FileProvider` não exportado e limitado à pasta `cache/invoices/`.
+- `allowBackup=false` e `usesCleartextTraffic=false` na aplicação Android.
+- `FileProvider` não exportado e limitado à pasta `cache/invoices/`; a auditoria estática passa a bloquear a exposição de caminhos externos/root.
 - Sessões guardadas com AES-GCM e Android Keystore.
 - Histórico e Memória locais cifrados com AES-GCM; cópia cloud opcional e desligada por defeito desde a revisão de privacidade.
 - A sincronização cloud usa Auth e RLS, mas não é cifragem ponta a ponta. O conteúdo sincronizado pode ser tecnicamente acessível ao operador de backend com privilégios adequados; a app não deve prometer E2E.
@@ -78,18 +78,20 @@ As 51 versões comuns não foram consideradas equivalentes só pelo prefixo/time
 - Chave cliente Android começa por `sb_publishable_`; pesquisa de repositório não encontrou `sb_secret_` nem `service_role` em código do cliente.
 - O modelo generativo corre localmente; a Edge Function `studiomesa-assistant` devolve HTTP 410 e não recebe prompts para inferência.
 
-## 3. Alteração de segurança nesta revisão — PR #102
+## 3. Alteração de segurança nesta revisão — PR #105
 
 Risco identificado: `binaryStorageRequest` usava `readBytes()` sem limite, verificando o tamanho do documento só depois de o corpo ser integralmente carregado para memória.
 
 Correção proposta em PR separada:
+- Limitar respostas JSON normais a 4 MiB e corpos JSON de erro a 64 KiB.
+- Paginar o download do histórico do assistente em blocos de 100 mensagens, ordenados de forma estável por data e ID, com teto de 5 000 mensagens.
 - Limitar a leitura incremental de documentos Storage a 25 MiB.
 - Rejeitar `Content-Length` anunciado acima do limite antes de ler o stream.
 - Manter a verificação de tamanho mesmo quando o servidor não envia ou declara incorretamente `Content-Length`.
 - Limitar corpos de erro de Storage a 64 KiB, preservando HTTP status/path e mensagens sanitizadas.
-- Acrescentar testes unitários ao leitor binário e testes estáticos para impedir regressões de transporte, HTTPS e chaves privilegiadas no cliente.
+- Acrescentar testes unitários para o leitor binário e para a paginação, além de testes estáticos para impedir regressões de transporte, HTTPS, chaves privilegiadas e consultas de histórico sem paginação.
 
-Estado da CI do commit atual `dae6766eb494aa8beac61c78140f7fcfc7750cff`: em validação à hora da atualização deste documento. Não marcar os passos como aprovados até os quatro jobs de CI terminarem com sucesso.
+Evidência da CI anterior: run `42781541453`, commit de código `c72ffec461bc6de22780c12be75869a29234ff63`. Nesse commit, a compilação das cinco variantes, os testes unitários e o replay PostgreSQL/autorização passaram; o Lint ainda estava em execução, e o build de release/emuladores não tinham concluído. A atualização documental gera uma nova execução; só essa execução no commit final pode fechar o gate técnico.
 
 ## 4. Riscos ainda não fechados
 
