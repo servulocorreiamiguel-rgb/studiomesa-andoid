@@ -68,8 +68,8 @@ As 51 versões comuns não foram consideradas equivalentes só pelo prefixo/time
 
 ## 2. Proteções já existentes no cliente Android
 
-- `allowBackup=false` na aplicação Android.
-- `FileProvider` não exportado e limitado à pasta `cache/invoices/`.
+- `allowBackup=false` e `usesCleartextTraffic=false` na aplicação Android.
+- `FileProvider` não exportado e limitado à pasta `cache/invoices/`; a auditoria estática passa a bloquear a exposição de caminhos externos/root.
 - Sessões guardadas com AES-GCM e Android Keystore.
 - Histórico e Memória locais cifrados com AES-GCM; cópia cloud opcional e desligada por defeito desde a revisão de privacidade.
 - A sincronização cloud usa Auth e RLS, mas não é cifragem ponta a ponta. O conteúdo sincronizado pode ser tecnicamente acessível ao operador de backend com privilégios adequados; a app não deve prometer E2E.
