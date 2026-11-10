@@ -254,7 +254,35 @@ object SupabaseApi {
     fun listAssistantMessages(token: String, restaurantId: String): JSONArray {
         require(token.isNotBlank() && restaurantId.isNotBlank())
         val restaurant = URLEncoder.encode(restaurantId, "UTF-8")
-        return JSONArray(call("GET", "/rest/v1/restaurant_assistant_messages?select=id,restaurant_id,conversation_id,role,content,created_by,created_at&restaurant_id=eq.$restaurant&order=created_at.asc&limit=5000", accessToken = token))
+        val combined = JSONArray()
+        var offset = 0
+
+        while (combined.length() < AssistantMessagePaginationPolicy.MAX_MESSAGES) {
+            val requestedLimit = minOf(
+                AssistantMessagePaginationPolicy.PAGE_SIZE,
+                AssistantMessagePaginationPolicy.MAX_MESSAGES - combined.length()
+            )
+            val page = JSONArray(
+                call(
+                    "GET",
+                    "/rest/v1/restaurant_assistant_messages?select=id,restaurant_id,conversation_id,role,content,created_by,created_at&restaurant_id=eq.$restaurant&order=created_at.asc&limit=$requestedLimit&offset=$offset",
+                    accessToken = token
+                )
+            )
+            for (index in 0 until page.length()) {
+                combined.put(page.getJSONObject(index))
+            }
+
+            val nextOffset = AssistantMessagePaginationPolicy.nextOffset(
+                currentOffset = offset,
+                requestedLimit = requestedLimit,
+                returnedRows = page.length(),
+                totalRows = combined.length()
+            ) ?: break
+            offset = nextOffset
+        }
+
+        return combined
     }
 
     fun upsertAssistantMessages(token: String, rows: JSONArray) {
