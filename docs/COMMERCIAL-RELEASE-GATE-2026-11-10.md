@@ -17,7 +17,7 @@
 - [x] Histórico/Memória locais cifrados; sincronização cloud opcional e desligada por defeito, sem E2E.
 - [x] OCR local com revisão humana obrigatória; não aprova/paga documentos automaticamente.
 - [x] CI do código principal anteriormente passou build, 5 variantes, testes unitários, Android Lint, replay PostgreSQL/autorização e emuladores Android 8/16.
-- [ ] CI de PR #102 no commit final ainda tem de passar todos os jobs antes de integrar o hardening do Storage.
+- [ ] CI de PR #102 no commit final ainda tem de passar todos os jobs antes de integrar o hardening do Storage, os limites dos corpos JSON e a paginação do histórico do assistente.
 
 ## Bloqueios obrigatórios
 
