@@ -37,11 +37,11 @@ As respetivas migrations estão no repositório local mas não constam do histó
 
 | Fonte | Número de versões |
 |---|---:|
-| Ficheiros locais em `supabase/migrations` | 55 |
-| Histórico remoto no Supabase | 63 |
-| Prefixos/versões comuns | 51 |
+| Ficheiros locais em `supabase/migrations` após recuperação de sete originais | 62 |
+| Histórico remoto no Supabase (10/11/2026) | 63 |
+| Prefixos/versões comuns | 58 |
 | Apenas no repositório | 4 |
-| Apenas no projeto alojado | 12 |
+| Apenas no projeto alojado | 5 |
 
 Migrações apenas locais:
 - `20261030111815`
@@ -50,25 +50,18 @@ Migrações apenas locais:
 - `20261104100000`
 
 Versões apenas remotas:
-- `20261102082151`
 - `20261102103246`
 - `20261102103627`
 - `20261102104650`
 - `20261102113719`
 - `20261102113944`
-- `20261108120141`
-- `20261108120201`
-- `20261108124820`
-- `20261108125118`
-- `20261108164151`
-- `20261108164623`
 
-As 51 versões comuns não foram consideradas equivalentes só pelo prefixo/timestamp. É necessário comparar o SQL exato e recuperar as 12 versões remotas. **Não executar `supabase db push`, reset, merge, rebase ou migration manual no projeto alojado antes de reconciliar os conteúdos e testar backup/restauro.**
+Em 10/11/2026 foram recuperados sete ficheiros originais: `20261102082151` e as seis versões `20261108...` já não constam da lista remote-only. Os blobs recuperados mantêm exatamente os hashes das branches de origem. As 58 versões comuns ainda requerem comparação do SQL exato; as cinco versões remotas indicadas não foram recuperadas. Os candidatos locais de QR/loja com outros timestamps não são cópias comprovadas dos SQL históricos. **Não executar `supabase db push`, reset, merge, rebase ou migration manual no projeto alojado antes de reconciliar os conteúdos e testar backup/restauro.**
 
 ## 1.1. Revalidação read-only de 10/11/2026 às 10:11 UTC
 
 - Projeto Supabase: ACTIVE_HEALTHY, PostgreSQL 17, região eu-west-1; não foi criada qualquer branch de desenvolvimento e não foi executada nenhuma migration ou escrita de esquema nesta sessão.
-- Histórico: 63 versões remotas; a branch main contém 55 ficheiros, com 51 versões comuns, quatro apenas locais e doze apenas remotas. Os 51 prefixos comuns ainda não foram comparados pelo SQL integral.
+- Histórico após recuperação: 63 versões remotas; a main contém 62 ficheiros, com 58 versões comuns, quatro apenas locais e cinco apenas remotas. Os 58 prefixos comuns ainda não foram comparados pelo SQL integral. Sete ficheiros foram recuperados com hashes originais de branches Git históricas; nenhum foi aplicado ao Supabase.
 - As tabelas public.restaurant_assistant_conversations, public.restaurant_assistant_messages, public.restaurant_assistant_memory e public.restaurant_supplier_invoices existem com RLS ativo.
 - Bucket studiomesa-invoices: public=false, limite 25 MiB, tipos PDF/JPEG/PNG/WebP. As políticas atuais de SELECT/INSERT/DELETE exigem utilizador autenticado com papel owner no restaurante indicado no primeiro segmento do caminho.
 - O inventário SQL encontrou 47 funções SECURITY DEFINER no esquema public: 47 com referência a auth.uid(), 47 com search_path = '', zero com EXECUTE para anon e 42 com EXECUTE para authenticated. O Advisor assinala essas 42; a revisão funcional individual permanece obrigatória, não devendo ser tratadas como vulnerabilidade automaticamente nem revogadas em bloco.
