@@ -1302,6 +1302,35 @@ SELECT public.set_restaurant_staff_permissions(
 COMMIT;
 SQL
 
+LOYALTY_INVOICE_FIRST="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT qr_token::text || '|' || points::text
+FROM public.issue_loyalty_invoice_qr(
+  '$MEMBER_A'::uuid, 20.00, 'CI-valid-loyalty-permission', '77777777-7777-4777-8777-777777777780'::uuid
+);
+COMMIT;
+SQL
+)"
+LOYALTY_INVOICE_RETRY="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT qr_token::text || '|' || points::text
+FROM public.issue_loyalty_invoice_qr(
+  '$MEMBER_A'::uuid, 20.00, 'CI-valid-loyalty-permission', '77777777-7777-4777-8777-777777777780'::uuid
+);
+COMMIT;
+SQL
+)"
+if [ "$LOYALTY_INVOICE_FIRST" != "$LOYALTY_INVOICE_RETRY" ] ||
+   [[ "$LOYALTY_INVOICE_FIRST" != *"|20" ]]; then
+  echo "ERROR: permitted invoice-QR issuance was not successful and idempotent." >&2
+  printf 'First: %s\nRetry: %s\n' "$LOYALTY_INVOICE_FIRST" "$LOYALTY_INVOICE_RETRY" >&2
+  exit 1
+fi
+
 # Correct staff member credits points. Same request ID is safe to replay;
 # a different request ID cannot consume the QR a second time.
 LOYALTY_FIRST="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
