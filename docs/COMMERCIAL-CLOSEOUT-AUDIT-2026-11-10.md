@@ -1,3 +1,15 @@
+# Estado complementar — após a PR #109 (10/11/2026)
+
+A PR [#109](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/109) foi integrada no commit `e9add398747b8d721ea556881af392ce74d19ff0`. A CI da PR [42888315833](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42888315833) passou os quatro jobs, incluindo replay de 67 migrations numa base vazia e os testes de autorização. A CI após o merge na `main`, run [42892609272](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42892609272), ainda estava em execução na última consulta.
+
+**Histórico de migrations:** 67 ficheiros locais, 63 versões remotas, 63 versões remotas representadas, nenhuma remota em falta e quatro locais ainda não aplicadas. A lista e os riscos estão em [MIGRATION-AND-AUTHORIZATION-CLOSEOUT-2026-11-10.md](MIGRATION-AND-AUTHORIZATION-CLOSEOUT-2026-11-10.md).
+
+**Correção de autorização:** a CI encontrou que um funcionário podia confirmar a entrega de um resgate após perder a permissão `loyalty`. Foi acrescentada a migration `20261102120000_require_loyalty_permission_for_reward_fulfillment.sql` para verificar `private.has_restaurant_permission(..., 'loyalty')`; a matriz de testes confirma bloqueio após revogação e sucesso após reposição. A migration depende da tabela/RPC de permissões granulares, que ainda não existe no Supabase alojado. A correção não está ativa em produção.
+
+Nenhuma alteração de schema, migration, função, política, permissão ou dado foi aplicada ao Supabase alojado nesta integração.
+
+---
+
 # StudioMesa — auditoria de fecho comercial
 
 **Data da auditoria:** 10 de novembro de 2026  
