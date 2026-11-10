@@ -29,6 +29,7 @@ ResponseBodyReader.requireDeclaredLengthWithinLimit(connection.contentLengthLong
 val stream = if (success) connection.inputStream else connection.errorStream
 val bytes = ResponseBodyReader.readBytes(stream, responseLimitBytes)
 }
+fun listAssistantConversations() {}
 AssistantMessagePaginationPolicy.nextOffset(currentOffset = offset, requestedLimit = limit, returnedRows = page.length(), totalRows = combined.length())
 val historyQuery = "&order=created_at.desc,id.desc&limit=$requestedLimit&offset=$offset"
 throw BackendHttpException(code, path, ApiErrorMessage.sanitize(message, code))
