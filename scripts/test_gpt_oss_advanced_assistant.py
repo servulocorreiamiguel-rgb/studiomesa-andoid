@@ -9,9 +9,28 @@ EDGE = (ROOT / "supabase/functions/studiomesa-advanced-assistant/index.ts").read
 ACTIVITY = (ROOT / "app/src/main/java/pt/studiomesa/app/MainActivity.kt").read_text()
 CONTEXT = (ROOT / "app/src/main/java/pt/studiomesa/app/AdvancedAssistantCloudContextBuilder.kt").read_text()
 DOC = (ROOT / "docs/AI-ADVANCED-GPT-OSS-2026-11-10.md").read_text()
+GRADLE = (ROOT / "app/build.gradle.kts").read_text()
 
 
 class GptOssAssistantPrivacyTests(unittest.TestCase):
+    def test_cloud_model_is_disabled_by_default_until_release_gates_are_met(self):
+        self.assertIn(
+            'providers.gradleProperty("studiomesaAdvancedAssistantCloudEnabled").orNull == "true"',
+            GRADLE,
+        )
+        self.assertIn(
+            'buildConfigField("boolean", "ADVANCED_ASSISTANT_CLOUD_ENABLED", advancedAssistantCloudEnabled.toString())',
+            GRADLE,
+        )
+        self.assertIn("BuildConfig.ADVANCED_ASSISTANT_CLOUD_ENABLED", ACTIVITY)
+        self.assertIn("if (advancedAssistantCloudAvailable())", ACTIVITY)
+        self.assertIn("GPT-OSS 120B online ainda não está ativo nesta versão", ACTIVITY)
+
+    def test_cloud_ai_consent_discloses_current_token_pricing(self):
+        self.assertIn("USD 0,15 por milhão de tokens de entrada", ACTIVITY)
+        self.assertIn("USD 0,60 por milhão de tokens de saída", ACTIVITY)
+        self.assertIn("limites de despesa", ACTIVITY)
+
     def test_uses_the_expected_open_weight_model_and_hides_reasoning(self):
         self.assertIn('const MODEL_ID = "openai/gpt-oss-120b"', EDGE)
         self.assertIn("include_reasoning: false", EDGE)
