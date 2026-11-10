@@ -1,57 +1,76 @@
-# StudioMesa — IA avançada com pesos abertos
+# StudioMesa — IA avançada GPT-OSS 120B
 
 **Data:** 10 de novembro de 2026  
-**Estado:** código no repositório; ainda não publicado nem configurado no Supabase.
+**Branch:** `feature/gpt-oss-agent-tools-2026-11-10`  
+**Estado do código:** integração Android e Edge Function preparadas numa branch de revisão; ainda não publicadas no Supabase nem configuradas com uma chave Groq.
 
-## Objetivo
+## Objetivo e limites
 
-A IA local usa LFM2.5-1.2B-Instruct INT4 e um contexto aproximado de 4 096 tokens. É útil para operação offline e ferramentas determinísticas, mas não tem a capacidade de um modelo de raciocínio de grande dimensão.
+O StudioMesa mantém dois motores:
 
-Foi preparada uma opção avançada baseada no **gpt-oss-120b**, modelo de pesos abertos publicado pela OpenAI e servido através da API compatível com OpenAI da Groq. Não é o modelo proprietário do ChatGPT Free, não é servido pela API da OpenAI e não deve ser anunciado como equivalente ao ChatGPT.
+- **IA local:** LFM2.5-1.2B-Instruct INT4, executada através de LiteRT-LM. Continua disponível offline depois da transferência inicial do modelo.
+- **IA avançada opcional:** `openai/gpt-oss-120b`, executada pela API compatível com OpenAI da Groq. É um modelo de pesos abertos da OpenAI, mas não é o ChatGPT Free, não é servido pela API da OpenAI e não deve ser anunciado como equivalente ao ChatGPT.
 
-## Arquitetura no código
+O GPT-OSS 120B é um modelo de texto. A análise de faturas continua a ser feita pelo OCR local do StudioMesa e exige confirmação humana. O modelo não aprova, altera ou paga documentos e não escreve na base de dados.
 
-- O Android mantém o motor local como alternativa offline.
-- O proprietário pode ativar explicitamente a IA avançada online no chat.
-- A aplicação chama a Edge Function autenticada `studiomesa-advanced-assistant`.
-- A função confirma o JWT com Supabase Auth e consulta `restaurant_staff` com o JWT do próprio utilizador; exige papel `owner` no `restaurant_id` pedido. Não usa `service_role`.
-- O segredo `GROQ_API_KEY` fica exclusivamente nos segredos das Edge Functions do Supabase.
-- O modelo recebe o histórico recente e um resumo agregado gerado no dispositivo.
-- A resposta é consultiva: não executa RPCs nem altera registos.
-- `reasoning_effort=high` pede análise mais exigente; `reasoning_format=hidden` não apresenta raciocínio interno como resposta.
+## Capacidades previstas nesta integração
+
+1. **Raciocínio aprofundado:** `reasoning_effort=high` nas perguntas normais; o conteúdo de raciocínio interno é excluído da resposta.
+2. **Execução de código:** `code_interpreter` permite ao modelo executar Python num ambiente isolado para apoiar cálculos e análise de dados. Não recebe permissões para escrever no StudioMesa.
+3. **Pesquisa na Web:** `browser_search` é disponibilizado quando a pergunta pede explicitamente pesquisa pública ou informação atual. Nesse pedido, apenas a pergunta atual é enviada ao fornecedor; não são enviados histórico, Memória nem resumo privado do restaurante.
+4. **Memória curta:** nas perguntas normais, o modelo recebe um resumo da Memória guardada, limitado a 350 caracteres. A autorização antiga deixa de ser válida e o proprietário tem de aceitar novamente o novo aviso.
+5. **Continuidade:** podem ser enviadas até dez perguntas anteriores escritas pelo utilizador. As respostas anteriores do assistente não são encaminhadas, para evitar retransmitir dados provenientes de ferramentas locais.
+
+A pesquisa web é isolada do contexto privado. A execução de código é disponibilizada sem ser obrigatória em todas as mensagens. Nenhuma destas ferramentas pode alterar preços, stock, pedidos, reservas, documentos, permissões ou pagamentos.
 
 ## Dados enviados e excluídos
 
-**Enviados, após ativação explícita:**
-- Pergunta atual e até dez perguntas recentes escritas pelo utilizador; respostas anteriores do assistente nunca são encaminhadas, para evitar reenviar metadados de faturas devolvidos por ferramentas locais.
-- Nome/categoria dos artigos, preço e custo unitário registados.
-- Quantidades e limites de stock, apenas se a cache estiver atualizada.
-- Número de pedidos ativos/em preparação e número agregado de reservas pendentes.
-- Estatísticas agregadas de pedidos concluídos por dia da semana e previsão nominal dos próximos sete dias.
+**Perguntas normais, após consentimento renovado:**
+- pergunta atual e até dez perguntas recentes escritas pelo utilizador;
+- Memória curta editável, limitada a 350 caracteres;
+- nomes/categorias dos artigos, preços e custos unitários registados;
+- quantidades/limites de stock quando a cache foi carregada;
+- contagens agregadas de pedidos/reservas e estatísticas/previsões de vendas.
 
-**Excluídos do resumo:**
-- PDFs, imagens, faturas e texto OCR.
-- Nomes/contactos/notas de clientes ou reservas.
-- Dados da equipa.
-- Memória do assistente.
-- Identificadores internos ou credenciais.
+**Pesquisa pública explícita:**
+- apenas a pergunta atual;
+- não envia Memória, histórico nem resumo operacional do restaurante.
 
-O endpoint bloqueia padrões conhecidos de email, telefone, NIF e IBAN. Este filtro é uma defesa adicional, não uma garantia de anonimização. Os nomes dos artigos e os valores comerciais continuam a ser informação confidencial do restaurante.
+**Nunca incluídos no payload do modelo nesta integração:**
+- PDFs, imagens, faturas e texto OCR;
+- nomes/contactos/notas de clientes ou reservas;
+- dados da equipa, credenciais, identificadores internos ou dados bancários.
 
-## Dados e fornecedor
+O endpoint bloqueia padrões conhecidos de email, telefone, NIF e IBAN. Este filtro é uma defesa adicional, não uma garantia de anonimização. Os nomes dos artigos, preços, custos e estatísticas comerciais continuam a ser informação confidencial.
 
-A documentação de dados da Groq indica que pedidos de inferência não são retidos por defeito, mas podem ser temporariamente registados até 30 dias para fiabilidade ou prevenção de abuso; existe uma opção Zero Data Retention. A documentação também indica armazenamento de dados retidos em infraestrutura GCP nos EUA. É necessário rever o DPA, transferências internacionais, base legal, transparência e configuração ZDR antes de dados reais.
+## Fornecedores e privacidade
 
-O plano gratuito tem limites sujeitos a alteração. Quando a quota é atingida, o endpoint devolve erro 429. Não há garantia de capacidade contínua, SLA ou utilização comercial gratuita.
+- Inferência: Groq.
+- Pesquisa web: Browser Search integrado da Groq, alimentado por Exa.
+- Execução de código: Code Interpreter integrado da Groq, num ambiente sandbox.
+
+A documentação da Groq indica que os pedidos de inferência não são retidos por defeito. Em situações limitadas de fiabilidade ou prevenção de abuso, entradas e saídas podem ser registadas até 30 dias; a organização pode ativar Zero Data Retention nas definições de dados. Dados retidos são armazenados em buckets GCP nos EUA. Browser Search e Code Interpreter não estão disponíveis em endpoints regionais/soberanos. Antes de dados reais, é necessária revisão do DPA, subcontratantes, transferências internacionais, base legal, transparência, retenção e configuração ZDR.
+
+O escalão gratuito tem limites que podem mudar; não existe garantia de quota contínua, SLA ou utilização comercial gratuita. As ferramentas integradas podem ter condições próprias.
+
+## Segurança implementada no código
+
+- A Edge Function confirma o JWT com Supabase Auth.
+- Consulta a associação do utilizador em `restaurant_staff` e exige papel `owner` no restaurante pedido.
+- Não utiliza `service_role`; a chave Groq fica apenas nos segredos da Edge Function.
+- Mensagens, contexto e Memória são validados e limitados antes do envio.
+- A pesquisa pública não recebe histórico, Memória nem contexto do restaurante.
+- O raciocínio interno e os dados brutos de execução de ferramentas não são devolvidos à aplicação.
+- Não existe ferramenta de escrita na base de dados.
 
 ## Configuração ainda necessária
 
-1. Criar uma conta/organização de fornecedor sob responsabilidade do titular legal adequado e aceitar os termos aplicáveis.
-2. Criar a chave API Groq e definir `GROQ_API_KEY` em Supabase → Edge Functions → Secrets. Nunca inserir a chave no Android, GitHub, ficheiros de configuração ou mensagens.
-3. Publicar a Edge Function `studiomesa-advanced-assistant` com `verify_jwt=true`.
-4. Testar com dois proprietários de restaurantes diferentes e uma conta staff: só o proprietário do restaurante correspondente deve receber acesso.
-5. Testar bloqueio de NIF/IBAN/telefone/email, payloads grandes, 429, falhas do fornecedor, sessões expiradas e mudança de conta/restaurante.
-6. Comparar recomendações com os calculadores determinísticos e testar casos financeiros sintéticos.
-7. Obter revisão legal/privacidade e DPA antes de ativar em clientes.
+1. Criar uma conta de fornecedor sob responsabilidade do titular legal adequado e rever os termos.
+2. Criar uma chave Groq e guardá-la como `GROQ_API_KEY` nos segredos das Edge Functions do Supabase. Nunca colocar a chave no APK, GitHub ou mensagens.
+3. Publicar `studiomesa-advanced-assistant` com `verify_jwt=true`.
+4. Testar duas contas de proprietários de restaurantes diferentes e uma conta de funcionário.
+5. Testar bloqueio de identificadores, pedidos grandes, erros 429, falhas do fornecedor, sessões expiradas, pesquisa pública e isolamento de contexto.
+6. Rever DPA, política de privacidade, subcontratantes, transferências e retenção antes de dados reais.
+7. Executar testes físicos no OPPO A5m e medir latência, RAM, bateria e estabilidade da IA local.
 
-**Estado atual:** o código Android e a Edge Function estão preparados no repositório, mas a IA avançada não funciona até o segredo ser configurado e a função publicada. A IA local continua disponível sem este fornecedor.
+**Estado real:** o projeto Supabase consultado não tem ainda a Edge Function `studiomesa-advanced-assistant` publicada. O código nesta branch não ativa o serviço online por si só. Falta configurar a chave e publicar a função depois da revisão e aprovação. A IA local continua a ser o caminho alternativo.

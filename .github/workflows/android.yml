@@ -50,6 +50,9 @@ jobs:
       - name: Test Supabase Edge Function dependency pin audit
         run: python3 scripts/test_check_supabase_edge_dependency_pins.py
 
+      - name: Test GPT-OSS advanced assistant privacy and tool routing
+        run: python3 scripts/test_gpt_oss_advanced_assistant.py
+
       - name: Audit Supabase Edge Function dependency pins
         run: python3 scripts/check_supabase_edge_dependency_pins.py
 
@@ -123,6 +126,17 @@ jobs:
 
       - name: Run unit tests for every distributed variant
         run: gradle --no-daemon testEssencialRestauranteDebugUnitTest testProfissionalRestauranteDebugUnitTest testProfissionalClienteDebugUnitTest testPremiumRestauranteDebugUnitTest testPremiumClienteDebugUnitTest
+
+      - name: Upload unit test reports, including failures
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: StudioMesa-Unit-Test-Reports
+          path: |
+            app/build/test-results/**/*.xml
+            app/build/reports/tests/**/*.html
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Run Android lint
         timeout-minutes: 10

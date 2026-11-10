@@ -1075,7 +1075,7 @@ class MainActivity : ComponentActivity() {
             }, LinearLayout.LayoutParams(-1, dp(40)))
             composerArea.addView(label(
                 if (advancedAssistantEnabled())
-                    "Online: envia as últimas perguntas que escreveste e indicadores agregados do restaurante. Não envia faturas, OCR, clientes, reservas detalhadas ou Memória."
+                    "Online: perguntas normais enviam histórico recente, Memória curta e indicadores agregados. Pesquisa pública envia só a pergunta atual. Nunca envia faturas, OCR, clientes ou reservas detalhadas."
                 else
                     "Opcional. A IA local continua disponível; o modo online usa um fornecedor externo e limites gratuitos.",
                 8.5f, false, muted
@@ -1762,7 +1762,7 @@ class MainActivity : ComponentActivity() {
 
     private fun advancedAssistantPreferenceKey(): String {
         val ownerId = backendPrefs.getString("user_id", "").orEmpty()
-        return "assistant_advanced_ai_enabled_${ownerId}_${backendRestaurantId()}"
+        return "assistant_advanced_ai_enabled_v2_${ownerId}_${backendRestaurantId()}"
     }
 
     private fun isRemoteRestaurantOwner(): Boolean =
@@ -1794,10 +1794,11 @@ class MainActivity : ComponentActivity() {
         AlertDialog.Builder(this)
             .setTitle("Ativar IA avançada online")
             .setMessage(
-                "O StudioMesa passará a usar o modelo GPT-OSS 120B da OpenAI, alojado pela Groq. Para responder, envia ao fornecedor a pergunta atual, até 10 perguntas recentes escritas por ti e um resumo de dados do restaurante: nomes/preços/custos da carta, stock e estatísticas agregadas de pedidos e previsões.\n\n" +
-                    "Não são enviados PDFs, faturas, texto OCR, dados de clientes, contactos/notas de reservas, dados de funcionários nem a Memória. Evita escrever identificadores pessoais ou bancários.\n\n" +
-                    "A Groq indica que, por defeito, não conserva os pedidos de inferência, mas pode registar temporariamente entradas/saídas até 30 dias para fiabilidade ou prevenção de abuso; os dados armazenados pelo serviço ficam nos EUA. Existe uma opção Zero Data Retention, que ainda tem de ser avaliada/configurada.\n\n" +
-                    "O escalão gratuito tem limites e pode recusar pedidos quando a quota se esgota. Este modo ainda não está autorizado para dados reais ou uso comercial até estarem concluídos o contrato/DPA, a revisão de privacidade e a configuração do fornecedor. A chave privada fica apenas no servidor Supabase, nunca no APK."
+                "O StudioMesa vai usar o modelo GPT-OSS 120B da OpenAI através da Groq. Nas perguntas normais, são enviados ao fornecedor a pergunta atual, até 10 perguntas recentes escritas por ti, um resumo dos dados operacionais e uma versão curta da Memória guardada.\n\n" +
+                    "Quando pedes pesquisa pública na Web ou informação atual, o servidor envia apenas a pergunta atual: não envia histórico, Memória nem dados do restaurante. A ferramenta Browser Search pode pesquisar na Web; a ferramenta Code Interpreter pode executar Python para apoiar cálculos e análise. Ambas são executadas na infraestrutura da Groq.\n\n" +
+                    "Não são enviados PDFs, imagens de faturas, texto OCR, nomes/contactos de clientes, detalhes de reservas, dados de funcionários ou dados bancários. O filtro automático de identificadores é apenas uma proteção adicional e não garante anonimização total.\n\n" +
+                    "A documentação da Groq indica que os pedidos de inferência não são retidos por defeito. Em situações limitadas de fiabilidade ou prevenção de abuso, entradas e saídas podem ser registadas até 30 dias; a organização pode ativar Zero Data Retention nas definições de dados da Groq. Dados retidos são armazenados em buckets GCP nos EUA. A pesquisa e a execução de código têm condições próprias e não estão disponíveis em endpoints regionais/soberanos.\n\n" +
+                    "O escalão gratuito tem limites que podem mudar; não existe garantia de quota ou utilização comercial gratuita. Esta função não deve ser usada com dados reais nem vendida até existir revisão de privacidade, DPA, avaliação dos subcontratantes e configuração do fornecedor. A chave privada fica apenas nos segredos do servidor Supabase."
             )
             .setNegativeButton("Cancelar", null)
             .setPositiveButton("Aceito e ativar") { _, _ ->
@@ -2181,7 +2182,13 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 messages.put(JSONObject().put("role", "user").put("content", question))
-                val cloudContext = AdvancedAssistantCloudContextBuilder.build(assistantSnapshot())
+                val memorySnippet = AssistantAutomaticMemoryPolicy.contextSnippet(
+                    assistantChatStore.readMemory(scope)
+                )
+                val cloudContext = AdvancedAssistantCloudContextBuilder.build(
+                    snapshot = assistantSnapshot(),
+                    memorySnippet = memorySnippet
+                )
                 val token = backendToken()
                 val restaurantId = backendRestaurantId()
                 val requestUserId = backendPrefs.getString("user_id", "").orEmpty()
