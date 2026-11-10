@@ -4,7 +4,7 @@
 **Código principal auditado:** `52f858ad293f4ce557758fab60fdcc3a9321d6cf` (merge da PR #105 em `main`).  
 **Revisão de segurança:** PR #105 — `release/commercial-hardening-2026-11-10`, integrada por squash.  
 **CI da PR #105:** execução `42782322112`, commit `4588aae932e880146094a0385392440b914bae5b`, todos os quatro jobs concluídos com sucesso.  
-**CI pós-merge em `main`:** execução `42791471088`; o teste de migrações/autorização já passou; o job Android ainda estava a executar Android Lint na última consulta.  
+**CI mais recente em `main`:** [execução `42792956250`](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42792956250), commit `0177c6aa3e62c5e70b20f620be4576858ab67837`; os quatro jobs terminaram com sucesso. Incluiu build/testes das cinco variantes, Android Lint, auditorias de segurança, replay PostgreSQL/autorização e smoke tests em Android 8 e 16. O artefacto APK é de demonstração/debug, não uma release comercial assinada.  
 **Decisão:** **NÃO LIBERADO para piloto com dados reais, venda ou publicação.**
 
 ## O que está verificado
@@ -21,7 +21,9 @@
 - [x] Análise semanal, previsão de sete dias, feriados nacionais, eventos locais configuráveis, padrões de maior afluência e cálculos económicos locais estão presentes na `main`, com testes associados. A comparação da PR #100 confirmou que a proposta antiga contém versões já existentes e versões ultrapassadas; a PR #100 foi fechada sem merge para proteger as melhorias posteriores do assistente.
 - [x] CI final da PR #105 (`42782322112`): compilação das cinco variantes, testes unitários de todas as variantes, Android Lint, validação da configuração comercial, replay PostgreSQL/autorização e smoke tests Android 8 e Android 16 — todos concluídos com sucesso.
 - [x] PR #105 integrada na `main` por squash no commit `52f858ad293f4ce557758fab60fdcc3a9321d6cf`.
-- [ ] CI pós-merge da `main` (`42791471088`) ainda não concluída na última consulta: o job PostgreSQL/autorização passou; o job Android estava na etapa Android Lint.
+- [x] Auditoria read-only do Supabase às 10:06 UTC de 10/11/2026: projeto `ACTIVE_HEALTHY`, 63 migrações remotas, 26 tabelas com RLS ativo e bucket de faturas privado. A inspeção confirmou que as três tabelas opcionais continuam ausentes e que não existem privilégios diretos `anon`/`authenticated`/`PUBLIC` nas 11 tabelas sem políticas assinaladas pelo Advisor.
+- [x] Advisor atual consultado: 42 funções `SECURITY DEFINER` executáveis por `authenticated`, 11 tabelas RLS sem políticas, proteção de palavras-passe comprometidas desativada, quatro FKs sem índice de cobertura e 45 índices sem utilização observada. Os avisos exigem revisão individual; não foram aplicadas revogações ou alterações de esquema.
+- [x] CI mais recente da `main` (`42792956250`, commit `0177c6aa3e62c5e70b20f620be4576858ab67837`): os quatro jobs passaram. Os testes incluem build e testes unitários das cinco variantes, Android Lint, auditorias de segurança, replay de migrações/autorização e smoke tests Android 8/16. Os APKs publicados como artefacto são debug/demo.
 
 ### Backend incompatível com funcionalidades opcionais
 
