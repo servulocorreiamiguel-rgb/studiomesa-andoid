@@ -20,6 +20,8 @@ def audit_http_client(source: str) -> list[str]:
         ("ApiErrorMessage.sanitize(message, code)", "HTTP error messages must be sanitized before display."),
         ("BackendHttpException(code, path,", "HTTP errors must preserve status/path metadata without exposing raw response bodies."),
         ("ResponseBodyReader.readBytes(stream, responseLimitBytes)", "Private Storage responses must use the bounded byte reader."),
+        ("AssistantMessagePaginationPolicy.nextOffset(", "Assistant history must be downloaded in bounded pages."),
+        ("&order=created_at.asc,id.asc&limit=$requestedLimit&offset=$offset", "Assistant history pages must use stable ordering and offsets."),
     )
     for fragment, message in required_fragments:
         if fragment not in source:
