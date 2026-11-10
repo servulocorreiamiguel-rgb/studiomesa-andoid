@@ -20,6 +20,18 @@ O workflow `.github/workflows/commercial-release.yml` foi preparado para criar c
 
 Os APKs do workflow normal continuam a usar os identificadores `pt.studiomesa.preview.*`. A configuração comercial é opt-in e não altera a identidade dos APKs de demonstração.
 
+## Início de sessão social — adiado até depois da primeira venda
+
+Os botões **Continuar com Google** e **Continuar com Microsoft (Outlook)** estão ocultos por defeito na primeira versão comercial. O início de sessão inicial mantém-se por email/palavra-passe; SMTP próprio e confirmação de email continuam obrigatórios.
+
+A implementação OAuth com PKCE foi preservada. Para voltar a mostrar os botões numa versão posterior, depois de criar e configurar as credenciais Google/Microsoft no Supabase e testar os Redirect URLs, compila com:
+
+```bash
+-PstudiomesaSocialLoginButtonsEnabled=true
+```
+
+Não ativar esta propriedade na primeira release. O valor por defeito é `false`, incluindo nos builds de demonstração e no workflow comercial.
+
 ## Decisão obrigatória: identificadores das aplicações
 
 A configuração de sabores atual produz aplicações separadas para Essencial/Profissional/Premium e Gestão/Cliente. O workflow comercial acrescenta os sufixos de sabor ao identificador base definido na variável `STUDIOMESA_RELEASE_APPLICATION_ID`.
