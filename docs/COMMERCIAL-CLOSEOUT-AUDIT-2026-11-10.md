@@ -51,6 +51,23 @@ Projeto `svwvkfsyevuyabelrtjk`, região `eu-west-1`, estado `ACTIVE_HEALTHY`, Po
 
 Não ativar a IA avançada nem anunciar pesquisa Web como operacional sem configuração, testes autenticados, limites de despesa e validação de privacidade.
 
+## 4A. Storage de faturas — verificação read-only
+
+- Bucket `studiomesa-invoices`: privado (`public=false`), limite 25 MiB e MIME types PDF, JPEG, PNG e WebP.
+- Políticas SQL de Storage observadas: INSERT, SELECT e DELETE apenas para `authenticated`; cada política verifica uma associação `restaurant_staff` do utilizador autenticado com papel `owner` para o `restaurant_id` no primeiro segmento do caminho.
+- Não foi encontrada uma política UPDATE; não assumir que a substituição de ficheiros por upsert está permitida.
+- Isto valida as regras diretas configuradas, não a experiência completa de upload, download, eliminação, conflitos, ficheiros malformados, sessão expirada ou isolamento entre dois proprietários. Esses testes continuam obrigatórios.
+
+## 4B. Notas da revisão estática das funções
+
+Foi efetuada uma classificação estática das 47 definições `SECURITY DEFINER`, sem execução de operações de escrita:
+
+- As funções que gerem stock, pontos, reservas, equipa, preços ou campanhas usam verificações de associação ao restaurante e/ou de proprietário; a validação concreta de cada fluxo e respetivos parâmetros continua pendente.
+- As funções do cliente analisadas (menu, cartão de fidelização, reservas próprias, notificações e consentimento de marketing) filtram os registos pelo utilizador autenticado ou pela sua associação de fidelização.
+- `request_restaurant_membership` permite pedir adesão a um restaurante identificado, mas bloqueia contas já associadas/geridas e limita a conta cliente a uma associação nesta versão.
+- `search_restaurants_by_name` exige sessão, query entre 3 e 80 caracteres e devolve apenas identificador/nome com limite de 10 resultados.
+- Não foi encontrada uma função executável por `anon`; os privilégios elevados estão disponíveis a `authenticated` apenas nas 42 RPCs intencionais identificadas. Esta classificação não é um pentest, não prova ausência de BOLA/IDOR e não substitui ensaios com identidades reais.
+
 ## 5. Bloqueios que exigem configuração, testes ou decisão fora do código
 
 1. **Email/SMTP:** configurar domínio/remetente e SMTP próprio no Supabase Auth; validar confirmação, recuperação, refresh, logout e eliminação com contas descartáveis. As ferramentas ligadas não permitem configurar diretamente estes parâmetros nem testar uma caixa de correio real.
