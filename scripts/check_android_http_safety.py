@@ -16,7 +16,9 @@ def audit_http_client(source: str) -> list[str]:
     required_fragments = (
         ("instanceFollowRedirects = false", "HTTP redirects must be disabled for authenticated API calls."),
         ("useCaches = false", "Authenticated API responses must not use the HttpURLConnection cache."),
-        ("ResponseBodyReader.read(stream)", "HTTP response bodies must be read with a byte limit."),
+        ("ResponseBodyReader.read(stream, responseLimitBytes)", "HTTP response bodies must use an explicit byte limit."),
+        ("MAX_JSON_RESPONSE_BYTES = 4 * 1024 * 1024", "Successful JSON responses must retain the 4 MiB bound."),
+        ("MAX_JSON_ERROR_BODY_BYTES = 64 * 1024", "JSON error bodies must be bounded to 64 KiB."),
         ("ApiErrorMessage.sanitize(message, code)", "HTTP error messages must be sanitized before display."),
         ("BackendHttpException(code, path,", "HTTP errors must preserve status/path metadata without exposing raw response bodies."),
         ("ResponseBodyReader.readBytes(stream, responseLimitBytes)", "Private Storage responses must use the bounded byte reader."),
@@ -26,6 +28,10 @@ def audit_http_client(source: str) -> list[str]:
     for fragment, message in required_fragments:
         if fragment not in source:
             errors.append(message)
+    if source.count("ResponseBodyReader.read(stream, responseLimitBytes)") < 2:
+        errors.append("Both authenticated JSON request paths must use the bounded response reader.")
+    if source.count("if (success) MAX_JSON_RESPONSE_BYTES else MAX_JSON_ERROR_BODY_BYTES") < 2:
+        errors.append("Both JSON request paths must use the success/error body limits.")
 
     if "stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()" in source:
         errors.append("Unbounded HTTP response reading is forbidden; use ResponseBodyReader.")
