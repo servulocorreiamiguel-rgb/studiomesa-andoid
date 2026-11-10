@@ -1,3 +1,11 @@
+> **Atualização de estado — após a integração da PR #106, 10/11/2026.** A CI integral do commit `c217bfdfb4fccb30b2e71f0e844f8b1dbbe18327` passou os quatro jobs (build/testes das cinco variantes, Lint, replay PostgreSQL/autorização e emuladores Android 8/16): [execução 42834074139](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42834074139). Foram entretanto adicionadas alterações para manter a IA cloud GPT-OSS desativada por omissão e divulgar os custos atuais; estas alterações exigem nova CI antes de assinar uma release.
+>
+> **IA cloud:** o código GPT-OSS 120B está no repositório, mas `studiomesa-advanced-assistant` ainda não está publicada no Supabase e `GROQ_API_KEY` não está configurada. A propriedade de build `studiomesaAdvancedAssistantCloudEnabled` está desativada por omissão. A tarifa atualmente publicada para GPT-OSS 120B na Groq é USD 0,15/1M tokens de entrada e USD 0,60/1M tokens de saída; não anunciar o serviço como gratuito. Ver [modelos Groq](https://console.groq.com/docs/models) e [limites](https://console.groq.com/docs/rate-limits).
+>
+> **Licença local:** o LFM Open License v1.0 condiciona a utilização comercial a receita anual inferior a USD 10 milhões para a entidade abrangida. Confirmar a licença e a entidade que vai distribuir antes da venda: https://www.liquid.ai/lfm-license
+>
+> **Fonte de estado atual:** [atualização de preparação comercial de 10/11/2026](COMMERCIAL-READINESS-UPDATE-2026-11-10.md). Em caso de conflito com a fotografia histórica abaixo, prevalece esta atualização e o relatório ligado.
+>
 # StudioMesa — gate de lançamento comercial
 
 **Data:** 10 de novembro de 2026  
