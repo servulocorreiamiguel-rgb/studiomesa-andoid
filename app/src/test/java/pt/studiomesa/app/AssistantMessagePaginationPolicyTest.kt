@@ -8,20 +8,20 @@ import org.junit.Test
 class AssistantMessagePaginationPolicyTest {
     @Test
     fun keepsPageAndTotalLimitsWithinTheJsonResponseBudget() {
-        assertEquals(200, AssistantMessagePaginationPolicy.PAGE_SIZE)
+        assertEquals(100, AssistantMessagePaginationPolicy.PAGE_SIZE)
         assertEquals(5_000, AssistantMessagePaginationPolicy.MAX_MESSAGES)
-        assertTrue(AssistantMessagePaginationPolicy.PAGE_SIZE * 6_000 < 2 * 1024 * 1024)
+        assertTrue(AssistantMessagePaginationPolicy.PAGE_SIZE * 6_000 * 4 < 4 * 1024 * 1024)
     }
 
     @Test
     fun advancesOnlyAfterAFullPage() {
         assertEquals(
-            200,
+            100,
             AssistantMessagePaginationPolicy.nextOffset(
                 currentOffset = 0,
-                requestedLimit = 200,
-                returnedRows = 200,
-                totalRows = 200
+                requestedLimit = 100,
+                returnedRows = 100,
+                totalRows = 100
             )
         )
     }
@@ -30,7 +30,7 @@ class AssistantMessagePaginationPolicyTest {
     fun stopsAfterShortFinalPage() {
         assertNull(
             AssistantMessagePaginationPolicy.nextOffset(
-                currentOffset = 200,
+                currentOffset = 100,
                 requestedLimit = 200,
                 returnedRows = 37,
                 totalRows = 237
@@ -42,9 +42,9 @@ class AssistantMessagePaginationPolicyTest {
     fun stopsAtTheFiveThousandMessageSafetyCap() {
         assertNull(
             AssistantMessagePaginationPolicy.nextOffset(
-                currentOffset = 4_800,
-                requestedLimit = 200,
-                returnedRows = 200,
+                currentOffset = 4_900,
+                requestedLimit = 100,
+                returnedRows = 100,
                 totalRows = AssistantMessagePaginationPolicy.MAX_MESSAGES
             )
         )
@@ -54,9 +54,9 @@ class AssistantMessagePaginationPolicyTest {
     fun supportsTheShortFinalPageAtTheConfiguredCap() {
         assertNull(
             AssistantMessagePaginationPolicy.nextOffset(
-                currentOffset = 4_800,
-                requestedLimit = 200,
-                returnedRows = 199,
+                currentOffset = 4_900,
+                requestedLimit = 100,
+                returnedRows = 99,
                 totalRows = 4_999
             )
         )
@@ -65,10 +65,10 @@ class AssistantMessagePaginationPolicyTest {
     @Test
     fun rejectsInvalidPaginationInputs() {
         val invalid = listOf(
-            Triple(-1, 200, 200),
+            Triple(-1, 100, 100),
             Triple(0, 0, 0),
-            Triple(0, 201, 201),
-            Triple(0, 200, 201)
+            Triple(0, 101, 101),
+            Triple(0, 100, 101)
         )
         invalid.forEach { (offset, limit, rows) ->
             try {
