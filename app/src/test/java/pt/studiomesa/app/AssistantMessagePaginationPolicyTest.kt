@@ -31,9 +31,9 @@ class AssistantMessagePaginationPolicyTest {
         assertNull(
             AssistantMessagePaginationPolicy.nextOffset(
                 currentOffset = 100,
-                requestedLimit = 200,
+                requestedLimit = 100,
                 returnedRows = 37,
-                totalRows = 237
+                totalRows = 137
             )
         )
     }
