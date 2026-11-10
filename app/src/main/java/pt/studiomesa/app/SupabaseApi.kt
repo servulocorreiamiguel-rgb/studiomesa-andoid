@@ -287,7 +287,7 @@ object SupabaseApi {
             val page = JSONArray(
                 call(
                     "GET",
-                    "/rest/v1/restaurant_assistant_messages?select=id,restaurant_id,conversation_id,role,content,created_by,created_at&restaurant_id=eq.$restaurant&order=created_at.asc,id.asc&limit=$requestedLimit&offset=$offset",
+                    "/rest/v1/restaurant_assistant_messages?select=id,restaurant_id,conversation_id,role,content,created_by,created_at&restaurant_id=eq.$restaurant&order=created_at.desc,id.desc&limit=$requestedLimit&offset=$offset",
                     accessToken = token
                 )
             )
@@ -304,7 +304,11 @@ object SupabaseApi {
             offset = nextOffset
         }
 
-        return combined
+        val chronological = JSONArray()
+        for (index in combined.length() - 1 downTo 0) {
+            chronological.put(combined.getJSONObject(index))
+        }
+        return chronological
     }
 
     fun upsertAssistantMessages(token: String, rows: JSONArray) {
