@@ -20,10 +20,15 @@ val responseLimitBytes = if (success) MAX_JSON_RESPONSE_BYTES else MAX_JSON_ERRO
 val text = ResponseBodyReader.read(stream, responseLimitBytes)
 val responseLimitBytes = if (success) MAX_JSON_RESPONSE_BYTES else MAX_JSON_ERROR_BODY_BYTES
 val response = ResponseBodyReader.read(stream, responseLimitBytes)
+private fun binaryStorageRequest(method: String, path: String) {
+val code = connection.responseCode
+val success = code in 200..299
 val responseLimitBytes = if (success) MAX_INVOICE_DOCUMENT_BYTES else MAX_STORAGE_ERROR_BODY_BYTES
 require(bytes.size in 1..MAX_INVOICE_DOCUMENT_BYTES)
 ResponseBodyReader.requireDeclaredLengthWithinLimit(connection.contentLengthLong, responseLimitBytes)
+val stream = if (success) connection.inputStream else connection.errorStream
 val bytes = ResponseBodyReader.readBytes(stream, responseLimitBytes)
+}
 AssistantMessagePaginationPolicy.nextOffset(currentOffset = offset, requestedLimit = limit, returnedRows = page.length(), totalRows = combined.length())
 val historyQuery = "&order=created_at.desc,id.desc&limit=$requestedLimit&offset=$offset"
 throw BackendHttpException(code, path, ApiErrorMessage.sanitize(message, code))
@@ -138,6 +143,13 @@ class AndroidHttpSafetyAuditTests(unittest.TestCase):
         )
         self.assertTrue(any("Both authenticated JSON request paths" in error for error in audit_http_client(changed)))
 
+
+    def test_rejects_storage_stream_opened_before_declared_length_guard(self) -> None:
+        changed = SAFE_CLIENT.replace(
+            "ResponseBodyReader.requireDeclaredLengthWithinLimit(connection.contentLengthLong, responseLimitBytes)\nval stream = if (success) connection.inputStream else connection.errorStream",
+            "val stream = if (success) connection.inputStream else connection.errorStream\nResponseBodyReader.requireDeclaredLengthWithinLimit(connection.contentLengthLong, responseLimitBytes)",
+        )
+        self.assertTrue(any("before opening the response stream" in error for error in audit_http_client(changed)))
 
 if __name__ == "__main__":
     unittest.main()
