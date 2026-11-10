@@ -2,9 +2,17 @@ package pt.studiomesa.app
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AssistantMessagePaginationPolicyTest {
+    @Test
+    fun keepsPageAndTotalLimitsWithinTheJsonResponseBudget() {
+        assertEquals(200, AssistantMessagePaginationPolicy.PAGE_SIZE)
+        assertEquals(5_000, AssistantMessagePaginationPolicy.MAX_MESSAGES)
+        assertTrue(AssistantMessagePaginationPolicy.PAGE_SIZE * 6_000 < 2 * 1024 * 1024)
+    }
+
     @Test
     fun advancesOnlyAfterAFullPage() {
         assertEquals(
