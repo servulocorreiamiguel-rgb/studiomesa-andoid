@@ -8,11 +8,15 @@ from check_android_http_safety import audit_http_client
 
 
 SAFE_CLIENT = """
+private const val BASE_URL = "https://example.supabase.co"
+private const val API_KEY = "sb_publishable_test_key"
 private const val MAX_INVOICE_DOCUMENT_BYTES = 25 * 1024 * 1024
 private const val MAX_STORAGE_ERROR_BODY_BYTES = 64 * 1024
 instanceFollowRedirects = false
 useCaches = false
 val text = ResponseBodyReader.read(stream)
+val responseLimitBytes = if (success) MAX_INVOICE_DOCUMENT_BYTES else MAX_STORAGE_ERROR_BODY_BYTES
+require(bytes.size in 1..MAX_INVOICE_DOCUMENT_BYTES)
 ResponseBodyReader.requireDeclaredLengthWithinLimit(connection.contentLengthLong, responseLimitBytes)
 val bytes = ResponseBodyReader.readBytes(stream, responseLimitBytes)
 throw BackendHttpException(code, path, ApiErrorMessage.sanitize(message, code))
@@ -81,6 +85,21 @@ class AndroidHttpSafetyAuditTests(unittest.TestCase):
             "MAX_STORAGE_ERROR_BODY_BYTES = 1024 * 1024",
         )
         self.assertTrue(any("error body" in error.lower() for error in audit_http_client(changed)))
+
+
+    def test_rejects_non_https_backend_endpoint(self) -> None:
+        changed = SAFE_CLIENT.replace(
+            'BASE_URL = "https://example.supabase.co"',
+            'BASE_URL = "http://example.supabase.co"',
+        )
+        self.assertTrue(any("HTTPS" in error for error in audit_http_client(changed)))
+
+    def test_rejects_privileged_backend_key_in_android_client(self) -> None:
+        changed = SAFE_CLIENT.replace(
+            'API_KEY = "sb_publishable_test_key"',
+            'API_KEY = "sb_secret_do_not_ship"',
+        )
+        self.assertTrue(any("publishable" in error.lower() for error in audit_http_client(changed)))
 
 
 if __name__ == "__main__":
