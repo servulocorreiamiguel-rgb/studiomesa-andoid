@@ -35,6 +35,46 @@ object SupabaseApi {
     }
 
     /**
+     * Routes general chat to a free-only open-model provider chain.
+     * Only user-authored turns are sent; restaurant snapshots, memory and documents stay local.
+     */
+    fun generateRoutedAssistantReply(
+        token: String,
+        restaurantId: String,
+        messages: JSONArray
+    ): JSONObject {
+        require(token.isNotBlank()) { "Inicia sessão antes de usar a IA avançada." }
+        require(restaurantId.matches(Regex("^[0-9a-fA-F-]{36}$"))) {
+            "O restaurante não está identificado corretamente."
+        }
+        require(messages.length() in 1..12) { "O contexto da conversa excede o limite permitido." }
+        for (index in 0 until messages.length()) {
+            val message = messages.optJSONObject(index)
+                ?: throw IllegalArgumentException("A conversa contém uma mensagem inválida.")
+            require(message.optString("role") == "user") {
+                "Só podem ser enviados pedidos escritos pelo utilizador."
+            }
+            require(message.optString("content").length in 1..1_600) {
+                "Cada mensagem deve ter até 1 600 caracteres."
+            }
+        }
+        val response = call(
+            "POST",
+            "/functions/v1/studiomesa-ai-router",
+            JSONObject()
+                .put("restaurant_id", restaurantId)
+                .put("messages", messages),
+            token,
+            readTimeoutMillis = 110_000
+        )
+        val result = JSONObject(response)
+        if (result.optString("reply").isBlank()) {
+            throw IllegalStateException("O assistente avançado não devolveu uma resposta válida.")
+        }
+        return result
+    }
+
+    /**
      * Advanced owner-only reasoning. The model provider key never leaves the Edge Function.
      * The caller sends only recent chat turns and an explicitly approved, minimised snapshot.
      */
