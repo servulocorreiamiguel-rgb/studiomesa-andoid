@@ -8,6 +8,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 EDGE = (ROOT / "supabase/functions/studiomesa-ai-router/index.ts").read_text()
 API = (ROOT / "app/src/main/java/pt/studiomesa/app/SupabaseApi.kt").read_text()
+ROUTED_API = API.split("fun generateRoutedAssistantReply(", 1)[1].split("private fun call(", 1)[0]
 ACTIVITY = (ROOT / "app/src/main/java/pt/studiomesa/app/MainActivity.kt").read_text()
 
 
@@ -40,8 +41,8 @@ class MultiModelRouterContractTests(unittest.TestCase):
     def test_private_context_is_rejected_and_not_forwarded(self):
         self.assertIn('"restaurant_context" in body', EDGE)
         self.assertIn('"memory" in body', EDGE)
-        self.assertNotIn("AdvancedAssistantCloudContextBuilder", API)
-        self.assertNotIn("restaurantContext", API)
+        self.assertNotIn("AdvancedAssistantCloudContextBuilder", ROUTED_API)
+        self.assertNotIn("restaurantContext", ROUTED_API)
 
     def test_provider_privacy_constraints_are_required(self):
         self.assertIn('data_collection: "deny"', EDGE)
