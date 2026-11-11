@@ -56,7 +56,7 @@ class MultiModelAssistantPrivacyTests(unittest.TestCase):
 
     def test_paid_fallback_is_not_available(self):
         self.assertIn('billing: "free_only"', EDGE)
-        self.assertIn("Não existe fallback para modelos pagos", ACTIVITY)
+        self.assertIn("O router não tem fallback para modelos pagos", ACTIVITY)
 
 
 if __name__ == "__main__":
