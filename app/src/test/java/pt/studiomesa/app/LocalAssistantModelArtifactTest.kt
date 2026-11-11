@@ -70,7 +70,7 @@ class LocalAssistantModelArtifactTest {
     fun gemmaLoadFailureFallsBackOnlyToAnInstalledValidLfmArtifact() {
         assertEquals(
             true,
-            LocalAssistantModelPolicy.shouldFallbackToLfmAfterGemmaLoadFailure(
+            LocalAssistantModelPolicy.shouldFallbackToLfm(
                 LocalAssistantModelManager.GEMMA_MODEL_FILENAME,
                 lfmFileExists = true,
                 lfmSizeValid = true,
@@ -79,7 +79,7 @@ class LocalAssistantModelArtifactTest {
         )
         assertEquals(
             false,
-            LocalAssistantModelPolicy.shouldFallbackToLfmAfterGemmaLoadFailure(
+            LocalAssistantModelPolicy.shouldFallbackToLfm(
                 LocalAssistantModelManager.GEMMA_MODEL_FILENAME,
                 lfmFileExists = true,
                 lfmSizeValid = true,
@@ -88,7 +88,7 @@ class LocalAssistantModelArtifactTest {
         )
         assertEquals(
             false,
-            LocalAssistantModelPolicy.shouldFallbackToLfmAfterGemmaLoadFailure(
+            LocalAssistantModelPolicy.shouldFallbackToLfm(
                 LocalAssistantModelManager.MODEL_FILENAME,
                 lfmFileExists = true,
                 lfmSizeValid = true,
