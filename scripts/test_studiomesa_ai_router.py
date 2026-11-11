@@ -98,7 +98,7 @@ class MultiModelRouterContractTests(unittest.TestCase):
 
     def test_no_paid_fallback(self):
         self.assertIn("Não foi utilizado nenhum modelo pago", EDGE)
-        self.assertIn("Não existe fallback para modelos pagos", ACTIVITY)
+        self.assertIn("O router não tem fallback para modelos pagos", ACTIVITY)
 
 
 if __name__ == "__main__":
