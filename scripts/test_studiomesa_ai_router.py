@@ -67,6 +67,14 @@ class MultiModelRouterContractTests(unittest.TestCase):
         self.assertIn("round < 3", EDGE)
         self.assertNotIn("eval(", EDGE)
 
+    def test_calculator_regexes_recognize_digits_decimals_and_whitespace(self):
+        self.assertIn(r'replace(/\s+/g, "")', EDGE)
+        self.assertIn(
+            r'expression.match(/(?:\d+(?:\.\d*)?|\.\d+|[()+\-*/])/g)',
+            EDGE,
+        )
+        self.assertIn(r'/^(?:\d+(?:\.\d*)?|\.\d+)$/', EDGE)
+
     def test_provider_cannot_route_to_unapproved_paid_fallback(self):
         self.assertIn("allow_fallbacks: false", EDGE)
         self.assertIn("require_parameters: true", EDGE)
