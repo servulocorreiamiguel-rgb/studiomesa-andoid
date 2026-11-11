@@ -22,7 +22,7 @@ A seleção é feita no servidor com regras simples e auditáveis. Termos de pro
 - A cadeia seleciona um motor de cada vez; só tenta o modelo seguinte quando o anterior falha. Não executa todos em paralelo nem soma automaticamente as respostas, para reduzir consumo da quota gratuita.
 - Não existe fallback para um modelo pago.
 - Erros de quota, falta de disponibilidade ou ausência de fornecedor que cumpra privacidade terminam em erro controlado. O utilizador pode voltar à IA local.
-- OpenRouter indica atualmente 20 pedidos por minuto e 50 pedidos por dia para variantes gratuitas sem compra de créditos. Os limites podem mudar e pedidos falhados também contam.
+- OpenRouter indica atualmente 20 pedidos por minuto e 50 pedidos por dia para variantes gratuitas sem compra de créditos. Esta quota é da conta/chave OpenRouter e é partilhada por todos os restaurantes que utilizem a mesma chave da StudioMesa; não é uma quota por restaurante. As tentativas falhadas também contam. Os limites podem mudar. O router interrompe a cadeia quando recebe HTTP 429 para não desperdiçar pedidos em tentativas adicionais.
 - DeepSeek API direta e Groq para GPT-OSS 120B têm tarifas por token; por isso não são usados pelo modo free-only.
 - A quota inicial QwenCloud tem validade limitada; não é considerada uma fonte gratuita permanente neste desenho.
 
