@@ -22,7 +22,7 @@ class MultiModelAssistantPrivacyTests(unittest.TestCase):
 
     def test_deepseek_is_selected_for_complex_reasoning(self):
         chain = EDGE.split("reasoning:", 1)[1].split("],", 1)[0]
-        self.assertIn("deepseek/deepseek-v4-flash:free", chain)
+        self.assertIn("deepseek/deepseek-r1:free", chain)
 
     def test_qwen_is_selected_for_programming(self):
         chain = EDGE.split("coding:", 1)[1].split("],", 1)[0]
