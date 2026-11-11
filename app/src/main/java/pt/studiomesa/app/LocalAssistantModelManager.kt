@@ -48,6 +48,20 @@ internal object AssistantModelConversationPolicy {
             activeUserTurns >= maxUserTurnsPerSession
 }
 
+internal object LocalAssistantModelPolicy {
+    fun needsIntegrityVerification(activeModelPath: String, verifiedModelPath: String?): Boolean =
+        verifiedModelPath != activeModelPath
+
+    fun shouldFallbackToLfmAfterGemmaLoadFailure(
+        activeModelFilename: String,
+        lfmFileExists: Boolean,
+        lfmSizeValid: Boolean,
+        lfmHashValid: Boolean
+    ): Boolean =
+        activeModelFilename == LocalAssistantModelManager.GEMMA_MODEL_FILENAME &&
+            lfmFileExists && lfmSizeValid && lfmHashValid
+}
+
 internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
     data class Turn(val role: String, val content: String)
 
@@ -273,7 +287,10 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                 var activeModelFile = installedModelFile()
                     ?: throw IllegalStateException("O modelo local deixou de estar disponível.")
                 var activeArtifact = artifactFor(activeModelFile)
-                if (verifiedModelPath != activeModelFile.absolutePath) {
+                if (LocalAssistantModelPolicy.needsIntegrityVerification(
+                        activeModelFile.absolutePath,
+                        verifiedModelPath
+                    )) {
                     if (!verifySha256(activeModelFile, activeArtifact.sha256)) {
                         throw IllegalStateException("O modelo guardado não passou a verificação de integridade. Transfere-o novamente.")
                     }
@@ -324,10 +341,16 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     val createdEngine = try {
                         createInitializedEngine(activeModelFile, activeArtifact)
                     } catch (primaryError: Exception) {
-                        if (activeArtifact.cacheName != "gemma-4-e2b" ||
-                            !lfmModelFile.isFile ||
-                            lfmModelFile.length() != LFM_MODEL_SIZE_BYTES ||
-                            !verifySha256(lfmModelFile, LFM_MODEL_SHA256)
+                        val lfmExists = lfmModelFile.isFile
+                        val lfmSizeValid = lfmModelFile.length() == LFM_MODEL_SIZE_BYTES
+                        val lfmHashValid = lfmExists && lfmSizeValid &&
+                            verifySha256(lfmModelFile, LFM_MODEL_SHA256)
+                        if (!LocalAssistantModelPolicy.shouldFallbackToLfmAfterGemmaLoadFailure(
+                                activeModelFile.name,
+                                lfmExists,
+                                lfmSizeValid,
+                                lfmHashValid
+                            )
                         ) {
                             throw primaryError
                         }
