@@ -35,6 +35,12 @@ class MultiModelRouterContractTests(unittest.TestCase):
     def test_gpt_oss_20b_is_a_free_alternative(self):
         self.assertIn("openai/gpt-oss-20b:free", EDGE)
 
+    def test_paid_only_requested_variants_are_never_called(self):
+        self.assertNotIn("qwen/qwen3.8-27b:free", EDGE)
+        self.assertNotIn("openai/gpt-oss-120b:free", EDGE)
+        self.assertIn("Qwen 3.8 27B", ACTIVITY)
+        self.assertIn("GPT-OSS 120B", ACTIVITY)
+
     def test_requires_authenticated_owner(self):
         self.assertIn("authenticateOwner(authorization, supabaseUrl, anonKey, restaurantId)", EDGE)
         self.assertIn('searchParams.set("role", "eq.owner")', EDGE)
