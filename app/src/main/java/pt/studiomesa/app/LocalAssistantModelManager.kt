@@ -1,5 +1,6 @@
 package pt.studiomesa.app
 
+import android.app.ActivityManager
 import android.content.Context
 import android.os.StatFs
 import com.google.ai.edge.litertlm.Backend
@@ -108,7 +109,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
     fun shouldOfferGemmaUpgrade(): Boolean =
         canUseGemmaOnThisDevice() &&
             installedModelFile() == lfmModelFile &&
-            !gemmaModelFile.isFile
+            (!gemmaModelFile.isFile || gemmaModelFile.length() != GEMMA_MODEL_SIZE_BYTES)
     private var engine: Engine? = null
     private var conversation: Conversation? = null
     private var activeConversationId: String? = null
