@@ -282,6 +282,9 @@ async function callFreeModel(
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
 
+    if (response.status === 429) {
+      throw new Error("OPENROUTER_RATE_LIMIT");
+    }
     if (!response.ok) return null;
     let payload: unknown;
     try {
@@ -462,8 +465,15 @@ Deno.serve(async (req: Request) => {
         tools_used: result.toolsUsed,
         warning: "Resposta gerada por IA. Confirma factos e decisões importantes.",
       });
-    } catch {
-      // Try the next explicitly free model. No provider error details or prompts are logged.
+    } catch (error) {
+      if (error instanceof Error && error.message === "OPENROUTER_RATE_LIMIT") {
+        return json({
+          code: "FREE_MODELS_RATE_LIMITED",
+          error: "A quota gratuita partilhada do assistente foi atingida. Não foram feitas mais tentativas nem usado qualquer modelo pago. Continua com a IA local ou tenta novamente quando a quota for reposta.",
+        }, 429);
+      }
+      // Other provider failures may try the next explicitly free model.
+      // No provider error details or prompts are logged.
     }
   }
 
