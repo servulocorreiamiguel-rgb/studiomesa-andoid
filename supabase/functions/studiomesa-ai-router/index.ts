@@ -9,22 +9,24 @@ const REQUEST_TIMEOUT_MS = 25_000;
 
 // Every model ID below is an explicitly free variant. The last route is the
 // OpenRouter free-only router. Never replace these with paid model IDs.
+// Rechecked against the current free catalogue on 11 Nov 2026.
+// Qwen 3.8 27B and GPT-OSS 120B are not used here: their current listed
+// API routes are token-priced. Use only verified free variants, then the
+// OpenRouter free-only router. Never add an unpriced alias as a "free" route.
 const MODEL_CHAINS = {
   reasoning: [
     "deepseek/deepseek-r1:free",
-    "openai/gpt-oss-120b:free",
+    "openai/gpt-oss-20b:free",
     "openrouter/free",
   ],
   coding: [
-    "qwen/qwen3.8-27b:free",
-    "openai/gpt-oss-120b:free",
-    "deepseek/deepseek-r1:free",
+    "cohere/north-mini-code:free",
+    "openai/gpt-oss-20b:free",
     "openrouter/free",
   ],
   general: [
-    "qwen/qwen3.8-27b:free",
+    "openai/gpt-oss-20b:free",
     "deepseek/deepseek-r1:free",
-    "openai/gpt-oss-120b:free",
     "openrouter/free",
   ],
 } as const;
@@ -356,6 +358,7 @@ Deno.serve(async (req: Request) => {
         result.actualModel.includes("deepseek") ? "DeepSeek" :
         result.actualModel.includes("qwen") ? "Qwen" :
         result.actualModel.includes("gpt-oss") ? "GPT-OSS" :
+        result.actualModel.includes("north-mini-code") ? "Cohere Code" :
         "Modelo gratuito automático";
       return json({
         provider: "OpenRouter",
