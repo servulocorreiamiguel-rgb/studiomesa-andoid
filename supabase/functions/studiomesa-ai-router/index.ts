@@ -10,19 +10,19 @@ const REQUEST_TIMEOUT_MS = 25_000;
 // OpenRouter free-only router. Never replace these with paid model IDs.
 const MODEL_CHAINS = {
   reasoning: [
-    "deepseek/deepseek-v4-flash:free",
+    "deepseek/deepseek-r1:free",
     "openai/gpt-oss-120b:free",
     "openrouter/free",
   ],
   coding: [
     "qwen/qwen3.8-27b:free",
     "openai/gpt-oss-120b:free",
-    "deepseek/deepseek-v4-flash:free",
+    "deepseek/deepseek-r1:free",
     "openrouter/free",
   ],
   general: [
     "qwen/qwen3.8-27b:free",
-    "deepseek/deepseek-v4-flash:free",
+    "deepseek/deepseek-r1:free",
     "openai/gpt-oss-120b:free",
     "openrouter/free",
   ],
