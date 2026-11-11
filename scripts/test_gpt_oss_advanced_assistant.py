@@ -15,7 +15,7 @@ ROUTED_API = API.split("fun generateRoutedAssistantReply(", 1)[1].split("fun gen
 
 class MultiModelAssistantPrivacyTests(unittest.TestCase):
     def test_every_selected_cloud_model_is_free_only(self):
-        model_ids = re.findall(r'"((?:deepseek|qwen|openai)/[^"]+)"', EDGE)
+        model_ids = re.findall(r'"((?:deepseek|qwen|openai|cohere)/[^"]+)"', EDGE)
         self.assertTrue(model_ids)
         self.assertTrue(all(model.endswith(":free") for model in model_ids))
         self.assertIn('"openrouter/free"', EDGE)
@@ -24,12 +24,12 @@ class MultiModelAssistantPrivacyTests(unittest.TestCase):
         chain = EDGE.split("reasoning:", 1)[1].split("],", 1)[0]
         self.assertIn("deepseek/deepseek-r1:free", chain)
 
-    def test_qwen_is_selected_for_programming(self):
+    def test_cohere_is_selected_for_programming(self):
         chain = EDGE.split("coding:", 1)[1].split("],", 1)[0]
-        self.assertIn("qwen/qwen3.8-27b:free", chain)
+        self.assertIn("cohere/north-mini-code:free", chain)
 
-    def test_gpt_oss_is_a_free_only_fallback(self):
-        self.assertIn("openai/gpt-oss-120b:free", EDGE)
+    def test_gpt_oss_20b_is_a_free_only_fallback(self):
+        self.assertIn("openai/gpt-oss-20b:free", EDGE)
 
     def test_owner_authentication_is_required(self):
         self.assertIn("authenticateOwner(authorization, supabaseUrl, anonKey, restaurantId)", EDGE)
