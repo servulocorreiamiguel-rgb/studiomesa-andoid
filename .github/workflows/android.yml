@@ -52,6 +52,7 @@ jobs:
 
       - name: Test free multi-model assistant router privacy and model routing
         run: |
+          node scripts/test_studiomesa_ai_calculator.mjs
           python3 scripts/test_studiomesa_ai_router.py
           python3 scripts/test_gpt_oss_advanced_assistant.py
 
