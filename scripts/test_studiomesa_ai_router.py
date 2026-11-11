@@ -8,7 +8,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 EDGE = (ROOT / "supabase/functions/studiomesa-ai-router/index.ts").read_text()
 API = (ROOT / "app/src/main/java/pt/studiomesa/app/SupabaseApi.kt").read_text()
-ROUTED_API = API.split("fun generateRoutedAssistantReply(", 1)[1].split("private fun call(", 1)[0]
+ROUTED_API = API.split("fun generateRoutedAssistantReply(", 1)[1].split("fun generateAdvancedAssistantReply(", 1)[0]
 ACTIVITY = (ROOT / "app/src/main/java/pt/studiomesa/app/MainActivity.kt").read_text()
 
 
