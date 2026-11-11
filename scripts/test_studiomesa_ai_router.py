@@ -15,7 +15,7 @@ ACTIVITY = (ROOT / "app/src/main/java/pt/studiomesa/app/MainActivity.kt").read_t
 
 class MultiModelRouterContractTests(unittest.TestCase):
     def test_every_cloud_model_is_explicitly_free(self):
-        model_ids = re.findall(r'"((?:deepseek|qwen|openai)/[^"]+)"', EDGE)
+        model_ids = re.findall(r'"((?:deepseek|qwen|openai|cohere)/[^"]+)"', EDGE)
         self.assertTrue(model_ids)
         self.assertTrue(all(model.endswith(":free") for model in model_ids))
 
@@ -28,12 +28,12 @@ class MultiModelRouterContractTests(unittest.TestCase):
         chain = EDGE.split("reasoning:", 1)[1].split("],", 1)[0]
         self.assertIn("deepseek/deepseek-r1:free", chain)
 
-    def test_routes_programming_to_qwen(self):
+    def test_routes_programming_to_free_coding_model(self):
         chain = EDGE.split("coding:", 1)[1].split("],", 1)[0]
-        self.assertIn("qwen/qwen3.8-27b:free", chain)
+        self.assertIn("cohere/north-mini-code:free", chain)
 
-    def test_gpt_oss_is_an_optional_free_alternative(self):
-        self.assertIn("openai/gpt-oss-120b:free", EDGE)
+    def test_gpt_oss_20b_is_a_free_alternative(self):
+        self.assertIn("openai/gpt-oss-20b:free", EDGE)
 
     def test_requires_authenticated_owner(self):
         self.assertIn("authenticateOwner(authorization, supabaseUrl, anonKey, restaurantId)", EDGE)
