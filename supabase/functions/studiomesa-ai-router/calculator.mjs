@@ -28,7 +28,7 @@ export function calculateExactMath(rawExpression) {
   }
   const expression = rawExpression.replace(/,/g, ".").replace(/\s+/g, "");
   const tokens = expression.match(/(?:\d+(?:\.\d*)?|\.\d+|[()+\-*/])/g) ?? [];
-  if (tokens.length === 0 || tokens.join("") !== expression || tokens.length > 129) {
+  if (tokens.length === 0 || tokens.join("") !== expression || tokens.length > 257) {
     throw new Error("Expression contains unsupported characters or is too complex.");
   }
 
