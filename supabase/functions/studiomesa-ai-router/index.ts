@@ -82,6 +82,9 @@ function calculateExactMath(rawExpression: string): string {
   if (!rawExpression || rawExpression.length > 256) {
     throw new Error("Expression must contain 1 to 256 characters.");
   }
+  if (/\d\s+\d|\.\s+\d/.test(rawExpression)) {
+    throw new Error("Whitespace cannot split a number.");
+  }
   const expression = rawExpression.replace(/,/g, ".").replace(/\s+/g, "");
   const tokens = expression.match(/(?:\d+(?:\.\d*)?|\.\d+|[()+\-*/])/g) ?? [];
   if (tokens.length === 0 || tokens.join("") !== expression || tokens.length > 129) {
@@ -116,7 +119,13 @@ function calculateExactMath(rawExpression: string): string {
       }
       index += 1;
       const value = Number(token);
-      if (!Number.isFinite(value)) throw new Error("Number is outside the supported range.");
+      const decimalPlaces = token.includes(".") ? token.split(".")[1].length : 0;
+      if (!Number.isFinite(value) || Math.abs(value) > 1e15) {
+        throw new Error("Number is outside the supported range.");
+      }
+      if (decimalPlaces > 12) {
+        throw new Error("Numbers may contain at most 12 decimal places.");
+      }
       return value;
     };
 
