@@ -1,4 +1,4 @@
-const CALCULATOR_TOOL = {
+export const CALCULATOR_TOOL = {
   type: "function",
   function: {
     name: "calculate_exact_math",
@@ -19,7 +19,7 @@ const CALCULATOR_TOOL = {
   },
 };
 
-function calculateExactMath(rawExpression: string): string {
+export function calculateExactMath(rawExpression) {
   if (!rawExpression || rawExpression.length > 256) {
     throw new Error("Expression must contain 1 to 256 characters.");
   }
@@ -39,8 +39,8 @@ function calculateExactMath(rawExpression: string): string {
     if (operationCount > 64) throw new Error("Expression contains too many operations.");
   };
 
-  const parseExpression = (): number => {
-    const parseFactor = (): number => {
+  const parseExpression = () => {
+    const parseFactor = () => {
       const token = tokens[index];
       if (token === "+" || token === "-") {
         index += 1;
@@ -70,7 +70,7 @@ function calculateExactMath(rawExpression: string): string {
       return value;
     };
 
-    const parseTerm = (): number => {
+    const parseTerm = () => {
       let value = parseFactor();
       while (tokens[index] === "*" || tokens[index] === "/") {
         const operator = tokens[index++];
