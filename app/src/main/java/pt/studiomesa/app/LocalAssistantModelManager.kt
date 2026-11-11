@@ -120,7 +120,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
     private var salesForecastTool: StudioMesaSalesForecastTool? = null
     @Volatile private var downloading = false
     @Volatile private var closed = false
-    private var verifiedThisProcess = false
+    private var verifiedModelPath: String? = null
 
     fun isDownloading(): Boolean = downloading
 
@@ -163,7 +163,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     targetFile.length() == artifact.sizeBytes &&
                     verifySha256(targetFile, artifact.sha256)
                 ) {
-                    verifiedThisProcess = true
+                    verifiedModelPath = targetFile.absolutePath
                     return@runCatching targetFile
                 }
                 targetFile.delete()
@@ -233,7 +233,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     if (!temporaryFile.renameTo(targetFile)) {
                         throw IllegalStateException("Não foi possível instalar o modelo transferido.")
                     }
-                    verifiedThisProcess = true
+                    verifiedModelPath = targetFile.absolutePath
                     targetFile
                 } finally {
                     connection.disconnect()
@@ -270,14 +270,14 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                 }
                 require(isModelInstalled()) { "Transfere primeiro o modelo de IA local." }
 
-                val activeModelFile = installedModelFile()
+                var activeModelFile = installedModelFile()
                     ?: throw IllegalStateException("O modelo local deixou de estar disponível.")
-                val activeArtifact = artifactFor(activeModelFile)
-                if (!verifiedThisProcess) {
+                var activeArtifact = artifactFor(activeModelFile)
+                if (verifiedModelPath != activeModelFile.absolutePath) {
                     if (!verifySha256(activeModelFile, activeArtifact.sha256)) {
                         throw IllegalStateException("O modelo guardado não passou a verificação de integridade. Transfere-o novamente.")
                     }
-                    verifiedThisProcess = true
+                    verifiedModelPath = activeModelFile.absolutePath
                 }
 
                 val effectiveSystemInstruction = AssistantThinkingModePolicy.buildSystemInstruction(
@@ -298,23 +298,43 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     )) {
                     closeActiveSession()
 
-                    val createdEngine = Engine(
-                        EngineConfig(
-                            modelPath = activeModelFile.absolutePath,
-                            backend = Backend.CPU(),
-                            maxNumTokens = MAX_CONTEXT_TOKENS,
-                            cacheDir = File(appContext.cacheDir, "studiomesa-litert-cache-${activeArtifact.cacheName}").absolutePath
+                    fun createInitializedEngine(modelFile: File, artifact: ModelArtifact): Engine {
+                        val candidate = Engine(
+                            EngineConfig(
+                                modelPath = modelFile.absolutePath,
+                                backend = Backend.CPU(),
+                                maxNumTokens = MAX_CONTEXT_TOKENS,
+                                cacheDir = File(
+                                    appContext.cacheDir,
+                                    "studiomesa-litert-cache-${artifact.cacheName}"
+                                ).absolutePath
+                            )
                         )
-                    )
-                    // An Engine and its Conversation belong to one user conversation.
-                    // LiteRT-LM 0.18/LFM2 can retain short-convolution state when a second
-                    // Conversation is created on an already-used Engine.
-                    try {
-                        createdEngine.initialize()
-                    } catch (error: Exception) {
-                        // Do not leak native runtime resources if model/backend initialisation fails.
-                        runCatching { createdEngine.close() }
-                        throw error
+                        try {
+                            candidate.initialize()
+                            return candidate
+                        } catch (error: Exception) {
+                            runCatching { candidate.close() }
+                            throw error
+                        }
+                    }
+
+                    // Gemma can exceed the real memory/runtime capability of a device even
+                    // when its advertised RAM and free-space checks pass. Fall back to LFM.
+                    val createdEngine = try {
+                        createInitializedEngine(activeModelFile, activeArtifact)
+                    } catch (primaryError: Exception) {
+                        if (activeArtifact.cacheName != "gemma-4-e2b" ||
+                            !lfmModelFile.isFile ||
+                            lfmModelFile.length() != LFM_MODEL_SIZE_BYTES ||
+                            !verifySha256(lfmModelFile, LFM_MODEL_SHA256)
+                        ) {
+                            throw primaryError
+                        }
+                        activeModelFile = lfmModelFile
+                        activeArtifact = artifactFor(lfmModelFile)
+                        verifiedModelPath = activeModelFile.absolutePath
+                        createInitializedEngine(activeModelFile, activeArtifact)
                     }
 
                     val dataTool = StudioMesaRestaurantDataTool(snapshot)
