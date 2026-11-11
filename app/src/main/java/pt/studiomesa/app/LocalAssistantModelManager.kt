@@ -52,7 +52,7 @@ internal object LocalAssistantModelPolicy {
     fun needsIntegrityVerification(activeModelPath: String, verifiedModelPath: String?): Boolean =
         verifiedModelPath != activeModelPath
 
-    fun shouldFallbackToLfmAfterGemmaLoadFailure(
+    fun shouldFallbackToLfm(
         activeModelFilename: String,
         lfmFileExists: Boolean,
         lfmSizeValid: Boolean,
@@ -180,6 +180,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     verifySha256(targetFile, artifact.sha256)
                 ) {
                     verifiedModelPath = targetFile.absolutePath
+                    if (targetFile.name == GEMMA_MODEL_FILENAME) forceLfmForProcess = false
                     return@runCatching targetFile
                 }
                 targetFile.delete()
@@ -250,6 +251,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                         throw IllegalStateException("Não foi possível instalar o modelo transferido.")
                     }
                     verifiedModelPath = targetFile.absolutePath
+                    if (targetFile.name == GEMMA_MODEL_FILENAME) forceLfmForProcess = false
                     targetFile
                 } finally {
                     connection.disconnect()
@@ -298,7 +300,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                         val lfmSizeValid = lfmModelFile.length() == LFM_MODEL_SIZE_BYTES
                         val lfmHashValid = lfmExists && lfmSizeValid &&
                             verifySha256(lfmModelFile, LFM_MODEL_SHA256)
-                        if (!LocalAssistantModelPolicy.shouldFallbackToLfmAfterGemmaLoadFailure(
+                        if (!LocalAssistantModelPolicy.shouldFallbackToLfm(
                                 activeModelFile.name,
                                 lfmExists,
                                 lfmSizeValid,
@@ -364,7 +366,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                         val lfmSizeValid = lfmModelFile.length() == LFM_MODEL_SIZE_BYTES
                         val lfmHashValid = lfmExists && lfmSizeValid &&
                             verifySha256(lfmModelFile, LFM_MODEL_SHA256)
-                        if (!LocalAssistantModelPolicy.shouldFallbackToLfmAfterGemmaLoadFailure(
+                        if (!LocalAssistantModelPolicy.shouldFallbackToLfm(
                                 activeModelFile.name,
                                 lfmExists,
                                 lfmSizeValid,
