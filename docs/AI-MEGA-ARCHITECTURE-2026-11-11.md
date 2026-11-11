@@ -10,7 +10,7 @@ Um único assistente e uma única conversa, com seleção automática do motor a
 |---|---|---|
 | DeepSeek R1 | Primeiro motor para problemas complexos, análise e raciocínio | Router online usa `deepseek/deepseek-r1:free` |
 | Qwen 3.8 27B | Programação, revisão de código e tarefas gerais | Router online usa `qwen/qwen3.8-27b:free` |
-| Gemma 4 E2B | Motor local Android, sem enviar perguntas para a nuvem | Modelo local de destino; requer integração e teste no hardware antes de substituir o modelo local atual |
+| Gemma 4 E2B | Motor local Android preferido, sem enviar perguntas para a nuvem | Integrado no gestor de modelos LiteRT-LM; selecionado quando existem pelo menos 6 GiB de RAM total e espaço livre suficiente; instalação manual/única |
 | GPT-OSS 120B | Alternativa de raciocínio geral | Router tenta `openai/gpt-oss-120b:free` quando disponível |
 | OpenRouter Free Router | Última alternativa gratuita, escolhida dinamicamente | `openrouter/free`, que só seleciona variantes gratuitas |
 
@@ -19,6 +19,7 @@ A seleção é feita no servidor com regras simples e auditáveis. Termos de pro
 ## Limite de custo: free-only
 
 - O router usa exclusivamente IDs terminados em `:free` e `openrouter/free`.
+- A cadeia seleciona um motor de cada vez; só tenta o modelo seguinte quando o anterior falha. Não executa todos em paralelo nem soma automaticamente as respostas, para reduzir consumo da quota gratuita.
 - Não existe fallback para um modelo pago.
 - Erros de quota, falta de disponibilidade ou ausência de fornecedor que cumpra privacidade terminam em erro controlado. O utilizador pode voltar à IA local.
 - OpenRouter indica atualmente 20 pedidos por minuto e 50 pedidos por dia para variantes gratuitas sem compra de créditos. Os limites podem mudar e pedidos falhados também contam.
@@ -42,20 +43,21 @@ O filtro de identificadores não deteta todos os dados sensíveis. O modo online
 
 O repositório LiteRT Community publica Gemma 4 E2B no formato `.litertlm` para Android. O ficheiro documentado tem aproximadamente 2,58 GB. O modelo card apresenta cerca de 1,73 GB de memória de CPU no ensaio Android publicado num Galaxy S26 Ultra; esse resultado não prova desempenho ou estabilidade no OPPO A5m nem noutros telemóveis.
 
-A StudioMesa mantém o LFM2.5-1.2B já integrado como fallback local. Não substitui automaticamente esse motor por Gemma 4 E2B sem:
+A StudioMesa integra agora Gemma 4 E2B e mantém o LFM2.5-1.2B INT4 como fallback local mais leve. O gestor escolhe Gemma quando o dispositivo tem pelo menos 6 GiB de RAM total e espaço livre para o artefacto mais 512 MB de margem; caso contrário, escolhe LFM2.5. O LFM2.5 não é apagado quando Gemma é instalado. Antes de ativar Gemma em produção, continuam obrigatórios:
 1. confirmar a revisão imutável do artefacto e o SHA-256 oficial;
 2. verificar RAM disponível, espaço livre e compatibilidade do LiteRT-LM no dispositivo;
 3. testar abertura do modelo, uma conversa longa, chamadas a ferramentas, encerramento e libertação de RAM;
 4. medir latência, consumo de bateria, temperatura e falhas no OPPO A5m e em dispositivos comerciais representativos.
 
-A substituição fica condicionada a esses testes para evitar que a IA local deixe de abrir em telemóveis com menos memória. A arquitetura suporta manter Gemma como motor local e o modelo LFM como fallback de compatibilidade.
+A integração e a transferência/validação SHA-256 estão implementadas, mas não foi ainda executado um ensaio físico de qualidade, latência, RAM, temperatura e bateria no OPPO A5m nem noutros equipamentos suportados. A seleção por RAM e espaço livre é um filtro inicial, não uma garantia de que o runtime conseguirá carregar Gemma em todos os telemóveis elegíveis.
 
 ## Integração técnica criada
 
 - Edge Function: `supabase/functions/studiomesa-ai-router/index.ts`.
 - Endpoint Android: `SupabaseApi.generateRoutedAssistantReply`.
 - A interface mantém um único assistente e o consentimento atual passa a explicar a cadeia multi-modelo.
-- As ferramentas determinísticas locais (cálculo exato, ferramentas económicas e OCR local) mantêm-se separadas da geração cloud.
+- O router online disponibiliza `calculate_exact_math`, um parser aritmético determinístico sem `eval`, limitado a 256 caracteres e 64 operações; divisão por zero, sintaxe não suportada e resultados excessivos são rejeitados. A ferramenta é apenas de leitura.
+- As ferramentas económicas, consulta de dados do restaurante e OCR de faturas continuam locais; o router cloud não recebe contexto privado e não pode escrever na base de dados.
 - A IA não pode escrever preços, stock, reservas, pagamentos, faturas ou permissões.
 
 ## Ativação pendente
@@ -66,4 +68,4 @@ A substituição fica condicionada a esses testes para evitar que a IA local dei
 4. Executar testes de owner autorizado, funcionário, token expirado, identificadores sensíveis, falha de todos os modelos gratuitos e bloqueio de qualquer rota paga.
 5. Rever termos, política de privacidade e transferências antes de usar conteúdo real.
 
-A chave OpenRouter não está configurada nesta alteração. A função ainda não foi publicada e a opção cloud continua desativada por omissão. A integração de Gemma local ainda precisa da fase de compatibilidade no Android. Não declarar a Mega IA pronta para produção até esses passos estarem concluídos.
+A chave OpenRouter não está configurada nesta alteração. A função ainda não foi publicada e a opção cloud continua desativada por omissão. O funcionamento real de Gemma ainda precisa de validação física no OPPO A5m e em dispositivos comerciais representativos. Não declarar a Mega IA pronta para produção até esses passos estarem concluídos.
