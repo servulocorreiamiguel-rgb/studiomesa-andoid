@@ -2037,7 +2037,16 @@ class MainActivity : ComponentActivity() {
             .setNegativeButton("Fechar", null)
             .setPositiveButton("Abrir licença") { _, _ ->
                 runCatching {
-                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://huggingface.co/litert-community/LFM2.5-1.2B-Instruct/blob/main/LICENSE")))
+                    startActivity(Intent(
+                        Intent.ACTION_VIEW,
+                        android.net.Uri.parse(
+                            if (localAssistantModelManager.activeModelDisplayName() == "Gemma 4 E2B") {
+                                "https://ai.google.dev/gemma/terms"
+                            } else {
+                                "https://huggingface.co/litert-community/LFM2.5-1.2B-Instruct/blob/main/LICENSE"
+                            }
+                        )
+                    ))
                 }.onFailure {
                     Toast.makeText(this, "Não foi possível abrir a licença.", Toast.LENGTH_SHORT).show()
                 }
