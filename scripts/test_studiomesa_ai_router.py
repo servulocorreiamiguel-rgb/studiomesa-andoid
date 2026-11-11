@@ -57,6 +57,22 @@ class MultiModelRouterContractTests(unittest.TestCase):
         self.assertIn("generateRoutedAssistantReply(", ACTIVITY)
         self.assertNotIn("generateAdvancedAssistantReply(", ACTIVITY)
 
+    def test_router_has_a_bounded_exact_math_tool(self):
+        self.assertIn('name: "calculate_exact_math"', EDGE)
+        self.assertIn("function calculateExactMath(", EDGE)
+        self.assertIn("operationCount > 64", EDGE)
+        self.assertIn("Division by zero", EDGE)
+        self.assertIn("read_only: true", EDGE)
+        self.assertIn("tools_used: result.toolsUsed", EDGE)
+        self.assertIn("round < 3", EDGE)
+        self.assertNotIn("eval(", EDGE)
+
+    def test_provider_cannot_route_to_unapproved_paid_fallback(self):
+        self.assertIn("allow_fallbacks: false", EDGE)
+        self.assertIn("require_parameters: true", EDGE)
+        self.assertIn("data_collection: \"deny\"", EDGE)
+        self.assertIn("zdr: true", EDGE)
+
     def test_no_paid_fallback(self):
         self.assertIn("Não foi utilizado nenhum modelo pago", EDGE)
         self.assertIn("Não existe fallback para modelos pagos", ACTIVITY)
