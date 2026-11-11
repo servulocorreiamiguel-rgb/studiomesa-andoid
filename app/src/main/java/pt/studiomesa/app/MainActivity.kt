@@ -120,6 +120,7 @@ class MainActivity : ComponentActivity() {
     private var assistantStreamingTextView: TextView? = null
     private var assistantModelDownloading = false
     private var assistantModelProgressBytes = 0L
+    private var assistantModelTargetBytes = 0L
     private var assistantModelError: String? = null
     // Update download progress in place; rebuilding the chat for every percent causes flicker.
     private var assistantModelStatusTextView: TextView? = null
@@ -1051,7 +1052,7 @@ class MainActivity : ComponentActivity() {
             if (!localAssistantModelManager.isModelInstalled()) {
                 AlertDialog.Builder(this@MainActivity)
                     .setTitle("Pensar mais")
-                    .setMessage("O modo de análise aprofundada requer o modelo generativo local. A instalação é única, ocupa cerca de 736 MB e não tem custo por mensagem. Recomenda-se Wi-Fi.")
+                    .setMessage("O modo de análise aprofundada requer um modelo generativo local. A transferência depende do telemóvel: Gemma 4 E2B (cerca de 2,59 GB) em equipamentos com memória suficiente ou LFM2.5 (cerca de 736 MB) nos restantes. Não existe custo por mensagem.")
                     .setNegativeButton("Agora não", null)
                     .setPositiveButton("Instalar modelo") { _, _ -> startLocalAssistantModelDownload() }
                     .show()
@@ -1961,11 +1962,11 @@ class MainActivity : ComponentActivity() {
         addGap(card, 5)
         val status = when {
             assistantModelDownloading || localAssistantModelManager.isDownloading() ->
-                "A transferir o modelo: ${((assistantModelProgressBytes * 100) / localAssistantModelManager.modelSizeBytes()).coerceIn(0, 100)}%."
+                "A transferir o modelo: ${((assistantModelProgressBytes * 100) / assistantModelTargetBytes.coerceAtLeast(1L)).coerceIn(0, 100)}%."
             modelInstalled ->
-                "IA generativa instalada. As mensagens e os dados selecionados são processados no próprio telemóvel, sem API e sem cobrança por mensagem."
+                "IA local instalada: ${localAssistantModelManager.activeModelDisplayName()}. As mensagens e os dados selecionados são processados no telemóvel, sem API nem custo por mensagem."
             else ->
-                "O motor generativo local ainda não foi instalado. O assistente de regras continua disponível; transfere o modelo uma única vez para ativar a conversa generativa offline."
+                "O assistente generativo local ainda não foi instalado. A StudioMesa escolhe Gemma 4 E2B quando a memória do telemóvel é suficiente e mantém LFM2.5 como alternativa mais leve."
         }
         val statusView = label(status, 12f, false, ink)
         assistantModelStatusTextView = statusView
@@ -1974,26 +1975,44 @@ class MainActivity : ComponentActivity() {
 
         if (assistantModelDownloading || localAssistantModelManager.isDownloading()) {
             val progressView = label(
-                "Transferido: ${formatModelBytes(assistantModelProgressBytes)} de aproximadamente 736 MB",
+                "Transferido: ${formatModelBytes(assistantModelProgressBytes)} de ${formatModelBytes(assistantModelTargetBytes)}",
                 10.5f, true, forest
             )
             assistantModelProgressTextView = progressView
             card.addView(progressView)
         } else if (!modelInstalled) {
-            card.addView(secondaryButton("Transferir IA local · 736 MB") {
+            card.addView(secondaryButton("Transferir IA local · ${formatModelBytes(localAssistantModelManager.modelSizeBytes())}") {
                 AlertDialog.Builder(this)
                     .setTitle("Instalar IA local")
                     .setMessage(
-                        "A transferência inicial é de aproximadamente 736 MB e requer Internet. O ficheiro fica guardado na área privada da aplicação. Depois de instalado, o modelo funciona sem Internet e não envia mensagens, memória ou dados do restaurante para servidores. A transferência pode consumir dados móveis; recomenda-se Wi-Fi."
+                        "A transferência inicial é de aproximadamente ${formatModelBytes(localAssistantModelManager.modelSizeBytes())} e requer Internet. O StudioMesa escolhe automaticamente o modelo local adequado à memória do telemóvel: Gemma 4 E2B quando existe capacidade suficiente ou LFM2.5 como alternativa mais leve. O ficheiro fica guardado na área privada da aplicação. Depois de instalado, a geração funciona sem Internet e não envia mensagens, memória ou dados do restaurante para servidores."
                     )
                     .setNegativeButton("Cancelar", null)
                     .setPositiveButton("Transferir") { _, _ -> startLocalAssistantModelDownload() }
                     .show()
             }, LinearLayout.LayoutParams(-1, dp(44)))
         } else {
-            card.addView(label("Modelo LFM2.5 1.2B · quantização INT4 · execução CPU local", 10.5f, true, forest))
+            card.addView(label(
+                "Modelo ${localAssistantModelManager.activeModelDisplayName()} · LiteRT-LM · execução local no telemóvel",
+                10.5f, true, forest
+            ))
             addGap(card, 6)
             card.addView(secondaryButton("Ver modelo e licenças") { showLocalAssistantLicencesDialog() }, LinearLayout.LayoutParams(-1, dp(40)))
+            if (localAssistantModelManager.shouldOfferGemmaUpgrade()) {
+                addGap(card, 6)
+                card.addView(secondaryButton("Atualizar para Gemma 4 E2B · 2,59 GB") {
+                    AlertDialog.Builder(this)
+                        .setTitle("Atualizar o motor local")
+                        .setMessage(
+                            "O Gemma 4 E2B é maior e pode oferecer respostas locais mais capazes. A instalação publicada ocupa cerca de 2,59 GB; o consumo real de RAM e a velocidade variam por telemóvel. O LFM2.5 atual não será apagado: mantém-se como alternativa. A transferência não tem custo por mensagem."
+                        )
+                        .setNegativeButton("Agora não", null)
+                        .setPositiveButton("Transferir Gemma") { _, _ ->
+                            startLocalAssistantModelDownload(preferGemma = true)
+                        }
+                        .show()
+                }, LinearLayout.LayoutParams(-1, dp(42)))
+            }
         }
 
         assistantModelError?.let {
@@ -2013,7 +2032,7 @@ class MainActivity : ComponentActivity() {
         AlertDialog.Builder(this)
             .setTitle("Modelo e licenças")
             .setMessage(
-                "Modelo: LFM2.5-1.2B-Instruct, quantizado INT4 e convertido para LiteRT-LM pela comunidade litert-community.\n\nO modelo é disponibilizado sob a LFM Open License v1.0, com condições de utilização comercial e atribuição. Confirma os termos completos antes de comercializar a StudioMesa.\n\nO runtime LiteRT-LM é distribuído sob Apache 2.0.\n\nO modelo não foi criado pela StudioMesa nem pela Google."
+                "A StudioMesa suporta dois motores locais: Gemma 4 E2B (ficheiro LiteRT-LM de 2 588 147 712 bytes, conversão publicada pela comunidade litert-community) e LFM2.5-1.2B INT4 (alternativa mais pequena). A seleção depende da memória disponível no telemóvel.\n\nGemma é um modelo da Google sujeito aos termos de utilização Gemma; a conversão LiteRT-LM tem os avisos e a licença indicados no respetivo repositório. LFM2.5 utiliza a LFM Open License v1.0, com condições próprias de utilização comercial e atribuição. Confirma os termos integrais antes de distribuir a StudioMesa.\n\nO runtime LiteRT-LM é distribuído sob Apache 2.0. Nenhum destes modelos foi treinado pela StudioMesa."
             )
             .setNegativeButton("Fechar", null)
             .setPositiveButton("Abrir licença") { _, _ ->
@@ -2031,10 +2050,11 @@ class MainActivity : ComponentActivity() {
         return String.format(Locale("pt", "PT"), "%.0f MB", megabytes)
     }
 
-    private fun startLocalAssistantModelDownload() {
+    private fun startLocalAssistantModelDownload(preferGemma: Boolean = false) {
         if (assistantModelDownloading || localAssistantModelManager.isDownloading()) return
         assistantModelDownloading = true
         assistantModelProgressBytes = 0L
+        assistantModelTargetBytes = localAssistantModelManager.modelSizeBytes(preferGemma)
         assistantModelError = null
         renderApp()
         var lastShownPercent = -1
@@ -2058,9 +2078,13 @@ class MainActivity : ComponentActivity() {
                     assistantModelDownloading = false
                     result.fold(
                         onSuccess = {
-                            assistantModelProgressBytes = localAssistantModelManager.modelSizeBytes()
+                            assistantModelProgressBytes = assistantModelTargetBytes
                             assistantModelError = null
-                            Toast.makeText(this, "IA local instalada e verificada.", Toast.LENGTH_LONG).show()
+                            Toast.makeText(
+                                this,
+                                "${localAssistantModelManager.activeModelDisplayName()} instalada e verificada.",
+                                Toast.LENGTH_LONG
+                            ).show()
                         },
                         onFailure = { error ->
                             assistantModelError = error.message ?: "Não foi possível instalar o modelo local."
@@ -2068,7 +2092,8 @@ class MainActivity : ComponentActivity() {
                     )
                     renderApp()
                 }
-            }
+            },
+            preferGemma = preferGemma
         )
     }
 
