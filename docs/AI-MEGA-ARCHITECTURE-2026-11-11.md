@@ -8,7 +8,7 @@ Um único assistente e uma única conversa, com seleção automática do motor a
 
 | Motor | Função | Situação nesta integração |
 |---|---|---|
-| DeepSeek R1 | Primeiro motor para problemas complexos, análise e raciocínio | Router online usa `deepseek/deepseek-v4-flash:free` |
+| DeepSeek R1 | Primeiro motor para problemas complexos, análise e raciocínio | Router online usa `deepseek/deepseek-r1:free` |
 | Qwen 3.8 27B | Programação, revisão de código e tarefas gerais | Router online usa `qwen/qwen3.8-27b:free` |
 | Gemma 4 E2B | Motor local Android, sem enviar perguntas para a nuvem | Modelo local de destino; requer integração e teste no hardware antes de substituir o modelo local atual |
 | GPT-OSS 120B | Alternativa de raciocínio geral | Router tenta `openai/gpt-oss-120b:free` quando disponível |
