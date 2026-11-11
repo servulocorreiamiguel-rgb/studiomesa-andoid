@@ -82,8 +82,8 @@ function calculateExactMath(rawExpression: string): string {
   if (!rawExpression || rawExpression.length > 256) {
     throw new Error("Expression must contain 1 to 256 characters.");
   }
-  const expression = rawExpression.replace(/,/g, ".").replace(/\\s+/g, "");
-  const tokens = expression.match(/(?:\\d+(?:\\.\\d*)?|\\.\\d+|[()+\\-*/])/g) ?? [];
+  const expression = rawExpression.replace(/,/g, ".").replace(/\s+/g, "");
+  const tokens = expression.match(/(?:\d+(?:\.\d*)?|\.\d+|[()+\-*/])/g) ?? [];
   if (tokens.length === 0 || tokens.join("") !== expression || tokens.length > 129) {
     throw new Error("Expression contains unsupported characters or is too complex.");
   }
@@ -111,7 +111,7 @@ function calculateExactMath(rawExpression: string): string {
         index += 1;
         return value;
       }
-      if (!token || !/^(?:\\d+(?:\\.\\d*)?|\\.\\d+)$/.test(token)) {
+      if (!token || !/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(token)) {
         throw new Error("Expected a number.");
       }
       index += 1;
