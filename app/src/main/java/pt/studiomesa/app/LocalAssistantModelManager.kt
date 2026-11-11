@@ -74,6 +74,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
     private val modelDirectory = File(appContext.filesDir, MODEL_DIRECTORY)
     private val lfmModelFile = File(modelDirectory, LFM_MODEL_FILENAME)
     private val gemmaModelFile = File(modelDirectory, GEMMA_MODEL_FILENAME)
+    @Volatile private var forceLfmForProcess = false
 
     private fun canUseGemmaOnThisDevice(): Boolean = runCatching {
         val manager = appContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
@@ -106,7 +107,8 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         }
 
     private fun installedModelFile(): File? = when {
-        gemmaModelFile.isFile && gemmaModelFile.length() == GEMMA_MODEL_SIZE_BYTES -> gemmaModelFile
+        !forceLfmForProcess && gemmaModelFile.isFile &&
+            gemmaModelFile.length() == GEMMA_MODEL_SIZE_BYTES -> gemmaModelFile
         lfmModelFile.isFile && lfmModelFile.length() == LFM_MODEL_SIZE_BYTES -> lfmModelFile
         else -> null
     }
@@ -292,7 +294,24 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                         verifiedModelPath
                     )) {
                     if (!verifySha256(activeModelFile, activeArtifact.sha256)) {
-                        throw IllegalStateException("O modelo guardado não passou a verificação de integridade. Transfere-o novamente.")
+                        val lfmExists = lfmModelFile.isFile
+                        val lfmSizeValid = lfmModelFile.length() == LFM_MODEL_SIZE_BYTES
+                        val lfmHashValid = lfmExists && lfmSizeValid &&
+                            verifySha256(lfmModelFile, LFM_MODEL_SHA256)
+                        if (!LocalAssistantModelPolicy.shouldFallbackToLfmAfterGemmaLoadFailure(
+                                activeModelFile.name,
+                                lfmExists,
+                                lfmSizeValid,
+                                lfmHashValid
+                            )
+                        ) {
+                            throw IllegalStateException(
+                                "O modelo guardado não passou a verificação de integridade. Transfere-o novamente."
+                            )
+                        }
+                        forceLfmForProcess = true
+                        activeModelFile = lfmModelFile
+                        activeArtifact = artifactFor(lfmModelFile)
                     }
                     verifiedModelPath = activeModelFile.absolutePath
                 }
@@ -354,6 +373,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                         ) {
                             throw primaryError
                         }
+                        forceLfmForProcess = true
                         activeModelFile = lfmModelFile
                         activeArtifact = artifactFor(lfmModelFile)
                         verifiedModelPath = activeModelFile.absolutePath
