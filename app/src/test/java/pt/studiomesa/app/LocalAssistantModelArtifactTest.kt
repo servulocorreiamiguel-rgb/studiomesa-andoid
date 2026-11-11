@@ -49,6 +49,55 @@ class LocalAssistantModelArtifactTest {
     }
 
     @Test
+    fun switchingLocalModelAlwaysRequiresFreshIntegrityVerification() {
+        assertEquals(
+            true,
+            LocalAssistantModelPolicy.needsIntegrityVerification(
+                activeModelPath = "/private/gemma-4-E2B-it.litertlm",
+                verifiedModelPath = "/private/LFM2.5-1.2B-Instruct_int4.litertlm"
+            )
+        )
+        assertEquals(
+            false,
+            LocalAssistantModelPolicy.needsIntegrityVerification(
+                activeModelPath = "/private/LFM2.5-1.2B-Instruct_int4.litertlm",
+                verifiedModelPath = "/private/LFM2.5-1.2B-Instruct_int4.litertlm"
+            )
+        )
+    }
+
+    @Test
+    fun gemmaLoadFailureFallsBackOnlyToAnInstalledValidLfmArtifact() {
+        assertEquals(
+            true,
+            LocalAssistantModelPolicy.shouldFallbackToLfmAfterGemmaLoadFailure(
+                LocalAssistantModelManager.GEMMA_MODEL_FILENAME,
+                lfmFileExists = true,
+                lfmSizeValid = true,
+                lfmHashValid = true
+            )
+        )
+        assertEquals(
+            false,
+            LocalAssistantModelPolicy.shouldFallbackToLfmAfterGemmaLoadFailure(
+                LocalAssistantModelManager.GEMMA_MODEL_FILENAME,
+                lfmFileExists = true,
+                lfmSizeValid = true,
+                lfmHashValid = false
+            )
+        )
+        assertEquals(
+            false,
+            LocalAssistantModelPolicy.shouldFallbackToLfmAfterGemmaLoadFailure(
+                LocalAssistantModelManager.MODEL_FILENAME,
+                lfmFileExists = true,
+                lfmSizeValid = true,
+                lfmHashValid = true
+            )
+        )
+    }
+
+    @Test
     fun localInferenceStaysInsideTheModelContextWindow() {
         assertEquals(4096, LocalAssistantModelManager.MAX_CONTEXT_TOKENS)
         assertTrue(AssistantThinkingModePolicy.DEFAULT_MAX_OUTPUT_TOKENS in 1..4096)
