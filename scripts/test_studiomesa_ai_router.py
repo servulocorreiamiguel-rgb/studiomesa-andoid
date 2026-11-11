@@ -81,6 +81,12 @@ class MultiModelRouterContractTests(unittest.TestCase):
         self.assertIn("data_collection: \"deny\"", EDGE)
         self.assertIn("zdr: true", EDGE)
 
+    def test_shared_quota_error_stops_fallback_attempts(self):
+        self.assertIn('response.status === 429', EDGE)
+        self.assertIn('OPENROUTER_RATE_LIMIT', EDGE)
+        self.assertIn('FREE_MODELS_RATE_LIMITED', EDGE)
+        self.assertIn('return json(', EDGE)
+
     def test_no_paid_fallback(self):
         self.assertIn("Não foi utilizado nenhum modelo pago", EDGE)
         self.assertIn("Não existe fallback para modelos pagos", ACTIVITY)
