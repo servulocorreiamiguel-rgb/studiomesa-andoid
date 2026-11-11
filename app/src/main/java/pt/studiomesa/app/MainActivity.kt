@@ -2193,11 +2193,12 @@ class MainActivity : ComponentActivity() {
     private fun requiresPrivateRestaurantContext(value: String): Boolean {
         val normalized = normalizeAssistantPrivacyText(value)
         return Regex(
-            "\\b(restaurante|restauracao|menu|carta|prato|receita|ingrediente|stock|inventario|armazem|" +
-                "fatura|faturas|factura|facturas|fornecedor|fornecedores|custo|custos|margem|lucro|" +
-                "venda|vendas|pedido|pedidos|encomenda|encomendas|reserva|reservas|mesa|mesas|" +
-                "cliente|clientes|funcionario|funcionarios|equipa|salario|salarios|despesa|despesas|" +
-                "iva|contabilidade|financeiro|financeira|preco do prato|precos da carta)\\b"
+            "\\b(restaurante|restauracao|restaurant|negocio|empresa|business|company|menu|carta|prato|receita|ingrediente|stock|inventario|inventory|armazem|" +
+                "fatura|faturas|factura|facturas|invoice|invoices|fornecedor|fornecedores|supplier|suppliers|custo|custos|costs|margem|lucro|profit|revenue|faturamento|faturacao|turnover|" +
+                "venda|vendas|sales|pedido|pedidos|order|orders|encomenda|encomendas|reserva|reservas|booking|bookings|mesa|mesas|table|tables|" +
+                "cliente|clientes|customer|customers|funcionario|funcionarios|employee|employees|equipa|staff|salario|salarios|payroll|despesa|despesas|expense|expenses|" +
+                "pagamento|pagamentos|payment|payments|caixa|pos|ponto de venda|tesouraria|iva|vat|contabilidade|accounting|financeiro|financeira|financial|" +
+                "preco do prato|precos da carta|menu price|bank account|bank statement|morada|endereco|address|codigo postal|postal code)\\b"
         ).containsMatchIn(normalized)
     }
 
@@ -2205,7 +2206,8 @@ class MainActivity : ComponentActivity() {
         Regex("[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", RegexOption.IGNORE_CASE).containsMatchIn(value) ||
             Regex("\\b(?:NIF|NIPC)\\s*[:#]?\\s*\\d(?:[ .-]?\\d){8}\\b", RegexOption.IGNORE_CASE).containsMatchIn(value) ||
             Regex("\\bIBAN\\s*[:#]?\\s*[A-Z]{2}\\d{2}[A-Z0-9 ]{10,30}\\b", RegexOption.IGNORE_CASE).containsMatchIn(value) ||
-            Regex("(?:\\+351\\s?)?9[1236](?:[ .-]?\\d){7}\\b").containsMatchIn(value) ||
+            Regex("(?:\\+351\\s?)?[29]\\d{2}(?:[ .-]?\\d){6}\\b").containsMatchIn(value) ||
+            Regex("\\b\\d{4}-\\d{3}\\b").containsMatchIn(value) ||
             Regex("\\b\\d{9}\\b").containsMatchIn(value)
 
     private fun sendAssistantMessage(rawMessage: String) {
