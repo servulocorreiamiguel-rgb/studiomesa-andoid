@@ -7,6 +7,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 EDGE = (ROOT / "supabase/functions/studiomesa-ai-router/index.ts").read_text()
+CALC = (ROOT / "supabase/functions/studiomesa-ai-router/calculator.mjs").read_text()
 API = (ROOT / "app/src/main/java/pt/studiomesa/app/SupabaseApi.kt").read_text()
 ROUTED_API = API.split("fun generateRoutedAssistantReply(", 1)[1].split("fun generateAdvancedAssistantReply(", 1)[0]
 ACTIVITY = (ROOT / "app/src/main/java/pt/studiomesa/app/MainActivity.kt").read_text()
@@ -58,22 +59,24 @@ class MultiModelRouterContractTests(unittest.TestCase):
         self.assertNotIn("generateAdvancedAssistantReply(", ACTIVITY)
 
     def test_router_has_a_bounded_exact_math_tool(self):
-        self.assertIn('name: "calculate_exact_math"', EDGE)
-        self.assertIn("function calculateExactMath(", EDGE)
-        self.assertIn("operationCount > 64", EDGE)
-        self.assertIn("Division by zero", EDGE)
+        self.assertIn('name: "calculate_exact_math"', CALC)
+        self.assertIn("function calculateExactMath(", CALC)
+        self.assertIn("operationCount > 64", CALC)
+        self.assertIn("Division by zero", CALC)
         self.assertIn("read_only: true", EDGE)
         self.assertIn("tools_used: result.toolsUsed", EDGE)
         self.assertIn("round < 3", EDGE)
-        self.assertNotIn("eval(", EDGE)
+        self.assertNotIn("eval(", CALC)
 
     def test_calculator_regexes_recognize_digits_decimals_and_whitespace(self):
-        self.assertIn(r'replace(/\s+/g, "")', EDGE)
+        self.assertIn(r'replace(/\s+/g, "")', CALC)
         self.assertIn(
             r'expression.match(/(?:\d+(?:\.\d*)?|\.\d+|[()+\-*/])/g)',
-            EDGE,
+            CALC,
         )
-        self.assertIn(r'/^(?:\d+(?:\.\d*)?|\.\d+)$/', EDGE)
+        self.assertIn(r'/^(?:\d+(?:\.\d*)?|\.\d+)$/', CALC)
+        self.assertIn("decimalPlaces > 12", CALC)
+        self.assertIn("Whitespace cannot split a number", CALC)
 
     def test_provider_cannot_route_to_unapproved_paid_fallback(self):
         self.assertIn("allow_fallbacks: false", EDGE)
