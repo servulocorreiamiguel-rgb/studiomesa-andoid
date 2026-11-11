@@ -2208,6 +2208,18 @@ class MainActivity : ComponentActivity() {
             assistantChatError = null
 
             if (advancedAssistantEnabled() &&
+                (economicAssistant ||
+                    requiresPrivateRestaurantContext(question) ||
+                    containsCloudSensitiveIdentifier(question))
+            ) {
+                Toast.makeText(
+                    this,
+                    "Esta pergunta fica no dispositivo e será respondida pela IA local.",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+
+            if (advancedAssistantEnabled() &&
                 !economicAssistant &&
                 !requiresPrivateRestaurantContext(question) &&
                 !containsCloudSensitiveIdentifier(question)
