@@ -1063,22 +1063,22 @@ class MainActivity : ComponentActivity() {
             setMargins(0, 0, dp(6), 0)
         })
         optionsRow.addView(label(
-            if (assistantSending) "A analisar…" else if (advancedAssistantEnabled()) "GPT-OSS online" else if (modelInstalled) "IA offline" else "IA local por instalar",
+            if (assistantSending) "A analisar…" else if (advancedAssistantEnabled()) "IA online" else if (modelInstalled) "IA offline" else "IA local por instalar",
             9.5f, true, if (advancedAssistantEnabled() || modelInstalled) forestSoft else muted
         ).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(dp(100), -2))
         composerArea.addView(optionsRow, LinearLayout.LayoutParams(-1, -2))
         if (isRemoteRestaurantOwner()) {
             if (advancedAssistantCloudAvailable()) {
                 composerArea.addView(secondaryButton(
-                    if (advancedAssistantEnabled()) "GPT-OSS 120B online · desligar" else "Ativar IA avançada · GPT-OSS 120B"
+                    if (advancedAssistantEnabled()) "IA avançada online · desligar" else "Ativar IA avançada · modelos gratuitos"
                 ) {
                     requestAdvancedAssistant()
                 }, LinearLayout.LayoutParams(-1, dp(40)))
                 composerArea.addView(label(
                     if (advancedAssistantEnabled())
-                        "Online: perguntas normais enviam histórico recente, Memória curta e indicadores agregados. Pesquisa pública envia só a pergunta atual. Nunca envia faturas, OCR, clientes ou reservas detalhadas."
+                        "Online: envia apenas perguntas escritas por ti. Nunca envia Memória, faturas, OCR, clientes, reservas ou indicadores do restaurante. Só usa variantes gratuitas."
                     else
-                        "Opcional. A IA local continua disponível. O serviço online tem custos por tokens e depende de quotas externas.",
+                        "Opcional. O assistente pode usar modelos gratuitos externos. As quotas variam; não existe fallback pago. A IA local continua disponível.",
                     8.5f, false, muted
                 ).apply {
                     gravity = Gravity.CENTER
@@ -1086,7 +1086,7 @@ class MainActivity : ComponentActivity() {
                 })
             } else {
                 composerArea.addView(label(
-                    "GPT-OSS 120B online ainda não está ativo nesta versão. A IA local continua disponível.",
+                    "O modo online ainda não está configurado nesta versão. A IA local continua disponível.",
                     8.5f, false, muted
                 ).apply {
                     gravity = Gravity.CENTER
@@ -1816,11 +1816,10 @@ class MainActivity : ComponentActivity() {
         AlertDialog.Builder(this)
             .setTitle("Ativar IA avançada online")
             .setMessage(
-                "O StudioMesa vai usar o modelo GPT-OSS 120B da OpenAI através da Groq. Nas perguntas normais, são enviados ao fornecedor a pergunta atual, até 10 perguntas recentes escritas por ti, um resumo dos dados operacionais e uma versão curta da Memória guardada.\n\n" +
-                    "Quando pedes pesquisa pública na Web ou informação atual, o servidor envia apenas a pergunta atual: não envia histórico, Memória nem dados do restaurante. A ferramenta Browser Search pode pesquisar na Web; a ferramenta Code Interpreter pode executar Python para apoiar cálculos e análise. Ambas são executadas na infraestrutura da Groq.\n\n" +
-                    "Não são enviados PDFs, imagens de faturas, texto OCR, nomes/contactos de clientes, detalhes de reservas, dados de funcionários ou dados bancários. O filtro automático de identificadores é apenas uma proteção adicional e não garante anonimização total.\n\n" +
-                    "A documentação da Groq indica que os pedidos de inferência não são retidos por defeito. Em situações limitadas de fiabilidade ou prevenção de abuso, entradas e saídas podem ser registadas até 30 dias; a organização pode ativar Zero Data Retention nas definições de dados da Groq. Dados retidos são armazenados em buckets GCP nos EUA. A pesquisa e a execução de código têm condições próprias e não estão disponíveis em endpoints regionais/soberanos.\n\n" +
-                    "A tarifa publicada para o GPT-OSS 120B na Groq é USD 0,15 por milhão de tokens de entrada e USD 0,60 por milhão de tokens de saída; os preços, quotas e condições podem mudar. Não assumas utilização gratuita nem limites suficientes para produção. Antes de ativar, define limites de despesa na conta do fornecedor. Esta função não deve receber dados reais nem ser vendida até existir revisão de privacidade, DPA, avaliação dos subcontratantes e configuração do fornecedor. A chave privada fica apenas nos segredos do servidor Supabase."
+                "O StudioMesa vai usar o OpenRouter para escolher automaticamente entre modelos de pesos abertos: DeepSeek V4 Flash para problemas complexos, Qwen 3.8 27B para programação e tarefas gerais, e GPT-OSS 120B como alternativa quando a variante gratuita estiver disponível. O Gemma será o motor local/offline quando a versão compatível estiver instalada; o modelo local atualmente incluído continua a ser a alternativa offline.\n\n" +
+                    "A integração usa exclusivamente identificadores de modelos gratuitos (:free) e o router openrouter/free. Não existe fallback para modelos pagos. Os modelos gratuitos estão sujeitos a limites, indisponibilidades e alterações dos fornecedores; a OpenRouter indica atualmente limites para variantes gratuitas de 20 pedidos por minuto e 50 por dia, podendo mudar.\n\n" +
+                    "Só são enviados a pergunta atual e até 10 perguntas anteriores escritas por ti. Não são enviados a Memória, respostas anteriores do assistente, resumo do restaurante, menu, custos, vendas, reservas, clientes, equipa, faturas, PDFs, imagens ou OCR. Não escrevas dados pessoais, credenciais ou informação comercial confidencial no modo online. O servidor pede aos fornecedores políticas de não recolha de dados e Zero Data Retention; se não houver um fornecedor gratuito que respeite esses requisitos, a chamada falha e não é encaminhada para um serviço pago.\n\n" +
+                    "Os modelos e fornecedores são serviços externos. A filtragem automática de emails, telefones, NIF e IBAN é uma proteção adicional, não uma garantia de deteção de todos os dados sensíveis. Consulta a política de privacidade e as condições do OpenRouter e dos fornecedores antes de usar informação real. A chave privada fica apenas nos segredos do servidor Supabase. A IA local continua disponível e não envia as mensagens para a nuvem."
             )
             .setNegativeButton("Cancelar", null)
             .setPositiveButton("Aceito e ativar") { _, _ ->
@@ -2204,13 +2203,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 messages.put(JSONObject().put("role", "user").put("content", question))
-                val memorySnippet = AssistantAutomaticMemoryPolicy.contextSnippet(
-                    assistantChatStore.readMemory(scope)
-                )
-                val cloudContext = AdvancedAssistantCloudContextBuilder.build(
-                    snapshot = assistantSnapshot(),
-                    memorySnippet = memorySnippet
-                )
                 val token = backendToken()
                 val restaurantId = backendRestaurantId()
                 val requestUserId = backendPrefs.getString("user_id", "").orEmpty()
@@ -2219,11 +2211,10 @@ class MainActivity : ComponentActivity() {
                 renderApp()
                 Thread({
                     val result = runCatching {
-                        SupabaseApi.generateAdvancedAssistantReply(
+                        SupabaseApi.generateRoutedAssistantReply(
                             token = token,
                             restaurantId = restaurantId,
-                            messages = messages,
-                            restaurantContext = cloudContext
+                            messages = messages
                         ).optString("reply").trim()
                     }
                     runOnUiThread {
