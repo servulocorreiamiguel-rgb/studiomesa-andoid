@@ -1818,7 +1818,7 @@ class MainActivity : ComponentActivity() {
             .setMessage(
                 "O StudioMesa vai usar o OpenRouter para escolher automaticamente entre modelos de pesos abertos: DeepSeek V4 Flash para problemas complexos, Qwen 3.8 27B para programação e tarefas gerais, e GPT-OSS 120B como alternativa quando a variante gratuita estiver disponível. O Gemma será o motor local/offline quando a versão compatível estiver instalada; o modelo local atualmente incluído continua a ser a alternativa offline.\n\n" +
                     "A integração usa exclusivamente identificadores de modelos gratuitos (:free) e o router openrouter/free. Não existe fallback para modelos pagos. Os modelos gratuitos estão sujeitos a limites, indisponibilidades e alterações dos fornecedores; a OpenRouter indica atualmente limites para variantes gratuitas de 20 pedidos por minuto e 50 por dia, podendo mudar.\n\n" +
-                    "Só são enviados a pergunta atual e até 10 perguntas anteriores escritas por ti. Não são enviados a Memória, respostas anteriores do assistente, resumo do restaurante, menu, custos, vendas, reservas, clientes, equipa, faturas, PDFs, imagens ou OCR. Não escrevas dados pessoais, credenciais ou informação comercial confidencial no modo online. O servidor pede aos fornecedores políticas de não recolha de dados e Zero Data Retention; se não houver um fornecedor gratuito que respeite esses requisitos, a chamada falha e não é encaminhada para um serviço pago.\n\n" +
+                    "Só são enviados a pergunta atual e até 10 perguntas anteriores gerais escritas por ti que passem filtros locais. Perguntas sobre gestão, documentos ou registos do restaurante, bem como mensagens com identificadores pessoais detetáveis, ficam no dispositivo. Não são enviados a Memória, respostas anteriores do assistente, resumo do restaurante, menu, custos, vendas, reservas, clientes, equipa, faturas, PDFs, imagens ou OCR. Não escrevas dados pessoais, credenciais ou informação comercial confidencial no modo online. O servidor pede aos fornecedores políticas de não recolha de dados e Zero Data Retention; se não houver um fornecedor gratuito que respeite esses requisitos, a chamada falha e não é encaminhada para um serviço pago.\n\n" +
                     "Os modelos e fornecedores são serviços externos. A filtragem automática de emails, telefones, NIF e IBAN é uma proteção adicional, não uma garantia de deteção de todos os dados sensíveis. Consulta a política de privacidade e as condições do OpenRouter e dos fornecedores antes de usar informação real. A chave privada fica apenas nos segredos do servidor Supabase. A IA local continua disponível e não envia as mensagens para a nuvem."
             )
             .setNegativeButton("Cancelar", null)
@@ -2148,6 +2148,32 @@ class MainActivity : ComponentActivity() {
 
 
 
+    private fun normalizeAssistantPrivacyText(value: String): String =
+        java.text.Normalizer.normalize(value.lowercase(Locale.ROOT), java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
+
+    /**
+     * Questions that may depend on restaurant records stay on-device.
+     * The cloud router is for general knowledge and programming only.
+     */
+    private fun requiresPrivateRestaurantContext(value: String): Boolean {
+        val normalized = normalizeAssistantPrivacyText(value)
+        return Regex(
+            "\\b(restaurante|restauracao|menu|carta|prato|receita|ingrediente|stock|inventario|armazem|" +
+                "fatura|faturas|factura|facturas|fornecedor|fornecedores|custo|custos|margem|lucro|" +
+                "venda|vendas|pedido|pedidos|encomenda|encomendas|reserva|reservas|mesa|mesas|" +
+                "cliente|clientes|funcionario|funcionarios|equipa|salario|salarios|despesa|despesas|" +
+                "iva|contabilidade|financeiro|financeira|preco do prato|precos da carta)\\b"
+        ).containsMatchIn(normalized)
+    }
+
+    private fun containsCloudSensitiveIdentifier(value: String): Boolean =
+        Regex("[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", RegexOption.IGNORE_CASE).containsMatchIn(value) ||
+            Regex("\\b(?:NIF|NIPC)\\s*[:#]?\\s*\\d(?:[ .-]?\\d){8}\\b", RegexOption.IGNORE_CASE).containsMatchIn(value) ||
+            Regex("\\bIBAN\\s*[:#]?\\s*[A-Z]{2}\\d{2}[A-Z0-9 ]{10,30}\\b", RegexOption.IGNORE_CASE).containsMatchIn(value) ||
+            Regex("(?:\\+351\\s?)?9[1236](?:[ .-]?\\d){7}\\b").containsMatchIn(value) ||
+            Regex("\\b\\d{9}\\b").containsMatchIn(value)
+
     private fun sendAssistantMessage(rawMessage: String) {
         if (assistantSending) return
         val question = rawMessage.trim().take(4000)
@@ -2181,7 +2207,11 @@ class MainActivity : ComponentActivity() {
             assistantChatAutoFollow = true
             assistantChatError = null
 
-            if (advancedAssistantEnabled()) {
+            if (advancedAssistantEnabled() &&
+                !economicAssistant &&
+                !requiresPrivateRestaurantContext(question) &&
+                !containsCloudSensitiveIdentifier(question)
+            ) {
                 if (!isRemoteRestaurantOwner()) {
                     throw IllegalStateException("A IA avançada online só está disponível para o proprietário autenticado do restaurante.")
                 }
@@ -2195,7 +2225,10 @@ class MainActivity : ComponentActivity() {
                 // Only forward questions typed by the user. Previous assistant replies can
                 // contain invoice metadata returned by local tools and must stay on-device.
                 remoteHistory.forEach { turn ->
-                    if (turn.role == "user") {
+                    if (turn.role == "user" &&
+                        !requiresPrivateRestaurantContext(turn.content) &&
+                        !containsCloudSensitiveIdentifier(turn.content)
+                    ) {
                         val text = turn.content.trim().take(1_600)
                         if (text.isNotBlank()) {
                             messages.put(JSONObject().put("role", "user").put("content", text))
@@ -2235,8 +2268,62 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                             onFailure = { error ->
-                                assistantChatError = error.message?.take(500)
-                                    ?: "A IA avançada não está disponível. Verifica a configuração do servidor e tenta novamente."
+                                if (localAssistantModelManager.isModelInstalled()) {
+                                    assistantChatError = "Os modelos online estão indisponíveis. A resposta será gerada localmente."
+                                    assistantSending = true
+                                    val previousTurns = assistantChatStore.readTurns(scope, conversationId)
+                                        .dropLast(1)
+                                        .takeLast(LocalAssistantModelManager.MAX_HISTORY_MESSAGES)
+                                        .map { turn -> LocalAssistantModelManager.Turn(turn.role, turn.content) }
+                                    renderApp()
+                                    localAssistantModelManager.generate(
+                                        conversationId = conversationId,
+                                        systemInstruction = buildLocalAssistantSystemInstruction(scope, economicAssistant = false),
+                                        snapshot = assistantSnapshot(),
+                                        history = previousTurns,
+                                        userMessage = question,
+                                        deepThinking = turnUsesDeepThinking,
+                                        economicMode = false,
+                                        economicBridgeEnabled = hasRemoteRestaurant() &&
+                                            backendToken().isNotBlank() &&
+                                            backendPrefs.getString("restaurant_role", "") == "owner",
+                                        onToken = { tokenChunk ->
+                                            runOnUiThread { assistantStreamingTextView?.append(tokenChunk) }
+                                        },
+                                        onComplete = { localResult ->
+                                            runOnUiThread {
+                                                assistantSending = false
+                                                assistantStreamingTextView = null
+                                                localResult.fold(
+                                                    onSuccess = { localReply ->
+                                                        runCatching {
+                                                            assistantChatStore.appendTurn(scope, conversationId, "assistant", localReply)
+                                                            syncAssistantCloud(silent = true)
+                                                        }.onFailure { saveError ->
+                                                            assistantChatError = saveError.message
+                                                                ?: "A resposta local chegou, mas não foi possível guardar o histórico."
+                                                        }
+                                                    },
+                                                    onFailure = { localError ->
+                                                        assistantChatError = localError.message
+                                                            ?: "Os modelos online e local não conseguiram responder."
+                                                    }
+                                                )
+                                                renderApp()
+                                            }
+                                        }
+                                    )
+                                } else {
+                                    val localReply = answerAssistantChatMessage(question, scope, conversationId, economicAssistant = false)
+                                    runCatching {
+                                        assistantChatStore.appendTurn(scope, conversationId, "assistant", localReply)
+                                        syncAssistantCloud(silent = true)
+                                    }.onFailure { saveError ->
+                                        assistantChatError = saveError.message
+                                            ?: "Não foi possível guardar a resposta local."
+                                    }
+                                    assistantChatError = "Os modelos gratuitos estão indisponíveis. Foi usada a resposta local básica."
+                                }
                             }
                         )
                         renderApp()
