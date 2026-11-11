@@ -27,6 +27,28 @@ class LocalAssistantModelArtifactTest {
     }
 
     @Test
+    fun gemmaArtifactIsPinnedAndIntegrityChecked() {
+        assertEquals(
+            "gemma-4-E2B-it.litertlm",
+            LocalAssistantModelManager.GEMMA_MODEL_FILENAME
+        )
+        assertEquals(2_588_147_712L, LocalAssistantModelManager.GEMMA_MODEL_SIZE_BYTES)
+        assertEquals(
+            "181938105e0eefd105961417e8da75903eacda102c4fce9ce90f50b97139a63c",
+            LocalAssistantModelManager.GEMMA_MODEL_SHA256
+        )
+        assertEquals(64, LocalAssistantModelManager.GEMMA_MODEL_SHA256.length)
+        assertTrue(LocalAssistantModelManager.GEMMA_MODEL_DOWNLOAD_URL.startsWith("https://huggingface.co/"))
+        assertTrue(
+            "Gemma model URL must be pinned to an immutable Hugging Face revision.",
+            LocalAssistantModelManager.GEMMA_MODEL_DOWNLOAD_URL.contains(
+                "/resolve/6e5c4f1e395deb959c494953478fa5cec4b8008f/"
+            )
+        )
+        assertTrue(LocalAssistantModelManager.MIN_GEMMA_TOTAL_MEMORY_BYTES >= 6L * 1024L * 1024L * 1024L)
+    }
+
+    @Test
     fun localInferenceStaysInsideTheModelContextWindow() {
         assertEquals(4096, LocalAssistantModelManager.MAX_CONTEXT_TOKENS)
         assertTrue(AssistantThinkingModePolicy.DEFAULT_MAX_OUTPUT_TOKENS in 1..4096)
