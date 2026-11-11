@@ -100,9 +100,6 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
     private fun preferredModelFile(): File =
         if (canUseGemmaOnThisDevice()) gemmaModelFile else lfmModelFile
 
-    private val modelFile: File
-        get() = installedModelFile() ?: preferredModelFile()
-
     fun activeModelDisplayName(): String =
         artifactFor(installedModelFile() ?: preferredModelFile()).displayName
 
