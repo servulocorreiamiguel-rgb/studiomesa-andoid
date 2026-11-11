@@ -25,7 +25,7 @@ class MultiModelRouterContractTests(unittest.TestCase):
 
     def test_routes_complex_reasoning_to_deepseek(self):
         chain = EDGE.split("reasoning:", 1)[1].split("],", 1)[0]
-        self.assertIn("deepseek/deepseek-v4-flash:free", chain)
+        self.assertIn("deepseek/deepseek-r1:free", chain)
 
     def test_routes_programming_to_qwen(self):
         chain = EDGE.split("coding:", 1)[1].split("],", 1)[0]
