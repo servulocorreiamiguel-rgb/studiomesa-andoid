@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const MAX_MESSAGES = 12;
 const MAX_MESSAGE_CHARS = 1_600;
-const MAX_TOTAL_MESSAGE_CHARS = 8_000;
+const MAX_TOTAL_MESSAGE_CHARS = 17_600;
 const MAX_REPLY_CHARS = 10_000;
 const REQUEST_TIMEOUT_MS = 25_000;
 
@@ -166,6 +166,7 @@ async function callFreeModel(
       provider: {
         data_collection: "deny",
         zdr: true,
+        allow_fallbacks: false,
       },
     }),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
