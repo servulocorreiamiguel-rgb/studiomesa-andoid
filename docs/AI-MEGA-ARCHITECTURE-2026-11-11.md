@@ -16,7 +16,7 @@ Um único assistente e uma única conversa, com seleção automática do motor a
 | GPT-OSS 20B | Alternativa cloud de baixo custo | OpenRouter: `openai/gpt-oss-20b:free` |
 | OpenRouter Free Router | Última alternativa dinâmica | `openrouter/free`, seleciona um modelo gratuito que satisfaça os requisitos |
 
-A aplicação mantém **um único assistente e uma única conversa**. O utilizador não escolhe quatro chats. A Edge Function seleciona o primeiro motor gratuito adequado à categoria da pergunta e só tenta o seguinte quando o anterior falha. O sistema não executa os modelos todos em paralelo e não envia a mesma mensagem a vários fornecedores.
+A aplicação mantém **um único assistente e uma única conversa**. O Qwen3.8 27B (variante gratuita) também integra a cadeia de tarefas gerais, além da cadeia de programação. O utilizador não escolhe quatro chats. A Edge Function seleciona o primeiro motor gratuito adequado à categoria da pergunta e só tenta o seguinte quando o anterior falha. O sistema não executa os modelos todos em paralelo e não envia a mesma mensagem a vários fornecedores.
 
 A variante `qwen/qwen3.8-27b:free` está listada no OpenRouter com preço zero e suporte para chamadas de ferramentas. A rota paga `qwen/qwen3.8-27b` é diferente e nunca é chamada. GPT-OSS 120B continua excluído do modo gratuito; GPT-OSS 20B mantém-se como alternativa gratuita confirmada. O router exige `data_collection: deny`, `zdr: true` e `allow_fallbacks: false`; se não existir um endpoint elegível, a tentativa falha e passa para o próximo modelo gratuito, sem enfraquecer a privacidade nem usar um modelo pago.
 
