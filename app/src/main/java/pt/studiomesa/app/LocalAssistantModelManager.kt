@@ -78,6 +78,32 @@ internal object LocalAssistantModelPolicy {
             lfmFileExists && lfmSizeValid && lfmHashValid
 }
 
+internal object ModelDownloadResumePolicy {
+    fun resumeOffset(partialBytes: Long, expectedBytes: Long): Long =
+        if (partialBytes in 1..expectedBytes) partialBytes else 0L
+
+    fun requiredFreeBytes(
+        expectedBytes: Long,
+        partialBytes: Long,
+        minimumFreeBytes: Long
+    ): Long {
+        val usablePartialBytes = if (partialBytes in 0..expectedBytes) partialBytes else 0L
+        return (expectedBytes - usablePartialBytes).coerceAtLeast(0L) + minimumFreeBytes
+    }
+
+    fun acceptsContentRange(
+        requestedOffset: Long,
+        rangeStart: Long,
+        rangeEnd: Long,
+        rangeTotal: Long,
+        expectedBytes: Long
+    ): Boolean =
+        requestedOffset in 0 until expectedBytes &&
+            rangeStart == requestedOffset &&
+            rangeEnd == expectedBytes - 1L &&
+            rangeTotal == expectedBytes
+}
+
 internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
     data class Turn(val role: String, val content: String)
 
@@ -97,8 +123,17 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         val memory = ActivityManager.MemoryInfo()
         manager.getMemoryInfo(memory)
         val availableBytes = StatFs(appContext.filesDir.absolutePath).availableBytes
+        val stagedGemmaBytes = File(
+            modelDirectory,
+            "${GEMMA_MODEL_FILENAME}.part"
+        ).length()
+        val requiredBytes = ModelDownloadResumePolicy.requiredFreeBytes(
+            expectedBytes = GEMMA_MODEL_SIZE_BYTES,
+            partialBytes = stagedGemmaBytes,
+            minimumFreeBytes = MINIMUM_FREE_SPACE_BYTES
+        )
         memory.totalMem >= MIN_GEMMA_TOTAL_MEMORY_BYTES &&
-            availableBytes >= GEMMA_MODEL_SIZE_BYTES + MINIMUM_FREE_SPACE_BYTES
+            availableBytes >= requiredBytes
     }.getOrDefault(false)
 
     private fun artifactFor(file: File): ModelArtifact =
@@ -213,63 +248,16 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                 }
                 targetFile.delete()
 
-                val availableBytes = StatFs(appContext.filesDir.absolutePath).availableBytes
-                val requiredBytes = artifact.sizeBytes + MINIMUM_FREE_SPACE_BYTES
-                if (availableBytes < requiredBytes) {
-                    throw IllegalStateException(
-                        "Espaço insuficiente. São necessários cerca de " +
-                            formatModelSize(artifact.sizeBytes) + " livres para transferir " +
-                            artifact.displayName + " e manter espaço de trabalho."
-                    )
-                }
-
                 val temporaryFile = File(targetFile.parentFile, "${artifact.file.name}.part")
-                temporaryFile.delete()
-                val connection = (URL(artifact.downloadUrl).openConnection() as HttpURLConnection).apply {
-                    requestMethod = "GET"
-                    connectTimeout = 25_000
-                    readTimeout = 120_000
-                    instanceFollowRedirects = true
-                    useCaches = false
-                    setRequestProperty("Accept", "application/octet-stream")
-                    setRequestProperty("User-Agent", "StudioMesa-Offline-AI/1.0")
-                }
+                var resumeOffset = ModelDownloadResumePolicy.resumeOffset(
+                    partialBytes = temporaryFile.length(),
+                    expectedBytes = artifact.sizeBytes
+                )
+                if (temporaryFile.exists() && resumeOffset == 0L) temporaryFile.delete()
 
-                try {
-                    val status = connection.responseCode
-                    if (status !in 200..299) {
-                        throw IllegalStateException("O servidor do modelo respondeu com HTTP $status.")
-                    }
-                    val declaredLength = connection.contentLengthLong
-                    if (declaredLength > 0 && declaredLength != artifact.sizeBytes) {
-                        throw IllegalStateException("O tamanho anunciado pelo servidor não corresponde ao modelo validado.")
-                    }
-
-                    val digest = MessageDigest.getInstance("SHA-256")
-                    var downloaded = 0L
-                    BufferedInputStream(connection.inputStream, BUFFER_SIZE).use { input ->
-                        BufferedOutputStream(FileOutputStream(temporaryFile), BUFFER_SIZE).use { output ->
-                            val buffer = ByteArray(BUFFER_SIZE)
-                            while (true) {
-                                if (closed) throw CancellationException("Transferência cancelada ao fechar a aplicação.")
-                                val count = input.read(buffer)
-                                if (count < 0) break
-                                output.write(buffer, 0, count)
-                                digest.update(buffer, 0, count)
-                                downloaded += count
-                                onProgress(downloaded, artifact.sizeBytes)
-                            }
-                            output.flush()
-                        }
-                    }
-
-                    if (downloaded != artifact.sizeBytes) {
-                        throw IllegalStateException(
-                            "A transferência ficou incompleta ($downloaded de ${artifact.sizeBytes} bytes)."
-                        )
-                    }
-                    val actualHash = digest.digest().joinToString("") { "%02x".format(it) }
-                    if (!actualHash.equals(artifact.sha256, ignoreCase = true)) {
+                fun installVerifiedTemporaryFile(): File {
+                    if (!verifySha256(temporaryFile, artifact.sha256)) {
+                        temporaryFile.delete()
                         throw IllegalStateException("A verificação SHA-256 falhou. O ficheiro foi rejeitado.")
                     }
                     if (targetFile.exists() && !targetFile.delete()) {
@@ -280,10 +268,129 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     }
                     verifiedModelPath = targetFile.absolutePath
                     if (targetFile.name == GEMMA_MODEL_FILENAME) forceLfmForProcess = false
-                    targetFile
+                    return targetFile
+                }
+
+                // A previous interrupted transfer may already contain the complete file.
+                // Verify it before making another network request.
+                if (resumeOffset == artifact.sizeBytes) {
+                    if (verifySha256(temporaryFile, artifact.sha256)) {
+                        return@runCatching installVerifiedTemporaryFile()
+                    }
+                    temporaryFile.delete()
+                    resumeOffset = 0L
+                }
+
+                val availableBytes = StatFs(appContext.filesDir.absolutePath).availableBytes
+                val remainingBytes = artifact.sizeBytes - resumeOffset
+                val requiredBytes = ModelDownloadResumePolicy.requiredFreeBytes(
+                    expectedBytes = artifact.sizeBytes,
+                    partialBytes = resumeOffset,
+                    minimumFreeBytes = MINIMUM_FREE_SPACE_BYTES
+                )
+                if (availableBytes < requiredBytes) {
+                    throw IllegalStateException(
+                        "Espaço insuficiente. Faltam cerca de " +
+                            formatModelSize(remainingBytes) + " para concluir a transferência de " +
+                            artifact.displayName + " e manter espaço de trabalho."
+                    )
+                }
+
+                val connection = (URL(artifact.downloadUrl).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 25_000
+                    readTimeout = 120_000
+                    instanceFollowRedirects = true
+                    useCaches = false
+                    setRequestProperty("Accept", "application/octet-stream")
+                    setRequestProperty("Accept-Encoding", "identity")
+                    setRequestProperty("User-Agent", "StudioMesa-Offline-AI/1.0")
+                    if (resumeOffset > 0L) {
+                        setRequestProperty("Range", "bytes=${resumeOffset}-")
+                    }
+                }
+
+                try {
+                    val status = connection.responseCode
+                    var outputOffset = resumeOffset
+                    var appendToPartial = false
+
+                    when {
+                        status == HttpURLConnection.HTTP_OK -> {
+                            // Some mirrors ignore Range. Restart safely instead of corrupting the model.
+                            if (resumeOffset > 0L) {
+                                temporaryFile.delete()
+                                outputOffset = 0L
+                            }
+                        }
+                        status == HttpURLConnection.HTTP_PARTIAL -> {
+                            val range = parseContentRange(connection.getHeaderField("Content-Range"))
+                            if (range == null || !ModelDownloadResumePolicy.acceptsContentRange(
+                                    requestedOffset = resumeOffset,
+                                    rangeStart = range[0],
+                                    rangeEnd = range[1],
+                                    rangeTotal = range[2],
+                                    expectedBytes = artifact.sizeBytes
+                                )
+                            ) {
+                                temporaryFile.delete()
+                                throw IllegalStateException(
+                                    "O servidor devolveu um intervalo inválido; a transferência parcial foi descartada por segurança."
+                                )
+                            }
+                            appendToPartial = resumeOffset > 0L
+                        }
+                        else -> {
+                            throw IllegalStateException("O servidor do modelo respondeu com HTTP $status.")
+                        }
+                    }
+
+                    val expectedResponseBytes = artifact.sizeBytes - outputOffset
+                    val declaredLength = connection.contentLengthLong
+                    if (declaredLength > 0 && declaredLength != expectedResponseBytes) {
+                        throw IllegalStateException(
+                            "O tamanho anunciado pelo servidor não corresponde à parte que falta transferir."
+                        )
+                    }
+
+                    var downloaded = outputOffset
+                    onProgress(downloaded, artifact.sizeBytes)
+                    BufferedInputStream(connection.inputStream, BUFFER_SIZE).use { input ->
+                        BufferedOutputStream(
+                            FileOutputStream(temporaryFile, appendToPartial),
+                            BUFFER_SIZE
+                        ).use { output ->
+                            val buffer = ByteArray(BUFFER_SIZE)
+                            while (true) {
+                                if (closed) {
+                                    throw CancellationException(
+                                        "Transferência interrompida. O progresso ficou guardado para retomar mais tarde."
+                                    )
+                                }
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                if (downloaded + count > artifact.sizeBytes) {
+                                    temporaryFile.delete()
+                                    throw IllegalStateException("O servidor enviou mais dados do que o tamanho validado do modelo.")
+                                }
+                                output.write(buffer, 0, count)
+                                downloaded += count
+                                onProgress(downloaded, artifact.sizeBytes)
+                            }
+                            output.flush()
+                        }
+                    }
+
+                    if (downloaded != artifact.sizeBytes) {
+                        throw IllegalStateException(
+                            "A transferência foi interrompida ($downloaded de ${artifact.sizeBytes} bytes). " +
+                                "O progresso ficou guardado; tenta novamente para continuar do mesmo ponto."
+                        )
+                    }
+                    installVerifiedTemporaryFile()
                 } finally {
+                    // Never delete the .part file here: network loss/app closure must be resumable.
                     connection.disconnect()
-                    if (temporaryFile.exists()) temporaryFile.delete()
                 }
             }
             downloading = false
@@ -573,6 +680,18 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                 worker.shutdown()
             }
         }
+    }
+
+    private fun parseContentRange(value: String?): LongArray? {
+        val match = Regex("^bytes\\s+(\\d+)-(\\d+)/(\\d+)$", RegexOption.IGNORE_CASE)
+            .matchEntire(value?.trim().orEmpty()) ?: return null
+        return runCatching {
+            longArrayOf(
+                match.groupValues[1].toLong(),
+                match.groupValues[2].toLong(),
+                match.groupValues[3].toLong()
+            )
+        }.getOrNull()
     }
 
     private fun verifySha256(file: File, expectedSha256: String): Boolean = runCatching {

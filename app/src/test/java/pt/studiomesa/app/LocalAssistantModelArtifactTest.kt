@@ -1,10 +1,89 @@
 package pt.studiomesa.app
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LocalAssistantModelArtifactTest {
+    @Test
+    fun interruptedModelDownloadsResumeFromTheExistingPartialFile() {
+        val expected = 2_588_147_712L
+        assertEquals(0L, ModelDownloadResumePolicy.resumeOffset(0L, expected))
+        assertEquals(512_000_000L, ModelDownloadResumePolicy.resumeOffset(512_000_000L, expected))
+        // A complete staged file is returned as a complete offset so the manager
+        // can verify its SHA-256 and install it without downloading again.
+        assertEquals(expected, ModelDownloadResumePolicy.resumeOffset(expected, expected))
+        assertEquals(0L, ModelDownloadResumePolicy.resumeOffset(expected + 1L, expected))
+        assertEquals(0L, ModelDownloadResumePolicy.resumeOffset(-1L, expected))
+    }
+
+    @Test
+    fun remainingStorageAccountsForTheAlreadyDownloadedModelBytes() {
+        val modelBytes = 100L
+        val freeReserve = 50L
+        assertEquals(
+            150L,
+            ModelDownloadResumePolicy.requiredFreeBytes(modelBytes, 0L, freeReserve)
+        )
+        assertEquals(
+            110L,
+            ModelDownloadResumePolicy.requiredFreeBytes(modelBytes, 40L, freeReserve)
+        )
+        assertEquals(
+            50L,
+            ModelDownloadResumePolicy.requiredFreeBytes(modelBytes, modelBytes, freeReserve)
+        )
+        // An oversized partial file is not trusted and must not reduce the
+        // amount of free space required for a fresh transfer.
+        assertEquals(
+            150L,
+            ModelDownloadResumePolicy.requiredFreeBytes(modelBytes, modelBytes + 1L, freeReserve)
+        )
+    }
+
+    @Test
+    fun resumedDownloadsAcceptOnlyTheExactRemainingHttpByteRange() {
+        val expected = 2_588_147_712L
+        val offset = 512_000_000L
+        assertTrue(
+            ModelDownloadResumePolicy.acceptsContentRange(
+                requestedOffset = offset,
+                rangeStart = offset,
+                rangeEnd = expected - 1L,
+                rangeTotal = expected,
+                expectedBytes = expected
+            )
+        )
+        assertFalse(
+            ModelDownloadResumePolicy.acceptsContentRange(
+                requestedOffset = offset,
+                rangeStart = offset + 1L,
+                rangeEnd = expected - 1L,
+                rangeTotal = expected,
+                expectedBytes = expected
+            )
+        )
+        assertFalse(
+            ModelDownloadResumePolicy.acceptsContentRange(
+                requestedOffset = offset,
+                rangeStart = offset,
+                rangeEnd = expected - 2L,
+                rangeTotal = expected,
+                expectedBytes = expected
+            )
+        )
+        assertFalse(
+            ModelDownloadResumePolicy.acceptsContentRange(
+                requestedOffset = offset,
+                rangeStart = offset,
+                rangeEnd = expected - 1L,
+                rangeTotal = expected + 1L,
+                expectedBytes = expected
+            )
+        )
+    }
+
     @Test
     fun modelArtifactIsPinnedAndIntegrityChecked() {
         assertEquals(

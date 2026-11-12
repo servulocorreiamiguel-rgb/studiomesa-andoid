@@ -1060,7 +1060,7 @@ class MainActivity : ComponentActivity() {
             if (!localAssistantModelManager.isModelInstalled()) {
                 AlertDialog.Builder(this@MainActivity)
                     .setTitle("Pensar mais")
-                    .setMessage("O modo de análise aprofundada requer um modelo generativo local. A transferência depende do telemóvel: Gemma 4 E2B (cerca de 2,59 GB) em equipamentos com memória suficiente ou LFM2.5 (cerca de 736 MB) nos restantes. Não existe custo por mensagem.")
+                    .setMessage("O modo de análise aprofundada usa o melhor modelo local compatível com o telemóvel. O Gemma 4 E2B ocupa cerca de 2,59 GB e mantém a qualidade do motor principal. Se a ligação cair ou fechares a aplicação, o progresso fica guardado: basta voltares a tocar em Transferir modelo para continuar, sem recomeçar do zero. Não existe custo por mensagem.")
                     .setNegativeButton("Agora não", null)
                     .setPositiveButton("Instalar modelo") { _, _ -> startLocalAssistantModelDownload() }
                     .show()
@@ -1993,7 +1993,7 @@ class MainActivity : ComponentActivity() {
                 AlertDialog.Builder(this)
                     .setTitle("Instalar IA local")
                     .setMessage(
-                        "A transferência inicial é de aproximadamente ${formatModelBytes(localAssistantModelManager.modelSizeBytes())} e requer Internet. O StudioMesa escolhe automaticamente o modelo local adequado à memória do telemóvel: Gemma 4 E2B quando existe capacidade suficiente ou LFM2.5 como alternativa mais leve. O ficheiro fica guardado na área privada da aplicação. Depois de instalado, a geração funciona sem Internet e não envia mensagens, memória ou dados do restaurante para servidores."
+                        "A transferência inicial é de aproximadamente ${formatModelBytes(localAssistantModelManager.modelSizeBytes())} e requer Internet. A StudioMesa escolhe o modelo local adequado à memória do telemóvel. Se a ligação cair ou fechares a aplicação, o ficheiro parcial fica guardado e a próxima transferência continua do ponto onde ficou. O modelo completo é verificado por SHA-256 antes de ser instalado. Depois de instalado, a geração funciona sem Internet e não envia mensagens, memória ou dados do restaurante para servidores."
                     )
                     .setNegativeButton("Cancelar", null)
                     .setPositiveButton("Transferir") { _, _ -> startLocalAssistantModelDownload() }
@@ -2012,7 +2012,7 @@ class MainActivity : ComponentActivity() {
                     AlertDialog.Builder(this)
                         .setTitle("Atualizar o motor local")
                         .setMessage(
-                            "O Gemma 4 E2B é maior e pode oferecer respostas locais mais capazes. A instalação publicada ocupa cerca de 2,59 GB; o consumo real de RAM e a velocidade variam por telemóvel. O LFM2.5 atual não será apagado: mantém-se como alternativa. A transferência não tem custo por mensagem."
+                            "O Gemma 4 E2B mantém-se como motor local principal, sem reduzir a quantização nem trocar por um modelo mais pequeno. O ficheiro ocupa cerca de 2,59 GB. Se a transferência for interrompida, podes retomá-la sem voltar a descarregar os dados já recebidos. O LFM2.5 atual não será apagado e mantém-se como alternativa."
                         )
                         .setNegativeButton("Agora não", null)
                         .setPositiveButton("Transferir Gemma") { _, _ ->
