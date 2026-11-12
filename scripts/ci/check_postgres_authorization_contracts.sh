@@ -1311,6 +1311,47 @@ if create_inventory_item "$USER_B" "$RESTAURANT_B" "e1111111-1111-4111-8111-1111
   exit 1
 fi
 
+# A downgrade hides existing stock and movement history through direct REST table reads.
+# Seed one item as Premium, downgrade, verify both RLS policies, then clean the fixture.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO private.restaurant_loyalty_entitlements (restaurant_id, plan_code)
+VALUES ('$RESTAURANT_B'::uuid, 'premium')
+ON CONFLICT (restaurant_id) DO UPDATE SET plan_code = EXCLUDED.plan_code;
+SQL
+PLAN_STOCK_PROBE_ID="$(create_inventory_item "$USER_B" "$RESTAURANT_B" "e3333333-3333-4333-8333-333333333333" "Premium Stock Visibility Probe" "1")"
+test -n "$PLAN_STOCK_PROBE_ID"
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+UPDATE private.restaurant_loyalty_entitlements
+SET plan_code = 'profissional'
+WHERE restaurant_id = '$RESTAURANT_B'::uuid;
+SQL
+visible_stock_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text FROM public.restaurant_inventory_items WHERE restaurant_id = '$RESTAURANT_B'::uuid;
+ROLLBACK;
+SQL
+)"
+visible_movement_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text FROM public.restaurant_inventory_movements WHERE restaurant_id = '$RESTAURANT_B'::uuid;
+ROLLBACK;
+SQL
+)"
+if [ "$visible_stock_rows" != "0" ] || [ "$visible_movement_rows" != "0" ]; then
+  echo "ERROR: a Professional restaurant could still read Premium inventory rows." >&2
+  printf 'Visible stock=%s, visible movements=%s\\n' "$visible_stock_rows" "$visible_movement_rows" >&2
+  exit 1
+fi
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+DELETE FROM public.restaurant_inventory_movements WHERE item_id = '$PLAN_STOCK_PROBE_ID'::uuid;
+DELETE FROM public.restaurant_inventory_items WHERE id = '$PLAN_STOCK_PROBE_ID'::uuid;
+SQL
+echo "PASS: Pro cannot read Premium stock or movement history through direct REST table queries."
+
 if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
