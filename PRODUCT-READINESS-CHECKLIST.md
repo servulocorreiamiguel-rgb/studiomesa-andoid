@@ -1,63 +1,69 @@
 # StudioMesa — lista de preparação para uso profissional
 
-**Estado atualizado em 12/11/2026: NÃO LIBERADA para venda operacional, piloto com dados reais ou produção.** A Mega IA da PR #113 já está integrada na `main` (merge commit `94a41413336678c9078fef9e21e0c4951cb8edaf`). Na CI da `main` [43186787267](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43186787267), passaram os quatro jobs: compilação das cinco variantes, testes unitários, Android Lint, configuração de release, replay PostgreSQL/autorização e smoke tests Android 8 e Android 16. Foram publicados cinco APKs **debug/demo**, sem assinatura comercial definitiva.
+**Estado consolidado em 12/11/2026:** o código está suficientemente avançado para demonstração com dados fictícios, mas **NÃO está LIBERADO para venda operacional, piloto com dados reais ou produção**. Esta fotografia substitui os estados contraditórios ou desatualizados dos registos históricos que se seguem.
 
-A fotografia detalhada mais recente está em [docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-10.md](docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-10.md). Esta secção prevalece sobre os registos históricos abaixo.
+Auditoria detalhada: [docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-12.md](docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-12.md).
 
-## Atualização técnica de 12/11/2026
+## Código e CI
 
-- [x] PR #113 integrada na `main`: assistente único com roteamento online para DeepSeek R1, Cohere North Mini Code, Qwen3.8 27B `:free`, GPT-OSS 20B `:free` e OpenRouter Free Router; GPT-OSS 120B não é usado no caminho gratuito.
-- [x] PR #114 integrada: a reserva LFM2.5 pode ser novamente verificada/reparada mesmo quando o ficheiro existe com tamanho válido; a validação SHA-256 decide se é necessário voltar a descarregar. CI da PR passou nos quatro jobs (43200057302).
-- [x] PR #115 integrada: documentação corrigida para 63 versões remotas correspondentes a 68 ficheiros locais, com cinco migrações locais por validar.
-- [x] PR #116 integrada: os RPCs de permissões granulares não são chamados enquanto o gate está desligado; a cache de funcionários é limpa em falha de autorização; a criação de pedidos exige as permissões correspondentes no cliente e na política PostgreSQL. CI da PR passou nos quatro jobs, incluindo Android 8 e 16 (43205612141).
-- [x] CI de pós-merge da `main` após PR #116: execução [43209335761](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43209335761) passou nos quatro jobs. A PR #118 também passou nos quatro jobs ([43210884500](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43210884500)); a CI pós-merge de #118 está em curso ([43216860718](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43216860718)).
-- [ ] O gate `GRANULAR_STAFF_PERMISSIONS_ENABLED` e o gate `RECIPE_MANAGEMENT_ENABLED` permanecem `false`. Só os ativar depois de aplicar/testar as migrações na branch Supabase de desenvolvimento e validar em duas contas/restaurantes.
-- [x] IA local Android: Gemma 4 E2B como motor preferido em equipamentos com filtro inicial de RAM/espaço suficiente; LFM2.5-1.2B INT4 como alternativa local e reserva instalável (736 MB), com validação SHA-256.
-- [x] O router exige JWT na configuração versionada e autentica o papel `owner`; a chamada online está desativada por omissão no build.
-- [x] Edge Function `studiomesa-ai-router` publicada no Supabase alojado, versão 1, com `verify_jwt=true`.
-- [ ] Confirmar/configurar a secret de servidor `OPENROUTER_API_KEY` e testar chamadas autenticadas de owner; a presença do segredo não foi confirmada nesta verificação. Manter cloud desligada até passar esses testes.
-- [ ] Testes físicos de Gemma/LFM no OPPO A5m e outros Android: carregamento, qualidade, latência, RAM, temperatura, bateria, encerramento e fallback.
-- [ ] O modo gratuito online tem quotas partilhadas pelo serviço/projeto e pode ficar indisponível; não prometer IA online ilimitada.
-- [x] Foram publicados cinco APKs debug/demo na execução [43186787267](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43186787267); não são pacotes comerciais assinados.
+- [x] PR #119 integrada: o texto da gestão de equipa corresponde ao comportamento real das permissões no backend atual.
+- [x] PR #120 integrada no commit `e2b23b65416a600e2fb1d8a699cba1a0d37ec9d6`: índices de adesão movidos para uma migração posterior à criação da tabela.
+- [x] CI da PR #120 [43219206624](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43219206624) passou os quatro jobs: compilação e testes/Lint, replay PostgreSQL/autorização, Android 8 e Android 16.
+- [ ] CI pós-merge da `main` no commit `e2b23b65416a600e2fb1d8a699cba1a0d37ec9d6`: execução [43223886131](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43223886131) em curso na última consulta; só marcar concluída depois dos quatro jobs passarem.
+- [x] Cinco variantes Android de demonstração/debug compiladas. Não são pacotes comerciais assinados nem foram testadas fisicamente no OPPO A5m.
+- [x] Um só assistente, modelos locais Gemma 4 E2B e LFM2.5-1.2B INT4, router cloud publicado com JWT obrigatório.
+- [ ] Validar fisicamente os modelos locais, qualidade, latência, RAM, temperatura, bateria e fallback.
 
-Estado detalhado e bloqueios: [atualização técnica de 12/11/2026](docs/COMMERCIAL-READINESS-UPDATE-2026-11-12.md).
+## Supabase e migrações
 
-- [x] Cinco variantes Android configuradas; compileSdk/targetSdk 36, minSdk 24, Java 17 e versão 1.5.0.
-- [x] CI da `main` após integração da Mega IA passou os quatro jobs (43186787267): compilação/testes/Lint, replay PostgreSQL/autorização e smoke tests Android 8 e Android 16.
-- [x] Os botões Google/Microsoft estão ocultos por defeito; a implementação OAuth/PKCE foi preservada e adiada até depois da primeira venda.
-- [x] Projeto Supabase `ACTIVE_HEALTHY`, PostgreSQL 17.6.1.166, região eu-west-1; 26 tabelas com RLS ativo.
-- [x] Verificação SQL read-only: as 11 tabelas RLS sem políticas não concedem SELECT/INSERT/UPDATE/DELETE a `anon` nem `authenticated`.
-- [x] Verificação SQL read-only: 47 funções `SECURITY DEFINER`; 42 executáveis por `authenticated`, zero por `anon`; todas referenciam `auth.uid()` e têm `search_path = ''`. A revisão função a função continua obrigatória.
-- [x] Comparação read-only de 12/11/2026: 63 versões no histórico remoto e 68 ficheiros SQL locais. Todas as 63 versões remotas têm ficheiro local com a mesma versão e nome; não há versões remotas sem ficheiro local. Existem cinco migrações locais ainda não aplicadas no projeto alojado:
-  - `20261030111815_restaurant_recipes_and_order_stock_consumption.sql`
-  - `20261102103000_granular_restaurant_staff_permissions.sql`
-  - `20261102120000_require_loyalty_permission_for_reward_fulfillment.sql`
-  - `20261102121000_enforce_loyalty_permission_for_staff_loyalty_operations.sql`
-  - `20261104100000_price_adviser_actor_indexes.sql`
-  A comparação confirmou versões/nomes, não igualdade integral do SQL histórico remoto.
-- [x] Replay das 68 migrações numa base PostgreSQL isolada e testes de autorização/idempotência entre restaurantes passaram no job de CI da PR #114 ([execução 43200057302](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43200057302)).
-- [ ] Aplicar as cinco migrações apenas numa branch Supabase de desenvolvimento, testar schema/RLS/RPCs e verificar advisors. A branch custa 0,01344 USD/hora; ainda não foi criada à espera de aprovação do custo. Não executar `db push`, `migration repair`, reset ou DDL na produção antes de backup/restauro comprovados.
-- [ ] Criar, reconciliar e testar as tabelas/RPCs ausentes: `public.restaurant_recipes`, `public.restaurant_recipe_ingredients` e `private.restaurant_staff_permissions`.
-- [ ] Rever individualmente as 42 funções `SECURITY DEFINER`, com testes de isolamento entre restaurantes e papéis. Os avisos do Advisor não devem ser resolvidos por revogações em bloco.
-- [ ] Resolver a proteção contra palavras-passe comprometidas desativada, depois de confirmar custo/plano.
-- [ ] Configurar SMTP próprio e confirmar email; testar registo, recuperação, sessão, logout e eliminação com contas descartáveis.
-- [x] Primeira versão sem Google/Microsoft; OAuth social explicitamente adiado para depois da primeira venda.
-- [ ] Testar E2E pedidos, reservas, cozinha, stock, fidelização, campanhas, faturas, sincronização, perda de rede e isolamento multi-restaurante.
-- [ ] Testar fisicamente no OPPO A5m e noutros Android o modelo local, instalação, desempenho, bateria, temperatura e atualização.
-- [ ] Publicar/validar apenas os serviços cloud necessários. A Edge Function `studiomesa-assistant` devolve HTTP 410; a IA avançada não está publicada; a pesquisa Web depende de `SEARXNG_BASE_URL` configurado.
-- [ ] Finalizar política de privacidade, termos, DPA, subcontratantes, retenção, eliminação, Data Safety, SBOM, licenças e suporte com a entidade responsável.
-- [ ] Escolher package IDs finais, guardar keystore comercial com backup seguro, configurar secrets/variables e gerar AAB/APKs assinados. Os artefactos regulares de CI são debug/demo.
-- [ ] Validar a release assinada, checksums, atualização e distribuição final.
+- [x] Projeto alojado observado em estado `ACTIVE_HEALTHY`, PostgreSQL 17.6.1.166, região `eu-west-1`.
+- [x] Comparação read-only: 69 ficheiros SQL locais; 63 migrações remotas. As 63 versões remotas têm correspondência exata por versão e nome; não há versões remotas sem ficheiro.
+- [ ] Aplicar e validar em ambiente isolado seis migrações locais ainda não aplicadas:
+  - `20261030111815_restaurant_recipes_and_order_stock_consumption`
+  - `20261102103000_granular_restaurant_staff_permissions`
+  - `20261102120000_require_loyalty_permission_for_reward_fulfillment`
+  - `20261102121000_enforce_loyalty_permission_for_staff_loyalty_operations`
+  - `20261104100000_price_adviser_actor_indexes`
+  - `20261112120000_restaurant_membership_request_actor_indexes`
+- [ ] Criar uma branch Supabase de desenvolvimento, testar schema/RLS/RPCs e advisors. O preço consultado é 0,01344 USD/hora. Não foi criada por não existir aprovação explícita para o custo.
+- [ ] Validar as tabelas ausentes `public.restaurant_recipes`, `public.restaurant_recipe_ingredients` e `private.restaurant_staff_permissions`. Até lá, não anunciar fichas técnicas/consumo automático de ingredientes nem permissões granulares.
+- [ ] Rever individualmente as 42 funções `SECURITY DEFINER` executáveis por `authenticated`. Não revogar permissões em bloco.
+- [ ] Rever o aviso do Auth sobre proteção contra palavras-passe comprometidas, tendo em conta o plano/custo do projeto.
+- [ ] Confirmar backup e executar restauro controlado antes de qualquer alteração de produção.
 
-**Não anunciar como funcionalidades comerciais já disponíveis:** fichas técnicas/consumo automático de ingredientes; permissões granulares de funcionários; IA cloud GPT-OSS; pesquisa Web até configurar/testar o motor; integração POS, pagamentos, impressoras, faturação, SAF-T ou contabilidade. O saldo de fidelização continua parcialmente manual. As previsões baseadas em pedidos não representam recebimentos bancários nem faturação contabilística.
+## Autenticação, IA e integrações
 
-**Limites da IA:** a versão integrada suporta Gemma 4 E2B local e LFM2.5-1.2B INT4 como alternativa/reserva; ainda exige testes físicos e revisão das licenças. O router cloud multi-modelo está no código, mas permanece desligado até publicação da Edge Function, configuração da chave e validação de privacidade. Não é ChatGPT nem equivalente ao ChatGPT Free; OCR exige revisão humana.
+- [ ] Configurar SMTP/domínio próprio e testar registo, confirmação, recuperação, refresh, logout e eliminação de conta com contas descartáveis.
+- [ ] Confirmar/configurar `OPENROUTER_API_KEY` como segredo do servidor e executar testes autenticados de owner, staff, token expirado, privacidade, filtros, quotas e fallback. A IA cloud continua desligada por omissão.
+- [ ] Confirmar `SEARXNG_BASE_URL` HTTPS e testar pesquisa Web sem enviar dados privados.
+- [x] Google/Microsoft ocultos por decisão para a primeira venda; OAuth/PKCE preservado para fase posterior.
+- [ ] Testar a sincronização de histórico/memória entre dois dispositivos com consentimento, perda de rede e eliminação. A cópia cloud não é encriptação ponta a ponta.
 
-**Regra de lançamento:** a StudioMesa pode ser demonstrada com dados fictícios. Não deve receber dados reais de clientes ou restaurantes nem ser vendida como solução operacional até todos os bloqueios acima estarem resolvidos e testados.
+## Produto, segurança e testes de aceitação
+
+- [ ] E2E com dois restaurantes e contas owner/staff/cliente: isolamento, menus, pedidos, cozinha, reservas, inventário, fidelização, campanhas, faturas e revogação de acesso.
+- [ ] Testar falhas de rede, repetição idempotente, sessão expirada, conflitos concorrentes, restauração e atualização.
+- [ ] Testar Gemma/LFM no OPPO A5m e em equipamentos Android representativos.
+- [ ] Rever retenção, exportação, eliminação, incident response, backups e suporte.
+- [ ] Não anunciar POS, pagamentos, faturação, SAF-T, contabilidade ou impressoras como funcionalidades integradas. O saldo de pontos permanece parcialmente manual.
+
+## Release comercial e distribuição
+
+- [x] Workflow manual de release assinado existe e bloqueia builds sem CI verde para o commit exato, confirmação manual, keystore e package ID.
+- [ ] Escolher os identificadores finais após decidir a estratégia de distribuição; os identificadores ficam permanentes após publicação.
+- [ ] Criar keystore privada e backup controlado pelo proprietário; configurar os GitHub Actions Secrets/Variables. Nunca enviar chaves ou passwords por chat ou Git.
+- [ ] Rever a estratégia Google Play: cinco variantes técnicas não significam cinco listagens permitidas. Considerar apps distintas Gestão/Cliente e entitlement seguro para os planos ou distribuição B2B privada.
+- [ ] Gerar AAB/APKs assinados, verificar assinatura/checksums e testar atualização em dispositivos reais. O workflow não publica automaticamente na Play Store.
+- [ ] Finalizar termos, política de privacidade, DPA, subprocessadores, declaração Data Safety, licenças da IA e suporte com a entidade responsável.
+
+**Regra de lançamento:** a StudioMesa só fica autorizada para operação comercial depois de todos os bloqueios de backend, Auth, autorização, E2E/físicos, release e legal/privacidade acima estarem resolvidos e documentados.
 
 ---
 
 ## Registos históricos — não usar como estado atual
+
+Os registos abaixo descrevem auditorias anteriores e podem conter números, caminhos e estados entretanto alterados. Em caso de conflito, prevalecem o estado consolidado no início deste ficheiro e a auditoria comercial de 12/11/2026.
+
 
 Os registos e checkboxes abaixo foram escritos em 29/10 e 05/11/2026. Alguns referem estados do código e do Supabase que mudaram desde então. Servem apenas para histórico; em caso de conflito, prevalece a fotografia atual acima e o gate de lançamento de 10/11/2026.
 
