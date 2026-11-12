@@ -1,6 +1,6 @@
 # StudioMesa — lista de preparação para uso profissional
 
-**Estado atualizado em 12/11/2026: NÃO LIBERADA para venda operacional, piloto com dados reais ou produção.** A Mega IA da PR #113 já está integrada na `main` (merge commit `94a41413336678c9078fef9e21e0c4951cb8edaf`). Na CI da `main` [43186787267](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43186787267), passaram compilação das cinco variantes, testes unitários, Android Lint, configuração de release e replay PostgreSQL/autorização; os smoke tests Android 8 passaram e os smoke tests Android 16 ainda estavam em execução na última consulta. Foram publicados cinco APKs **debug/demo**, sem assinatura comercial definitiva.
+**Estado atualizado em 12/11/2026: NÃO LIBERADA para venda operacional, piloto com dados reais ou produção.** A Mega IA da PR #113 já está integrada na `main` (merge commit `94a41413336678c9078fef9e21e0c4951cb8edaf`). Na CI da `main` [43186787267](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43186787267), passaram os quatro jobs: compilação das cinco variantes, testes unitários, Android Lint, configuração de release, replay PostgreSQL/autorização e smoke tests Android 8 e Android 16. Foram publicados cinco APKs **debug/demo**, sem assinatura comercial definitiva.
 
 A fotografia detalhada mais recente está em [docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-10.md](docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-10.md). Esta secção prevalece sobre os registos históricos abaixo.
 
@@ -17,7 +17,7 @@ A fotografia detalhada mais recente está em [docs/COMMERCIAL-CLOSEOUT-AUDIT-202
 Estado detalhado e bloqueios: [atualização técnica de 12/11/2026](docs/COMMERCIAL-READINESS-UPDATE-2026-11-12.md).
 
 - [x] Cinco variantes Android configuradas; compileSdk/targetSdk 36, minSdk 24, Java 17 e versão 1.5.0.
-- [x] CI da PR #107 passou os quatro jobs: compilação/testes, replay PostgreSQL/autorização, smoke tests Android 8 e Android 16. A CI de `main` após o merge ainda precisa de terminar com sucesso.
+- [x] CI da `main` após integração da Mega IA passou os quatro jobs (43186787267): compilação/testes/Lint, replay PostgreSQL/autorização e smoke tests Android 8 e Android 16.
 - [x] Os botões Google/Microsoft estão ocultos por defeito; a implementação OAuth/PKCE foi preservada e adiada até depois da primeira venda.
 - [x] Projeto Supabase `ACTIVE_HEALTHY`, PostgreSQL 17.6.1.166, região eu-west-1; 26 tabelas com RLS ativo.
 - [x] Verificação SQL read-only: as 11 tabelas RLS sem políticas não concedem SELECT/INSERT/UPDATE/DELETE a `anon` nem `authenticated`.
