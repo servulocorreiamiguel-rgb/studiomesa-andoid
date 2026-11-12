@@ -1004,14 +1004,18 @@ BEGIN
         RETURN OLD;
     END IF;
 
-    IF TG_TABLE_NAME = 'restaurant_recipes'
-       AND TG_OP = 'UPDATE'
-       AND NEW.is_active IS FALSE
-       AND NEW.id = OLD.id
-       AND NEW.restaurant_id = OLD.restaurant_id
-       AND NEW.menu_item_id = OLD.menu_item_id
-       AND NEW.created_by IS NOT DISTINCT FROM OLD.created_by THEN
-        RETURN NEW;
+    -- Recipe deactivation is allowed after a downgrade so the owner can
+    -- disable automatic stock consumption before moving to a lower plan.
+    -- Keep recipe-only columns inside this branch: ingredient rows do not
+    -- contain is_active, menu_item_id or created_by.
+    IF TG_TABLE_NAME = 'restaurant_recipes' AND TG_OP = 'UPDATE' THEN
+        IF NEW.is_active IS FALSE
+           AND NEW.id = OLD.id
+           AND NEW.restaurant_id = OLD.restaurant_id
+           AND NEW.menu_item_id = OLD.menu_item_id
+           AND NEW.created_by IS NOT DISTINCT FROM OLD.created_by THEN
+            RETURN NEW;
+        END IF;
     END IF;
 
     IF NOT private.restaurant_plan_allows(NEW.restaurant_id, 'premium') THEN
