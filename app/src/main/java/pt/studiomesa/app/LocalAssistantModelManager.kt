@@ -80,7 +80,7 @@ internal object LocalAssistantModelPolicy {
 
 internal object ModelDownloadResumePolicy {
     fun resumeOffset(partialBytes: Long, expectedBytes: Long): Long =
-        if (partialBytes in 1 until expectedBytes) partialBytes else 0L
+        if (partialBytes in 1..expectedBytes) partialBytes else 0L
 
     fun acceptsContentRange(
         requestedOffset: Long,
@@ -229,16 +229,6 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     return@runCatching targetFile
                 }
                 targetFile.delete()
-
-                val availableBytes = StatFs(appContext.filesDir.absolutePath).availableBytes
-                val requiredBytes = artifact.sizeBytes + MINIMUM_FREE_SPACE_BYTES
-                if (availableBytes < requiredBytes) {
-                    throw IllegalStateException(
-                        "Espaço insuficiente. São necessários cerca de " +
-                            formatModelSize(artifact.sizeBytes) + " livres para transferir " +
-                            artifact.displayName + " e manter espaço de trabalho."
-                    )
-                }
 
                 val temporaryFile = File(targetFile.parentFile, "${artifact.file.name}.part")
                 var resumeOffset = ModelDownloadResumePolicy.resumeOffset(
