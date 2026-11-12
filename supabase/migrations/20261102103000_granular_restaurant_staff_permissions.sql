@@ -273,18 +273,6 @@ create policy restaurant_orders_staff_update
     using (private.has_restaurant_permission(restaurant_id, 'orders'))
     with check (private.has_restaurant_permission(restaurant_id, 'orders'));
 
-drop policy if exists restaurant_orders_owner_delete on public.restaurant_orders;
-create policy restaurant_orders_owner_delete
-    on public.restaurant_orders
-    for delete to authenticated
-    using (
-        exists (
-            select 1 from public.restaurant_staff as rs
-            where rs.restaurant_id = restaurant_orders.restaurant_id
-              and rs.user_id = (select auth.uid())
-              and rs.role = 'owner'
-        )
-    );
 alter policy restaurant_inventory_items_staff_read on public.restaurant_inventory_items
     using (private.has_restaurant_permission(restaurant_id, 'inventory'));
 alter policy restaurant_inventory_movements_staff_read on public.restaurant_inventory_movements
