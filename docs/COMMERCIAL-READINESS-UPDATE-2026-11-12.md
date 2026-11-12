@@ -1,8 +1,8 @@
 # StudioMesa — atualização de integração e preparação comercial
 
 **Data:** 12 de novembro de 2026  
-**Commit `main` verificado:** `94a41413336678c9078fef9e21e0c4951cb8edaf`  
-**Decisão:** **não liberada para operação com dados reais nem venda comercial final.** A Mega IA foi integrada; faltam ativação cloud, testes físicos, autenticação real e preparação de release.
+**Commit de integração de código na `main`:** `94a41413336678c9078fef9e21e0c4951cb8edaf`  
+**Decisão:** **não liberada para operação com dados reais nem venda comercial final.** A Mega IA foi integrada e a Edge Function foi publicada com JWT obrigatório; faltam a chave do fornecedor, ativação cloud controlada, testes físicos, autenticação real e preparação de release.
 
 ## O que ficou integrado
 
@@ -33,9 +33,9 @@ O workflow publicou cinco APKs `debug/demo` no artefacto `StudioMesa-1.5.0-Demo-
 
 ## IA online — configuração ainda em falta
 
-- A Edge Function `studiomesa-ai-router` não aparece na lista das funções publicadas do projeto Supabase alojado `svwvkfsyevuyabelrtjk`.
-- A secret `OPENROUTER_API_KEY` não está configurada; o código devolve `MODEL_NOT_CONFIGURED` quando a chave falta.
-- A propriedade Gradle `studiomesaAdvancedAssistantCloudEnabled` continua falsa por omissão. Não a ativar sem publicar a função, configurar a chave no secret store e executar testes autenticados de owner/funcionário/token expirado, filtros de dados, privacidade, quotas e fallback.
+- A Edge Function `studiomesa-ai-router` foi publicada no projeto Supabase `svwvkfsyevuyabelrtjk`: versão 1, estado `ACTIVE`, `verify_jwt=true`, com SHA-256 da implementação `7291c4699512f25161c03ff9d2bc2139ce1607ac407d6505d66cb231b14eae4a`.
+- A chave `OPENROUTER_API_KEY` é necessária em segredo de servidor; a sua presença/configuração não foi confirmada com as ferramentas disponíveis. Sem ela, o código responde `MODEL_NOT_CONFIGURED` (503) e não chama fornecedores.
+- A propriedade Gradle `studiomesaAdvancedAssistantCloudEnabled` continua falsa por omissão. Não a ativar antes de confirmar/configurar a chave no secret store e executar testes autenticados de owner/funcionário/token expirado, filtros de dados, privacidade, quotas e fallback.
 - As variantes gratuitas OpenRouter estão sujeitas a disponibilidade e limites partilhados pela chave de serviço; não prometer serviço online ilimitado.
 
 ## Bloqueios comerciais que permanecem
@@ -51,7 +51,7 @@ O workflow publicou cinco APKs `debug/demo` no artefacto `StudioMesa-1.5.0-Demo-
 ## Próximos passos técnicos seguros
 
 1. Concluído: smoke tests Android 16 passaram na CI 43186787267. Prosseguir para testes físicos e E2E.
-2. Manter IA cloud desligada até configuração da secret e publicação controlada da função.
+2. Manter IA cloud desligada até confirmação/configuração da secret e testes autenticados da função já publicada.
 3. Reconciliar o Supabase em ambiente separado com backup/restauro confirmado; não alterar o schema alojado por tentativa.
 4. Fazer os testes E2E e físicos com dados fictícios/contas descartáveis.
 5. Só então criar a release assinada definitiva e autorizar o piloto/venda.
