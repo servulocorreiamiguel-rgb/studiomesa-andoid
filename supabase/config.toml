@@ -15,3 +15,7 @@ verify_jwt = true
 [functions.studiomesa-advanced-assistant]
 enabled = true
 verify_jwt = true
+
+[functions.studiomesa-ai-router]
+enabled = true
+verify_jwt = true
