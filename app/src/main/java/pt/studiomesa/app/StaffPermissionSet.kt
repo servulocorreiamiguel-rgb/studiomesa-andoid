@@ -24,6 +24,9 @@ internal object StaffPermissionSet {
         return all.filter { it in selected }
     }
 
+    fun shouldRestrictNavigation(hasRemoteRestaurant: Boolean, role: String): Boolean =
+        hasRemoteRestaurant && role != "owner"
+
     fun canCreateOrder(permissions: Set<String>, role: String): Boolean = when (role) {
         "owner" -> true
         "staff" -> "orders" in permissions &&
