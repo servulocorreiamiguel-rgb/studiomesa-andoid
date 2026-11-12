@@ -10,9 +10,10 @@ const REQUEST_TIMEOUT_MS = 25_000;
 // Every model ID below is an explicitly free variant. The last route is the
 // OpenRouter free-only router. Never replace these with paid model IDs.
 // Rechecked against the current free catalogue on 11 Nov 2026.
-// Qwen 3.8 27B and GPT-OSS 120B are not used here: their current listed
-// API routes are token-priced. Use only verified free variants, then the
-// OpenRouter free-only router. Never add an unpriced alias as a "free" route.
+// Qwen3.8 27B has an explicitly free OpenRouter variant. GPT-OSS 120B
+// remains paid and is excluded. Keep provider privacy filters strict: if no
+// ZDR/data-collection-compliant endpoint is available, continue to the next
+// explicitly free model; never weaken privacy or route to a paid model.
 const MODEL_CHAINS = {
   reasoning: [
     "deepseek/deepseek-r1:free",
@@ -21,6 +22,7 @@ const MODEL_CHAINS = {
   ],
   coding: [
     "cohere/north-mini-code:free",
+    "qwen/qwen3.8-27b:free",
     "openai/gpt-oss-20b:free",
     "openrouter/free",
   ],
