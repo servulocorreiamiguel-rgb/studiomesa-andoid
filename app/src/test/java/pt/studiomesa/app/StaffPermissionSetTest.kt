@@ -42,6 +42,22 @@ class StaffPermissionSetTest {
     }
 
     @Test
+    fun unknownRoleCannotReuseAnOldStaffPermissionSnapshot() {
+        val role = "unknown"
+        val oldStaffPermissions = StaffPermissionSet.all.toSet()
+        val effectivePermissions = if (role == "staff") oldStaffPermissions else emptySet()
+        val pages = listOf("Início", "Mesas", "Pedidos", "Carta", "Conta")
+        assertEquals(
+            listOf("Início", "Conta"),
+            StaffPermissionSet.filterPages(
+                pages,
+                effectivePermissions,
+                isStaff = StaffPermissionSet.shouldRestrictNavigation(true, role)
+            )
+        )
+    }
+
+    @Test
     fun ownerNavigationIsNotFilteredByStaffPermissions() {
         val pages = listOf("Início", "Mesas", "Pedidos", "IA", "Assistente económico", "Conta")
         assertEquals(
