@@ -1,8 +1,20 @@
 # StudioMesa — lista de preparação para uso profissional
 
-**Estado auditado em 10/11/2026: NÃO LIBERADA para venda operacional, piloto com dados reais ou produção.** A alteração para ocultar Google/Microsoft já foi integrada na `main` pela PR #107 (commit `38058cee6a4febc3faf37c527cb6ea4615fb4da3`). A CI de `main` acionada após o merge ainda estava em execução na última consulta.
+**Estado atualizado em 12/11/2026: NÃO LIBERADA para venda operacional, piloto com dados reais ou produção.** A Mega IA da PR #113 já está integrada na `main` (merge commit `94a41413336678c9078fef9e21e0c4951cb8edaf`). Na CI da `main` [43186787267](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43186787267), passaram compilação das cinco variantes, testes unitários, Android Lint, configuração de release e replay PostgreSQL/autorização; os smoke tests Android 8 passaram e os smoke tests Android 16 ainda estavam em execução na última consulta. Foram publicados cinco APKs **debug/demo**, sem assinatura comercial definitiva.
 
 A fotografia detalhada mais recente está em [docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-10.md](docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-10.md). Esta secção prevalece sobre os registos históricos abaixo.
+
+## Atualização técnica de 12/11/2026
+
+- [x] PR #113 integrada na `main`: assistente único com roteamento online para DeepSeek R1, Cohere North Mini Code, Qwen3.8 27B `:free`, GPT-OSS 20B `:free` e OpenRouter Free Router; GPT-OSS 120B não é usado no caminho gratuito.
+- [x] IA local Android: Gemma 4 E2B como motor preferido em equipamentos com filtro inicial de RAM/espaço suficiente; LFM2.5-1.2B INT4 como alternativa local e reserva instalável (736 MB), com validação SHA-256.
+- [x] O router exige JWT na configuração versionada e autentica o papel `owner`; a chamada online está desativada por omissão no build.
+- [ ] A função `studiomesa-ai-router` ainda não está publicada no Supabase alojado e a secret `OPENROUTER_API_KEY` ainda não está configurada. Não ativar a opção cloud antes destes passos e testes autenticados.
+- [ ] Testes físicos de Gemma/LFM no OPPO A5m e outros Android: carregamento, qualidade, latência, RAM, temperatura, bateria, encerramento e fallback.
+- [ ] O modo gratuito online tem quotas partilhadas pelo serviço/projeto e pode ficar indisponível; não prometer IA online ilimitada.
+- [x] Foram publicados cinco APKs debug/demo na execução [43186787267](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43186787267); não são pacotes comerciais assinados.
+
+Estado detalhado e bloqueios: [atualização técnica de 12/11/2026](docs/COMMERCIAL-READINESS-UPDATE-2026-11-12.md).
 
 - [x] Cinco variantes Android configuradas; compileSdk/targetSdk 36, minSdk 24, Java 17 e versão 1.5.0.
 - [x] CI da PR #107 passou os quatro jobs: compilação/testes, replay PostgreSQL/autorização, smoke tests Android 8 e Android 16. A CI de `main` após o merge ainda precisa de terminar com sucesso.
@@ -25,7 +37,7 @@ A fotografia detalhada mais recente está em [docs/COMMERCIAL-CLOSEOUT-AUDIT-202
 
 **Não anunciar como funcionalidades comerciais já disponíveis:** fichas técnicas/consumo automático de ingredientes; permissões granulares de funcionários; IA cloud GPT-OSS; pesquisa Web até configurar/testar o motor; integração POS, pagamentos, impressoras, faturação, SAF-T ou contabilidade. O saldo de fidelização continua parcialmente manual. As previsões baseadas em pedidos não representam recebimentos bancários nem faturação contabilística.
 
-**Limites da IA:** a primeira versão usa o modelo local LFM2.5-1.2B-Instruct INT4; não é ChatGPT nem equivalente ao ChatGPT Free. OCR exige revisão humana. A licença do modelo e das dependências tem de ser confirmada pela entidade que fará a distribuição comercial.
+**Limites da IA:** a versão integrada suporta Gemma 4 E2B local e LFM2.5-1.2B INT4 como alternativa/reserva; ainda exige testes físicos e revisão das licenças. O router cloud multi-modelo está no código, mas permanece desligado até publicação da Edge Function, configuração da chave e validação de privacidade. Não é ChatGPT nem equivalente ao ChatGPT Free; OCR exige revisão humana.
 
 **Regra de lançamento:** a StudioMesa pode ser demonstrada com dados fictícios. Não deve receber dados reais de clientes ou restaurantes nem ser vendida como solução operacional até todos os bloqueios acima estarem resolvidos e testados.
 
