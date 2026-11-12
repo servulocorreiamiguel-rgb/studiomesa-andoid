@@ -2013,6 +2013,21 @@ class MainActivity : ComponentActivity() {
                         .show()
                 }, LinearLayout.LayoutParams(-1, dp(42)))
             }
+            if (localAssistantModelManager.shouldOfferLfmBackup()) {
+                addGap(card, 6)
+                card.addView(secondaryButton("Instalar alternativa local LFM2.5 · 736 MB") {
+                    AlertDialog.Builder(this)
+                        .setTitle("Instalar modelo de reserva")
+                        .setMessage(
+                            "O LFM2.5-1.2B ocupa cerca de 736 MB e ficará guardado ao lado do Gemma 4 E2B. Não substitui o Gemma como motor principal; permite ao assistente mudar automaticamente para uma alternativa mais leve se o telemóvel não conseguir carregar o Gemma. Requer Internet durante a transferência."
+                        )
+                        .setNegativeButton("Agora não", null)
+                        .setPositiveButton("Instalar reserva") { _, _ ->
+                            startLocalAssistantModelDownload(forceLfm = true)
+                        }
+                        .show()
+                }, LinearLayout.LayoutParams(-1, dp(42)))
+            }
         }
 
         assistantModelError?.let {
@@ -2059,11 +2074,18 @@ class MainActivity : ComponentActivity() {
         return String.format(Locale("pt", "PT"), "%.0f MB", megabytes)
     }
 
-    private fun startLocalAssistantModelDownload(preferGemma: Boolean = false) {
+    private fun startLocalAssistantModelDownload(
+        preferGemma: Boolean = false,
+        forceLfm: Boolean = false
+    ) {
         if (assistantModelDownloading || localAssistantModelManager.isDownloading()) return
         assistantModelDownloading = true
         assistantModelProgressBytes = 0L
-        assistantModelTargetBytes = localAssistantModelManager.modelSizeBytes(preferGemma)
+        assistantModelTargetBytes = if (forceLfm) {
+            localAssistantModelManager.lfmModelSizeBytes()
+        } else {
+            localAssistantModelManager.modelSizeBytes(preferGemma)
+        }
         assistantModelError = null
         renderApp()
         var lastShownPercent = -1
@@ -2102,7 +2124,8 @@ class MainActivity : ComponentActivity() {
                     renderApp()
                 }
             },
-            preferGemma = preferGemma
+            preferGemma = preferGemma,
+            forceLfm = forceLfm
         )
     }
 
