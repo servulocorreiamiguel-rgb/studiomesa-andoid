@@ -50,6 +50,26 @@ BEGIN
             NEW.plan_code, v_limit;
     END IF;
 
+    IF NEW.plan_code <> 'premium'
+       AND EXISTS (
+            SELECT 1
+            FROM public.restaurant_recipes r
+            WHERE r.restaurant_id = NEW.restaurant_id
+              AND r.is_active
+       ) THEN
+        RAISE EXCEPTION 'Antes de sair do Premium, desativa as fichas técnicas e o consumo automático de ingredientes.';
+    END IF;
+
+    IF NEW.plan_code = 'essencial'
+       AND EXISTS (
+            SELECT 1
+            FROM private.restaurant_price_adviser_settings s
+            WHERE s.restaurant_id = NEW.restaurant_id
+              AND s.enabled
+       ) THEN
+        RAISE EXCEPTION 'Antes de passar para Essencial, desativa o consultor de preços.';
+    END IF;
+
     RETURN NEW;
 END;
 $function$;
@@ -944,6 +964,77 @@ BEFORE INSERT ON private.restaurant_price_adviser_audit
 FOR EACH ROW
 EXECUTE FUNCTION private.enforce_restaurant_plan_before_write(
     'profissional', 'consultor de preços'
+);
+
+-- Recipe definitions, ingredient lists and automatic stock consumption are Premium-only.
+-- The owner may deactivate an existing recipe or remove ingredients after a downgrade,
+-- but cannot create/edit/reactivate recipe data below Premium.
+CREATE OR REPLACE FUNCTION private.enforce_recipe_plan_before_write()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
+
+    IF TG_TABLE_NAME = 'restaurant_recipes'
+       AND TG_OP = 'UPDATE'
+       AND NEW.is_active IS FALSE
+       AND NEW.id = OLD.id
+       AND NEW.restaurant_id = OLD.restaurant_id
+       AND NEW.menu_item_id = OLD.menu_item_id
+       AND NEW.created_by IS NOT DISTINCT FROM OLD.created_by THEN
+        RETURN NEW;
+    END IF;
+
+    IF NOT private.restaurant_plan_allows(NEW.restaurant_id, 'premium') THEN
+        RAISE EXCEPTION 'Fichas técnicas e consumo automático de ingredientes requerem o plano Premium.';
+    END IF;
+
+    RETURN NEW;
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION private.enforce_recipe_plan_before_write()
+    FROM PUBLIC, anon, authenticated, service_role;
+
+DROP TRIGGER IF EXISTS restaurant_recipes_server_plan_gate
+    ON public.restaurant_recipes;
+CREATE TRIGGER restaurant_recipes_server_plan_gate
+BEFORE INSERT OR UPDATE ON public.restaurant_recipes
+FOR EACH ROW
+EXECUTE FUNCTION private.enforce_recipe_plan_before_write();
+
+DROP TRIGGER IF EXISTS restaurant_recipe_ingredients_server_plan_gate
+    ON public.restaurant_recipe_ingredients;
+CREATE TRIGGER restaurant_recipe_ingredients_server_plan_gate
+BEFORE INSERT OR UPDATE ON public.restaurant_recipe_ingredients
+FOR EACH ROW
+EXECUTE FUNCTION private.enforce_recipe_plan_before_write();
+
+DROP POLICY IF EXISTS restaurant_recipes_premium_read
+    ON public.restaurant_recipes;
+CREATE POLICY restaurant_recipes_premium_read
+ON public.restaurant_recipes
+AS RESTRICTIVE
+FOR SELECT
+TO authenticated
+USING (
+    private.restaurant_plan_allows(restaurant_id, 'premium')
+);
+
+DROP POLICY IF EXISTS restaurant_recipe_ingredients_premium_read
+    ON public.restaurant_recipe_ingredients;
+CREATE POLICY restaurant_recipe_ingredients_premium_read
+ON public.restaurant_recipe_ingredients
+AS RESTRICTIVE
+FOR SELECT
+TO authenticated
+USING (
+    private.restaurant_plan_allows(restaurant_id, 'premium')
 );
 
 -- Cloud invoice metadata and document uploads are Premium-only. Existing
