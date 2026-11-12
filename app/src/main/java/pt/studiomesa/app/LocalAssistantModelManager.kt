@@ -274,16 +274,6 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                 }
                 targetFile.delete()
 
-                val availableBytes = StatFs(appContext.filesDir.absolutePath).availableBytes
-                val requiredBytes = artifact.sizeBytes + MINIMUM_FREE_SPACE_BYTES
-                if (availableBytes < requiredBytes) {
-                    throw IllegalStateException(
-                        "Espaço insuficiente. São necessários cerca de " +
-                            formatModelSize(artifact.sizeBytes) + " livres para transferir " +
-                            artifact.displayName + " e manter espaço de trabalho."
-                    )
-                }
-
                 val temporaryFile = File(targetFile.parentFile, "${artifact.file.name}.part")
                 if (temporaryFile.isFile && temporaryFile.length() > artifact.sizeBytes) {
                     temporaryFile.delete()
