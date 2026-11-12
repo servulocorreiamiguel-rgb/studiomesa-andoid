@@ -425,9 +425,14 @@ class MainActivity : ComponentActivity() {
             hasRemoteRestaurant = hasRemoteRestaurant(),
             role = role
         )
+        val navigationPermissions = if (role == "staff") {
+            currentStaffPermissions.orEmpty()
+        } else {
+            emptySet()
+        }
         return StaffPermissionSet.filterPages(
             pages,
-            currentStaffPermissions.orEmpty(),
+            navigationPermissions,
             isRestricted
         )
     }
