@@ -52,6 +52,27 @@ internal object LocalAssistantModelPolicy {
     fun needsIntegrityVerification(activeModelPath: String, verifiedModelPath: String?): Boolean =
         verifiedModelPath != activeModelPath
 
+    fun selectDownloadModelFilename(
+        forceLfm: Boolean,
+        preferGemma: Boolean,
+        canUseGemma: Boolean,
+        installedModelFilename: String?,
+        preferredModelFilename: String
+    ): String = when {
+        forceLfm -> LocalAssistantModelManager.LFM_MODEL_FILENAME
+        preferGemma && canUseGemma -> LocalAssistantModelManager.GEMMA_MODEL_FILENAME
+        !installedModelFilename.isNullOrBlank() -> installedModelFilename
+        else -> preferredModelFilename
+    }
+
+    fun shouldOfferLfmBackup(
+        activeModelFilename: String,
+        lfmFileExists: Boolean,
+        lfmSizeValid: Boolean
+    ): Boolean =
+        activeModelFilename == LocalAssistantModelManager.GEMMA_MODEL_FILENAME &&
+            (!lfmFileExists || !lfmSizeValid)
+
     fun shouldFallbackToLfm(
         activeModelFilename: String,
         lfmFileExists: Boolean,
@@ -151,10 +172,20 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         return artifactFor(selected).sizeBytes
     }
 
+    fun lfmModelSizeBytes(): Long = LFM_MODEL_SIZE_BYTES
+
+    fun shouldOfferLfmBackup(): Boolean =
+        LocalAssistantModelPolicy.shouldOfferLfmBackup(
+            activeModelFilename = installedModelFile()?.name ?: "",
+            lfmFileExists = lfmModelFile.isFile,
+            lfmSizeValid = lfmModelFile.isFile && lfmModelFile.length() == LFM_MODEL_SIZE_BYTES
+        )
+
     fun downloadModel(
         onProgress: (downloadedBytes: Long, totalBytes: Long) -> Unit,
         onComplete: (Result<File>) -> Unit,
-        preferGemma: Boolean = false
+        preferGemma: Boolean = false,
+        forceLfm: Boolean = false
     ) {
         if (closed || downloading) {
             onComplete(Result.failure(IllegalStateException("A transferência já está em curso ou o motor foi fechado.")))
@@ -163,11 +194,15 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         downloading = true
         worker.execute {
             val result = runCatching {
-                val targetFile = when {
-                    preferGemma && canUseGemmaOnThisDevice() -> gemmaModelFile
-                    installedModelFile() != null -> installedModelFile()!!
-                    else -> preferredModelFile()
-                }
+                val installedFilename = installedModelFile()?.name
+                val selectedFilename = LocalAssistantModelPolicy.selectDownloadModelFilename(
+                    forceLfm = forceLfm,
+                    preferGemma = preferGemma,
+                    canUseGemma = canUseGemmaOnThisDevice(),
+                    installedModelFilename = installedFilename,
+                    preferredModelFilename = preferredModelFile().name
+                )
+                val targetFile = File(modelDirectory, selectedFilename)
                 val artifact = artifactFor(targetFile)
                 targetFile.parentFile?.let { directory ->
                     if (!directory.exists() && !directory.mkdirs()) {
