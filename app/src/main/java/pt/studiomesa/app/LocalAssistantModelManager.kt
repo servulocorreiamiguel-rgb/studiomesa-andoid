@@ -408,6 +408,12 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                                 lfmHashValid
                             )
                         ) {
+                            if (activeModelFile.name == GEMMA_MODEL_FILENAME) {
+                                throw IllegalStateException(
+                                    "O Gemma 4 E2B não conseguiu iniciar neste telemóvel. Instala a alternativa LFM2.5 (cerca de 736 MB) no cartão do modelo local e tenta novamente.",
+                                    primaryError
+                                )
+                            }
                             throw primaryError
                         }
                         forceLfmForProcess = true
