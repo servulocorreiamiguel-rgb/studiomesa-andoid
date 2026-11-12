@@ -3974,6 +3974,7 @@ class MainActivity : ComponentActivity() {
             // but fail closed for staff navigation until permissions can be reloaded.
             if (backendPrefs.getString("restaurant_role", "") == "staff") {
                 currentStaffPermissions = emptySet()
+                clearCachedStaffOperationalData()
             }
         }
     }
@@ -4016,11 +4017,30 @@ class MainActivity : ComponentActivity() {
         return result
     }
 
+    private fun clearCachedStaffOperationalData() {
+        backendPrefs.edit()
+            .remove("remote_tables_json")
+            .remove("remote_menu_json")
+            .remove("remote_orders_json")
+            .remove("remote_inventory_json")
+            .remove("inventory_loaded")
+            .remove("remote_reservations_json")
+            .remove("reservations_loaded")
+            .remove("remote_members_json")
+            .remove("restaurant_rewards_json")
+            .apply()
+        reservationCache = JSONArray()
+        reservationsLoaded = false
+        kitchenOrdersCache = null
+        kitchenQueueUpdatedAtMillis = 0L
+    }
+
     private fun cacheRemoteOperations(token: String, restaurantId: String) {
         if (token.isBlank() || restaurantId.isBlank()) return
-        val isStaff = backendPrefs.getString("restaurant_role", "").orEmpty() == "staff"
+        val role = backendPrefs.getString("restaurant_role", "").orEmpty()
+        val isStaff = role == "staff"
         val readPermissions = StaffPermissionSet.cacheReadPermissions(
-            currentStaffPermissions.orEmpty(),
+            if (role == "owner") StaffPermissionSet.all.toSet() else currentStaffPermissions.orEmpty(),
             isStaff
         )
         // Do not request areas the staff member cannot read. Besides avoiding
@@ -4053,8 +4073,9 @@ class MainActivity : ComponentActivity() {
         }
         val currentRole = backendPrefs.getString("restaurant_role", "").orEmpty()
         if (currentRole == "staff" && BackendSchemaFeatureGate.GRANULAR_STAFF_PERMISSIONS_ENABLED) {
-            // Do not keep stale privileges if the server cannot reload the current matrix.
+            // Do not keep stale privileges or cached data if the server cannot reload the matrix.
             currentStaffPermissions = emptySet()
+            clearCachedStaffOperationalData()
         }
         runBackend({
             val serverPermissions = if (
