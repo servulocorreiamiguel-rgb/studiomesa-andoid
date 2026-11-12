@@ -49,6 +49,77 @@ class LocalAssistantModelArtifactTest {
     }
 
     @Test
+    fun modelDownloadResumesOnlyWhenServerReturnsTheExactRequestedRange() {
+        assertEquals(
+            true,
+            ModelDownloadResumePolicy.shouldAppendPartial(
+                httpStatus = 206,
+                partialBytes = 40L,
+                expectedTotalBytes = 100L,
+                contentRange = "bytes 40-99/100"
+            )
+        )
+        assertEquals(
+            60L,
+            ModelDownloadResumePolicy.responseBodyLength(
+                httpStatus = 206,
+                expectedTotalBytes = 100L,
+                contentRange = "bytes 40-99/100"
+            )
+        )
+    }
+
+    @Test
+    fun modelDownloadRestartsSafelyWhenServerIgnoresRange() {
+        assertEquals(
+            false,
+            ModelDownloadResumePolicy.shouldAppendPartial(
+                httpStatus = 200,
+                partialBytes = 40L,
+                expectedTotalBytes = 100L,
+                contentRange = null
+            )
+        )
+        assertEquals(
+            100L,
+            ModelDownloadResumePolicy.responseBodyLength(
+                httpStatus = 200,
+                expectedTotalBytes = 100L,
+                contentRange = null
+            )
+        )
+    }
+
+    @Test
+    fun modelDownloadRejectsWrongOrMalformedPartialRanges() {
+        var rejectedWrongStart = false
+        try {
+            ModelDownloadResumePolicy.shouldAppendPartial(
+                httpStatus = 206,
+                partialBytes = 40L,
+                expectedTotalBytes = 100L,
+                contentRange = "bytes 39-99/100"
+            )
+        } catch (_: IllegalArgumentException) {
+            rejectedWrongStart = true
+        }
+        assertTrue(rejectedWrongStart)
+
+        var rejectedMalformed = false
+        try {
+            ModelDownloadResumePolicy.shouldAppendPartial(
+                httpStatus = 206,
+                partialBytes = 40L,
+                expectedTotalBytes = 100L,
+                contentRange = "not-a-byte-range"
+            )
+        } catch (_: IllegalArgumentException) {
+            rejectedMalformed = true
+        }
+        assertTrue(rejectedMalformed)
+    }
+
+    @Test
     fun switchingLocalModelAlwaysRequiresFreshIntegrityVerification() {
         assertEquals(
             true,
