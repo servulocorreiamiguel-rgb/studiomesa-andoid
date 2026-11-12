@@ -7,6 +7,11 @@ A fotografia detalhada mais recente está em [docs/COMMERCIAL-CLOSEOUT-AUDIT-202
 ## Atualização técnica de 12/11/2026
 
 - [x] PR #113 integrada na `main`: assistente único com roteamento online para DeepSeek R1, Cohere North Mini Code, Qwen3.8 27B `:free`, GPT-OSS 20B `:free` e OpenRouter Free Router; GPT-OSS 120B não é usado no caminho gratuito.
+- [x] PR #114 integrada: a reserva LFM2.5 pode ser novamente verificada/reparada mesmo quando o ficheiro existe com tamanho válido; a validação SHA-256 decide se é necessário voltar a descarregar. CI da PR passou nos quatro jobs (43200057302).
+- [x] PR #115 integrada: documentação corrigida para 63 versões remotas correspondentes a 68 ficheiros locais, com cinco migrações locais por validar.
+- [x] PR #116 integrada: os RPCs de permissões granulares não são chamados enquanto o gate está desligado; a cache de funcionários é limpa em falha de autorização; a criação de pedidos exige as permissões correspondentes no cliente e na política PostgreSQL. CI da PR passou nos quatro jobs, incluindo Android 8 e 16 (43205612141).
+- [ ] CI de pós-merge da `main` após PR #116: execução 43209335761 ainda em curso na última verificação.
+- [ ] O gate `GRANULAR_STAFF_PERMISSIONS_ENABLED` e o gate `RECIPE_MANAGEMENT_ENABLED` permanecem `false`. Só os ativar depois de aplicar/testar as migrações na branch Supabase de desenvolvimento e validar em duas contas/restaurantes.
 - [x] IA local Android: Gemma 4 E2B como motor preferido em equipamentos com filtro inicial de RAM/espaço suficiente; LFM2.5-1.2B INT4 como alternativa local e reserva instalável (736 MB), com validação SHA-256.
 - [x] O router exige JWT na configuração versionada e autentica o papel `owner`; a chamada online está desativada por omissão no build.
 - [x] Edge Function `studiomesa-ai-router` publicada no Supabase alojado, versão 1, com `verify_jwt=true`.
