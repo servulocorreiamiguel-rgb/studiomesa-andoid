@@ -820,6 +820,13 @@ COMMIT;
 SQL
 }
 
+# Downgrade fixture A to Essential before asserting that the price adviser is unavailable.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO private.restaurant_loyalty_entitlements (restaurant_id, plan_code)
+VALUES ('$RESTAURANT_A'::uuid, 'essencial')
+ON CONFLICT (restaurant_id) DO UPDATE SET plan_code = EXCLUDED.plan_code;
+SQL
+
 # Essential is the fail-safe default: an owner cannot enable the Professional price adviser.
 if set_price_adviser_enabled "$USER_A" "true" >/dev/null 2>&1; then
   echo "ERROR: an Essential restaurant enabled the Professional price adviser." >&2
