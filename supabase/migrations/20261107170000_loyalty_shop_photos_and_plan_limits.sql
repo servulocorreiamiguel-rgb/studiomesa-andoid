@@ -73,7 +73,7 @@ ALTER TABLE public.loyalty_rewards
     CHECK (
         image_path IS NULL OR
         image_path ~ (
-            '^' || restaurant_id::text || '/' || id::text || '/photo[.]jpg$'
+            '^' || restaurant_id::text || '/' || id::text || '/photo[.]jpg' || chr(36)
         )
     );
 
@@ -142,7 +142,7 @@ FOR INSERT
 TO authenticated
 WITH CHECK (
     bucket_id = 'loyalty-reward-images'
-    AND name ~ '^[0-9a-f-]{36}/[0-9a-f-]{36}/photo[.]jpg$'
+    AND name ~ ('^[0-9a-f-]{36}/[0-9a-f-]{36}/photo[.]jpg' || chr(36))
     AND private.can_upload_loyalty_reward_image(
         split_part(name, '/', 1)::uuid,
         split_part(name, '/', 2)::uuid
@@ -156,7 +156,7 @@ FOR SELECT
 TO authenticated
 USING (
     bucket_id = 'loyalty-reward-images'
-    AND name ~ '^[0-9a-f-]{36}/[0-9a-f-]{36}/photo[.]jpg$'
+    AND name ~ ('^[0-9a-f-]{36}/[0-9a-f-]{36}/photo[.]jpg' || chr(36))
     AND private.can_upload_loyalty_reward_image(
         split_part(name, '/', 1)::uuid,
         split_part(name, '/', 2)::uuid
@@ -170,7 +170,7 @@ FOR UPDATE
 TO authenticated
 USING (
     bucket_id = 'loyalty-reward-images'
-    AND name ~ '^[0-9a-f-]{36}/[0-9a-f-]{36}/photo[.]jpg$'
+    AND name ~ ('^[0-9a-f-]{36}/[0-9a-f-]{36}/photo[.]jpg' || chr(36))
     AND private.can_upload_loyalty_reward_image(
         split_part(name, '/', 1)::uuid,
         split_part(name, '/', 2)::uuid
@@ -178,7 +178,7 @@ USING (
 )
 WITH CHECK (
     bucket_id = 'loyalty-reward-images'
-    AND name ~ '^[0-9a-f-]{36}/[0-9a-f-]{36}/photo[.]jpg$'
+    AND name ~ ('^[0-9a-f-]{36}/[0-9a-f-]{36}/photo[.]jpg' || chr(36))
     AND private.can_upload_loyalty_reward_image(
         split_part(name, '/', 1)::uuid,
         split_part(name, '/', 2)::uuid
@@ -192,7 +192,7 @@ FOR DELETE
 TO authenticated
 USING (
     bucket_id = 'loyalty-reward-images'
-    AND name ~ '^[0-9a-f-]{36}/[0-9a-f-]{36}/photo[.]jpg$'
+    AND name ~ ('^[0-9a-f-]{36}/[0-9a-f-]{36}/photo[.]jpg' || chr(36))
     AND private.can_delete_loyalty_reward_image(split_part(name, '/', 1)::uuid)
 );
 
@@ -578,7 +578,7 @@ BEGIN
         END IF;
 
         IF p_image_path !~ (
-            '^' || p_restaurant_id::text || '/' || p_reward_id::text || '/photo[.]jpg$'
+            '^' || p_restaurant_id::text || '/' || p_reward_id::text || '/photo[.]jpg' || chr(36)
         ) THEN
             RAISE EXCEPTION 'O caminho da fotografia não é válido.';
         END IF;
@@ -984,10 +984,8 @@ TO authenticated
 WITH CHECK (
     CASE
         WHEN bucket_id <> 'studiomesa-invoices' THEN true
-        WHEN COALESCE((storage.foldername(name))[1], '') ~* '^[0-9a-f-]{36}
-COMMIT;
-
-            THEN private.restaurant_plan_allows(
+        WHEN COALESCE((storage.foldername(name))[1], '') ~* ('^[0-9a-f-]{36}' || chr(36))
+        THEN private.restaurant_plan_allows(
                 ((storage.foldername(name))[1])::uuid,
                 'premium'
             )
@@ -1005,10 +1003,8 @@ TO authenticated
 USING (
     CASE
         WHEN bucket_id <> 'studiomesa-invoices' THEN true
-        WHEN COALESCE((storage.foldername(name))[1], '') ~* '^[0-9a-f-]{36}
-COMMIT;
-
-            THEN private.restaurant_plan_allows(
+        WHEN COALESCE((storage.foldername(name))[1], '') ~* ('^[0-9a-f-]{36}' || chr(36))
+        THEN private.restaurant_plan_allows(
                 ((storage.foldername(name))[1])::uuid,
                 'premium'
             )
@@ -1018,10 +1014,8 @@ COMMIT;
 WITH CHECK (
     CASE
         WHEN bucket_id <> 'studiomesa-invoices' THEN true
-        WHEN COALESCE((storage.foldername(name))[1], '') ~* '^[0-9a-f-]{36}
-COMMIT;
-
-            THEN private.restaurant_plan_allows(
+        WHEN COALESCE((storage.foldername(name))[1], '') ~* ('^[0-9a-f-]{36}' || chr(36))
+        THEN private.restaurant_plan_allows(
                 ((storage.foldername(name))[1])::uuid,
                 'premium'
             )
