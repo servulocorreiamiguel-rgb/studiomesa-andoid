@@ -14,6 +14,14 @@
 - Google e Microsoft continuam ocultos por defeito, conforme a decisão de adiar OAuth social até depois da primeira venda.
 - A configuração versionada em `supabase/config.toml` define `studiomesa-ai-router` com `verify_jwt = true`.
 
+## Atualização de código e compatibilidade — 12/11/2026
+
+- PR [#114](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/114) integrada: a opção para verificar/reparar a reserva LFM2.5 permanece disponível enquanto Gemma é o motor principal; a transferência existente valida tamanho e SHA-256. Execução CI [43200057302](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43200057302): quatro jobs passaram (compilação/Lint, PostgreSQL/autorização, Android 8 e Android 16).
+- PR [#115](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/115) integrada: documentação atualizada com o estado read-only das migrações.
+- PR [#116](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/116) integrada no commit `03618817588b5146aa2a9a9e4e586fd61f187b4c`: os caminhos de autenticação e refresh só chamam `get_my_restaurant_permissions()` quando o gate granular está ativo; no schema atual, o comportamento legado dos funcionários é mantido. A cache operacional dos funcionários é removida quando a autorização não pode ser confirmada. O cliente não apresenta criação de pedidos sem as permissões necessárias e a migração separa a política RLS de leitura, inserção e atualização de pedidos. Execução CI da PR [43205612141](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43205612141): quatro jobs passaram, incluindo testes PostgreSQL de autorização e emuladores Android 8/16.
+- A execução pós-merge na `main`, [43209335761](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43209335761), estava em curso na última consulta. Não a declarar verde até terminar.
+- **Nenhuma migração foi aplicada na base Supabase de produção.** Os gates `RECIPE_MANAGEMENT_ENABLED` e `GRANULAR_STAFF_PERMISSIONS_ENABLED` continuam desligados; as funcionalidades que dependem das tabelas ainda ausentes permanecem indisponíveis.
+
 ## Validação CI na branch principal
 
 Execução [43186787267](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43186787267), no commit acima:
