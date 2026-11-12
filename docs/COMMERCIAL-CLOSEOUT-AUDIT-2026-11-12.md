@@ -2,7 +2,7 @@
 
 **Data:** 12 de novembro de 2026  
 **Branch principal verificada:** `main`  
-**Commit mais recente:** `c5417529a797d0d63856dffda1effb3433d33f1a`  
+**Commit mais recente:** `2b75468eca430c74a7ce3b5ffb02e6071588ca07`  
 **Decisão:** **ainda não autorizada para operação com dados reais nem venda operacional.** O código principal e as correções recentes estão integrados; o que falta inclui configuração do ambiente, reconciliação segura do backend, testes de aceitação no dispositivo e preparação jurídica/comercial.
 
 ## 1. Alterações de código e CI
@@ -12,7 +12,9 @@
 - CI da PR #120, execução [43219206624](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43219206624): os quatro jobs passaram.
 - PR #121 consolidou esta auditoria e foi integrada no commit `7350c02bfee437dd7b53879ada8327700798622e`; os quatro jobs passaram.
 - PR #122 integrou os entitlements comerciais server-side e os testes de segurança por plano no commit `c5417529a797d0d63856dffda1effb3433d33f1a`. A execução [43241011598](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43241011598) passou nos quatro jobs: compilação APK, replay de migrações/autorização PostgreSQL, Android 8 e Android 16.
-- A CI pós-merge da `main`, execução [43247282954](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43247282954), tinha o replay PostgreSQL/autorização concluído com sucesso; a compilação Android ainda estava em execução na última consulta. Não declarar esta CI pós-merge completa antes de terminar.
+- A CI pós-merge do commit `c5417529a797d0d63856dffda1effb3433d33f1a`, execução [43247282954](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43247282954), terminou com sucesso nos quatro jobs: compilação, migrações/autorização PostgreSQL, Android 8 e Android 16.
+- A CI da `main` no commit atual `2b75468eca430c74a7ce3b5ffb02e6071588ca07`, execução [43267740540](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43267740540), já concluiu com sucesso a compilação debug e o replay de migrações/autorização PostgreSQL. Na última consulta, os smoke tests instrumentados Android 8 e Android 16 ainda estavam em execução; não declarar a execução completa até os quatro jobs terminarem.
+- O run atual já publicou o artefacto `StudioMesa-1.5.0-Demo-APKs` (artefacto `13967791415`), com as cinco variantes debug. O ZIP foi descarregado e validado com `unzip -t`; SHA-256: `df44be64bd16226d6d750d6f3ef4ed4ad44a9b5380ae08525ce0e3443e4b5f7e`. Estes binários continuam a ser builds de demonstração/debug, não releases comerciais assinadas.
 - Existem artefactos APK debug/demo. Não são assinados com a chave comercial e não constituem uma release de produção.
 
 ## 2. Migrações e estado do Supabase
