@@ -2032,7 +2032,7 @@ class MainActivity : ComponentActivity() {
         AlertDialog.Builder(this)
             .setTitle("Modelo e licenças")
             .setMessage(
-                "A StudioMesa suporta dois motores locais: Gemma 4 E2B (ficheiro LiteRT-LM de 2 588 147 712 bytes, conversão publicada pela comunidade litert-community) e LFM2.5-1.2B INT4 (alternativa mais pequena). A seleção depende da memória disponível no telemóvel.\n\nGemma é um modelo da Google sujeito aos termos de utilização Gemma; a conversão LiteRT-LM tem os avisos e a licença indicados no respetivo repositório. LFM2.5 utiliza a LFM Open License v1.0, com condições próprias de utilização comercial e atribuição. Confirma os termos integrais antes de distribuir a StudioMesa.\n\nO runtime LiteRT-LM é distribuído sob Apache 2.0. Nenhum destes modelos foi treinado pela StudioMesa."
+                "A StudioMesa suporta dois motores locais: Gemma 4 E2B (ficheiro LiteRT-LM de 2 588 147 712 bytes, conversão publicada pela comunidade litert-community) e LFM2.5-1.2B INT4 (alternativa mais pequena). A seleção depende da memória disponível no telemóvel.\n\nGemma 4 é distribuído sob Apache License 2.0; a conversão LiteRT-LM da comunidade litert-community deve manter a respetiva atribuição e os avisos do repositório. LFM2.5 utiliza a LFM Open License v1.0: o uso comercial gratuito deixa de estar abrangido quando a receita anual da entidade legal responsável atinge ou ultrapassa 10 milhões USD; mantém também as obrigações de atribuição e redistribuição da licença. Confirma a entidade responsável e os termos integrais antes de distribuir a StudioMesa.\n\nO runtime LiteRT-LM é distribuído sob Apache 2.0. Nenhum destes modelos foi treinado pela StudioMesa."
             )
             .setNegativeButton("Fechar", null)
             .setPositiveButton("Abrir licença") { _, _ ->
@@ -2041,9 +2041,9 @@ class MainActivity : ComponentActivity() {
                         Intent.ACTION_VIEW,
                         android.net.Uri.parse(
                             if (localAssistantModelManager.activeModelDisplayName() == "Gemma 4 E2B") {
-                                "https://ai.google.dev/gemma/terms"
+                                "https://www.apache.org/licenses/LICENSE-2.0"
                             } else {
-                                "https://huggingface.co/litert-community/LFM2.5-1.2B-Instruct/blob/main/LICENSE"
+                                "https://www.liquid.ai/lfm-license"
                             }
                         )
                     ))
