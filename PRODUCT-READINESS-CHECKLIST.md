@@ -23,7 +23,15 @@ Estado detalhado e bloqueios: [atualização técnica de 12/11/2026](docs/COMMER
 - [x] Projeto Supabase `ACTIVE_HEALTHY`, PostgreSQL 17.6.1.166, região eu-west-1; 26 tabelas com RLS ativo.
 - [x] Verificação SQL read-only: as 11 tabelas RLS sem políticas não concedem SELECT/INSERT/UPDATE/DELETE a `anon` nem `authenticated`.
 - [x] Verificação SQL read-only: 47 funções `SECURITY DEFINER`; 42 executáveis por `authenticated`, zero por `anon`; todas referenciam `auth.uid()` e têm `search_path = ''`. A revisão função a função continua obrigatória.
-- [ ] Reconciliar 61 ficheiros de migration locais com 63 versões remotas: 58 comuns, três só locais e cinco só remotas. Não executar `db push`, `migration repair` ou reset; comparar SQL integral, fazer backup e provar restauro antes de qualquer deployment.
+- [x] Comparação read-only de 12/11/2026: 63 versões no histórico remoto e 68 ficheiros SQL locais. Todas as 63 versões remotas têm ficheiro local com a mesma versão e nome; não há versões remotas sem ficheiro local. Existem cinco migrações locais ainda não aplicadas no projeto alojado:
+  - `20261030111815_restaurant_recipes_and_order_stock_consumption.sql`
+  - `20261102103000_granular_restaurant_staff_permissions.sql`
+  - `20261102120000_require_loyalty_permission_for_reward_fulfillment.sql`
+  - `20261102121000_enforce_loyalty_permission_for_staff_loyalty_operations.sql`
+  - `20261104100000_price_adviser_actor_indexes.sql`
+  A comparação confirmou versões/nomes, não igualdade integral do SQL histórico remoto.
+- [x] Replay das 68 migrações numa base PostgreSQL isolada e testes de autorização/idempotência entre restaurantes passaram no job de CI da PR #114 ([execução 43200057302](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43200057302)).
+- [ ] Aplicar as cinco migrações apenas numa branch Supabase de desenvolvimento, testar schema/RLS/RPCs e verificar advisors. A branch custa 0,01344 USD/hora; ainda não foi criada à espera de aprovação do custo. Não executar `db push`, `migration repair`, reset ou DDL na produção antes de backup/restauro comprovados.
 - [ ] Criar, reconciliar e testar as tabelas/RPCs ausentes: `public.restaurant_recipes`, `public.restaurant_recipe_ingredients` e `private.restaurant_staff_permissions`.
 - [ ] Rever individualmente as 42 funções `SECURITY DEFINER`, com testes de isolamento entre restaurantes e papéis. Os avisos do Advisor não devem ser resolvidos por revogações em bloco.
 - [ ] Resolver a proteção contra palavras-passe comprometidas desativada, depois de confirmar custo/plano.
