@@ -34,6 +34,14 @@ class StaffPermissionSetTest {
     }
 
     @Test
+    fun unknownRemoteRolesAreRestrictedButLocalAndOwnerNavigationIsPreserved() {
+        assertEquals(true, StaffPermissionSet.shouldRestrictNavigation(true, "staff"))
+        assertEquals(true, StaffPermissionSet.shouldRestrictNavigation(true, "unknown"))
+        assertEquals(false, StaffPermissionSet.shouldRestrictNavigation(true, "owner"))
+        assertEquals(false, StaffPermissionSet.shouldRestrictNavigation(false, ""))
+    }
+
+    @Test
     fun ownerNavigationIsNotFilteredByStaffPermissions() {
         val pages = listOf("Início", "Mesas", "Pedidos", "IA", "Assistente económico", "Conta")
         assertEquals(
