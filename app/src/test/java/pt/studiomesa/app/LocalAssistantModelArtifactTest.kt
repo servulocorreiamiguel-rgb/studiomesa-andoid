@@ -67,6 +67,66 @@ class LocalAssistantModelArtifactTest {
     }
 
     @Test
+    fun explicitLfmBackupDownloadOverridesAnInstalledGemmaModel() {
+        assertEquals(
+            LocalAssistantModelManager.LFM_MODEL_FILENAME,
+            LocalAssistantModelPolicy.selectDownloadModelFilename(
+                forceLfm = true,
+                preferGemma = false,
+                canUseGemma = true,
+                installedModelFilename = LocalAssistantModelManager.GEMMA_MODEL_FILENAME,
+                preferredModelFilename = LocalAssistantModelManager.GEMMA_MODEL_FILENAME
+            )
+        )
+        assertEquals(
+            LocalAssistantModelManager.GEMMA_MODEL_FILENAME,
+            LocalAssistantModelPolicy.selectDownloadModelFilename(
+                forceLfm = false,
+                preferGemma = false,
+                canUseGemma = true,
+                installedModelFilename = LocalAssistantModelManager.GEMMA_MODEL_FILENAME,
+                preferredModelFilename = LocalAssistantModelManager.GEMMA_MODEL_FILENAME
+            )
+        )
+    }
+
+    @Test
+    fun lfmBackupOfferAppearsOnlyWhenGemmaIsActiveAndLfmIsMissingOrInvalid() {
+        assertEquals(
+            true,
+            LocalAssistantModelPolicy.shouldOfferLfmBackup(
+                LocalAssistantModelManager.GEMMA_MODEL_FILENAME,
+                lfmFileExists = false,
+                lfmSizeValid = false
+            )
+        )
+        assertEquals(
+            true,
+            LocalAssistantModelPolicy.shouldOfferLfmBackup(
+                LocalAssistantModelManager.GEMMA_MODEL_FILENAME,
+                lfmFileExists = true,
+                lfmSizeValid = false
+            )
+        )
+        assertEquals(
+            false,
+            LocalAssistantModelPolicy.shouldOfferLfmBackup(
+                LocalAssistantModelManager.GEMMA_MODEL_FILENAME,
+                lfmFileExists = true,
+                lfmSizeValid = true
+            )
+        )
+        assertEquals(
+            false,
+            LocalAssistantModelPolicy.shouldOfferLfmBackup(
+                LocalAssistantModelManager.LFM_MODEL_FILENAME,
+                lfmFileExists = false,
+                lfmSizeValid = false
+            )
+        )
+    }
+
+    @Test
     fun gemmaLoadFailureFallsBackOnlyToAnInstalledValidLfmArtifact() {
         assertEquals(
             true,
