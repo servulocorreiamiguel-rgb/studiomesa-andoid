@@ -659,6 +659,15 @@ then
 fi
 echo "PASS: staff permissions default safely, are owner-managed, isolated and cannot be self-escalated."
 
+# Set a deliberately partial matrix for the read/insert dependency checks.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders','reservations']);
+COMMIT;
+SQL
+
 # Menu and table data needed by order/reservation workflows is read-only.
 # The menu permission is still required to read priced menu items and their
 # private cost fields; reservations can read table options without editing tables.
@@ -725,6 +734,17 @@ INSERT INTO public.restaurant_orders (
 ROLLBACK;
 SQL
 echo "PASS: staff order creation needs menu and read-only table access; existing order updates stay separate."
+
+# Restore the full matrix for downstream loyalty and owner-operation tests.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions(
+  '$USER_C'::uuid, ARRAY['orders','tables','reservations','menu','inventory','loyalty']
+);
+COMMIT;
+SQL
 
 # A separate staff user belongs to restaurant B for cross-restaurant QR/rescue tests.
 STAFF_JOIN_D="$(join_staff_member "$USER_D" "$STAFF_CODE_B")"
