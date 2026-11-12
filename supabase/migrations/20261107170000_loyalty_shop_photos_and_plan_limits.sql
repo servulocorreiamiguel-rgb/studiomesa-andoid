@@ -966,6 +966,30 @@ EXECUTE FUNCTION private.enforce_restaurant_plan_before_write(
     'profissional', 'consultor de preços'
 );
 
+-- Inventory data itself is Premium-only, not merely its write RPCs.
+-- Restrictive policies combine with the existing staff membership policies.
+DROP POLICY IF EXISTS restaurant_inventory_items_premium_read
+    ON public.restaurant_inventory_items;
+CREATE POLICY restaurant_inventory_items_premium_read
+ON public.restaurant_inventory_items
+AS RESTRICTIVE
+FOR SELECT
+TO authenticated
+USING (
+    private.restaurant_plan_allows(restaurant_id, 'premium')
+);
+
+DROP POLICY IF EXISTS restaurant_inventory_movements_premium_read
+    ON public.restaurant_inventory_movements;
+CREATE POLICY restaurant_inventory_movements_premium_read
+ON public.restaurant_inventory_movements
+AS RESTRICTIVE
+FOR SELECT
+TO authenticated
+USING (
+    private.restaurant_plan_allows(restaurant_id, 'premium')
+);
+
 -- Recipe definitions, ingredient lists and automatic stock consumption are Premium-only.
 -- The owner may deactivate an existing recipe or remove ingredients after a downgrade,
 -- but cannot create/edit/reactivate recipe data below Premium.
