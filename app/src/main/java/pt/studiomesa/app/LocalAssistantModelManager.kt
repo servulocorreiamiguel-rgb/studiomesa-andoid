@@ -65,13 +65,8 @@ internal object LocalAssistantModelPolicy {
         else -> preferredModelFilename
     }
 
-    fun shouldOfferLfmBackup(
-        activeModelFilename: String,
-        lfmFileExists: Boolean,
-        lfmSizeValid: Boolean
-    ): Boolean =
-        activeModelFilename == LocalAssistantModelManager.GEMMA_MODEL_FILENAME &&
-            (!lfmFileExists || !lfmSizeValid)
+    fun shouldOfferLfmBackup(activeModelFilename: String): Boolean =
+        activeModelFilename == LocalAssistantModelManager.GEMMA_MODEL_FILENAME
 
     fun shouldFallbackToLfm(
         activeModelFilename: String,
@@ -176,9 +171,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
 
     fun shouldOfferLfmBackup(): Boolean =
         LocalAssistantModelPolicy.shouldOfferLfmBackup(
-            activeModelFilename = installedModelFile()?.name ?: "",
-            lfmFileExists = lfmModelFile.isFile,
-            lfmSizeValid = lfmModelFile.isFile && lfmModelFile.length() == LFM_MODEL_SIZE_BYTES
+            activeModelFilename = installedModelFile()?.name ?: ""
         )
 
     fun downloadModel(

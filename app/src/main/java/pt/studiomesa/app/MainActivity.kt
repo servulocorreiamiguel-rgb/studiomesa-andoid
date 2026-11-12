@@ -2015,14 +2015,14 @@ class MainActivity : ComponentActivity() {
             }
             if (localAssistantModelManager.shouldOfferLfmBackup()) {
                 addGap(card, 6)
-                card.addView(secondaryButton("Instalar alternativa local LFM2.5 · 736 MB") {
+                card.addView(secondaryButton("Verificar/instalar reserva LFM2.5 · 736 MB") {
                     AlertDialog.Builder(this)
-                        .setTitle("Instalar modelo de reserva")
+                        .setTitle("Verificar modelo de reserva")
                         .setMessage(
-                            "O LFM2.5-1.2B ocupa cerca de 736 MB e ficará guardado ao lado do Gemma 4 E2B. Não substitui o Gemma como motor principal; permite ao assistente mudar automaticamente para uma alternativa mais leve se o telemóvel não conseguir carregar o Gemma. Requer Internet durante a transferência."
+                            "O LFM2.5-1.2B ocupa cerca de 736 MB e fica guardado ao lado do Gemma 4 E2B. Não substitui o Gemma como motor principal; permite ao assistente mudar automaticamente para uma alternativa mais leve se o telemóvel não conseguir carregar o Gemma. Se a reserva já estiver instalada e íntegra, apenas será verificada. Se estiver em falta ou danificada, será transferida novamente."
                         )
                         .setNegativeButton("Agora não", null)
-                        .setPositiveButton("Instalar reserva") { _, _ ->
+                        .setPositiveButton("Verificar reserva") { _, _ ->
                             startLocalAssistantModelDownload(forceLfm = true)
                         }
                         .show()
