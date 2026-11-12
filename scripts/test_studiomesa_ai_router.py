@@ -38,6 +38,8 @@ class MultiModelRouterContractTests(unittest.TestCase):
     def test_qwen_38_27b_uses_the_explicit_free_coding_variant(self):
         chain = EDGE.split("coding:", 1)[1].split("],", 1)[0]
         self.assertIn("qwen/qwen3.8-27b:free", chain)
+        general = EDGE.split("general:", 1)[1].split("],", 1)[0]
+        self.assertIn("qwen/qwen3.8-27b:free", general)
         self.assertNotIn('"qwen/qwen3.8-27b"', EDGE)
         self.assertIn("Qwen3.8 27B (variante gratuita)", ACTIVITY)
 
