@@ -3221,7 +3221,16 @@ class MainActivity : ComponentActivity() {
                 LinearLayout.LayoutParams(-1, dp(48)))
             addGap(container, 7)
         }
-        container.addView(primaryButton("+  Novo pedido") { showCreateOrderDialog() }, LinearLayout.LayoutParams(-1, dp(50)))
+        val staffRole = backendPrefs.getString("restaurant_role", "").orEmpty() == "staff"
+        val canCreateOrder = StaffPermissionSet.canCreateOrder(currentStaffPermissions.orEmpty(), staffRole)
+        if (canCreateOrder) {
+            container.addView(primaryButton("+  Novo pedido") { showCreateOrderDialog() }, LinearLayout.LayoutParams(-1, dp(50)))
+        } else {
+            container.addView(label(
+                "Para criar pedidos, este funcionário precisa das permissões Pedidos, Carta e Mesas ou Reservas. Pode continuar a consultar e atualizar pedidos existentes.",
+                11.5f, false, muted
+            ))
+        }
         addGap(container, 15)
 
         if (hasRemoteRestaurant()) {
@@ -4009,9 +4018,23 @@ class MainActivity : ComponentActivity() {
 
     private fun cacheRemoteOperations(token: String, restaurantId: String) {
         if (token.isBlank() || restaurantId.isBlank()) return
-        val tables = SupabaseApi.listTables(token, restaurantId)
-        val menu = SupabaseApi.listMenuItems(token, restaurantId)
-        val orders = SupabaseApi.listOrders(token, restaurantId)
+        val isStaff = backendPrefs.getString("restaurant_role", "").orEmpty() == "staff"
+        val readPermissions = StaffPermissionSet.cacheReadPermissions(
+            currentStaffPermissions.orEmpty(),
+            isStaff
+        )
+        // Do not request areas the staff member cannot read. Besides avoiding
+        // RLS errors, overwrite old cache entries so revoked permissions cannot
+        // leave previously loaded restaurant data visible on this device.
+        val tables = if ("tables" in readPermissions) {
+            SupabaseApi.listTables(token, restaurantId)
+        } else JSONArray()
+        val menu = if ("menu" in readPermissions) {
+            SupabaseApi.listMenuItems(token, restaurantId)
+        } else JSONArray()
+        val orders = if ("orders" in readPermissions) {
+            SupabaseApi.listOrders(token, restaurantId)
+        } else JSONArray()
         backendPrefs.edit()
             .putString("remote_tables_json", tables.toString())
             .putString("remote_menu_json", menu.toString())
@@ -8885,6 +8908,15 @@ class MainActivity : ComponentActivity() {
 
     private fun showCreateOrderDialog() {
         val cloudMode = hasRemoteRestaurant()
+        val isStaff = backendPrefs.getString("restaurant_role", "").orEmpty() == "staff"
+        if (cloudMode && !StaffPermissionSet.canCreateOrder(currentStaffPermissions.orEmpty(), isStaff)) {
+            Toast.makeText(
+                this,
+                "Para criar pedidos, precisas das permissões Pedidos, Carta e Mesas ou Reservas.",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
         val items = if (cloudMode) remoteMenuEntries() else store.getMenu()
         if (items.isEmpty()) {
             AlertDialog.Builder(this)
