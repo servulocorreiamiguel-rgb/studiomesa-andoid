@@ -9,7 +9,8 @@ A fotografia detalhada mais recente está em [docs/COMMERCIAL-CLOSEOUT-AUDIT-202
 - [x] PR #113 integrada na `main`: assistente único com roteamento online para DeepSeek R1, Cohere North Mini Code, Qwen3.8 27B `:free`, GPT-OSS 20B `:free` e OpenRouter Free Router; GPT-OSS 120B não é usado no caminho gratuito.
 - [x] IA local Android: Gemma 4 E2B como motor preferido em equipamentos com filtro inicial de RAM/espaço suficiente; LFM2.5-1.2B INT4 como alternativa local e reserva instalável (736 MB), com validação SHA-256.
 - [x] O router exige JWT na configuração versionada e autentica o papel `owner`; a chamada online está desativada por omissão no build.
-- [ ] A função `studiomesa-ai-router` ainda não está publicada no Supabase alojado e a secret `OPENROUTER_API_KEY` ainda não está configurada. Não ativar a opção cloud antes destes passos e testes autenticados.
+- [x] Edge Function `studiomesa-ai-router` publicada no Supabase alojado, versão 1, com `verify_jwt=true`.
+- [ ] Confirmar/configurar a secret de servidor `OPENROUTER_API_KEY` e testar chamadas autenticadas de owner; a presença do segredo não foi confirmada nesta verificação. Manter cloud desligada até passar esses testes.
 - [ ] Testes físicos de Gemma/LFM no OPPO A5m e outros Android: carregamento, qualidade, latência, RAM, temperatura, bateria, encerramento e fallback.
 - [ ] O modo gratuito online tem quotas partilhadas pelo serviço/projeto e pode ficar indisponível; não prometer IA online ilimitada.
 - [x] Foram publicados cinco APKs debug/demo na execução [43186787267](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43186787267); não são pacotes comerciais assinados.
