@@ -1,6 +1,7 @@
 # StudioMesa — atualização de integração e preparação comercial
 
 **Data:** 12 de novembro de 2026  
+**Nota de estado:** este registo técnico foi supersedido, quanto ao estado global de lançamento e às migrações, pela [auditoria comercial consolidada de 12/11/2026](COMMERCIAL-CLOSEOUT-AUDIT-2026-11-12.md), que confirma a integração das PRs #119/#120, 69 ficheiros locais, 63 versões remotas e seis migrações locais ainda não aplicadas. 
 **Commit de integração de código na `main`:** `94a41413336678c9078fef9e21e0c4951cb8edaf`  
 **Decisão:** **não liberada para operação com dados reais nem venda comercial final.** A Mega IA foi integrada e a Edge Function foi publicada com JWT obrigatório; faltam a chave do fornecedor, ativação cloud controlada, testes físicos, autenticação real e preparação de release.
 
