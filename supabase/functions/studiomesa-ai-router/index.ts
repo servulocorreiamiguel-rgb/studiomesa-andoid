@@ -28,6 +28,7 @@ const MODEL_CHAINS = {
   ],
   general: [
     "openai/gpt-oss-20b:free",
+    "qwen/qwen3.8-27b:free",
     "deepseek/deepseek-r1:free",
     "openrouter/free",
   ],
