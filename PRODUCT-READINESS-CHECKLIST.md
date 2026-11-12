@@ -10,7 +10,7 @@ A fotografia detalhada mais recente está em [docs/COMMERCIAL-CLOSEOUT-AUDIT-202
 - [x] PR #114 integrada: a reserva LFM2.5 pode ser novamente verificada/reparada mesmo quando o ficheiro existe com tamanho válido; a validação SHA-256 decide se é necessário voltar a descarregar. CI da PR passou nos quatro jobs (43200057302).
 - [x] PR #115 integrada: documentação corrigida para 63 versões remotas correspondentes a 68 ficheiros locais, com cinco migrações locais por validar.
 - [x] PR #116 integrada: os RPCs de permissões granulares não são chamados enquanto o gate está desligado; a cache de funcionários é limpa em falha de autorização; a criação de pedidos exige as permissões correspondentes no cliente e na política PostgreSQL. CI da PR passou nos quatro jobs, incluindo Android 8 e 16 (43205612141).
-- [ ] CI de pós-merge da `main` após PR #116: execução 43209335761 ainda em curso na última verificação.
+- [x] CI de pós-merge da `main` após PR #116: execução [43209335761](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43209335761) passou nos quatro jobs. A PR #118 também passou nos quatro jobs ([43210884500](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43210884500)); a CI pós-merge de #118 está em curso ([43216860718](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43216860718)).
 - [ ] O gate `GRANULAR_STAFF_PERMISSIONS_ENABLED` e o gate `RECIPE_MANAGEMENT_ENABLED` permanecem `false`. Só os ativar depois de aplicar/testar as migrações na branch Supabase de desenvolvimento e validar em duas contas/restaurantes.
 - [x] IA local Android: Gemma 4 E2B como motor preferido em equipamentos com filtro inicial de RAM/espaço suficiente; LFM2.5-1.2B INT4 como alternativa local e reserva instalável (736 MB), com validação SHA-256.
 - [x] O router exige JWT na configuração versionada e autentica o papel `owner`; a chamada online está desativada por omissão no build.
@@ -142,7 +142,7 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 - [x] Separação de contas, papéis owner/staff e código de adesão de equipa.
 - [x] Proprietário pode consultar membros, remover o acesso de um funcionário e renovar automaticamente o código de adesão após a remoção.
 - [x] Verificado em teste transacional que operações administrativas de proprietário (consultar equipa, renovar códigos e remover membros) são recusadas a uma conta `staff`.
-- [ ] Definir e implementar permissões granulares para as restantes operações; atualmente os funcionários têm permissões operacionais gerais.
+- [ ] Ativar permissões granulares para as operações restantes depois de criar/testar a branch Supabase de desenvolvimento e aplicar as migrações aprovadas. Até lá, o gate continua desligado e os funcionários existentes mantêm o acesso operacional legado.
 - [ ] Suspensão temporária, horários/turnos e trilho de auditoria administrativo completo.
 - [ ] Verificar em testes que a revogação é refletida em todos os dispositivos; ecrãs ativos podem continuar a mostrar dados já carregados até atualizar/reabrir.
 - [x] Ensaios transacionais live: duas contas só viram os próprios dados em `restaurants`, `restaurant_staff`, `menu_items`, `restaurant_tables` e `restaurant_orders`; RPCs de criação de stock/reserva para o restaurante alheio foram recusadas. Uma conta `staff` não conseguiu listar a equipa, renovar códigos de equipa/clientes ou remover outro membro. Os testes foram revertidos e verificou-se que não ficaram registos temporários.
