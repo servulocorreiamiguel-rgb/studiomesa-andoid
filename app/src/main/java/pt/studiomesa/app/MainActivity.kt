@@ -2113,7 +2113,11 @@ class MainActivity : ComponentActivity() {
                             assistantModelError = null
                             Toast.makeText(
                                 this,
-                                "${localAssistantModelManager.activeModelDisplayName()} instalada e verificada.",
+                                if (forceLfm) {
+                                    "Alternativa local LFM2.5 instalada e verificada."
+                                } else {
+                                    "${localAssistantModelManager.activeModelDisplayName()} instalada e verificada."
+                                },
                                 Toast.LENGTH_LONG
                             ).show()
                         },
