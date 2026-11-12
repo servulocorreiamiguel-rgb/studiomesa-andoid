@@ -1024,6 +1024,23 @@ BEGIN
     -- Keep recipe-only columns inside this branch: ingredient rows do not
     -- contain is_active, menu_item_id or created_by.
     IF TG_TABLE_NAME = 'restaurant_recipes' AND TG_OP = 'UPDATE' THEN
+        -- Account deletion anonymizes recipe audit actors with ON DELETE SET NULL.
+        -- Permit only actor fields to move from a user ID to NULL; every recipe,
+        -- approval and business field must remain byte-for-byte equivalent.
+        IF (SELECT auth.uid()) IS NULL
+           AND (
+               (OLD.created_by IS NOT NULL AND NEW.created_by IS NULL)
+               OR (OLD.updated_by IS NOT NULL AND NEW.updated_by IS NULL)
+           )
+           AND (NEW.created_by IS NOT DISTINCT FROM OLD.created_by
+                OR (OLD.created_by IS NOT NULL AND NEW.created_by IS NULL))
+           AND (NEW.updated_by IS NOT DISTINCT FROM OLD.updated_by
+                OR (OLD.updated_by IS NOT NULL AND NEW.updated_by IS NULL))
+           AND (pg_catalog.to_jsonb(NEW) - 'created_by' - 'updated_by')
+               IS NOT DISTINCT FROM (pg_catalog.to_jsonb(OLD) - 'created_by' - 'updated_by') THEN
+            RETURN NEW;
+        END IF;
+
         IF NEW.is_active IS FALSE
            AND NEW.id = OLD.id
            AND NEW.restaurant_id = OLD.restaurant_id
