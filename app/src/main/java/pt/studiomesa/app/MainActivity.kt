@@ -420,12 +420,15 @@ class MainActivity : ComponentActivity() {
             pages.remove("Assistente económico")
         }
 
-        val isStaff = hasRemoteRestaurant() &&
-            backendPrefs.getString("restaurant_role", "staff") == "staff"
+        val role = backendPrefs.getString("restaurant_role", "").orEmpty()
+        val isRestricted = StaffPermissionSet.shouldRestrictNavigation(
+            hasRemoteRestaurant = hasRemoteRestaurant(),
+            role = role
+        )
         return StaffPermissionSet.filterPages(
             pages,
             currentStaffPermissions.orEmpty(),
-            isStaff
+            isRestricted
         )
     }
 
@@ -3973,7 +3976,7 @@ class MainActivity : ComponentActivity() {
         } catch (_: Exception) {
             // Keep authentication successful if restoring cloud data temporarily fails,
             // but fail closed for staff navigation until permissions can be reloaded.
-            if (backendPrefs.getString("restaurant_role", "") == "staff") {
+            if (backendPrefs.getString("restaurant_role", "").orEmpty() != "owner") {
                 currentStaffPermissions = emptySet()
                 clearCachedStaffOperationalData()
             }
@@ -4072,7 +4075,10 @@ class MainActivity : ComponentActivity() {
             return
         }
         val currentRole = backendPrefs.getString("restaurant_role", "").orEmpty()
-        if (currentRole == "staff" && BackendSchemaFeatureGate.GRANULAR_STAFF_PERMISSIONS_ENABLED) {
+        val nonOwnerRole = currentRole != "owner"
+        val granularRefreshRequired = currentRole == "staff" &&
+            BackendSchemaFeatureGate.GRANULAR_STAFF_PERMISSIONS_ENABLED
+        if (nonOwnerRole && (granularRefreshRequired || currentRole != "staff")) {
             // Do not keep stale privileges or cached data if the server cannot reload the matrix.
             currentStaffPermissions = emptySet()
             clearCachedStaffOperationalData()
@@ -4088,9 +4094,8 @@ class MainActivity : ComponentActivity() {
                 granularPermissionsEnabled = BackendSchemaFeatureGate.GRANULAR_STAFF_PERMISSIONS_ENABLED,
                 serverPermissions = serverPermissions
             )
-            val isStaff = currentRole == "staff"
             cacheRemoteOperations(backendToken(), restaurantId)
-            if (isStaff) {
+            if (nonOwnerRole) {
                 if ("inventory" !in currentStaffPermissions.orEmpty()) {
                     backendPrefs.edit().remove("remote_inventory_json").remove("inventory_loaded").apply()
                 }
