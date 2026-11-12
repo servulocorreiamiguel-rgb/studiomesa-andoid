@@ -890,12 +890,13 @@ BEGIN
     -- Authenticated application writes still pass through the plan check below.
     IF TG_TABLE_NAME = 'restaurant_inventory_items'
        AND TG_OP = 'UPDATE'
-       AND (SELECT auth.uid()) IS NULL
-       AND OLD.created_by IS NOT NULL
-       AND NEW.created_by IS NULL
-       AND (pg_catalog.to_jsonb(NEW) - 'created_by')
-           IS NOT DISTINCT FROM (pg_catalog.to_jsonb(OLD) - 'created_by') THEN
-        RETURN NEW;
+       AND (SELECT auth.uid()) IS NULL THEN
+        IF OLD.created_by IS NOT NULL
+           AND NEW.created_by IS NULL
+           AND (pg_catalog.to_jsonb(NEW) - 'created_by')
+               IS NOT DISTINCT FROM (pg_catalog.to_jsonb(OLD) - 'created_by') THEN
+            RETURN NEW;
+        END IF;
     END IF;
 
     IF NOT private.restaurant_plan_allows(v_restaurant_id, v_required_plan) THEN
