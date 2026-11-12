@@ -321,7 +321,7 @@ DECLARE
     v_photos_enabled boolean;
 BEGIN
     IF (SELECT auth.uid()) IS NULL OR p_restaurant_id IS NULL
-       OR NOT private.is_restaurant_staff(p_restaurant_id) THEN
+       OR NOT private.has_restaurant_permission(p_restaurant_id, 'loyalty') THEN
         RAISE EXCEPTION 'Sem autorização para consultar a loja de pontos.';
     END IF;
 
