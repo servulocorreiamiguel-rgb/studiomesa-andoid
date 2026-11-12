@@ -9,7 +9,7 @@ Um único assistente e uma única conversa, com seleção automática do motor a
 | Motor | Função | Situação nesta integração |
 |---|---|---|
 | DeepSeek R1 | Primeiro motor online para raciocínio complexo | OpenRouter: `deepseek/deepseek-r1:free` |
-| Qwen 3.8 27B | Modelo pretendido para programação e tarefas gerais | Não é chamado no modo gratuito: a rota atual oficial da Groq apresenta preços por token e não há variante gratuita confirmada na lista atual da OpenRouter |
+| Qwen3.8 27B | Programação e tarefas gerais | OpenRouter `qwen/qwen3.8-27b:free`; variante apresentada a preço zero. Só é usada quando o endpoint cumpre os filtros de privacidade enviados pelo router |
 | Gemma 4 E2B | Motor local Android preferido | Integrado via LiteRT-LM, com verificação SHA-256 e fallback local para LFM2.5-1.2B |
 | GPT-OSS 120B | Variante grande de raciocínio pretendida | Não é chamada no modo gratuito: não existe variante gratuita confirmada no catálogo atual |
 | Cohere North Mini Code | Programação e tarefas de código | OpenRouter: `cohere/north-mini-code:free` |
@@ -18,7 +18,7 @@ Um único assistente e uma única conversa, com seleção automática do motor a
 
 A aplicação mantém **um único assistente e uma única conversa**. O utilizador não escolhe quatro chats. A Edge Function seleciona o primeiro motor gratuito adequado à categoria da pergunta e só tenta o seguinte quando o anterior falha. O sistema não executa os modelos todos em paralelo e não envia a mesma mensagem a vários fornecedores.
 
-A preferência original por Qwen 3.8 27B e GPT-OSS 120B fica registada, mas não pode ser apresentada como gratuita: a documentação atual da Groq lista Qwen 3.8 27B com preço por token; a variante GPT-OSS 120B não aparece na seleção gratuita atual da OpenRouter. O GPT-OSS 20B tem uma variante gratuita confirmada e ocupa o lugar de alternativa. Se as condições dos fornecedores mudarem, os IDs só devem ser adicionados depois de confirmar preço zero, limites, tool calling e privacidade.
+A variante `qwen/qwen3.8-27b:free` está listada no OpenRouter com preço zero e suporte para chamadas de ferramentas. A rota paga `qwen/qwen3.8-27b` é diferente e nunca é chamada. GPT-OSS 120B continua excluído do modo gratuito; GPT-OSS 20B mantém-se como alternativa gratuita confirmada. O router exige `data_collection: deny`, `zdr: true` e `allow_fallbacks: false`; se não existir um endpoint elegível, a tentativa falha e passa para o próximo modelo gratuito, sem enfraquecer a privacidade nem usar um modelo pago.
 
 ## Privacidade
 
@@ -70,7 +70,8 @@ A chave OpenRouter não está configurada nesta alteração. A função ainda n�
 - OpenRouter — Cohere North Mini Code (variante gratuita): https://openrouter.ai/cohere/north-mini-code:free
 - OpenRouter — GPT-OSS 20B (variante gratuita): https://openrouter.ai/openai/gpt-oss-20b:free
 - OpenRouter — catálogo de modelos gratuitos e limites: https://openrouter.ai/collections/free-models
-- Groq — preços atuais publicados para Qwen 3.8 27B: https://console.groq.com/docs/model/qwen/qwen3.8-27b
+- OpenRouter — Qwen3.8 27B (variante gratuita): https://openrouter.ai/qwen/qwen3.8-27b%3Afree
+- OpenRouter — filtros de privacidade e Zero Data Retention: https://openrouter.ai/docs/guides/routing/provider-selection
 - Google — Gemma 4 e LiteRT-LM Android: https://developers.google.com/edge/litert-lm/models/gemma-4
 
 Verificação efetuada em 11 de novembro de 2026. As listas de modelos gratuitos, limites e termos mudam; repetir a verificação antes de cada lançamento comercial.
