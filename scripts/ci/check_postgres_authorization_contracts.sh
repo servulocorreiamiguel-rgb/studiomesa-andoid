@@ -153,6 +153,34 @@ COMMIT;
 SQL
 }
 
+update_inventory_item_with_cost() {
+  local user_id="$1" restaurant_id="$2" item_id="$3" unit_override="$4" cost_override="$5"
+  local unit_sql="(SELECT i.unit FROM public.restaurant_inventory_items AS i WHERE i.id = '$item_id'::uuid)"
+  local cost_sql="(SELECT i.unit_cost_per_unit FROM public.restaurant_inventory_items AS i WHERE i.id = '$item_id'::uuid)"
+  if [ -n "$unit_override" ]; then
+    unit_sql="'$unit_override'"
+  fi
+  if [ -n "$cost_override" ]; then
+    cost_sql="$cost_override"
+  fi
+  psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$user_id', true);
+SET LOCAL ROLE authenticated;
+SELECT public.save_inventory_item_with_cost(
+  '$restaurant_id'::uuid,
+  '$item_id'::uuid,
+  (SELECT i.name FROM public.restaurant_inventory_items AS i WHERE i.id = '$item_id'::uuid),
+  $unit_sql,
+  (SELECT i.quantity FROM public.restaurant_inventory_items AS i WHERE i.id = '$item_id'::uuid),
+  (SELECT i.low_stock_threshold FROM public.restaurant_inventory_items AS i WHERE i.id = '$item_id'::uuid),
+  'CI authenticated item update',
+  $cost_sql
+);
+COMMIT;
+SQL
+}
+
 join_customer() {
   local user_id="$1" join_code="$2" display_name="$3"
   psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
@@ -2647,8 +2675,7 @@ fi
 
 # Changing a stock unit must invalidate approval and block reactivation until
 # the owner explicitly saves that ingredient line again with the new unit.
-psql --no-psqlrc --set ON_ERROR_STOP=1 -c \
-  "UPDATE public.restaurant_inventory_items SET unit = 'g' WHERE id = '$RECIPE_ITEM_C'::uuid;" >/dev/null
+update_inventory_item_with_cost "$USER_A" "$RESTAURANT_A" "$RECIPE_ITEM_C" "g" "" >/dev/null
 unit_change_active="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
   -c "SELECT is_active::text FROM public.restaurant_recipes WHERE id = '$RECIPE_ID_A'::uuid;")"
 if [ "$unit_change_active" != "false" ]; then
@@ -2677,8 +2704,7 @@ if [ "$(set_recipe_active "$USER_A" "$RESTAURANT_A" "$PRICE_MENU_ITEM_A" "true")
 fi
 
 # Restoring the old unit is another unit change and must invalidate approval.
-psql --no-psqlrc --set ON_ERROR_STOP=1 -c \
-  "UPDATE public.restaurant_inventory_items SET unit = 'kg' WHERE id = '$RECIPE_ITEM_C'::uuid;" >/dev/null
+update_inventory_item_with_cost "$USER_A" "$RESTAURANT_A" "$RECIPE_ITEM_C" "kg" "" >/dev/null
 if set_recipe_active "$USER_A" "$RESTAURANT_A" "$PRICE_MENU_ITEM_A" "true" >/dev/null 2>&1; then
   echo "ERROR: a recipe was reactivated after its ingredient unit changed back without review." >&2
   exit 1
@@ -2728,8 +2754,7 @@ echo "PASS: recipe lines are tenant-isolated and RPC-only; only the owner can ac
 # 5% preparation waste, rounded up to 0.001 kg) and 0.200 kg of ingredient C.
 # Give ingredient A a known purchase cost so the cost-snapshot trigger is
 # verified for automatic recipe-consumption movements.
-psql --no-psqlrc --set ON_ERROR_STOP=1 -c \
-  "UPDATE public.restaurant_inventory_items SET unit_cost_per_unit = 3.5000 WHERE id = '$ITEM_A'::uuid;" >/dev/null
+update_inventory_item_with_cost "$USER_A" "$RESTAURANT_A" "$ITEM_A" "" "3.5000::numeric" >/dev/null
 create_recipe_order "$USER_A" "$RECIPE_ORDER_ID" "$PRICE_MENU_ITEM_A" "2"
 set_recipe_order_status "$USER_A" "$RECIPE_ORDER_ID" "Em preparação"
 
@@ -2760,8 +2785,7 @@ if [ "$recipe_replay_count" != "2" ] || [ "$recipe_stock_a_after_replay" != "7.3
 fi
 # A later purchase-cost edit must not rewrite the historical cost of this
 # automatically consumed ingredient.
-psql --no-psqlrc --set ON_ERROR_STOP=1 -c \
-  "UPDATE public.restaurant_inventory_items SET unit_cost_per_unit = 4.2500 WHERE id = '$ITEM_A'::uuid;" >/dev/null
+update_inventory_item_with_cost "$USER_A" "$RESTAURANT_A" "$ITEM_A" "" "4.2500::numeric" >/dev/null
 recipe_historical_cost_a="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
   -c "SELECT unit_cost_at_movement::text FROM public.restaurant_inventory_movements WHERE source_order_id = '$RECIPE_ORDER_ID'::uuid AND item_id = '$ITEM_A'::uuid;")"
 if [ "$recipe_historical_cost_a" != "3.5000" ]; then
