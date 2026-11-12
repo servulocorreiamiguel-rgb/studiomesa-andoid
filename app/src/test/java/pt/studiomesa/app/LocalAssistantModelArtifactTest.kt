@@ -91,38 +91,24 @@ class LocalAssistantModelArtifactTest {
     }
 
     @Test
-    fun lfmBackupOfferAppearsOnlyWhenGemmaIsActiveAndLfmIsMissingOrInvalid() {
+    fun lfmBackupCanAlwaysBeReverifiedWhileGemmaIsThePrimaryModel() {
+        // Keep the repair/verification action available even when an LFM file
+        // already exists: a same-size corrupted artifact must be replaceable.
         assertEquals(
             true,
             LocalAssistantModelPolicy.shouldOfferLfmBackup(
-                LocalAssistantModelManager.GEMMA_MODEL_FILENAME,
-                lfmFileExists = false,
-                lfmSizeValid = false
-            )
-        )
-        assertEquals(
-            true,
-            LocalAssistantModelPolicy.shouldOfferLfmBackup(
-                LocalAssistantModelManager.GEMMA_MODEL_FILENAME,
-                lfmFileExists = true,
-                lfmSizeValid = false
+                LocalAssistantModelManager.GEMMA_MODEL_FILENAME
             )
         )
         assertEquals(
             false,
             LocalAssistantModelPolicy.shouldOfferLfmBackup(
-                LocalAssistantModelManager.GEMMA_MODEL_FILENAME,
-                lfmFileExists = true,
-                lfmSizeValid = true
+                LocalAssistantModelManager.LFM_MODEL_FILENAME
             )
         )
         assertEquals(
             false,
-            LocalAssistantModelPolicy.shouldOfferLfmBackup(
-                LocalAssistantModelManager.LFM_MODEL_FILENAME,
-                lfmFileExists = false,
-                lfmSizeValid = false
-            )
+            LocalAssistantModelPolicy.shouldOfferLfmBackup("")
         )
     }
 
