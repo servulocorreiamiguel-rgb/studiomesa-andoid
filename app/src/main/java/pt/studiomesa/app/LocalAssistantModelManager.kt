@@ -1,5 +1,6 @@
 package pt.studiomesa.app
 
+import android.app.ActivityManager
 import android.content.Context
 import android.os.StatFs
 import com.google.ai.edge.litertlm.Backend
@@ -47,6 +48,41 @@ internal object AssistantModelConversationPolicy {
             activeUserTurns >= maxUserTurnsPerSession
 }
 
+internal object LocalAssistantModelPolicy {
+    fun needsIntegrityVerification(activeModelPath: String, verifiedModelPath: String?): Boolean =
+        verifiedModelPath != activeModelPath
+
+    fun selectDownloadModelFilename(
+        forceLfm: Boolean,
+        preferGemma: Boolean,
+        canUseGemma: Boolean,
+        installedModelFilename: String?,
+        preferredModelFilename: String
+    ): String = when {
+        forceLfm -> LocalAssistantModelManager.LFM_MODEL_FILENAME
+        preferGemma && canUseGemma -> LocalAssistantModelManager.GEMMA_MODEL_FILENAME
+        !installedModelFilename.isNullOrBlank() -> installedModelFilename
+        else -> preferredModelFilename
+    }
+
+    fun shouldOfferLfmBackup(
+        activeModelFilename: String,
+        lfmFileExists: Boolean,
+        lfmSizeValid: Boolean
+    ): Boolean =
+        activeModelFilename == LocalAssistantModelManager.GEMMA_MODEL_FILENAME &&
+            (!lfmFileExists || !lfmSizeValid)
+
+    fun shouldFallbackToLfm(
+        activeModelFilename: String,
+        lfmFileExists: Boolean,
+        lfmSizeValid: Boolean,
+        lfmHashValid: Boolean
+    ): Boolean =
+        activeModelFilename == LocalAssistantModelManager.GEMMA_MODEL_FILENAME &&
+            lfmFileExists && lfmSizeValid && lfmHashValid
+}
+
 internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
     data class Turn(val role: String, val content: String)
 
@@ -56,10 +92,58 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
             priority = Thread.NORM_PRIORITY
         }
     }
-    private val modelFile = File(
-        File(appContext.filesDir, MODEL_DIRECTORY),
-        MODEL_FILENAME
-    )
+    private val modelDirectory = File(appContext.filesDir, MODEL_DIRECTORY)
+    private val lfmModelFile = File(modelDirectory, LFM_MODEL_FILENAME)
+    private val gemmaModelFile = File(modelDirectory, GEMMA_MODEL_FILENAME)
+    @Volatile private var forceLfmForProcess = false
+
+    private fun canUseGemmaOnThisDevice(): Boolean = runCatching {
+        val manager = appContext.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        val memory = ActivityManager.MemoryInfo()
+        manager.getMemoryInfo(memory)
+        val availableBytes = StatFs(appContext.filesDir.absolutePath).availableBytes
+        memory.totalMem >= MIN_GEMMA_TOTAL_MEMORY_BYTES &&
+            availableBytes >= GEMMA_MODEL_SIZE_BYTES + MINIMUM_FREE_SPACE_BYTES
+    }.getOrDefault(false)
+
+    private fun artifactFor(file: File): ModelArtifact =
+        if (file.name == GEMMA_MODEL_FILENAME) {
+            ModelArtifact(
+                file = file,
+                displayName = "Gemma 4 E2B",
+                sizeBytes = GEMMA_MODEL_SIZE_BYTES,
+                sha256 = GEMMA_MODEL_SHA256,
+                downloadUrl = GEMMA_MODEL_DOWNLOAD_URL,
+                cacheName = "gemma-4-e2b"
+            )
+        } else {
+            ModelArtifact(
+                file = file,
+                displayName = "LFM2.5 1.2B",
+                sizeBytes = LFM_MODEL_SIZE_BYTES,
+                sha256 = LFM_MODEL_SHA256,
+                downloadUrl = LFM_MODEL_DOWNLOAD_URL,
+                cacheName = "lfm2.5-1.2b"
+            )
+        }
+
+    private fun installedModelFile(): File? = when {
+        !forceLfmForProcess && gemmaModelFile.isFile &&
+            gemmaModelFile.length() == GEMMA_MODEL_SIZE_BYTES -> gemmaModelFile
+        lfmModelFile.isFile && lfmModelFile.length() == LFM_MODEL_SIZE_BYTES -> lfmModelFile
+        else -> null
+    }
+
+    private fun preferredModelFile(): File =
+        if (canUseGemmaOnThisDevice()) gemmaModelFile else lfmModelFile
+
+    fun activeModelDisplayName(): String =
+        artifactFor(installedModelFile() ?: preferredModelFile()).displayName
+
+    fun shouldOfferGemmaUpgrade(): Boolean =
+        canUseGemmaOnThisDevice() &&
+            installedModelFile() == lfmModelFile &&
+            (!gemmaModelFile.isFile || gemmaModelFile.length() != GEMMA_MODEL_SIZE_BYTES)
     private var engine: Engine? = null
     private var conversation: Conversation? = null
     private var activeConversationId: String? = null
@@ -73,18 +157,35 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
     private var salesForecastTool: StudioMesaSalesForecastTool? = null
     @Volatile private var downloading = false
     @Volatile private var closed = false
-    private var verifiedThisProcess = false
+    private var verifiedModelPath: String? = null
 
     fun isDownloading(): Boolean = downloading
 
-    fun isModelInstalled(): Boolean =
-        modelFile.isFile && modelFile.length() == MODEL_SIZE_BYTES
+    fun isModelInstalled(): Boolean = installedModelFile() != null
 
-    fun modelSizeBytes(): Long = MODEL_SIZE_BYTES
+    fun modelSizeBytes(preferGemma: Boolean = false): Long {
+        val selected = when {
+            preferGemma && canUseGemmaOnThisDevice() -> gemmaModelFile
+            installedModelFile() != null -> installedModelFile()!!
+            else -> preferredModelFile()
+        }
+        return artifactFor(selected).sizeBytes
+    }
+
+    fun lfmModelSizeBytes(): Long = LFM_MODEL_SIZE_BYTES
+
+    fun shouldOfferLfmBackup(): Boolean =
+        LocalAssistantModelPolicy.shouldOfferLfmBackup(
+            activeModelFilename = installedModelFile()?.name ?: "",
+            lfmFileExists = lfmModelFile.isFile,
+            lfmSizeValid = lfmModelFile.isFile && lfmModelFile.length() == LFM_MODEL_SIZE_BYTES
+        )
 
     fun downloadModel(
         onProgress: (downloadedBytes: Long, totalBytes: Long) -> Unit,
-        onComplete: (Result<File>) -> Unit
+        onComplete: (Result<File>) -> Unit,
+        preferGemma: Boolean = false,
+        forceLfm: Boolean = false
     ) {
         if (closed || downloading) {
             onComplete(Result.failure(IllegalStateException("A transferência já está em curso ou o motor foi fechado.")))
@@ -93,29 +194,45 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         downloading = true
         worker.execute {
             val result = runCatching {
-                modelFile.parentFile?.let { directory ->
+                val installedFilename = installedModelFile()?.name
+                val selectedFilename = LocalAssistantModelPolicy.selectDownloadModelFilename(
+                    forceLfm = forceLfm,
+                    preferGemma = preferGemma,
+                    canUseGemma = canUseGemmaOnThisDevice(),
+                    installedModelFilename = installedFilename,
+                    preferredModelFilename = preferredModelFile().name
+                )
+                val targetFile = File(modelDirectory, selectedFilename)
+                val artifact = artifactFor(targetFile)
+                targetFile.parentFile?.let { directory ->
                     if (!directory.exists() && !directory.mkdirs()) {
                         throw IllegalStateException("Não foi possível criar a pasta privada do modelo.")
                     }
                 } ?: throw IllegalStateException("A pasta privada do modelo não está disponível.")
 
-                if (modelFile.isFile && modelFile.length() == MODEL_SIZE_BYTES && verifySha256(modelFile)) {
-                    verifiedThisProcess = true
-                    return@runCatching modelFile
+                if (targetFile.isFile &&
+                    targetFile.length() == artifact.sizeBytes &&
+                    verifySha256(targetFile, artifact.sha256)
+                ) {
+                    verifiedModelPath = targetFile.absolutePath
+                    if (targetFile.name == GEMMA_MODEL_FILENAME) forceLfmForProcess = false
+                    return@runCatching targetFile
                 }
-                modelFile.delete()
+                targetFile.delete()
 
                 val availableBytes = StatFs(appContext.filesDir.absolutePath).availableBytes
-                val requiredBytes = MODEL_SIZE_BYTES + MINIMUM_FREE_SPACE_BYTES
+                val requiredBytes = artifact.sizeBytes + MINIMUM_FREE_SPACE_BYTES
                 if (availableBytes < requiredBytes) {
                     throw IllegalStateException(
-                        "Espaço insuficiente. São necessários cerca de 850 MB livres para transferir e instalar o modelo."
+                        "Espaço insuficiente. São necessários cerca de " +
+                            formatModelSize(artifact.sizeBytes) + " livres para transferir " +
+                            artifact.displayName + " e manter espaço de trabalho."
                     )
                 }
 
-                val temporaryFile = File(modelFile.parentFile, "$MODEL_FILENAME.part")
+                val temporaryFile = File(targetFile.parentFile, "${artifact.file.name}.part")
                 temporaryFile.delete()
-                val connection = (URL(MODEL_DOWNLOAD_URL).openConnection() as HttpURLConnection).apply {
+                val connection = (URL(artifact.downloadUrl).openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"
                     connectTimeout = 25_000
                     readTimeout = 120_000
@@ -131,7 +248,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                         throw IllegalStateException("O servidor do modelo respondeu com HTTP $status.")
                     }
                     val declaredLength = connection.contentLengthLong
-                    if (declaredLength > 0 && declaredLength != MODEL_SIZE_BYTES) {
+                    if (declaredLength > 0 && declaredLength != artifact.sizeBytes) {
                         throw IllegalStateException("O tamanho anunciado pelo servidor não corresponde ao modelo validado.")
                     }
 
@@ -147,29 +264,30 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                                 output.write(buffer, 0, count)
                                 digest.update(buffer, 0, count)
                                 downloaded += count
-                                onProgress(downloaded, MODEL_SIZE_BYTES)
+                                onProgress(downloaded, artifact.sizeBytes)
                             }
                             output.flush()
                         }
                     }
 
-                    if (downloaded != MODEL_SIZE_BYTES) {
+                    if (downloaded != artifact.sizeBytes) {
                         throw IllegalStateException(
-                            "A transferência ficou incompleta ($downloaded de $MODEL_SIZE_BYTES bytes)."
+                            "A transferência ficou incompleta ($downloaded de ${artifact.sizeBytes} bytes)."
                         )
                     }
                     val actualHash = digest.digest().joinToString("") { "%02x".format(it) }
-                    if (!actualHash.equals(MODEL_SHA256, ignoreCase = true)) {
+                    if (!actualHash.equals(artifact.sha256, ignoreCase = true)) {
                         throw IllegalStateException("A verificação SHA-256 falhou. O ficheiro foi rejeitado.")
                     }
-                    if (modelFile.exists() && !modelFile.delete()) {
+                    if (targetFile.exists() && !targetFile.delete()) {
                         throw IllegalStateException("Não foi possível substituir um ficheiro de modelo anterior.")
                     }
-                    if (!temporaryFile.renameTo(modelFile)) {
+                    if (!temporaryFile.renameTo(targetFile)) {
                         throw IllegalStateException("Não foi possível instalar o modelo transferido.")
                     }
-                    verifiedThisProcess = true
-                    modelFile
+                    verifiedModelPath = targetFile.absolutePath
+                    if (targetFile.name == GEMMA_MODEL_FILENAME) forceLfmForProcess = false
+                    targetFile
                 } finally {
                     connection.disconnect()
                     if (temporaryFile.exists()) temporaryFile.delete()
@@ -205,11 +323,34 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                 }
                 require(isModelInstalled()) { "Transfere primeiro o modelo de IA local." }
 
-                if (!verifiedThisProcess) {
-                    if (!verifySha256(modelFile)) {
-                        throw IllegalStateException("O modelo guardado não passou a verificação de integridade. Transfere-o novamente.")
+                var activeModelFile = installedModelFile()
+                    ?: throw IllegalStateException("O modelo local deixou de estar disponível.")
+                var activeArtifact = artifactFor(activeModelFile)
+                if (LocalAssistantModelPolicy.needsIntegrityVerification(
+                        activeModelFile.absolutePath,
+                        verifiedModelPath
+                    )) {
+                    if (!verifySha256(activeModelFile, activeArtifact.sha256)) {
+                        val lfmExists = lfmModelFile.isFile
+                        val lfmSizeValid = lfmModelFile.length() == LFM_MODEL_SIZE_BYTES
+                        val lfmHashValid = lfmExists && lfmSizeValid &&
+                            verifySha256(lfmModelFile, LFM_MODEL_SHA256)
+                        if (!LocalAssistantModelPolicy.shouldFallbackToLfm(
+                                activeModelFile.name,
+                                lfmExists,
+                                lfmSizeValid,
+                                lfmHashValid
+                            )
+                        ) {
+                            throw IllegalStateException(
+                                "O modelo guardado não passou a verificação de integridade. Transfere-o novamente."
+                            )
+                        }
+                        forceLfmForProcess = true
+                        activeModelFile = lfmModelFile
+                        activeArtifact = artifactFor(lfmModelFile)
                     }
-                    verifiedThisProcess = true
+                    verifiedModelPath = activeModelFile.absolutePath
                 }
 
                 val effectiveSystemInstruction = AssistantThinkingModePolicy.buildSystemInstruction(
@@ -230,23 +371,63 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                     )) {
                     closeActiveSession()
 
-                    val createdEngine = Engine(
-                        EngineConfig(
-                            modelPath = modelFile.absolutePath,
-                            backend = Backend.CPU(),
-                            maxNumTokens = MAX_CONTEXT_TOKENS,
-                            cacheDir = File(appContext.cacheDir, "studiomesa-litert-cache").absolutePath
+                    fun createInitializedEngine(modelFile: File, artifact: ModelArtifact): Engine {
+                        val candidate = Engine(
+                            EngineConfig(
+                                modelPath = modelFile.absolutePath,
+                                backend = Backend.CPU(),
+                                maxNumTokens = MAX_CONTEXT_TOKENS,
+                                cacheDir = File(
+                                    appContext.cacheDir,
+                                    "studiomesa-litert-cache-${artifact.cacheName}"
+                                ).absolutePath
+                            )
                         )
-                    )
-                    // An Engine and its Conversation belong to one user conversation.
-                    // LiteRT-LM 0.18/LFM2 can retain short-convolution state when a second
-                    // Conversation is created on an already-used Engine.
-                    try {
-                        createdEngine.initialize()
-                    } catch (error: Exception) {
-                        // Do not leak native runtime resources if model/backend initialisation fails.
-                        runCatching { createdEngine.close() }
-                        throw error
+                        try {
+                            candidate.initialize()
+                            return candidate
+                        } catch (error: OutOfMemoryError) {
+                            runCatching { candidate.close() }
+                            throw error
+                        } catch (error: Exception) {
+                            runCatching { candidate.close() }
+                            throw error
+                        }
+                    }
+
+                    // Gemma can exceed the real memory/runtime capability of a device even
+                    // when its advertised RAM and free-space checks pass. Fall back to LFM.
+                    // Explicitly handle Android memory exhaustion as well as runtime exceptions.
+                    val createdEngine = try {
+                        createInitializedEngine(activeModelFile, activeArtifact)
+                    } catch (primaryError: Throwable) {
+                        if (primaryError !is Exception && primaryError !is OutOfMemoryError) {
+                            throw primaryError
+                        }
+                        val lfmExists = lfmModelFile.isFile
+                        val lfmSizeValid = lfmModelFile.length() == LFM_MODEL_SIZE_BYTES
+                        val lfmHashValid = lfmExists && lfmSizeValid &&
+                            verifySha256(lfmModelFile, LFM_MODEL_SHA256)
+                        if (!LocalAssistantModelPolicy.shouldFallbackToLfm(
+                                activeModelFile.name,
+                                lfmExists,
+                                lfmSizeValid,
+                                lfmHashValid
+                            )
+                        ) {
+                            if (activeModelFile.name == GEMMA_MODEL_FILENAME) {
+                                throw IllegalStateException(
+                                    "O Gemma 4 E2B não conseguiu iniciar neste telemóvel. Instala a alternativa LFM2.5 (cerca de 736 MB) no cartão do modelo local e tenta novamente.",
+                                    primaryError
+                                )
+                            }
+                            throw primaryError
+                        }
+                        forceLfmForProcess = true
+                        activeModelFile = lfmModelFile
+                        activeArtifact = artifactFor(lfmModelFile)
+                        verifiedModelPath = activeModelFile.absolutePath
+                        createInitializedEngine(activeModelFile, activeArtifact)
                     }
 
                     val dataTool = StudioMesaRestaurantDataTool(snapshot)
@@ -401,7 +582,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         }
     }
 
-    private fun verifySha256(file: File): Boolean = runCatching {
+    private fun verifySha256(file: File, expectedSha256: String): Boolean = runCatching {
         val digest = MessageDigest.getInstance("SHA-256")
         BufferedInputStream(FileInputStream(file), BUFFER_SIZE).use { input ->
             val buffer = ByteArray(BUFFER_SIZE)
@@ -412,23 +593,49 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
             }
         }
         val actual = digest.digest().joinToString("") { "%02x".format(it) }
-        actual.equals(MODEL_SHA256, ignoreCase = true)
+        actual.equals(expectedSha256, ignoreCase = true)
     }.getOrDefault(false)
 
+    private fun formatModelSize(bytes: Long): String =
+        String.format(java.util.Locale("pt", "PT"), "%.2f GB", bytes.toDouble() / 1_000_000_000.0)
+
+    private data class ModelArtifact(
+        val file: File,
+        val displayName: String,
+        val sizeBytes: Long,
+        val sha256: String,
+        val downloadUrl: String,
+        val cacheName: String
+    )
+
     internal companion object {
+        // Compatibility aliases for existing tests and callers; the compact LFM remains the safe fallback.
         const val MODEL_FILENAME = "LFM2.5-1.2B-Instruct_int4.litertlm"
         const val MODEL_SIZE_BYTES = 736_015_744L
         const val MODEL_SHA256 = "e904729a8a8a0160658cb7cd22992e270a0547c05cc45b08c47ece5c0e29425b"
         const val MODEL_DOWNLOAD_URL =
             "https://huggingface.co/litert-community/LFM2.5-1.2B-Instruct/resolve/d23bed4d8871e970d9d4d7de087377a90ecb1b4e/LFM2.5-1.2B-Instruct_int4.litertlm"
+
+        const val LFM_MODEL_FILENAME = MODEL_FILENAME
+        const val LFM_MODEL_SIZE_BYTES = MODEL_SIZE_BYTES
+        const val LFM_MODEL_SHA256 = MODEL_SHA256
+        const val LFM_MODEL_DOWNLOAD_URL = MODEL_DOWNLOAD_URL
+
+        const val GEMMA_MODEL_FILENAME = "gemma-4-E2B-it.litertlm"
+        const val GEMMA_MODEL_SIZE_BYTES = 2_588_147_712L
+        const val GEMMA_MODEL_SHA256 = "181938105e0eefd105961417e8da75903eacda102c4fce9ce90f50b97139a63c"
+        const val GEMMA_MODEL_DOWNLOAD_URL =
+            "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/6e5c4f1e395deb959c494953478fa5cec4b8008f/gemma-4-E2B-it.litertlm"
+
         const val MODEL_DIRECTORY = "studiomesa_ai_models"
+        const val MIN_GEMMA_TOTAL_MEMORY_BYTES = 6L * 1024L * 1024L * 1024L
         const val MAX_CONTEXT_TOKENS = 4096
         const val MAX_HISTORY_MESSAGES = AssistantGeneralConversationPolicy.MAX_HISTORY_MESSAGES
         const val MAX_SESSION_USER_TURNS = 2
         const val MAX_HISTORY_MESSAGE_CHARS = AssistantGeneralConversationPolicy.MAX_HISTORY_MESSAGE_CHARS
         const val MAX_SYSTEM_INSTRUCTION_CHARS = 3200
         const val MAX_USER_MESSAGE_CHARS = 1200
-        const val MINIMUM_FREE_SPACE_BYTES = 128L * 1024L * 1024L
+        const val MINIMUM_FREE_SPACE_BYTES = 512L * 1024L * 1024L
         const val BUFFER_SIZE = 1024 * 1024
     }
 }

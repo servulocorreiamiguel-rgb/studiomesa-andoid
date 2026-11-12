@@ -2,7 +2,22 @@
 
 **Estado:** inventário preliminar da configuração de 6 de novembro de 2026. Este ficheiro não substitui a recolha automática de licenças de todo o grafo Gradle nem a revisão jurídica antes da distribuição.
 
-## Modelo de linguagem
+## Modelos de linguagem locais
+
+### Gemma 4 E2B
+
+- **Modelo base:** Google Gemma 4 E2B.
+- **Ficheiro LiteRT-LM:** conversão publicada pela comunidade `litert-community` no Hugging Face, revisão imutável `6e5c4f1e395deb959c494953478fa5cec4b8008f`.
+- **Licença do modelo base:** Apache License 2.0, conforme a documentação oficial Google AI Edge.
+- **Tamanho esperado:** 2 588 147 712 bytes; a aplicação verifica tamanho e SHA-256.
+- **Referências:** [Google AI Edge — Gemma 4 e licença](https://developers.google.com/edge/litert-lm/models/gemma-4) · [repositório da conversão](https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm) · [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0).
+- **Distribuição:** conservar cópia da licença Apache 2.0 e a atribuição/avisos da conversão comunitária. Confirmar os metadados do artefacto exato antes de cada release.
+
+### LFM2.5-1.2B-Instruct INT4
+
+- **Modelo base:** Liquid AI; conversão LiteRT-LM por `litert-community`.
+- **Licença:** LFM Open License v1.0. O uso comercial gratuito fica condicionado à receita anual da entidade legal responsável ser inferior a 10 milhões USD; ao atingir esse limiar é necessária licença comercial. Preservar a atribuição e os avisos exigidos.
+- **Texto oficial:** [LFM License — Liquid AI](https://www.liquid.ai/lfm-license).
 
 - **Modelo:** LFM2.5-1.2B-Instruct INT4, artefacto `LFM2.5-1.2B-Instruct_int4.litertlm`.
 - **Origem do ficheiro:** comunidade `litert-community` no Hugging Face, conversão/quantização do modelo LFM publicado pela Liquid AI.

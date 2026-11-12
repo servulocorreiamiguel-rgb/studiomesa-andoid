@@ -120,6 +120,7 @@ class MainActivity : ComponentActivity() {
     private var assistantStreamingTextView: TextView? = null
     private var assistantModelDownloading = false
     private var assistantModelProgressBytes = 0L
+    private var assistantModelTargetBytes = 0L
     private var assistantModelError: String? = null
     // Update download progress in place; rebuilding the chat for every percent causes flicker.
     private var assistantModelStatusTextView: TextView? = null
@@ -1051,7 +1052,7 @@ class MainActivity : ComponentActivity() {
             if (!localAssistantModelManager.isModelInstalled()) {
                 AlertDialog.Builder(this@MainActivity)
                     .setTitle("Pensar mais")
-                    .setMessage("O modo de análise aprofundada requer o modelo generativo local. A instalação é única, ocupa cerca de 736 MB e não tem custo por mensagem. Recomenda-se Wi-Fi.")
+                    .setMessage("O modo de análise aprofundada requer um modelo generativo local. A transferência depende do telemóvel: Gemma 4 E2B (cerca de 2,59 GB) em equipamentos com memória suficiente ou LFM2.5 (cerca de 736 MB) nos restantes. Não existe custo por mensagem.")
                     .setNegativeButton("Agora não", null)
                     .setPositiveButton("Instalar modelo") { _, _ -> startLocalAssistantModelDownload() }
                     .show()
@@ -1063,22 +1064,22 @@ class MainActivity : ComponentActivity() {
             setMargins(0, 0, dp(6), 0)
         })
         optionsRow.addView(label(
-            if (assistantSending) "A analisar…" else if (advancedAssistantEnabled()) "GPT-OSS online" else if (modelInstalled) "IA offline" else "IA local por instalar",
+            if (assistantSending) "A analisar…" else if (advancedAssistantEnabled()) "IA online" else if (modelInstalled) "IA offline" else "IA local por instalar",
             9.5f, true, if (advancedAssistantEnabled() || modelInstalled) forestSoft else muted
         ).apply { gravity = Gravity.CENTER }, LinearLayout.LayoutParams(dp(100), -2))
         composerArea.addView(optionsRow, LinearLayout.LayoutParams(-1, -2))
         if (isRemoteRestaurantOwner()) {
             if (advancedAssistantCloudAvailable()) {
                 composerArea.addView(secondaryButton(
-                    if (advancedAssistantEnabled()) "GPT-OSS 120B online · desligar" else "Ativar IA avançada · GPT-OSS 120B"
+                    if (advancedAssistantEnabled()) "IA avançada online · desligar" else "Ativar IA avançada · modelos gratuitos"
                 ) {
                     requestAdvancedAssistant()
                 }, LinearLayout.LayoutParams(-1, dp(40)))
                 composerArea.addView(label(
                     if (advancedAssistantEnabled())
-                        "Online: perguntas normais enviam histórico recente, Memória curta e indicadores agregados. Pesquisa pública envia só a pergunta atual. Nunca envia faturas, OCR, clientes ou reservas detalhadas."
+                        "Online: envia apenas perguntas escritas por ti. Nunca envia Memória, faturas, OCR, clientes, reservas ou indicadores do restaurante. Só usa variantes gratuitas."
                     else
-                        "Opcional. A IA local continua disponível. O serviço online tem custos por tokens e depende de quotas externas.",
+                        "Opcional. O assistente pode usar modelos gratuitos externos. As quotas variam; não existe fallback pago. A IA local continua disponível.",
                     8.5f, false, muted
                 ).apply {
                     gravity = Gravity.CENTER
@@ -1086,7 +1087,7 @@ class MainActivity : ComponentActivity() {
                 })
             } else {
                 composerArea.addView(label(
-                    "GPT-OSS 120B online ainda não está ativo nesta versão. A IA local continua disponível.",
+                    "O modo online ainda não está configurado nesta versão. A IA local continua disponível.",
                     8.5f, false, muted
                 ).apply {
                     gravity = Gravity.CENTER
@@ -1816,11 +1817,10 @@ class MainActivity : ComponentActivity() {
         AlertDialog.Builder(this)
             .setTitle("Ativar IA avançada online")
             .setMessage(
-                "O StudioMesa vai usar o modelo GPT-OSS 120B da OpenAI através da Groq. Nas perguntas normais, são enviados ao fornecedor a pergunta atual, até 10 perguntas recentes escritas por ti, um resumo dos dados operacionais e uma versão curta da Memória guardada.\n\n" +
-                    "Quando pedes pesquisa pública na Web ou informação atual, o servidor envia apenas a pergunta atual: não envia histórico, Memória nem dados do restaurante. A ferramenta Browser Search pode pesquisar na Web; a ferramenta Code Interpreter pode executar Python para apoiar cálculos e análise. Ambas são executadas na infraestrutura da Groq.\n\n" +
-                    "Não são enviados PDFs, imagens de faturas, texto OCR, nomes/contactos de clientes, detalhes de reservas, dados de funcionários ou dados bancários. O filtro automático de identificadores é apenas uma proteção adicional e não garante anonimização total.\n\n" +
-                    "A documentação da Groq indica que os pedidos de inferência não são retidos por defeito. Em situações limitadas de fiabilidade ou prevenção de abuso, entradas e saídas podem ser registadas até 30 dias; a organização pode ativar Zero Data Retention nas definições de dados da Groq. Dados retidos são armazenados em buckets GCP nos EUA. A pesquisa e a execução de código têm condições próprias e não estão disponíveis em endpoints regionais/soberanos.\n\n" +
-                    "A tarifa publicada para o GPT-OSS 120B na Groq é USD 0,15 por milhão de tokens de entrada e USD 0,60 por milhão de tokens de saída; os preços, quotas e condições podem mudar. Não assumas utilização gratuita nem limites suficientes para produção. Antes de ativar, define limites de despesa na conta do fornecedor. Esta função não deve receber dados reais nem ser vendida até existir revisão de privacidade, DPA, avaliação dos subcontratantes e configuração do fornecedor. A chave privada fica apenas nos segredos do servidor Supabase."
+                "O StudioMesa usa um único assistente com seleção automática de modelos. Online, usa DeepSeek R1 gratuito para raciocínio, Cohere North Mini Code e Qwen3.8 27B (variante gratuita) para programação e tarefas gerais, GPT-OSS 20B gratuito como alternativa e o router gratuito OpenRouter como último recurso. O Gemma 4 E2B é o motor local preferido em equipamentos com memória e espaço suficientes; o LFM2.5-1.2B mantém-se como alternativa local mais leve. GPT-OSS 120B continua fora do modo sem custos. Os modelos online só são usados com os filtros de privacidade ZDR; se nenhum endpoint elegível responder, o assistente volta à IA local.\n\n" +
+                    "A integração usa exclusivamente identificadores gratuitos (:free) e o router openrouter/free. O router não tem fallback para modelos pagos. Os modelos gratuitos estão sujeitos a limites, indisponibilidades e alterações dos fornecedores; a conta gratuita da OpenRouter limita atualmente as variantes gratuitas a 20 pedidos por minuto e 50 pedidos por dia. Esta quota é partilhada por todos os restaurantes que usam a mesma chave da StudioMesa; as tentativas falhadas também contam. Não é uma capacidade ilimitada nem uma quota individual por restaurante.\n\n" +
+                    "Só são enviados a pergunta atual e até 10 perguntas anteriores gerais escritas por ti que passem filtros locais. Perguntas sobre gestão, documentos ou registos do restaurante, bem como mensagens com identificadores pessoais detetáveis, ficam no dispositivo. Não são enviados a Memória, respostas anteriores do assistente, resumo do restaurante, menu, custos, vendas, reservas, clientes, equipa, faturas, PDFs, imagens ou OCR. Não escrevas dados pessoais, credenciais ou informação comercial confidencial no modo online. O servidor pede aos fornecedores políticas de não recolha de dados e Zero Data Retention; se não houver um fornecedor gratuito que respeite esses requisitos, a chamada falha e não é encaminhada para um serviço pago.\n\n" +
+                    "Os modelos e fornecedores são serviços externos. A filtragem automática de emails, telefones, NIF e IBAN é uma proteção adicional, não uma garantia de deteção de todos os dados sensíveis. Consulta a política de privacidade e as condições do OpenRouter e dos fornecedores antes de usar informação real. A chave privada fica apenas nos segredos do servidor Supabase. A IA local continua disponível e não envia as mensagens para a nuvem."
             )
             .setNegativeButton("Cancelar", null)
             .setPositiveButton("Aceito e ativar") { _, _ ->
@@ -1962,11 +1962,11 @@ class MainActivity : ComponentActivity() {
         addGap(card, 5)
         val status = when {
             assistantModelDownloading || localAssistantModelManager.isDownloading() ->
-                "A transferir o modelo: ${((assistantModelProgressBytes * 100) / localAssistantModelManager.modelSizeBytes()).coerceIn(0, 100)}%."
+                "A transferir o modelo: ${((assistantModelProgressBytes * 100) / assistantModelTargetBytes.coerceAtLeast(1L)).coerceIn(0, 100)}%."
             modelInstalled ->
-                "IA generativa instalada. As mensagens e os dados selecionados são processados no próprio telemóvel, sem API e sem cobrança por mensagem."
+                "IA local instalada: ${localAssistantModelManager.activeModelDisplayName()}. As mensagens e os dados selecionados são processados no telemóvel, sem API nem custo por mensagem."
             else ->
-                "O motor generativo local ainda não foi instalado. O assistente de regras continua disponível; transfere o modelo uma única vez para ativar a conversa generativa offline."
+                "O assistente generativo local ainda não foi instalado. A StudioMesa escolhe Gemma 4 E2B quando a memória do telemóvel é suficiente e mantém LFM2.5 como alternativa mais leve."
         }
         val statusView = label(status, 12f, false, ink)
         assistantModelStatusTextView = statusView
@@ -1975,26 +1975,59 @@ class MainActivity : ComponentActivity() {
 
         if (assistantModelDownloading || localAssistantModelManager.isDownloading()) {
             val progressView = label(
-                "Transferido: ${formatModelBytes(assistantModelProgressBytes)} de aproximadamente 736 MB",
+                "Transferido: ${formatModelBytes(assistantModelProgressBytes)} de ${formatModelBytes(assistantModelTargetBytes)}",
                 10.5f, true, forest
             )
             assistantModelProgressTextView = progressView
             card.addView(progressView)
         } else if (!modelInstalled) {
-            card.addView(secondaryButton("Transferir IA local · 736 MB") {
+            card.addView(secondaryButton("Transferir IA local · ${formatModelBytes(localAssistantModelManager.modelSizeBytes())}") {
                 AlertDialog.Builder(this)
                     .setTitle("Instalar IA local")
                     .setMessage(
-                        "A transferência inicial é de aproximadamente 736 MB e requer Internet. O ficheiro fica guardado na área privada da aplicação. Depois de instalado, o modelo funciona sem Internet e não envia mensagens, memória ou dados do restaurante para servidores. A transferência pode consumir dados móveis; recomenda-se Wi-Fi."
+                        "A transferência inicial é de aproximadamente ${formatModelBytes(localAssistantModelManager.modelSizeBytes())} e requer Internet. O StudioMesa escolhe automaticamente o modelo local adequado à memória do telemóvel: Gemma 4 E2B quando existe capacidade suficiente ou LFM2.5 como alternativa mais leve. O ficheiro fica guardado na área privada da aplicação. Depois de instalado, a geração funciona sem Internet e não envia mensagens, memória ou dados do restaurante para servidores."
                     )
                     .setNegativeButton("Cancelar", null)
                     .setPositiveButton("Transferir") { _, _ -> startLocalAssistantModelDownload() }
                     .show()
             }, LinearLayout.LayoutParams(-1, dp(44)))
         } else {
-            card.addView(label("Modelo LFM2.5 1.2B · quantização INT4 · execução CPU local", 10.5f, true, forest))
+            card.addView(label(
+                "Modelo ${localAssistantModelManager.activeModelDisplayName()} · LiteRT-LM · execução local no telemóvel",
+                10.5f, true, forest
+            ))
             addGap(card, 6)
             card.addView(secondaryButton("Ver modelo e licenças") { showLocalAssistantLicencesDialog() }, LinearLayout.LayoutParams(-1, dp(40)))
+            if (localAssistantModelManager.shouldOfferGemmaUpgrade()) {
+                addGap(card, 6)
+                card.addView(secondaryButton("Atualizar para Gemma 4 E2B · 2,59 GB") {
+                    AlertDialog.Builder(this)
+                        .setTitle("Atualizar o motor local")
+                        .setMessage(
+                            "O Gemma 4 E2B é maior e pode oferecer respostas locais mais capazes. A instalação publicada ocupa cerca de 2,59 GB; o consumo real de RAM e a velocidade variam por telemóvel. O LFM2.5 atual não será apagado: mantém-se como alternativa. A transferência não tem custo por mensagem."
+                        )
+                        .setNegativeButton("Agora não", null)
+                        .setPositiveButton("Transferir Gemma") { _, _ ->
+                            startLocalAssistantModelDownload(preferGemma = true)
+                        }
+                        .show()
+                }, LinearLayout.LayoutParams(-1, dp(42)))
+            }
+            if (localAssistantModelManager.shouldOfferLfmBackup()) {
+                addGap(card, 6)
+                card.addView(secondaryButton("Instalar alternativa local LFM2.5 · 736 MB") {
+                    AlertDialog.Builder(this)
+                        .setTitle("Instalar modelo de reserva")
+                        .setMessage(
+                            "O LFM2.5-1.2B ocupa cerca de 736 MB e ficará guardado ao lado do Gemma 4 E2B. Não substitui o Gemma como motor principal; permite ao assistente mudar automaticamente para uma alternativa mais leve se o telemóvel não conseguir carregar o Gemma. Requer Internet durante a transferência."
+                        )
+                        .setNegativeButton("Agora não", null)
+                        .setPositiveButton("Instalar reserva") { _, _ ->
+                            startLocalAssistantModelDownload(forceLfm = true)
+                        }
+                        .show()
+                }, LinearLayout.LayoutParams(-1, dp(42)))
+            }
         }
 
         assistantModelError?.let {
@@ -2014,12 +2047,21 @@ class MainActivity : ComponentActivity() {
         AlertDialog.Builder(this)
             .setTitle("Modelo e licenças")
             .setMessage(
-                "Modelo: LFM2.5-1.2B-Instruct, quantizado INT4 e convertido para LiteRT-LM pela comunidade litert-community.\n\nO modelo é disponibilizado sob a LFM Open License v1.0, com condições de utilização comercial e atribuição. Confirma os termos completos antes de comercializar a StudioMesa.\n\nO runtime LiteRT-LM é distribuído sob Apache 2.0.\n\nO modelo não foi criado pela StudioMesa nem pela Google."
+                "A StudioMesa suporta dois motores locais: Gemma 4 E2B (ficheiro LiteRT-LM de 2 588 147 712 bytes, conversão publicada pela comunidade litert-community) e LFM2.5-1.2B INT4 (alternativa mais pequena). A seleção depende da memória disponível no telemóvel.\n\nGemma 4 é distribuído sob Apache License 2.0; a conversão LiteRT-LM da comunidade litert-community deve manter a respetiva atribuição e os avisos do repositório. LFM2.5 utiliza a LFM Open License v1.0: o uso comercial gratuito deixa de estar abrangido quando a receita anual da entidade legal responsável atinge ou ultrapassa 10 milhões USD; mantém também as obrigações de atribuição e redistribuição da licença. Confirma a entidade responsável e os termos integrais antes de distribuir a StudioMesa.\n\nO runtime LiteRT-LM é distribuído sob Apache 2.0. Nenhum destes modelos foi treinado pela StudioMesa."
             )
             .setNegativeButton("Fechar", null)
             .setPositiveButton("Abrir licença") { _, _ ->
                 runCatching {
-                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://huggingface.co/litert-community/LFM2.5-1.2B-Instruct/blob/main/LICENSE")))
+                    startActivity(Intent(
+                        Intent.ACTION_VIEW,
+                        android.net.Uri.parse(
+                            if (localAssistantModelManager.activeModelDisplayName() == "Gemma 4 E2B") {
+                                "https://www.apache.org/licenses/LICENSE-2.0"
+                            } else {
+                                "https://www.liquid.ai/lfm-license"
+                            }
+                        )
+                    ))
                 }.onFailure {
                     Toast.makeText(this, "Não foi possível abrir a licença.", Toast.LENGTH_SHORT).show()
                 }
@@ -2032,10 +2074,18 @@ class MainActivity : ComponentActivity() {
         return String.format(Locale("pt", "PT"), "%.0f MB", megabytes)
     }
 
-    private fun startLocalAssistantModelDownload() {
+    private fun startLocalAssistantModelDownload(
+        preferGemma: Boolean = false,
+        forceLfm: Boolean = false
+    ) {
         if (assistantModelDownloading || localAssistantModelManager.isDownloading()) return
         assistantModelDownloading = true
         assistantModelProgressBytes = 0L
+        assistantModelTargetBytes = if (forceLfm) {
+            localAssistantModelManager.lfmModelSizeBytes()
+        } else {
+            localAssistantModelManager.modelSizeBytes(preferGemma)
+        }
         assistantModelError = null
         renderApp()
         var lastShownPercent = -1
@@ -2059,9 +2109,17 @@ class MainActivity : ComponentActivity() {
                     assistantModelDownloading = false
                     result.fold(
                         onSuccess = {
-                            assistantModelProgressBytes = localAssistantModelManager.modelSizeBytes()
+                            assistantModelProgressBytes = assistantModelTargetBytes
                             assistantModelError = null
-                            Toast.makeText(this, "IA local instalada e verificada.", Toast.LENGTH_LONG).show()
+                            Toast.makeText(
+                                this,
+                                if (forceLfm) {
+                                    "Alternativa local LFM2.5 instalada e verificada."
+                                } else {
+                                    "${localAssistantModelManager.activeModelDisplayName()} instalada e verificada."
+                                },
+                                Toast.LENGTH_LONG
+                            ).show()
                         },
                         onFailure = { error ->
                             assistantModelError = error.message ?: "Não foi possível instalar o modelo local."
@@ -2069,7 +2127,9 @@ class MainActivity : ComponentActivity() {
                     )
                     renderApp()
                 }
-            }
+            },
+            preferGemma = preferGemma,
+            forceLfm = forceLfm
         )
     }
 
@@ -2149,6 +2209,34 @@ class MainActivity : ComponentActivity() {
 
 
 
+    private fun normalizeAssistantPrivacyText(value: String): String =
+        java.text.Normalizer.normalize(value.lowercase(Locale.ROOT), java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
+
+    /**
+     * Questions that may depend on restaurant records stay on-device.
+     * The cloud router is for general knowledge and programming only.
+     */
+    private fun requiresPrivateRestaurantContext(value: String): Boolean {
+        val normalized = normalizeAssistantPrivacyText(value)
+        return Regex(
+            "\\b(restaurante|restauracao|restaurant|negocio|empresa|business|company|menu|carta|prato|receita|ingrediente|stock|inventario|inventory|armazem|" +
+                "fatura|faturas|factura|facturas|invoice|invoices|fornecedor|fornecedores|supplier|suppliers|custo|custos|costs|margem|lucro|profit|revenue|faturamento|faturacao|turnover|" +
+                "venda|vendas|sales|pedido|pedidos|order|orders|encomenda|encomendas|reserva|reservas|booking|bookings|mesa|mesas|table|tables|" +
+                "cliente|clientes|customer|customers|funcionario|funcionarios|employee|employees|equipa|staff|salario|salarios|payroll|despesa|despesas|expense|expenses|" +
+                "pagamento|pagamentos|payment|payments|caixa|pos|ponto de venda|tesouraria|iva|vat|contabilidade|accounting|financeiro|financeira|financial|" +
+                "preco do prato|precos da carta|menu price|bank account|bank statement|morada|endereco|address|codigo postal|postal code)\\b"
+        ).containsMatchIn(normalized)
+    }
+
+    private fun containsCloudSensitiveIdentifier(value: String): Boolean =
+        Regex("[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", RegexOption.IGNORE_CASE).containsMatchIn(value) ||
+            Regex("\\b(?:NIF|NIPC)\\s*[:#]?\\s*\\d(?:[ .-]?\\d){8}\\b", RegexOption.IGNORE_CASE).containsMatchIn(value) ||
+            Regex("\\bIBAN\\s*[:#]?\\s*[A-Z]{2}\\d{2}[A-Z0-9 ]{10,30}\\b", RegexOption.IGNORE_CASE).containsMatchIn(value) ||
+            Regex("(?:\\+351\\s?)?[29]\\d{2}(?:[ .-]?\\d){6}\\b").containsMatchIn(value) ||
+            Regex("\\b\\d{4}-\\d{3}\\b").containsMatchIn(value) ||
+            Regex("\\b\\d{9}\\b").containsMatchIn(value)
+
     private fun sendAssistantMessage(rawMessage: String) {
         if (assistantSending) return
         val question = rawMessage.trim().take(4000)
@@ -2182,7 +2270,23 @@ class MainActivity : ComponentActivity() {
             assistantChatAutoFollow = true
             assistantChatError = null
 
-            if (advancedAssistantEnabled()) {
+            if (advancedAssistantEnabled() &&
+                (economicAssistant ||
+                    requiresPrivateRestaurantContext(question) ||
+                    containsCloudSensitiveIdentifier(question))
+            ) {
+                Toast.makeText(
+                    this,
+                    "Esta pergunta fica no dispositivo e será respondida pela IA local.",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+
+            if (advancedAssistantEnabled() &&
+                !economicAssistant &&
+                !requiresPrivateRestaurantContext(question) &&
+                !containsCloudSensitiveIdentifier(question)
+            ) {
                 if (!isRemoteRestaurantOwner()) {
                     throw IllegalStateException("A IA avançada online só está disponível para o proprietário autenticado do restaurante.")
                 }
@@ -2196,7 +2300,10 @@ class MainActivity : ComponentActivity() {
                 // Only forward questions typed by the user. Previous assistant replies can
                 // contain invoice metadata returned by local tools and must stay on-device.
                 remoteHistory.forEach { turn ->
-                    if (turn.role == "user") {
+                    if (turn.role == "user" &&
+                        !requiresPrivateRestaurantContext(turn.content) &&
+                        !containsCloudSensitiveIdentifier(turn.content)
+                    ) {
                         val text = turn.content.trim().take(1_600)
                         if (text.isNotBlank()) {
                             messages.put(JSONObject().put("role", "user").put("content", text))
@@ -2204,13 +2311,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 messages.put(JSONObject().put("role", "user").put("content", question))
-                val memorySnippet = AssistantAutomaticMemoryPolicy.contextSnippet(
-                    assistantChatStore.readMemory(scope)
-                )
-                val cloudContext = AdvancedAssistantCloudContextBuilder.build(
-                    snapshot = assistantSnapshot(),
-                    memorySnippet = memorySnippet
-                )
                 val token = backendToken()
                 val restaurantId = backendRestaurantId()
                 val requestUserId = backendPrefs.getString("user_id", "").orEmpty()
@@ -2219,11 +2319,10 @@ class MainActivity : ComponentActivity() {
                 renderApp()
                 Thread({
                     val result = runCatching {
-                        SupabaseApi.generateAdvancedAssistantReply(
+                        SupabaseApi.generateRoutedAssistantReply(
                             token = token,
                             restaurantId = restaurantId,
-                            messages = messages,
-                            restaurantContext = cloudContext
+                            messages = messages
                         ).optString("reply").trim()
                     }
                     runOnUiThread {
@@ -2244,8 +2343,62 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                             onFailure = { error ->
-                                assistantChatError = error.message?.take(500)
-                                    ?: "A IA avançada não está disponível. Verifica a configuração do servidor e tenta novamente."
+                                if (localAssistantModelManager.isModelInstalled()) {
+                                    assistantChatError = "Os modelos online estão indisponíveis. A resposta será gerada localmente."
+                                    assistantSending = true
+                                    val previousTurns = assistantChatStore.readTurns(scope, conversationId)
+                                        .dropLast(1)
+                                        .takeLast(LocalAssistantModelManager.MAX_HISTORY_MESSAGES)
+                                        .map { turn -> LocalAssistantModelManager.Turn(turn.role, turn.content) }
+                                    renderApp()
+                                    localAssistantModelManager.generate(
+                                        conversationId = conversationId,
+                                        systemInstruction = buildLocalAssistantSystemInstruction(scope, economicAssistant = false),
+                                        snapshot = assistantSnapshot(),
+                                        history = previousTurns,
+                                        userMessage = question,
+                                        deepThinking = turnUsesDeepThinking,
+                                        economicMode = false,
+                                        economicBridgeEnabled = hasRemoteRestaurant() &&
+                                            backendToken().isNotBlank() &&
+                                            backendPrefs.getString("restaurant_role", "") == "owner",
+                                        onToken = { tokenChunk ->
+                                            runOnUiThread { assistantStreamingTextView?.append(tokenChunk) }
+                                        },
+                                        onComplete = { localResult ->
+                                            runOnUiThread {
+                                                assistantSending = false
+                                                assistantStreamingTextView = null
+                                                localResult.fold(
+                                                    onSuccess = { localReply ->
+                                                        runCatching {
+                                                            assistantChatStore.appendTurn(scope, conversationId, "assistant", localReply)
+                                                            syncAssistantCloud(silent = true)
+                                                        }.onFailure { saveError ->
+                                                            assistantChatError = saveError.message
+                                                                ?: "A resposta local chegou, mas não foi possível guardar o histórico."
+                                                        }
+                                                    },
+                                                    onFailure = { localError ->
+                                                        assistantChatError = localError.message
+                                                            ?: "Os modelos online e local não conseguiram responder."
+                                                    }
+                                                )
+                                                renderApp()
+                                            }
+                                        }
+                                    )
+                                } else {
+                                    val localReply = answerAssistantChatMessage(question, scope, conversationId, economicAssistant = false)
+                                    runCatching {
+                                        assistantChatStore.appendTurn(scope, conversationId, "assistant", localReply)
+                                        syncAssistantCloud(silent = true)
+                                    }.onFailure { saveError ->
+                                        assistantChatError = saveError.message
+                                            ?: "Não foi possível guardar a resposta local."
+                                    }
+                                    assistantChatError = "Os modelos gratuitos estão indisponíveis. Foi usada a resposta local básica."
+                                }
                             }
                         )
                         renderApp()
