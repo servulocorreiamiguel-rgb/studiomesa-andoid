@@ -2,7 +2,24 @@
 
 A funcionalidade de IA generativa da StudioMesa utiliza componentes de terceiros. A StudioMesa não treinou nem é proprietária do modelo de linguagem.
 
-## Modelo
+## Modelos locais
+
+### Gemma 4 E2B
+
+- Publicação do modelo base: Google.
+- Formato Android: ficheiro LiteRT-LM convertido/publicado pela comunidade `litert-community` no Hugging Face.
+- Licença do modelo Gemma 4: **Apache License 2.0**, conforme a documentação oficial Google AI Edge.
+- Ficheiro usado pela aplicação: `gemma-4-E2B-it.litertlm`, tamanho esperado de 2 588 147 712 bytes.
+- Revisão imutável usada pela aplicação: `6e5c4f1e395deb959c494953478fa5cec4b8008f`; SHA-256 é validado antes da inferência.
+- Referências: [Google AI Edge — Gemma 4](https://developers.google.com/edge/litert-lm/models/gemma-4) · [ficheiro LiteRT-LM convertido](https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm).
+- Preservar a licença Apache 2.0 e os avisos/atribuição existentes no repositório da conversão comunitária.
+
+### LFM2.5-1.2B-Instruct
+
+- Publicação do modelo base: Liquid AI.
+- Conversão para LiteRT-LM: comunidade `litert-community`.
+- Licença declarada: **LFM Open License v1.0**. O uso comercial gratuito está condicionado a a entidade legal responsável não atingir nem ultrapassar 10 milhões USD de receita anual. Atingido esse limiar, é necessária licença comercial da Liquid AI. São também obrigatórios os avisos e a atribuição previstos na licença.
+- Texto oficial: [LFM License — Liquid AI](https://www.liquid.ai/lfm-license).
 
 - Nome: LFM2.5-1.2B-Instruct.
 - Publicação de pesos: Liquid AI.
