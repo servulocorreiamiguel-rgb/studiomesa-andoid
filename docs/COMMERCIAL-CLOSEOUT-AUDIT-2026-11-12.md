@@ -82,7 +82,7 @@ O plano de negócio tem valores de referência de 890 €, 1 490 € e 1 690 €
 ## 6. Testes e preparação jurídica ainda necessários
 
 - Configurar SMTP/domínio e executar registo, confirmação, recuperação, refresh, logout e eliminação de conta com contas descartáveis.
-- Criar ambiente Supabase isolado, depois de autorizada a despesa, reconciliar/aplicar as seis migrações, executar advisors e testes de autorização antes de qualquer promoção para produção.
+- Criar ambiente Supabase isolado, depois de autorizada a despesa, reconciliar/aplicar as sete migrações, executar advisors e testes de autorização antes de qualquer promoção para produção.
 - Testar dois restaurantes e identidades distintas (owner, staff, cliente), isolamento de dados, reservas, pedidos, cozinha, inventário, fidelização, campanhas, faturas, sincronização, rede intermitente, sessão expirada e revogação.
 - Testar fisicamente no OPPO A5m e em dispositivos Android representativos; a CI de emuladores não substitui estes testes.
 - Rever uma a uma as funções privilegiadas e documentar retenção, backup/restauro, incidentes, exportação e eliminação.
