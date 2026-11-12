@@ -19,6 +19,30 @@ class LocalAssistantModelArtifactTest {
     }
 
     @Test
+    fun remainingStorageAccountsForTheAlreadyDownloadedModelBytes() {
+        val modelBytes = 100L
+        val freeReserve = 50L
+        assertEquals(
+            150L,
+            ModelDownloadResumePolicy.requiredFreeBytes(modelBytes, 0L, freeReserve)
+        )
+        assertEquals(
+            110L,
+            ModelDownloadResumePolicy.requiredFreeBytes(modelBytes, 40L, freeReserve)
+        )
+        assertEquals(
+            50L,
+            ModelDownloadResumePolicy.requiredFreeBytes(modelBytes, modelBytes, freeReserve)
+        )
+        // An oversized partial file is not trusted and must not reduce the
+        // amount of free space required for a fresh transfer.
+        assertEquals(
+            150L,
+            ModelDownloadResumePolicy.requiredFreeBytes(modelBytes, modelBytes + 1L, freeReserve)
+        )
+    }
+
+    @Test
     fun resumedDownloadsAcceptOnlyTheExactRemainingHttpByteRange() {
         val expected = 2_588_147_712L
         val offset = 512_000_000L
