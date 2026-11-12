@@ -2,7 +2,7 @@
 
 **ESTADO: RASCUNHO INTERNO — NÃO ENVIAR COMO OFERTA VINCULATIVA.**
 
-Estado técnico consolidado em 12/11/2026: ver [auditoria comercial consolidada](docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-12.md). Os planos e preços continuam por validar com clientes e não existe ainda entitlement/licença automática por plano no backend.
+Estado técnico consolidado em 12/11/2026: ver [auditoria comercial consolidada](docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-12.md). Os planos e preços continuam por validar com clientes. Os entitlements server-side estão implementados no código/migration #122, mas a migração ainda não foi aplicada ao Supabase alojado e não existe ativação automática por pagamento.
 
 Os valores abaixo são os valores de referência existentes no projeto. Ainda não foram validados com clientes nem aprovados em termos de IVA, custos de alojamento, suporte e contrato.
 
@@ -25,11 +25,11 @@ Os valores abaixo são os valores de referência existentes no projeto. Ainda n�
 | Pedidos e estados | ✓ | ✓ | ✓ | Fluxo operacional presente; não é POS/faturação fiscal. |
 | Vista de cozinha | ✓ | ✓ | ✓ | Atualização periódica em primeiro plano; não é tempo real nem impressão automática. |
 | Exportação CSV de pedidos | ✓ | ✓ | ✓ | Exportação operacional; não é SAF-T, fatura ou relatório contabilístico certificado. |
-| Fidelização de clientes | — | ✓ | ✓ | Base de fidelização e QR estão no backend; testar atribuição/resgate e isolamento antes de ativar com clientes. |
+| Fidelização de clientes | — | ✓ | ✓ | Base de fidelização e QR estão no backend; teste de atribuição/resgate e isolamento ainda pendente. Limites server-side previstos: 5/15/50 prémios ativos; só entram em vigor depois de aplicar a migração de entitlements. |
 | Aplicação Cliente | — | ✓ | ✓ | Variante Cliente disponível no código; confirmar package ID, login, menu e saldo no piloto. |
-| Reservas | — | ✓ | ✓ | Fluxo e validações no backend; regressões PostgreSQL testadas, E2E com duas contas/dispositivos ainda pendente. |
-| Inventário e movimentos | — | — | ✓ | Inventário e custos unitários no backend; testes E2E e conciliação operacional ainda pendentes. |
-| Consultor de preço com aprovação | — | — | ✓ | Implementado com aprovação do proprietário; não é contabilidade nem garantia de margem. |
+| Reservas | — | ✓ | ✓ | Fluxo e validações no backend; regressões PostgreSQL testadas. A migração de entitlements exige Profissional/Premium no servidor, mas ainda não foi aplicada ao Supabase alojado; E2E com duas contas/dispositivos pendente. |
+| Inventário e movimentos | — | — | ✓ | Inventário e custos unitários no backend; migração de entitlements restringe leituras e escritas ao Premium, mas ainda não está aplicada ao Supabase alojado. Testes E2E e conciliação operacional pendentes. |
+| Consultor de preço com aprovação | — | ✓ | ✓ | Implementado com aprovação do proprietário; o gate server-side exige Profissional/Premium após aplicação da migração. Não é contabilidade nem garantia de margem. |
 | Assistente IA local | ✓ | ✓ | ✓ | Gemma 4 E2B é o motor preferido em dispositivos com RAM/espaço suficientes; LFM2.5-1.2B INT4 (736 MB) é alternativa/reserva. A qualidade, compatibilidade, RAM, temperatura e bateria ainda precisam de testes físicos. Não é ChatGPT nem foi treinado pela StudioMesa. |
 | Pensar mais | ✓ | ✓ | ✓ | Reforça a verificação e aumenta o limite de resposta; não muda o modelo nem garante melhor raciocínio. |
 | Gestor Económico IA | ✓ | ✓ | ✓ | Cálculos determinísticos locais, apenas de leitura, com dados introduzidos/consultados; não liga automaticamente a POS, bancos ou contabilidade. |
@@ -38,9 +38,10 @@ Os valores abaixo são os valores de referência existentes no projeto. Ainda n�
 | Feriados nacionais e Carnaval facultativo na previsão | ✓ | ✓ | ✓ | Calendário nacional reconhecido automaticamente; o Carnaval é facultativo e o efeito só é medido com amostras históricas. |
 | Feriados municipais e eventos configuráveis | — | — | ✓ | Proprietário configura na página Análise; atualmente fica guardado neste dispositivo e não sincroniza com outros equipamentos. |
 | OCR local de faturas | — | — | ✓ | PDF/imagem processados localmente e campos sujeitos a revisão do proprietário. |
-| Arquivo cloud de faturas | — | — | ✓ | Tabela e bucket privado existem no Supabase atual; exige conta/permissão de proprietário e E2E de upload/leitura/eliminação ainda pendente. |
+| Arquivo cloud de faturas | — | — | ✓ | Tabela e bucket privado existem no Supabase atual; o novo gate server-side exige Premium, mas a migração ainda não foi aplicada. E2E de upload/leitura/eliminação pendente. |
 | Histórico/Memória cloud da IA | — | — | — | Tabelas existem; sincronização desligada por defeito e só ativa com consentimento do proprietário. A cópia cloud não tem cifragem ponta a ponta e ainda requer E2E em vários dispositivos. |
-| Fichas técnicas e consumo automático de stock | — | — | — | Código/migration existem, mas as tabelas não foram encontradas no Supabase alojado; não anunciar como funcional no backend. |
+| Fotografias dos prémios | — | ✓ | ✓ | Storage limitado a JPEG e 1,5 MB; upload exige proprietário e plano Profissional/Premium após a migração de entitlements. Ainda não está ativo no Supabase alojado. |
+| Fichas técnicas e consumo automático de stock | — | — | ✓ | Código/migration existe; tabelas ainda ausentes no Supabase alojado. O gate Premium está na migração de entitlements, mas não anunciar como funcional até à reconciliação e deployment aprovados. |
 | Permissões granulares por funcionário | — | — | — | Migration/tabela não encontrada no Supabase alojado; a matriz granular não está pronta para uso real. |
 
 ## Não incluído em nenhum plano nesta fase
@@ -55,7 +56,7 @@ Os valores abaixo são os valores de referência existentes no projeto. Ainda n�
 
 ## Limite atual da distribuição por plano
 
-As cinco variantes Gradle são artefactos técnicos de demonstração. O controlo de acesso a funcionalidades pagas por entitlement validado no servidor ainda não está implementado. Não tratar a separação de builds como mecanismo anti-pirataria nem publicar automaticamente cinco listagens Google Play. Antes de uma oferta comercial definitiva, escolher entre uma aplicação Gestão e uma Cliente com planos/entitlements seguros ou distribuição B2B privada, e validar essa estratégia na Play Console.
+As cinco variantes Gradle são artefactos técnicos de demonstração. O controlo por entitlement está implementado no código e em testes isolados: ausência de registo equivale a Essencial; Profissional desbloqueia reservas, consultor de preços e fotos de prémios; Premium desbloqueia inventário, fichas técnicas/consumo automático e arquivo de faturas; os limites de prémios ativos são 5/15/50. O servidor impede que o cliente Android altere a atribuição e bloqueia downgrades incompatíveis. **A migração ainda não foi aplicada ao Supabase alojado**, pelo que esta proteção comercial não está ativa no backend de produção. Não tratar a separação de builds como mecanismo anti-pirataria nem publicar automaticamente cinco listagens Google Play. Antes de uma oferta comercial definitiva, escolher entre uma aplicação Gestão e uma Cliente com planos/entitlements seguros ou distribuição B2B privada, e validar essa estratégia na Play Console.
 
 ## Condições comerciais que têm de ser fechadas
 
