@@ -3221,8 +3221,9 @@ class MainActivity : ComponentActivity() {
                 LinearLayout.LayoutParams(-1, dp(48)))
             addGap(container, 7)
         }
-        val staffRole = backendPrefs.getString("restaurant_role", "").orEmpty() == "staff"
-        val canCreateOrder = StaffPermissionSet.canCreateOrder(currentStaffPermissions.orEmpty(), staffRole)
+        val currentRole = backendPrefs.getString("restaurant_role", "").orEmpty()
+        val canCreateOrder = !hasRemoteRestaurant() ||
+            StaffPermissionSet.canCreateOrder(currentStaffPermissions.orEmpty(), currentRole)
         if (canCreateOrder) {
             container.addView(primaryButton("+  Novo pedido") { showCreateOrderDialog() }, LinearLayout.LayoutParams(-1, dp(50)))
         } else {
@@ -4038,10 +4039,9 @@ class MainActivity : ComponentActivity() {
     private fun cacheRemoteOperations(token: String, restaurantId: String) {
         if (token.isBlank() || restaurantId.isBlank()) return
         val role = backendPrefs.getString("restaurant_role", "").orEmpty()
-        val isStaff = role == "staff"
         val readPermissions = StaffPermissionSet.cacheReadPermissions(
-            if (role == "owner") StaffPermissionSet.all.toSet() else currentStaffPermissions.orEmpty(),
-            isStaff
+            role,
+            currentStaffPermissions.orEmpty()
         )
         // Do not request areas the staff member cannot read. Besides avoiding
         // RLS errors, overwrite old cache entries so revoked permissions cannot
@@ -8929,8 +8929,8 @@ class MainActivity : ComponentActivity() {
 
     private fun showCreateOrderDialog() {
         val cloudMode = hasRemoteRestaurant()
-        val isStaff = backendPrefs.getString("restaurant_role", "").orEmpty() == "staff"
-        if (cloudMode && !StaffPermissionSet.canCreateOrder(currentStaffPermissions.orEmpty(), isStaff)) {
+        val currentRole = backendPrefs.getString("restaurant_role", "").orEmpty()
+        if (cloudMode && !StaffPermissionSet.canCreateOrder(currentStaffPermissions.orEmpty(), currentRole)) {
             Toast.makeText(
                 this,
                 "Para criar pedidos, precisas das permissões Pedidos, Carta e Mesas ou Reservas.",
