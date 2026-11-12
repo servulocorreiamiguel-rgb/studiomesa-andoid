@@ -809,6 +809,17 @@ COMMIT;
 SQL
 }
 
+# Essential is the fail-safe default: an owner cannot enable the Professional price adviser.
+if set_price_adviser_enabled "$USER_A" "true" >/dev/null 2>&1; then
+  echo "ERROR: an Essential restaurant enabled the Professional price adviser." >&2
+  exit 1
+fi
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO private.restaurant_loyalty_entitlements (restaurant_id, plan_code)
+VALUES ('$RESTAURANT_A'::uuid, 'profissional')
+ON CONFLICT (restaurant_id) DO UPDATE SET plan_code = EXCLUDED.plan_code;
+SQL
+
 # The absent settings row must behave as OFF, not as an implicit permission.
 price_setting_default="$(get_price_adviser_enabled "$USER_A")"
 if [ "$price_setting_default" != "false" ]; then
@@ -947,6 +958,14 @@ if apply_advised_menu_price "$USER_A" "$PRICE_OFF_ACTION_ID" "$PRICE_MENU_ITEM_A
   exit 1
 fi
 echo "PASS: owner opt-in, per-action server recalculation, stale/cross-restaurant rejection, idempotency, private audit and off switch."
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO private.restaurant_loyalty_entitlements (restaurant_id, plan_code)
+VALUES
+  ('$RESTAURANT_A'::uuid, 'premium'),
+  ('$RESTAURANT_B'::uuid, 'premium')
+ON CONFLICT (restaurant_id) DO UPDATE SET plan_code = EXCLUDED.plan_code;
+SQL
 
 ITEM_A="$(create_inventory_item "$USER_A" "$RESTAURANT_A" "$REQUEST_A" "Flour A" "10")"
 ITEM_A_RETRY="$(create_inventory_item "$USER_A" "$RESTAURANT_A" "$REQUEST_A" "Flour A" "10")"
@@ -1209,6 +1228,288 @@ MEMBER_B="$(join_customer "$USER_F" "SMOKEBB001" "CI Customer B")"
 test -n "$MEMBER_A"
 test -n "$MEMBER_B"
 test "$MEMBER_A" != "$MEMBER_B"
+
+# Server-owned entitlements cannot be edited by an authenticated owner or staff member.
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
+SET LOCAL ROLE authenticated;
+UPDATE private.restaurant_loyalty_entitlements
+SET plan_code = 'premium'
+WHERE restaurant_id = '$RESTAURANT_B'::uuid;
+COMMIT;
+SQL
+then
+  echo "ERROR: an authenticated restaurant account directly changed its server-owned plan." >&2
+  exit 1
+fi
+
+# The plan helper must fail closed across tenants and default an unassigned restaurant to Essential.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+DELETE FROM private.restaurant_loyalty_entitlements
+WHERE restaurant_id = '$RESTAURANT_B'::uuid;
+SQL
+foreign_plan_check="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
+SET LOCAL ROLE authenticated;
+SELECT private.restaurant_plan_allows('$RESTAURANT_A'::uuid, 'premium')::text;
+ROLLBACK;
+SQL
+)"
+essential_plan_check="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_F', true);
+SET LOCAL ROLE authenticated;
+SELECT private.restaurant_plan_allows('$RESTAURANT_B'::uuid, 'essencial')::text;
+ROLLBACK;
+SQL
+)"
+if [ "$foreign_plan_check" != "false" ] || [ "$essential_plan_check" != "true" ]; then
+  echo "ERROR: plan entitlement helper did not enforce tenant scope or Essential default." >&2
+  exit 1
+fi
+
+# Customer B cannot bypass the Essential reservation restriction by calling the RPC directly.
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_F', true);
+SET LOCAL ROLE authenticated;
+SELECT * FROM public.create_customer_reservation_request(
+  'f1111111-1111-4111-8111-111111111111'::uuid,
+  'Essential plan bypass test', '', 2,
+  now() + interval '40 days', 90, 'Must be rejected'
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: an Essential customer bypassed the server-side reservation entitlement." >&2
+  exit 1
+fi
+echo "PASS: plan assignments are server-owned, tenant-scoped and default to Essential."
+
+# Professional unlocks reservations and price advice, but not Premium stock or invoice archive.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO private.restaurant_loyalty_entitlements (restaurant_id, plan_code)
+VALUES ('$RESTAURANT_B'::uuid, 'profissional')
+ON CONFLICT (restaurant_id) DO UPDATE SET plan_code = EXCLUDED.plan_code;
+SQL
+pro_plan_check="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_F', true);
+SET LOCAL ROLE authenticated;
+SELECT private.restaurant_plan_allows('$RESTAURANT_B'::uuid, 'profissional')::text;
+ROLLBACK;
+SQL
+)"
+if [ "$pro_plan_check" != "true" ]; then
+  echo "ERROR: a Professional customer did not receive the expected reservation entitlement." >&2
+  exit 1
+fi
+if create_inventory_item "$USER_B" "$RESTAURANT_B" "e1111111-1111-4111-8111-111111111111" "Blocked Pro stock item" "1" >/dev/null 2>&1; then
+  echo "ERROR: a Professional restaurant created Premium stock." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
+SET LOCAL ROLE authenticated;
+INSERT INTO public.restaurant_supplier_invoices (
+  id, restaurant_id, supplier_name, supplier_vat_number, invoice_number,
+  issue_date, currency, total_amount, review_status, source_type, created_by
+) VALUES (
+  'e2222222-2222-4222-8222-222222222222'::uuid,
+  '$RESTAURANT_B'::uuid, 'CI Supplier', '', 'CI-PRO-001',
+  current_date, 'EUR', 10.00, 'pending_review', 'manual', '$USER_B'::uuid
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: a Professional restaurant inserted Premium supplier-invoice metadata." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
+SET LOCAL ROLE authenticated;
+INSERT INTO storage.objects (bucket_id, name, owner_id, metadata)
+VALUES (
+  'studiomesa-invoices',
+  '$RESTAURANT_B/ci-pro-invoice.pdf',
+  '$USER_B',
+  jsonb_build_object('mimetype', 'application/pdf', 'size', 100)
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: a Professional restaurant uploaded a Premium supplier invoice." >&2
+  exit 1
+fi
+echo "PASS: Professional enables reservation/price features but server blocks Premium stock and invoice writes."
+
+# Premium enables invoice metadata and document storage; verify RLS with real authenticated
+# insert paths, then remove the synthetic rows before the remaining regression suite.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO private.restaurant_loyalty_entitlements (restaurant_id, plan_code)
+VALUES ('$RESTAURANT_B'::uuid, 'premium')
+ON CONFLICT (restaurant_id) DO UPDATE SET plan_code = EXCLUDED.plan_code;
+SQL
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
+SET LOCAL ROLE authenticated;
+INSERT INTO public.restaurant_supplier_invoices (
+  id, restaurant_id, supplier_name, supplier_vat_number, invoice_number,
+  issue_date, currency, total_amount, review_status, source_type, created_by
+) VALUES (
+  'e3333333-3333-4333-8333-333333333333'::uuid,
+  '$RESTAURANT_B'::uuid, 'CI Supplier', '', 'CI-PREMIUM-001',
+  current_date, 'EUR', 10.00, 'pending_review', 'manual', '$USER_B'::uuid
+);
+INSERT INTO storage.objects (bucket_id, name, owner_id, metadata)
+VALUES (
+  'studiomesa-invoices',
+  '$RESTAURANT_B/ci-premium-invoice.pdf',
+  '$USER_B',
+  jsonb_build_object('mimetype', 'application/pdf', 'size', 100)
+);
+DELETE FROM storage.objects
+WHERE bucket_id = 'studiomesa-invoices'
+  AND name = '$RESTAURANT_B/ci-premium-invoice.pdf';
+DELETE FROM public.restaurant_supplier_invoices
+WHERE id = 'e3333333-3333-4333-8333-333333333333'::uuid;
+COMMIT;
+SQL
+echo "PASS: Premium owner can write invoice metadata and upload documents; temporary data is removed."
+
+# Exercise the actual loyalty entitlement caps, not just Android page visibility.
+# Essential: 5 active rewards; Professional: 15; Premium: 50. Every overflow must fail
+# through the public SECURITY DEFINER RPC.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO private.restaurant_loyalty_entitlements (restaurant_id, plan_code)
+VALUES ('$RESTAURANT_A'::uuid, 'essencial')
+ON CONFLICT (restaurant_id) DO UPDATE SET plan_code = EXCLUDED.plan_code;
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.save_loyalty_reward(
+  '$RESTAURANT_A'::uuid,
+  ('a0000000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid,
+  'CI Plan Reward ' || i, '', 1, NULL, true
+)
+FROM generate_series(1, 5) AS seq(i);
+COMMIT;
+SQL
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.save_loyalty_reward(
+  '$RESTAURANT_A'::uuid, 'a0000000-0000-4000-8000-000000000006'::uuid,
+  'CI Essential Overflow', '', 1, NULL, true
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: Essential exceeded the five active reward limit." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO private.restaurant_loyalty_entitlements (restaurant_id, plan_code)
+VALUES ('$RESTAURANT_A'::uuid, 'profissional')
+ON CONFLICT (restaurant_id) DO UPDATE SET plan_code = EXCLUDED.plan_code;
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.save_loyalty_reward(
+  '$RESTAURANT_A'::uuid,
+  ('a0000000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid,
+  'CI Plan Reward ' || i, '', 1, NULL, true
+)
+FROM generate_series(6, 15) AS seq(i);
+COMMIT;
+SQL
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.save_loyalty_reward(
+  '$RESTAURANT_A'::uuid, 'a0000000-0000-4000-8000-000000000016'::uuid,
+  'CI Professional Overflow', '', 1, NULL, true
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: Professional exceeded the fifteen active reward limit." >&2
+  exit 1
+fi
+
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+UPDATE private.restaurant_loyalty_entitlements
+SET plan_code = 'essencial'
+WHERE restaurant_id = '$RESTAURANT_A'::uuid;
+SQL
+then
+  echo "ERROR: a plan downgrade left fifteen active rewards above the Essential cap." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO private.restaurant_loyalty_entitlements (restaurant_id, plan_code)
+VALUES ('$RESTAURANT_A'::uuid, 'premium')
+ON CONFLICT (restaurant_id) DO UPDATE SET plan_code = EXCLUDED.plan_code;
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.save_loyalty_reward(
+  '$RESTAURANT_A'::uuid,
+  ('a0000000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid,
+  'CI Plan Reward ' || i, '', 1, NULL, true
+)
+FROM generate_series(16, 50) AS seq(i);
+COMMIT;
+SQL
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.save_loyalty_reward(
+  '$RESTAURANT_A'::uuid, 'a0000000-0000-4000-8000-000000000051'::uuid,
+  'CI Premium Overflow', '', 1, NULL, true
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: Premium exceeded the fifty active reward limit." >&2
+  exit 1
+fi
+
+# Remove deterministic CI rewards so the normal loyalty contracts start with an empty shop.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.save_loyalty_reward(
+  '$RESTAURANT_A'::uuid,
+  ('a0000000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid,
+  'CI Plan Reward ' || i, '', 1, NULL, false
+)
+FROM generate_series(1, 50) AS seq(i);
+COMMIT;
+SQL
+echo "PASS: server enforces the 5/15/50 reward caps and prevents downgrades above active limits."
+
+# Restore Premium for the remainder of the disposable regression suite.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO private.restaurant_loyalty_entitlements (restaurant_id, plan_code)
+VALUES
+  ('$RESTAURANT_A'::uuid, 'premium'),
+  ('$RESTAURANT_B'::uuid, 'premium')
+ON CONFLICT (restaurant_id) DO UPDATE SET plan_code = EXCLUDED.plan_code;
+SQL
 
 own_menu_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
 BEGIN;
