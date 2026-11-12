@@ -27,7 +27,7 @@ Execução [43186787267](https://github.com/servulocorreiamiguel-rgb/studiomesa-
 | Replay de migrations numa base PostgreSQL isolada | Passou |
 | Testes de autorização/idempotência nessa base | Passaram |
 | Smoke tests Android 8 / API 26 | Passaram |
-| Smoke tests Android 16 / API 36 | Em execução na última consulta; não declarar concluído |
+| Smoke tests Android 16 / API 36 | Passou |
 
 O workflow publicou cinco APKs `debug/demo` no artefacto `StudioMesa-1.5.0-Demo-APKs`. Não têm assinatura comercial definitiva. A compilação não prova autenticação por email, configuração real do Supabase, performance em equipamento físico ou adequação legal.
 
@@ -50,7 +50,7 @@ O workflow publicou cinco APKs `debug/demo` no artefacto `StudioMesa-1.5.0-Demo-
 
 ## Próximos passos técnicos seguros
 
-1. Esperar pela conclusão dos smoke tests Android 16 e corrigir qualquer falha real.
+1. Concluído: smoke tests Android 16 passaram na CI 43186787267. Prosseguir para testes físicos e E2E.
 2. Manter IA cloud desligada até configuração da secret e publicação controlada da função.
 3. Reconciliar o Supabase em ambiente separado com backup/restauro confirmado; não alterar o schema alojado por tentativa.
 4. Fazer os testes E2E e físicos com dados fictícios/contas descartáveis.
