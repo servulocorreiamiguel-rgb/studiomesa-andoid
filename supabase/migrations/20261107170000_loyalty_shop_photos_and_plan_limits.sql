@@ -884,6 +884,20 @@ BEGIN
         v_restaurant_id := NEW.restaurant_id;
     END IF;
 
+    -- Supabase account deletion uses ON DELETE SET NULL for the inventory
+    -- created_by audit actor. Allow only that referential-integrity cleanup
+    -- when there is no request JWT; every business field must remain identical.
+    -- Authenticated application writes still pass through the plan check below.
+    IF TG_TABLE_NAME = 'restaurant_inventory_items'
+       AND TG_OP = 'UPDATE'
+       AND (SELECT auth.uid()) IS NULL
+       AND OLD.created_by IS NOT NULL
+       AND NEW.created_by IS NULL
+       AND (pg_catalog.to_jsonb(NEW) - 'created_by')
+           IS NOT DISTINCT FROM (pg_catalog.to_jsonb(OLD) - 'created_by') THEN
+        RETURN NEW;
+    END IF;
+
     IF NOT private.restaurant_plan_allows(v_restaurant_id, v_required_plan) THEN
         RAISE EXCEPTION 'A funcionalidade % requer o plano % ou superior.',
             v_feature_label, initcap(v_required_plan);
