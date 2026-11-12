@@ -1060,7 +1060,7 @@ class MainActivity : ComponentActivity() {
             if (!localAssistantModelManager.isModelInstalled()) {
                 AlertDialog.Builder(this@MainActivity)
                     .setTitle("Pensar mais")
-                    .setMessage("O modo de análise aprofundada requer um modelo generativo local. A transferência depende do telemóvel: Gemma 4 E2B (cerca de 2,59 GB) em equipamentos com memória suficiente ou LFM2.5 (cerca de 736 MB) nos restantes. Não existe custo por mensagem.")
+                    .setMessage("O modo de análise aprofundada requer um modelo generativo local. A transferência depende do telemóvel: Gemma 4 E2B (cerca de 2,59 GB) em equipamentos com memória suficiente ou LFM2.5 (cerca de 736 MB) nos restantes. Se a rede falhar, a transferência guarda o progresso e pode continuar sem recomeçar. Não existe custo por mensagem.")
                     .setNegativeButton("Agora não", null)
                     .setPositiveButton("Instalar modelo") { _, _ -> startLocalAssistantModelDownload() }
                     .show()
@@ -1993,7 +1993,7 @@ class MainActivity : ComponentActivity() {
                 AlertDialog.Builder(this)
                     .setTitle("Instalar IA local")
                     .setMessage(
-                        "A transferência inicial é de aproximadamente ${formatModelBytes(localAssistantModelManager.modelSizeBytes())} e requer Internet. O StudioMesa escolhe automaticamente o modelo local adequado à memória do telemóvel: Gemma 4 E2B quando existe capacidade suficiente ou LFM2.5 como alternativa mais leve. O ficheiro fica guardado na área privada da aplicação. Depois de instalado, a geração funciona sem Internet e não envia mensagens, memória ou dados do restaurante para servidores."
+                        "A transferência inicial é de aproximadamente ${formatModelBytes(localAssistantModelManager.modelSizeBytes())} e requer Internet. O StudioMesa escolhe automaticamente o modelo local adequado à memória do telemóvel: Gemma 4 E2B quando existe capacidade suficiente ou LFM2.5 como alternativa mais leve. Se a rede falhar, o progresso fica guardado e a próxima tentativa continua a transferência em vez de a reiniciar. O ficheiro fica guardado na área privada da aplicação. Depois de instalado, a geração funciona sem Internet e não envia mensagens, memória ou dados do restaurante para servidores."
                     )
                     .setNegativeButton("Cancelar", null)
                     .setPositiveButton("Transferir") { _, _ -> startLocalAssistantModelDownload() }
