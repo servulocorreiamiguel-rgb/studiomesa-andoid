@@ -2,6 +2,8 @@
 
 **ESTADO: RASCUNHO INTERNO — NÃO ENVIAR COMO OFERTA VINCULATIVA.**
 
+Estado técnico consolidado em 12/11/2026: ver [auditoria comercial consolidada](docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-12.md). Os planos e preços continuam por validar com clientes e não existe ainda entitlement/licença automática por plano no backend.
+
 Os valores abaixo são os valores de referência existentes no projeto. Ainda não foram validados com clientes nem aprovados em termos de IVA, custos de alojamento, suporte e contrato.
 
 ## Estrutura de preços
@@ -28,7 +30,7 @@ Os valores abaixo são os valores de referência existentes no projeto. Ainda n�
 | Reservas | — | ✓ | ✓ | Fluxo e validações no backend; regressões PostgreSQL testadas, E2E com duas contas/dispositivos ainda pendente. |
 | Inventário e movimentos | — | — | ✓ | Inventário e custos unitários no backend; testes E2E e conciliação operacional ainda pendentes. |
 | Consultor de preço com aprovação | — | — | ✓ | Implementado com aprovação do proprietário; não é contabilidade nem garantia de margem. |
-| Assistente IA local | ✓ | ✓ | ✓ | Modelo de terceiros LFM2.5-1.2B-Instruct INT4 executado no dispositivo; download inicial ~736 MB. Não é ChatGPT nem foi treinado pela StudioMesa; desempenho varia por telefone. |
+| Assistente IA local | ✓ | ✓ | ✓ | Gemma 4 E2B é o motor preferido em dispositivos com RAM/espaço suficientes; LFM2.5-1.2B INT4 (736 MB) é alternativa/reserva. A qualidade, compatibilidade, RAM, temperatura e bateria ainda precisam de testes físicos. Não é ChatGPT nem foi treinado pela StudioMesa. |
 | Pensar mais | ✓ | ✓ | ✓ | Reforça a verificação e aumenta o limite de resposta; não muda o modelo nem garante melhor raciocínio. |
 | Gestor Económico IA | ✓ | ✓ | ✓ | Cálculos determinísticos locais, apenas de leitura, com dados introduzidos/consultados; não liga automaticamente a POS, bancos ou contabilidade. |
 | Análise dos sete dias da semana e previsão na conversa | ✓ | ✓ | ✓ | Ferramenta do Assistente Económico baseada em pedidos concluídos e data de criação; apresenta amostras/confiança e não afirma pagamentos recebidos. |
@@ -50,6 +52,10 @@ Os valores abaixo são os valores de referência existentes no projeto. Ainda n�
 - Confirmações automáticas de reservas por SMS/email, lembretes e calendário avançado.
 - Conversões automáticas de unidades, gestão de vários armazéns e compras/encomendas a fornecedores.
 - Garantia de disponibilidade, recuperação de dados ou backups até existir plano e teste de restauro documentados.
+
+## Limite atual da distribuição por plano
+
+As cinco variantes Gradle são artefactos técnicos de demonstração. O controlo de acesso a funcionalidades pagas por entitlement validado no servidor ainda não está implementado. Não tratar a separação de builds como mecanismo anti-pirataria nem publicar automaticamente cinco listagens Google Play. Antes de uma oferta comercial definitiva, escolher entre uma aplicação Gestão e uma Cliente com planos/entitlements seguros ou distribuição B2B privada, e validar essa estratégia na Play Console.
 
 ## Condições comerciais que têm de ser fechadas
 
