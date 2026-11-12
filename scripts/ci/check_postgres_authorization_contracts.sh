@@ -196,6 +196,17 @@ test -n "$RESTAURANT_A"
 test -n "$RESTAURANT_B"
 test "$RESTAURANT_A" != "$RESTAURANT_B"
 
+# Existing regression scenarios exercise the full restaurant workflow. Seed
+# Premium entitlements for both fixtures; the dedicated plan tests below remove
+# or downgrade assignments explicitly to verify the Essential/Professional gates.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO private.restaurant_loyalty_entitlements (restaurant_id, plan_code)
+VALUES
+  ('$RESTAURANT_A'::uuid, 'premium'),
+  ('$RESTAURANT_B'::uuid, 'premium')
+ON CONFLICT (restaurant_id) DO UPDATE SET plan_code = EXCLUDED.plan_code;
+SQL
+
 # Cross-device assistant deletion keeps a content-free cloud tombstone.
 # Only the owner of that restaurant may request the deletion.
 ASSISTANT_CONVERSATION_ID="77777777-7777-4777-8777-777777777777"
