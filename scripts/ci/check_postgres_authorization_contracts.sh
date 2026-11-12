@@ -1437,7 +1437,6 @@ SELECT public.set_loyalty_reward_image_path(
   '$PHOTO_PLAN_REWARD_ID'::uuid,
   '$RESTAURANT_A/$PHOTO_PLAN_REWARD_ID/photo.jpg'
 );
-photo_path_check := NULL;
 COMMIT;
 SQL
 photo_path_check="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
