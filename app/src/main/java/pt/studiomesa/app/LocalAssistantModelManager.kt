@@ -386,6 +386,9 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
                         try {
                             candidate.initialize()
                             return candidate
+                        } catch (error: OutOfMemoryError) {
+                            runCatching { candidate.close() }
+                            throw error
                         } catch (error: Exception) {
                             runCatching { candidate.close() }
                             throw error
@@ -394,9 +397,13 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
 
                     // Gemma can exceed the real memory/runtime capability of a device even
                     // when its advertised RAM and free-space checks pass. Fall back to LFM.
+                    // Explicitly handle Android memory exhaustion as well as runtime exceptions.
                     val createdEngine = try {
                         createInitializedEngine(activeModelFile, activeArtifact)
-                    } catch (primaryError: Exception) {
+                    } catch (primaryError: Throwable) {
+                        if (primaryError !is Exception && primaryError !is OutOfMemoryError) {
+                            throw primaryError
+                        }
                         val lfmExists = lfmModelFile.isFile
                         val lfmSizeValid = lfmModelFile.length() == LFM_MODEL_SIZE_BYTES
                         val lfmHashValid = lfmExists && lfmSizeValid &&
