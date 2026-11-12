@@ -2899,6 +2899,9 @@ fi
 echo "PASS: confirmed owner deletion removes the restaurant, its recipe headers and ingredients atomically in the disposable database."
 
 add_staff_member "$USER_D" "$RESTAURANT_B"
+# Account deletion must anonymize actor foreign keys without changing inventory.
+STAFF_DELETE_ITEM_ID="$(create_inventory_item "$USER_D" "$RESTAURANT_B" "f5555555-5555-4555-8555-555555555555" "Staff deletion audit probe" "2")"
+test -n "$STAFF_DELETE_ITEM_ID"
 staff_preparation="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL
 BEGIN;
 SELECT set_config('request.jwt.claim.sub', '$USER_D', true);
@@ -2922,8 +2925,13 @@ deleted_staff_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON
   -c "SELECT count(*) FROM public.restaurant_staff WHERE user_id = '$USER_D'::uuid;")"
 staff_queue_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
   -c "SELECT count(*) FROM private.account_deletion_queue WHERE user_id = '$USER_D'::uuid;")"
-if [ "$shared_restaurant_rows" != "1" ] || [ "$deleted_staff_rows" != "0" ] || [ "$staff_queue_rows" != "0" ]; then
-  echo "ERROR: deleting a staff account did not preserve the shared restaurant and remove the staged request." >&2
+staff_inventory_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*) FROM public.restaurant_inventory_items WHERE id = '$STAFF_DELETE_ITEM_ID'::uuid AND created_by IS NULL AND quantity = 2;")"
+staff_inventory_movement_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*) FROM public.restaurant_inventory_movements WHERE item_id = '$STAFF_DELETE_ITEM_ID'::uuid AND created_by IS NULL AND delta = 2;")"
+if [ "$shared_restaurant_rows" != "1" ] || [ "$deleted_staff_rows" != "0" ] || [ "$staff_queue_rows" != "0" ] ||
+   [ "$staff_inventory_rows" != "1" ] || [ "$staff_inventory_movement_rows" != "1" ]; then
+  echo "ERROR: deleting a staff account did not preserve restaurant/stock data, anonymize audit actors and clear the staged request." >&2
   exit 1
 fi
-echo "PASS: deleting a staff account preserves the shared restaurant and clears its deletion request."
+echo "PASS: staff deletion preserves shared stock, anonymizes inventory audit actors and clears the deletion request."
