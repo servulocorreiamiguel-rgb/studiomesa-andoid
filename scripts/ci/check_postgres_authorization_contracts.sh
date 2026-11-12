@@ -1384,7 +1384,172 @@ COMMIT;
 SQL
 echo "PASS: Premium owner can write invoice metadata and upload documents; temporary data is removed."
 
-# Exercise the actual loyalty entitlement caps, not just Android page visibility.
+# Reward photos are Pro/Premium-only. Exercise the Storage RLS path rather than
+# relying on the Android editor to hide the upload control.
+PHOTO_PLAN_REWARD_ID="f0000000-0000-4000-8000-000000000001"
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO private.restaurant_loyalty_entitlements (restaurant_id, plan_code)
+VALUES ('$RESTAURANT_A'::uuid, 'essencial')
+ON CONFLICT (restaurant_id) DO UPDATE SET plan_code = EXCLUDED.plan_code;
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.save_loyalty_reward(
+  '$RESTAURANT_A'::uuid, '$PHOTO_PLAN_REWARD_ID'::uuid,
+  'CI Photo Plan Reward', '', 1, NULL, true
+);
+COMMIT;
+SQL
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+INSERT INTO storage.objects (bucket_id, name, owner_id, metadata)
+VALUES (
+  'loyalty-reward-images',
+  '$RESTAURANT_A/$PHOTO_PLAN_REWARD_ID/photo.jpg',
+  '$USER_A',
+  jsonb_build_object('mimetype', 'image/jpeg', 'size', 100)
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: an Essential restaurant uploaded a loyalty reward photograph." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO private.restaurant_loyalty_entitlements (restaurant_id, plan_code)
+VALUES ('$RESTAURANT_A'::uuid, 'profissional')
+ON CONFLICT (restaurant_id) DO UPDATE SET plan_code = EXCLUDED.plan_code;
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+INSERT INTO storage.objects (bucket_id, name, owner_id, metadata)
+VALUES (
+  'loyalty-reward-images',
+  '$RESTAURANT_A/$PHOTO_PLAN_REWARD_ID/photo.jpg',
+  '$USER_A',
+  jsonb_build_object('mimetype', 'image/jpeg', 'size', 100)
+);
+SELECT public.set_loyalty_reward_image_path(
+  '$RESTAURANT_A'::uuid,
+  '$PHOTO_PLAN_REWARD_ID'::uuid,
+  '$RESTAURANT_A/$PHOTO_PLAN_REWARD_ID/photo.jpg'
+);
+photo_path_check := NULL;
+COMMIT;
+SQL
+photo_path_check="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT image_path FROM public.get_restaurant_loyalty_rewards('$RESTAURANT_A'::uuid)
+WHERE id = '$PHOTO_PLAN_REWARD_ID'::uuid;
+ROLLBACK;
+SQL
+)"
+if [ "$photo_path_check" != "$RESTAURANT_A/$PHOTO_PLAN_REWARD_ID/photo.jpg" ]; then
+  echo "ERROR: the Professional loyalty reward photograph was not recorded by the server." >&2
+  exit 1
+fi
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_loyalty_reward_image_path(
+  '$RESTAURANT_A'::uuid, '$PHOTO_PLAN_REWARD_ID'::uuid, NULL
+);
+DELETE FROM storage.objects
+WHERE bucket_id = 'loyalty-reward-images'
+  AND name = '$RESTAURANT_A/$PHOTO_PLAN_REWARD_ID/photo.jpg';
+SELECT public.save_loyalty_reward(
+  '$RESTAURANT_A'::uuid, '$PHOTO_PLAN_REWARD_ID'::uuid,
+  'CI Photo Plan Reward', '', 1, NULL, false
+);
+COMMIT;
+SQL
+echo "PASS: Essential cannot upload reward photos; Professional can upload, register and remove its image."
+
+# Recipe data, ingredient lists and automatic stock consumption are Premium-only.
+# Existing recipes may be deactivated/cleaned before a downgrade, but not edited or reactivated.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO private.restaurant_loyalty_entitlements (restaurant_id, plan_code)
+VALUES ('$RESTAURANT_A'::uuid, 'premium')
+ON CONFLICT (restaurant_id) DO UPDATE SET plan_code = EXCLUDED.plan_code;
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.save_restaurant_recipe_ingredient(
+  '$RESTAURANT_A'::uuid, '$PRICE_MENU_ITEM_A'::uuid, '$ITEM_A'::uuid, 0.250, 0.00
+);
+SELECT public.set_restaurant_recipe_active(
+  '$RESTAURANT_A'::uuid, '$PRICE_MENU_ITEM_A'::uuid, true
+);
+COMMIT;
+SQL
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+UPDATE private.restaurant_loyalty_entitlements
+SET plan_code = 'profissional'
+WHERE restaurant_id = '$RESTAURANT_A'::uuid;
+SQL
+then
+  echo "ERROR: a Premium restaurant downgraded while an active recipe remained enabled." >&2
+  exit 1
+fi
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_recipe_active(
+  '$RESTAURANT_A'::uuid, '$PRICE_MENU_ITEM_A'::uuid, false
+);
+COMMIT;
+SQL
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+UPDATE private.restaurant_loyalty_entitlements
+SET plan_code = 'profissional'
+WHERE restaurant_id = '$RESTAURANT_A'::uuid;
+SQL
+pro_recipe_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text FROM public.restaurant_recipes
+WHERE restaurant_id = '$RESTAURANT_A'::uuid;
+ROLLBACK;
+SQL
+)"
+if [ "$pro_recipe_rows" != "0" ]; then
+  echo "ERROR: a Professional account read Premium recipe rows." >&2
+  exit 1
+fi
+if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.save_restaurant_recipe_ingredient(
+  '$RESTAURANT_A'::uuid, '$PRICE_MENU_ITEM_A'::uuid, '$ITEM_A'::uuid, 0.300, 0.00
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: a Professional account edited a Premium recipe." >&2
+  exit 1
+fi
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+DELETE FROM public.restaurant_recipe_ingredients
+WHERE restaurant_id = '$RESTAURANT_A'::uuid;
+DELETE FROM public.restaurant_recipes
+WHERE restaurant_id = '$RESTAURANT_A'::uuid;
+INSERT INTO private.restaurant_loyalty_entitlements (restaurant_id, plan_code)
+VALUES ('$RESTAURANT_A'::uuid, 'premium')
+ON CONFLICT (restaurant_id) DO UPDATE SET plan_code = EXCLUDED.plan_code;
+SQL
+echo "PASS: recipes are Premium-only, hidden below Premium and block unsafe downgrades until deactivated."
+
+# Essential: 5 active rewards; Professional: 15; Premium: 50. Every overflow must fail
+# through the public SECURITY DEFINER RPC., not just Android page visibility.
 # Essential: 5 active rewards; Professional: 15; Premium: 50. Every overflow must fail
 # through the public SECURITY DEFINER RPC.
 psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
