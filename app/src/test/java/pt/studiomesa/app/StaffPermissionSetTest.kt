@@ -48,4 +48,49 @@ class StaffPermissionSetTest {
             StaffPermissionSet.orderedValues(setOf("orders", "owner_access"))
         }
     }
+
+    @Test
+    fun orderCreationRequiresOrderMenuAndTableOrReservationReadAccessForStaff() {
+        assertEquals(true, StaffPermissionSet.canCreateOrder(
+            setOf("orders", "menu", "tables"), role = "staff"
+        ))
+        assertEquals(true, StaffPermissionSet.canCreateOrder(
+            setOf("orders", "menu", "reservations"), role = "staff"
+        ))
+        assertEquals(false, StaffPermissionSet.canCreateOrder(
+            setOf("orders", "tables"), role = "staff"
+        ))
+        assertEquals(false, StaffPermissionSet.canCreateOrder(
+            setOf("orders", "menu"), role = "staff"
+        ))
+        assertEquals(false, StaffPermissionSet.canCreateOrder(
+            setOf("menu", "tables"), role = "staff"
+        ))
+        assertEquals(true, StaffPermissionSet.canCreateOrder(emptySet(), role = "owner"))
+        assertEquals(false, StaffPermissionSet.canCreateOrder(StaffPermissionSet.all.toSet(), role = "unknown"))
+    }
+
+    @Test
+    fun remoteCacheLoadsOnlyTheAreasPermittedByTheStaffMatrix() {
+        assertEquals(
+            setOf("tables", "orders"),
+            StaffPermissionSet.cacheReadPermissions("staff", setOf("orders", "reservations"))
+        )
+        assertEquals(
+            setOf("menu", "tables"),
+            StaffPermissionSet.cacheReadPermissions("staff", setOf("menu", "tables"))
+        )
+        assertEquals(
+            StaffPermissionSet.all.toSet(),
+            StaffPermissionSet.cacheReadPermissions("owner", emptySet())
+        )
+        assertEquals(
+            emptySet<String>(),
+            StaffPermissionSet.cacheReadPermissions("staff", emptySet())
+        )
+        assertEquals(
+            emptySet<String>(),
+            StaffPermissionSet.cacheReadPermissions("unknown", StaffPermissionSet.all.toSet())
+        )
+    }
 }

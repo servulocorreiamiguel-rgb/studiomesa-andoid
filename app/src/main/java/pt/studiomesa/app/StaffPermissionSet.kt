@@ -24,6 +24,24 @@ internal object StaffPermissionSet {
         return all.filter { it in selected }
     }
 
+    fun canCreateOrder(permissions: Set<String>, role: String): Boolean = when (role) {
+        "owner" -> true
+        "staff" -> "orders" in permissions &&
+            "menu" in permissions &&
+            ("tables" in permissions || "reservations" in permissions)
+        else -> false
+    }
+
+    fun cacheReadPermissions(role: String, permissions: Set<String>): Set<String> = when (role) {
+        "owner" -> all.toSet()
+        "staff" -> buildSet {
+            if ("orders" in permissions) add("orders")
+            if ("menu" in permissions) add("menu")
+            if ("tables" in permissions || "reservations" in permissions) add("tables")
+        }
+        else -> emptySet()
+    }
+
     fun toJsonArray(selected: Set<String>): JSONArray =
         JSONArray().apply { orderedValues(selected).forEach { put(it) } }
 

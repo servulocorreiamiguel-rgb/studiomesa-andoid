@@ -3221,7 +3221,17 @@ class MainActivity : ComponentActivity() {
                 LinearLayout.LayoutParams(-1, dp(48)))
             addGap(container, 7)
         }
-        container.addView(primaryButton("+  Novo pedido") { showCreateOrderDialog() }, LinearLayout.LayoutParams(-1, dp(50)))
+        val currentRole = backendPrefs.getString("restaurant_role", "").orEmpty()
+        val canCreateOrder = !hasRemoteRestaurant() ||
+            StaffPermissionSet.canCreateOrder(currentStaffPermissions.orEmpty(), currentRole)
+        if (canCreateOrder) {
+            container.addView(primaryButton("+  Novo pedido") { showCreateOrderDialog() }, LinearLayout.LayoutParams(-1, dp(50)))
+        } else {
+            container.addView(label(
+                "Para criar pedidos, este funcionário precisa das permissões Pedidos, Carta e Mesas ou Reservas. Pode continuar a consultar e atualizar pedidos existentes.",
+                11.5f, false, muted
+            ))
+        }
         addGap(container, 15)
 
         if (hasRemoteRestaurant()) {
@@ -3921,11 +3931,16 @@ class MainActivity : ComponentActivity() {
             editor.apply()
             if (restaurant != null) {
                 val role = restaurant.optString("user_role", "staff")
-                currentStaffPermissions = if (role == "owner") {
-                    StaffPermissionSet.all.toSet()
-                } else {
+                val serverPermissions = if (
+                    role == "staff" && BackendSchemaFeatureGate.GRANULAR_STAFF_PERMISSIONS_ENABLED
+                ) {
                     StaffPermissionSet.fromJson(SupabaseApi.getMyRestaurantPermissions(token))
-                }
+                } else null
+                currentStaffPermissions = BackendSchemaFeatureGate.resolveStaffPermissions(
+                    role = role,
+                    granularPermissionsEnabled = BackendSchemaFeatureGate.GRANULAR_STAFF_PERMISSIONS_ENABLED,
+                    serverPermissions = serverPermissions
+                )
                 cacheRemoteOperations(token, restaurant.optString("restaurant_id"))
                 if ("inventory" !in currentStaffPermissions.orEmpty()) {
                     backendPrefs.edit().remove("remote_inventory_json").remove("inventory_loaded").apply()
@@ -3960,6 +3975,7 @@ class MainActivity : ComponentActivity() {
             // but fail closed for staff navigation until permissions can be reloaded.
             if (backendPrefs.getString("restaurant_role", "") == "staff") {
                 currentStaffPermissions = emptySet()
+                clearCachedStaffOperationalData()
             }
         }
     }
@@ -4002,11 +4018,43 @@ class MainActivity : ComponentActivity() {
         return result
     }
 
+    private fun clearCachedStaffOperationalData() {
+        backendPrefs.edit()
+            .remove("remote_tables_json")
+            .remove("remote_menu_json")
+            .remove("remote_orders_json")
+            .remove("remote_inventory_json")
+            .remove("inventory_loaded")
+            .remove("remote_reservations_json")
+            .remove("reservations_loaded")
+            .remove("remote_members_json")
+            .remove("restaurant_rewards_json")
+            .apply()
+        reservationCache = JSONArray()
+        reservationsLoaded = false
+        kitchenOrdersCache = null
+        kitchenQueueUpdatedAtMillis = 0L
+    }
+
     private fun cacheRemoteOperations(token: String, restaurantId: String) {
         if (token.isBlank() || restaurantId.isBlank()) return
-        val tables = SupabaseApi.listTables(token, restaurantId)
-        val menu = SupabaseApi.listMenuItems(token, restaurantId)
-        val orders = SupabaseApi.listOrders(token, restaurantId)
+        val role = backendPrefs.getString("restaurant_role", "").orEmpty()
+        val readPermissions = StaffPermissionSet.cacheReadPermissions(
+            role,
+            currentStaffPermissions.orEmpty()
+        )
+        // Do not request areas the staff member cannot read. Besides avoiding
+        // RLS errors, overwrite old cache entries so revoked permissions cannot
+        // leave previously loaded restaurant data visible on this device.
+        val tables = if ("tables" in readPermissions) {
+            SupabaseApi.listTables(token, restaurantId)
+        } else JSONArray()
+        val menu = if ("menu" in readPermissions) {
+            SupabaseApi.listMenuItems(token, restaurantId)
+        } else JSONArray()
+        val orders = if ("orders" in readPermissions) {
+            SupabaseApi.listOrders(token, restaurantId)
+        } else JSONArray()
         backendPrefs.edit()
             .putString("remote_tables_json", tables.toString())
             .putString("remote_menu_json", menu.toString())
@@ -4023,15 +4071,24 @@ class MainActivity : ComponentActivity() {
                 .show()
             return
         }
+        val currentRole = backendPrefs.getString("restaurant_role", "").orEmpty()
+        if (currentRole == "staff" && BackendSchemaFeatureGate.GRANULAR_STAFF_PERMISSIONS_ENABLED) {
+            // Do not keep stale privileges or cached data if the server cannot reload the matrix.
+            currentStaffPermissions = emptySet()
+            clearCachedStaffOperationalData()
+        }
         runBackend({
-            val isStaff = backendPrefs.getString("restaurant_role", "").orEmpty() == "staff"
-            if (isStaff) {
-                currentStaffPermissions = StaffPermissionSet.fromJson(
-                    SupabaseApi.getMyRestaurantPermissions(backendToken())
-                )
-            } else {
-                currentStaffPermissions = StaffPermissionSet.all.toSet()
-            }
+            val serverPermissions = if (
+                currentRole == "staff" && BackendSchemaFeatureGate.GRANULAR_STAFF_PERMISSIONS_ENABLED
+            ) {
+                StaffPermissionSet.fromJson(SupabaseApi.getMyRestaurantPermissions(backendToken()))
+            } else null
+            currentStaffPermissions = BackendSchemaFeatureGate.resolveStaffPermissions(
+                role = currentRole,
+                granularPermissionsEnabled = BackendSchemaFeatureGate.GRANULAR_STAFF_PERMISSIONS_ENABLED,
+                serverPermissions = serverPermissions
+            )
+            val isStaff = currentRole == "staff"
             cacheRemoteOperations(backendToken(), restaurantId)
             if (isStaff) {
                 if ("inventory" !in currentStaffPermissions.orEmpty()) {
@@ -8872,6 +8929,15 @@ class MainActivity : ComponentActivity() {
 
     private fun showCreateOrderDialog() {
         val cloudMode = hasRemoteRestaurant()
+        val currentRole = backendPrefs.getString("restaurant_role", "").orEmpty()
+        if (cloudMode && !StaffPermissionSet.canCreateOrder(currentStaffPermissions.orEmpty(), currentRole)) {
+            Toast.makeText(
+                this,
+                "Para criar pedidos, precisas das permissões Pedidos, Carta e Mesas ou Reservas.",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
         val items = if (cloudMode) remoteMenuEntries() else store.getMenu()
         if (items.isEmpty()) {
             AlertDialog.Builder(this)

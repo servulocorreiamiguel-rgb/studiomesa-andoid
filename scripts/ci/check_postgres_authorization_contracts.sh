@@ -659,6 +659,93 @@ then
 fi
 echo "PASS: staff permissions default safely, are owner-managed, isolated and cannot be self-escalated."
 
+# Set a deliberately partial matrix for the read/insert dependency checks.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders','reservations']);
+COMMIT;
+SQL
+
+# Menu and table data needed by order/reservation workflows is read-only.
+# The menu permission is still required to read priced menu items and their
+# private cost fields; reservations can read table options without editing tables.
+table_read_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text FROM public.restaurant_tables
+WHERE restaurant_id = '$RESTAURANT_A'::uuid AND table_number = 1;
+ROLLBACK;
+SQL
+)"
+menu_read_rows="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text FROM public.menu_items WHERE id = '$MENU_PERMISSION_PROBE'::uuid;
+ROLLBACK;
+SQL
+)"
+if [ "$table_read_rows" != "1" ] || [ "$menu_read_rows" != "0" ]; then
+  echo "ERROR: reservation permission should allow table options only, not menu data." >&2
+  exit 1
+fi
+
+ORDER_INSERT_PERMISSION_PROBE="88888888-8888-4888-8888-88888888888a"
+if psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+INSERT INTO public.restaurant_orders (
+  id, restaurant_id, menu_item_id, table_number, item_name, amount, quantity, service_course, notes, status
+) VALUES (
+  '$ORDER_INSERT_PERMISSION_PROBE'::uuid, '$RESTAURANT_A'::uuid, '$MENU_PERMISSION_PROBE'::uuid,
+  1, 'Permission-gated order', 5.00, 1, 'Principal', '', 'Aberto'
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: an employee without the menu permission inserted an order through the Data API." >&2
+  exit 1
+fi
+
+# Grant the menu area; existing reservations access already grants read-only
+# table options. The employee may now create orders without being allowed to
+# modify table definitions.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions('$USER_C'::uuid, ARRAY['orders','reservations','menu']);
+COMMIT;
+SQL
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_C', true);
+SET LOCAL ROLE authenticated;
+INSERT INTO public.restaurant_orders (
+  id, restaurant_id, menu_item_id, table_number, item_name, amount, quantity, service_course, notes, status
+) VALUES (
+  '$ORDER_INSERT_PERMISSION_PROBE'::uuid, '$RESTAURANT_A'::uuid, '$MENU_PERMISSION_PROBE'::uuid,
+  1, 'Permission-gated order', 5.00, 1, 'Principal', '', 'Aberto'
+);
+ROLLBACK;
+SQL
+echo "PASS: staff order creation needs menu and read-only table access; existing order updates stay separate."
+
+# Restore the full matrix for downstream loyalty and owner-operation tests.
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_A', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_restaurant_staff_permissions(
+  '$USER_C'::uuid, ARRAY['orders','tables','reservations','menu','inventory','loyalty']
+);
+COMMIT;
+SQL
+
 # A separate staff user belongs to restaurant B for cross-restaurant QR/rescue tests.
 STAFF_JOIN_D="$(join_staff_member "$USER_D" "$STAFF_CODE_B")"
 EXPECTED_STAFF_JOIN_D="$RESTAURANT_B|CI Restaurant B|staff"

@@ -225,12 +225,54 @@ grant execute on function public.get_my_restaurant_permissions() to authenticate
 alter policy restaurant_tables_staff_all on public.restaurant_tables
     using (private.has_restaurant_permission(restaurant_id, 'tables'))
     with check (private.has_restaurant_permission(restaurant_id, 'tables'));
+
+-- Staff with reservation access may read table options to assign a reservation,
+-- but only the tables permission allows editing or creating table records.
+drop policy if exists restaurant_tables_reservations_read on public.restaurant_tables;
+create policy restaurant_tables_reservations_read
+    on public.restaurant_tables
+    for select to authenticated
+    using (
+        private.has_restaurant_permission(restaurant_id, 'tables')
+        or private.has_restaurant_permission(restaurant_id, 'reservations')
+    );
+
 alter policy menu_items_staff_all on public.menu_items
     using (private.has_restaurant_permission(restaurant_id, 'menu'))
     with check (private.has_restaurant_permission(restaurant_id, 'menu'));
-alter policy restaurant_orders_staff_all on public.restaurant_orders
+
+-- The orders area can list/update existing tickets. Creating a ticket requires
+-- the menu permission plus read access to table options (tables or reservations).
+-- Split the old ALL policy so staff with orders-only access cannot insert tickets
+-- by posting arbitrary menu IDs/table numbers directly to the Data API.
+drop policy if exists restaurant_orders_staff_all on public.restaurant_orders;
+
+drop policy if exists restaurant_orders_staff_read on public.restaurant_orders;
+create policy restaurant_orders_staff_read
+    on public.restaurant_orders
+    for select to authenticated
+    using (private.has_restaurant_permission(restaurant_id, 'orders'));
+
+drop policy if exists restaurant_orders_staff_insert on public.restaurant_orders;
+create policy restaurant_orders_staff_insert
+    on public.restaurant_orders
+    for insert to authenticated
+    with check (
+        private.has_restaurant_permission(restaurant_id, 'orders')
+        and private.has_restaurant_permission(restaurant_id, 'menu')
+        and (
+            private.has_restaurant_permission(restaurant_id, 'tables')
+            or private.has_restaurant_permission(restaurant_id, 'reservations')
+        )
+    );
+
+drop policy if exists restaurant_orders_staff_update on public.restaurant_orders;
+create policy restaurant_orders_staff_update
+    on public.restaurant_orders
+    for update to authenticated
     using (private.has_restaurant_permission(restaurant_id, 'orders'))
     with check (private.has_restaurant_permission(restaurant_id, 'orders'));
+
 alter policy restaurant_inventory_items_staff_read on public.restaurant_inventory_items
     using (private.has_restaurant_permission(restaurant_id, 'inventory'));
 alter policy restaurant_inventory_movements_staff_read on public.restaurant_inventory_movements
