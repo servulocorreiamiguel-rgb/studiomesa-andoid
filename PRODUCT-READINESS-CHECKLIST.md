@@ -1,15 +1,18 @@
 # StudioMesa — lista de preparação para uso profissional
 
-**Estado consolidado em 12/11/2026:** o código está suficientemente avançado para demonstração com dados fictícios, mas **NÃO está LIBERADO para venda operacional, piloto com dados reais ou produção**. Esta fotografia substitui os estados contraditórios ou desatualizados dos registos históricos que se seguem.
+**Estado consolidado em 12/11/2026 (commit `2b75468eca430c74a7ce3b5ffb02e6071588ca07`):** a versão 1.5.0 está pronta para testes físicos e demonstração com dados fictícios, mas **NÃO está LIBERADA para venda operacional, piloto com dados reais ou produção**. Os cinco APKs debug do commit atual foram gerados e o ZIP foi validado; faltam os smoke tests Android 8/16 do run `43267740540`, a validação física e a configuração de produção descrita abaixo. Esta fotografia substitui estados históricos.
 
 Auditoria detalhada: [docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-12.md](docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-12.md).
 
 ## Código e CI
 
 - [x] PR #119 integrada: o texto da gestão de equipa corresponde ao comportamento real das permissões no backend atual.
-- [x] PR #120 integrada no commit `e2b23b65416a600e2fb1d8a699cba1a0d37ec9d6`: índices de adesão movidos para uma migração posterior à criação da tabela.
+- [x] PR #120 integrada; índices de adesão movidos para uma migração posterior à criação da tabela.
+- [x] PR #122 integrada no commit `c5417529a797d0d63856dffda1effb3433d33f1a`: entitlements server-side por plano, RLS e testes de autorização.
+- [x] PR #123 integrada no commit atual: documentação comercial alinhada com a implementação real e as pendências de produção.
 - [x] CI da PR #120 [43219206624](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43219206624) passou os quatro jobs: compilação e testes/Lint, replay PostgreSQL/autorização, Android 8 e Android 16.
-- [ ] CI pós-merge da `main` no commit `e2b23b65416a600e2fb1d8a699cba1a0d37ec9d6`: execução [43223886131](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43223886131) em curso na última consulta; só marcar concluída depois dos quatro jobs passarem.
+- [x] CI pós-merge do commit `c5417529a797d0d63856dffda1effb3433d33f1a` [43247282954](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43247282954): quatro jobs aprovados.
+- [ ] CI do commit atual [43267740540](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43267740540): compilação e replay PostgreSQL/autorização passaram; os smoke tests Android 8/16 ainda estavam em execução na última consulta.
 - [x] Cinco variantes Android de demonstração/debug compiladas. Não são pacotes comerciais assinados nem foram testadas fisicamente no OPPO A5m.
 - [x] Um só assistente, modelos locais Gemma 4 E2B e LFM2.5-1.2B INT4, router cloud publicado com JWT obrigatório.
 - [ ] Validar fisicamente os modelos locais, qualidade, latência, RAM, temperatura, bateria e fallback.
@@ -17,16 +20,17 @@ Auditoria detalhada: [docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-12.md](docs/COMMERC
 ## Supabase e migrações
 
 - [x] Projeto alojado observado em estado `ACTIVE_HEALTHY`, PostgreSQL 17.6.1.166, região `eu-west-1`.
-- [x] Comparação read-only: 69 ficheiros SQL locais; 63 migrações remotas. As 63 versões remotas têm correspondência exata por versão e nome; não há versões remotas sem ficheiro.
-- [ ] Aplicar e validar em ambiente isolado seis migrações locais ainda não aplicadas:
+- [x] Comparação read-only: 70 ficheiros SQL locais; 63 migrações remotas. As 63 versões remotas têm correspondência exata por versão e nome; não há versões remotas sem ficheiro.
+- [ ] Aplicar e validar em ambiente isolado sete migrações locais ainda não aplicadas:
   - `20261030111815_restaurant_recipes_and_order_stock_consumption`
   - `20261102103000_granular_restaurant_staff_permissions`
   - `20261102120000_require_loyalty_permission_for_reward_fulfillment`
   - `20261102121000_enforce_loyalty_permission_for_staff_loyalty_operations`
   - `20261104100000_price_adviser_actor_indexes`
+  - `20261107170000_loyalty_shop_photos_and_plan_limits`
   - `20261112120000_restaurant_membership_request_actor_indexes`
 - [ ] Criar uma branch Supabase de desenvolvimento, testar schema/RLS/RPCs e advisors. O preço consultado é 0,01344 USD/hora. Não foi criada por não existir aprovação explícita para o custo.
-- [ ] Validar as tabelas ausentes `public.restaurant_recipes`, `public.restaurant_recipe_ingredients` e `private.restaurant_staff_permissions`. Até lá, não anunciar fichas técnicas/consumo automático de ingredientes nem permissões granulares.
+- [ ] Validar as tabelas ausentes `public.restaurant_recipes`, `public.restaurant_recipe_ingredients`, `private.restaurant_staff_permissions` e `private.restaurant_loyalty_entitlements`. O entitlement por plano está implementado no código/migration, mas só fica ativo no backend alojado depois de deployment seguro.
 - [ ] Rever individualmente as 42 funções `SECURITY DEFINER` executáveis por `authenticated`. Não revogar permissões em bloco.
 - [ ] Rever o aviso do Auth sobre proteção contra palavras-passe comprometidas, tendo em conta o plano/custo do projeto.
 - [ ] Confirmar backup e executar restauro controlado antes de qualquer alteração de produção.
