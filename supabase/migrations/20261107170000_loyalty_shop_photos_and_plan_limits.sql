@@ -870,7 +870,7 @@ GRANT EXECUTE ON FUNCTION private.restaurant_plan_allows(uuid, text)
 CREATE OR REPLACE FUNCTION private.enforce_restaurant_plan_before_write()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = ''
 AS $function$
 DECLARE
@@ -934,7 +934,7 @@ EXECUTE FUNCTION private.enforce_restaurant_plan_before_write(
 CREATE OR REPLACE FUNCTION private.enforce_price_adviser_plan()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = ''
 AS $function$
 BEGIN
@@ -972,7 +972,7 @@ EXECUTE FUNCTION private.enforce_restaurant_plan_before_write(
 CREATE OR REPLACE FUNCTION private.enforce_recipe_plan_before_write()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = ''
 AS $function$
 BEGIN
