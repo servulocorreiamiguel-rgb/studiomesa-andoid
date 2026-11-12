@@ -1,6 +1,5 @@
--- Adds coverage for the nullable actor foreign keys flagged by Supabase Performance Advisor.
--- IF NOT EXISTS keeps this safe if the equivalent migration from a parallel branch
--- is later reconciled into the deployment history.
+-- Adds coverage for nullable actor foreign keys flagged by Supabase Performance Advisor.
+-- IF NOT EXISTS also makes this safe when reconciling parallel migration history.
 BEGIN;
 
 CREATE INDEX IF NOT EXISTS restaurant_price_adviser_audit_acted_by_idx

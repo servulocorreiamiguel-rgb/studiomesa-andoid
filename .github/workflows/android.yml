@@ -479,8 +479,10 @@ jobs:
             END IF;
 
             IF to_regclass('private.restaurant_price_adviser_audit_acted_by_idx') IS NULL
-              OR to_regclass('private.restaurant_price_adviser_settings_updated_by_idx') IS NULL THEN
-              RAISE EXCEPTION 'Price-adviser actor foreign-key indexes are missing after clean migration replay.';
+              OR to_regclass('private.restaurant_price_adviser_settings_updated_by_idx') IS NULL
+              OR to_regclass('public.restaurant_membership_requests_requester_user_id_idx') IS NULL
+              OR to_regclass('public.restaurant_membership_requests_reviewed_by_idx') IS NULL THEN
+              RAISE EXCEPTION 'Nullable actor foreign-key indexes are missing after clean migration replay.';
             END IF;
 
             IF has_function_privilege(
