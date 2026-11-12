@@ -28,9 +28,6 @@ CREATE TABLE IF NOT EXISTS storage.objects (
   UNIQUE (bucket_id, name)
 );
 ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
--- Hosted Supabase grants Storage API roles; CI needs direct grants to exercise RLS policies.
-GRANT SELECT, INSERT, UPDATE, DELETE ON storage.objects TO authenticated;
-
 CREATE OR REPLACE FUNCTION storage.foldername(name text)
 RETURNS text[]
 LANGUAGE sql
@@ -54,6 +51,9 @@ BEGIN
   END IF;
 END;
 $roles$;
+
+-- Hosted Supabase grants Storage API roles; CI needs direct grants to exercise RLS policies.
+GRANT SELECT, INSERT, UPDATE, DELETE ON storage.objects TO authenticated;
 
 CREATE TABLE auth.users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
