@@ -4654,7 +4654,7 @@ class MainActivity : ComponentActivity() {
                         }, LinearLayout.LayoutParams(-1, dp(44)))
                     } else {
                         card.addView(label(
-                            "As permissões por área ainda não estão configuradas no servidor. O acesso dos funcionários permanece limitado até à ativação e validação do backend.",
+                            "As permissões granulares por área ainda não estão ativadas no servidor. Até serem provisionadas e testadas, os funcionários mantêm o acesso operacional atual; o proprietário ainda não pode retirar áreas individualmente.",
                             11f, false, muted
                         ))
                     }
