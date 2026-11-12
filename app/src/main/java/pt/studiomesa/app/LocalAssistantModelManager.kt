@@ -82,6 +82,15 @@ internal object ModelDownloadResumePolicy {
     fun resumeOffset(partialBytes: Long, expectedBytes: Long): Long =
         if (partialBytes in 1..expectedBytes) partialBytes else 0L
 
+    fun requiredFreeBytes(
+        expectedBytes: Long,
+        partialBytes: Long,
+        minimumFreeBytes: Long
+    ): Long {
+        val usablePartialBytes = if (partialBytes in 0..expectedBytes) partialBytes else 0L
+        return (expectedBytes - usablePartialBytes).coerceAtLeast(0L) + minimumFreeBytes
+    }
+
     fun acceptsContentRange(
         requestedOffset: Long,
         rangeStart: Long,
@@ -114,8 +123,17 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         val memory = ActivityManager.MemoryInfo()
         manager.getMemoryInfo(memory)
         val availableBytes = StatFs(appContext.filesDir.absolutePath).availableBytes
+        val stagedGemmaBytes = File(
+            modelDirectory,
+            "${GEMMA_MODEL_FILENAME}.part"
+        ).length()
+        val requiredBytes = ModelDownloadResumePolicy.requiredFreeBytes(
+            expectedBytes = GEMMA_MODEL_SIZE_BYTES,
+            partialBytes = stagedGemmaBytes,
+            minimumFreeBytes = MINIMUM_FREE_SPACE_BYTES
+        )
         memory.totalMem >= MIN_GEMMA_TOTAL_MEMORY_BYTES &&
-            availableBytes >= GEMMA_MODEL_SIZE_BYTES + MINIMUM_FREE_SPACE_BYTES
+            availableBytes >= requiredBytes
     }.getOrDefault(false)
 
     private fun artifactFor(file: File): ModelArtifact =
@@ -265,7 +283,11 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
 
                 val availableBytes = StatFs(appContext.filesDir.absolutePath).availableBytes
                 val remainingBytes = artifact.sizeBytes - resumeOffset
-                val requiredBytes = remainingBytes + MINIMUM_FREE_SPACE_BYTES
+                val requiredBytes = ModelDownloadResumePolicy.requiredFreeBytes(
+                    expectedBytes = artifact.sizeBytes,
+                    partialBytes = resumeOffset,
+                    minimumFreeBytes = MINIMUM_FREE_SPACE_BYTES
+                )
                 if (availableBytes < requiredBytes) {
                     throw IllegalStateException(
                         "Espaço insuficiente. Faltam cerca de " +
