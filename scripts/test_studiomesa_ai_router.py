@@ -39,7 +39,7 @@ class MultiModelRouterContractTests(unittest.TestCase):
         chain = EDGE.split("coding:", 1)[1].split("],", 1)[0]
         self.assertIn("qwen/qwen3.8-27b:free", chain)
         self.assertNotIn('"qwen/qwen3.8-27b"', EDGE)
-        self.assertIn("Qwen3.8 27B (free)", ACTIVITY)
+        self.assertIn("Qwen3.8 27B (variante gratuita)", ACTIVITY)
 
     def test_paid_gpt_oss_120b_is_never_called(self):
         self.assertNotIn("openai/gpt-oss-120b:free", EDGE)
