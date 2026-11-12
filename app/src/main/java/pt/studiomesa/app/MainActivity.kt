@@ -3921,11 +3921,16 @@ class MainActivity : ComponentActivity() {
             editor.apply()
             if (restaurant != null) {
                 val role = restaurant.optString("user_role", "staff")
-                currentStaffPermissions = if (role == "owner") {
-                    StaffPermissionSet.all.toSet()
-                } else {
+                val serverPermissions = if (
+                    role == "staff" && BackendSchemaFeatureGate.GRANULAR_STAFF_PERMISSIONS_ENABLED
+                ) {
                     StaffPermissionSet.fromJson(SupabaseApi.getMyRestaurantPermissions(token))
-                }
+                } else null
+                currentStaffPermissions = BackendSchemaFeatureGate.resolveStaffPermissions(
+                    role = role,
+                    granularPermissionsEnabled = BackendSchemaFeatureGate.GRANULAR_STAFF_PERMISSIONS_ENABLED,
+                    serverPermissions = serverPermissions
+                )
                 cacheRemoteOperations(token, restaurant.optString("restaurant_id"))
                 if ("inventory" !in currentStaffPermissions.orEmpty()) {
                     backendPrefs.edit().remove("remote_inventory_json").remove("inventory_loaded").apply()
@@ -4023,15 +4028,23 @@ class MainActivity : ComponentActivity() {
                 .show()
             return
         }
+        val currentRole = backendPrefs.getString("restaurant_role", "").orEmpty()
+        if (currentRole == "staff" && BackendSchemaFeatureGate.GRANULAR_STAFF_PERMISSIONS_ENABLED) {
+            // Do not keep stale privileges if the server cannot reload the current matrix.
+            currentStaffPermissions = emptySet()
+        }
         runBackend({
-            val isStaff = backendPrefs.getString("restaurant_role", "").orEmpty() == "staff"
-            if (isStaff) {
-                currentStaffPermissions = StaffPermissionSet.fromJson(
-                    SupabaseApi.getMyRestaurantPermissions(backendToken())
-                )
-            } else {
-                currentStaffPermissions = StaffPermissionSet.all.toSet()
-            }
+            val serverPermissions = if (
+                currentRole == "staff" && BackendSchemaFeatureGate.GRANULAR_STAFF_PERMISSIONS_ENABLED
+            ) {
+                StaffPermissionSet.fromJson(SupabaseApi.getMyRestaurantPermissions(backendToken()))
+            } else null
+            currentStaffPermissions = BackendSchemaFeatureGate.resolveStaffPermissions(
+                role = currentRole,
+                granularPermissionsEnabled = BackendSchemaFeatureGate.GRANULAR_STAFF_PERMISSIONS_ENABLED,
+                serverPermissions = serverPermissions
+            )
+            val isStaff = currentRole == "staff"
             cacheRemoteOperations(backendToken(), restaurantId)
             if (isStaff) {
                 if ("inventory" !in currentStaffPermissions.orEmpty()) {
