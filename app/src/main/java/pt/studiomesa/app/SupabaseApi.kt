@@ -6,6 +6,7 @@ import java.math.BigDecimal
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.util.Locale
 
 /**
  * Minimal Supabase REST/Auth client. Only the public publishable key is embedded here.
