@@ -3178,4 +3178,29 @@ if [ "$saft_invoice_number" != "FT-CI-SAFT-001" ]; then
   exit 1
 fi
 
+
+# Account deletion must preserve financial audit history without being blocked by actor FKs.
+audit_fk_contract_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<'SQL'
+SELECT count(*)::text
+FROM pg_constraint AS c
+JOIN pg_class AS rel ON rel.oid = c.conrelid
+JOIN pg_namespace AS ns ON ns.oid = rel.relnamespace
+JOIN unnest(c.conkey) AS key(attnum) ON true
+JOIN pg_attribute AS att ON att.attrelid = rel.oid AND att.attnum = key.attnum
+WHERE c.contype = 'f'
+  AND c.confdeltype = 'n'
+  AND NOT att.attnotnull
+  AND (
+    (ns.nspname = 'public' AND rel.relname = 'restaurant_supplier_invoices' AND att.attname = 'stock_received_by')
+    OR (ns.nspname = 'private' AND rel.relname = 'restaurant_supplier_invoice_stock_receipts' AND att.attname = 'received_by')
+    OR (ns.nspname = 'private' AND rel.relname = 'restaurant_saft_sales_invoices' AND att.attname = 'updated_by')
+  );
+SQL
+)"
+if [ "$audit_fk_contract_count" != "3" ]; then
+  echo "ERROR: financial audit actor references must be nullable and use ON DELETE SET NULL." >&2
+  exit 1
+fi
+echo "PASS: account deletion can preserve stock-receipt and SAF-T audit records."
+
 echo "PASS: supplier invoice stock receipts are owner-only, tenant-isolated and idempotent; SAF-T history is private and rejects stale overwrites."
