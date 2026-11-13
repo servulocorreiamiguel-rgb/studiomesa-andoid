@@ -72,7 +72,7 @@ Consultas read-only e Supabase Advisors em 13/11/2026:
 
 ## Produto, segurança e testes de aceitação
 
-- [ ] E2E com dois restaurantes e contas de proprietário, funcionário e cliente: isolamento, menus, pedidos, cozinha, reservas, inventário, fidelização, campanhas, faturas e revogação de acesso.
+- [ ] Completar E2E com dois restaurantes e contas de proprietário, funcionário e cliente: permissões por função, menus, pedidos, cozinha, inventário, fidelização, campanhas, faturas e revogação de acesso. O fluxo básico de reservas, a sincronização Gestão/Cliente e o isolamento de dados entre restaurantes já foram confirmados manualmente pelo proprietário no OPPO A5m; o objectivo aqui é testar também contas/roles, concorrência, sessões e falhas.
 - [ ] Testar falhas de rede, repetição idempotente, sessão expirada, conflitos concorrentes, restauro e atualização em dispositivos reais.
 - [ ] Testar Gemma/LFM no OPPO A5m e em equipamentos Android representativos.
 - [ ] Rever retenção, exportação, eliminação, resposta a incidentes, backups e suporte.
