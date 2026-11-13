@@ -105,8 +105,8 @@ BEGIN
            OR v_payload->>'invoice_type' NOT IN ('FT', 'FS', 'FR', 'ND', 'NC', 'VD', 'TV', 'TD') THEN
             RAISE EXCEPTION 'A identidade ou os campos principais de uma fatura SAF-T não são válidos.';
         END IF;
-        IF coalesce(v_payload->>'net_total', '') !~ '^-?[0-9]{1,12}(\\.[0-9]{1,2})?$'
-           OR coalesce(v_payload->>'gross_total', '') !~ '^-?[0-9]{1,12}(\\.[0-9]{1,2})?$' THEN
+        IF coalesce(v_payload->>'net_total', '') !~ '^-?[0-9]{1,12}(\.[0-9]{1,2})?$'
+           OR coalesce(v_payload->>'gross_total', '') !~ '^-?[0-9]{1,12}(\.[0-9]{1,2})?$' THEN
             RAISE EXCEPTION 'Os totais de uma fatura SAF-T não são numéricos.';
         END IF;
         IF jsonb_typeof(v_payload->'lines') IS DISTINCT FROM 'array' THEN
