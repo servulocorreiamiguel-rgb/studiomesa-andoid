@@ -462,11 +462,25 @@ object SupabaseApi {
     fun listSupplierInvoices(token: String, restaurantId: String): JSONArray {
         require(token.isNotBlank() && restaurantId.isNotBlank())
         val restaurant = URLEncoder.encode(restaurantId, "UTF-8")
-        return JSONArray(call(
-            "GET",
-            "/rest/v1/restaurant_supplier_invoices?select=id,restaurant_id,supplier_name,supplier_vat_number,invoice_number,issue_date,due_date,currency,net_amount,vat_amount,total_amount,review_status,source_type,mime_type,byte_size,document_sha256,document_path,warnings,created_by,reviewed_by,reviewed_at,created_at,updated_at&restaurant_id=eq.$restaurant&order=issue_date.desc&limit=200",
-            accessToken = token
-        ))
+        val result = JSONArray()
+        val pageSize = 200
+        var offset = 0
+        // Fetch every accessible invoice page, regardless of its review status.
+        // This is deliberately independent of the customer loyalty-points system.
+        while (offset < 5_000) {
+            val page = JSONArray(call(
+                "GET",
+                "/rest/v1/restaurant_supplier_invoices?select=id,restaurant_id,supplier_name,supplier_vat_number,invoice_number,issue_date,due_date,currency,net_amount,vat_amount,total_amount,review_status,source_type,mime_type,byte_size,document_sha256,document_path,warnings,created_by,reviewed_by,reviewed_at,created_at,updated_at&restaurant_id=eq.$restaurant&order=issue_date.desc,created_at.desc&limit=$pageSize&offset=$offset",
+                accessToken = token
+            ))
+            for (index in 0 until page.length()) {
+                val row = page.optJSONObject(index) ?: continue
+                result.put(row)
+            }
+            if (page.length() < pageSize) break
+            offset += pageSize
+        }
+        return result
     }
 
     fun updateSupplierInvoiceReview(
