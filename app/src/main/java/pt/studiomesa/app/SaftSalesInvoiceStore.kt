@@ -186,7 +186,7 @@ internal class SaftSalesInvoiceStore(context: Context) :
                 require(id.matches(Regex("^[a-f0-9]{64}$")) && updatedAt > 0L)
                 db.execSQL(
                     "UPDATE sales_invoices SET cloud_synced_at = ? WHERE scope_key = ? AND invoice_id = ? AND updated_at = ?",
-                    arrayOf(updatedAt, scopeKey(scope), id, updatedAt)
+                    arrayOf<Any>(updatedAt, scopeKey(scope), id, updatedAt)
                 )
             }
             db.setTransactionSuccessful()
