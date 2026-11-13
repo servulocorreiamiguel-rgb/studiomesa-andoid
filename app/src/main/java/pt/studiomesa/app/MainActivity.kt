@@ -31,6 +31,8 @@ import android.widget.EditText
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ListView
+import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
@@ -147,6 +149,12 @@ class MainActivity : ComponentActivity() {
     // Owner-controlled economic tools: session-only until persistent authorization is designed.
     private var economicManagerEnabled = false
     private var economicScopeKey: String? = null
+    private var economicDailyForecast: EconomicDailyForecast? = null
+    private var economicForecastLoading = false
+    private var economicForecastError: String? = null
+    private var economicForecastLastAttemptMillis = 0L
+    private var economicForecastLoadedDay = ""
+    private var economicForecastUpdatedAtMillis = 0L
     private val economicInputs = mutableMapOf<String, String>()
     private var economicReportText = ""
     private var recipeReportText = ""
@@ -248,6 +256,9 @@ class MainActivity : ComponentActivity() {
         activityResumed = true
         updateKitchenAutoRefresh()
         updateInventoryAutoRefresh()
+        if (activePage == "Assistente económico" && economicAssistantIsEnabled()) {
+            refreshEconomicDailyForecastIfDue()
+        }
     }
 
     override fun onPause() {
@@ -616,6 +627,10 @@ class MainActivity : ComponentActivity() {
         if (activePage !in availablePages()) activePage = "Início"
         if (activePage == "IA" || activePage == "Assistente económico") {
             val economicAssistant = activePage == "Assistente económico"
+            if (economicAssistant && !economicAssistantIsEnabled()) {
+                renderEconomicAssistantActivationScreen()
+                return
+            }
             if (economicAssistant && assistantToolsVisible) {
                 renderAssistantToolsScreen()
             } else {
@@ -759,6 +774,105 @@ class MainActivity : ComponentActivity() {
         updateInventoryAutoRefresh()
     }
 
+    private fun economicAssistantPreferenceKey(): String {
+        val scope = if (hasRemoteRestaurant()) backendRestaurantId() else "local-demo"
+        return "economic_assistant_enabled_" + scope.ifBlank { "local-demo" }
+    }
+
+    private fun economicAssistantIsEnabled(): Boolean =
+        backendPrefs.getBoolean(economicAssistantPreferenceKey(), false)
+
+    private fun renderEconomicAssistantActivationScreen() {
+        appRoot = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(paper)
+        }
+        applySystemBarInsets(appRoot)
+        val toolbar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(7), dp(12), dp(7))
+            setBackgroundColor(white)
+        }
+        toolbar.addView(secondaryButton("‹ Voltar") {
+            activePage = "Início"
+            renderApp()
+        }, LinearLayout.LayoutParams(dp(96), dp(44)))
+        toolbar.addView(label("Assistente económico", 16f, true, forestDeep).apply {
+            setPadding(dp(12), 0, 0, 0)
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        appRoot.addView(toolbar, LinearLayout.LayoutParams(-1, -2))
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(20), dp(18), dp(24))
+        }
+        val card = makeCard(18, white)
+        card.addView(label("Queres ativar o Assistente económico?", 21f, true, forestDeep))
+        addGap(card, 8)
+        card.addView(label(
+            "É uma área privada de apoio à gestão do restaurante. Analisa os dados disponíveis e ajuda-te a perceber para onde vai o dinheiro e o que convém preparar.",
+            13f, false, ink
+        ))
+        addGap(card, 12)
+        sectionHeading(card, "O que faz", "As análises são apresentadas em linguagem simples.")
+        listOf(
+            "Previsão diária das vendas para os próximos sete dias, com um gráfico e indicação da confiança do histórico.",
+            "Estimativa média de ingredientes a preparar, calculada a partir das vendas por prato e das receitas aprovadas ligadas ao stock.",
+            "Leitura local de faturas PDF e imagens, extração de fornecedor, datas, base, IVA e total, com confirmação antes de aceitar os valores.",
+            "Arquivo de todas as faturas importadas — pendentes, confirmadas e rejeitadas — sem depender dos pontos de fidelização.",
+            "Análise de custos, desperdício, preços de fornecedores, tesouraria e resultados estimados."
+        ).forEachIndexed { index, itemText ->
+            card.addView(label("${index + 1}. ${itemText}", 12f, false, ink))
+            addGap(card, 7)
+        }
+        addGap(card, 5)
+        card.addView(label(
+            "Privacidade e limites: só o proprietário pode ativar esta área numa conta de restaurante. O OCR é feito no telemóvel. Os valores extraídos ficam pendentes até serem confirmados. As previsões não são garantias, pagamentos recebidos nem contabilidade certificada. O assistente não altera preços, stock, encomendas ou pagamentos.",
+            10.5f, false, muted
+        ))
+        addGap(card, 12)
+        card.addView(primaryButton("Sim, ativar o Assistente económico") {
+            if (hasRemoteRestaurant() && !isRemoteRestaurantOwner()) {
+                Toast.makeText(this, "Só o proprietário pode ativar esta área.", Toast.LENGTH_LONG).show()
+                activePage = "Início"
+            } else {
+                backendPrefs.edit().putBoolean(economicAssistantPreferenceKey(), true).apply()
+            }
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(48)))
+        addGap(card, 6)
+        card.addView(secondaryButton("Agora não") {
+            activePage = "Início"
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(44)))
+        content.addView(card, cardParams())
+        if (hasRemoteRestaurant() && !isRemoteRestaurantOwner()) {
+            content.removeAllViews()
+            content.addView(emptyCard("Esta área é privada e está reservada ao proprietário do restaurante. Pede ao proprietário que a ative na sua conta."), cardParams())
+        }
+        val scroll = ScrollView(this).apply { addView(content) }
+        appRoot.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        setContentView(appRoot)
+    }
+
+    private fun showEconomicAssistantSettingsDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Assistente económico")
+            .setMessage("Ao desativar, o assistente deixa de abrir nesta conta. As faturas guardadas e o histórico de conversas não são eliminados.")
+            .setNegativeButton("Manter ativo", null)
+            .setPositiveButton("Desativar") { _, _ ->
+                backendPrefs.edit().putBoolean(economicAssistantPreferenceKey(), false).apply()
+                clearEconomicManagerState()
+                economicDailyForecast = null
+                economicForecastLoadedDay = ""
+                assistantToolsVisible = false
+                activePage = "Assistente económico"
+                renderApp()
+            }
+            .show()
+    }
+
     private fun renderAssistantChatScreen(
         isEconomicAssistant: Boolean = activePage == "Assistente económico"
     ) {
@@ -866,6 +980,19 @@ class MainActivity : ComponentActivity() {
         toolbar.addView(syncButton, LinearLayout.LayoutParams(dp(34), dp(44)))
 
         if (isEconomicAssistant) {
+            val settingsButton = TextView(this).apply {
+                text = "⋯"
+                textSize = 24f
+                gravity = Gravity.CENTER
+                setTextColor(forestDeep)
+                contentDescription = "Definições do Assistente económico"
+                background = rippleBackground(paper, 12)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { showEconomicAssistantSettingsDialog() }
+            }
+            toolbar.addView(settingsButton, LinearLayout.LayoutParams(dp(34), dp(44)))
+
             val documentsButton = TextView(this).apply {
                 text = "▤"
                 textSize = 19f
@@ -936,6 +1063,12 @@ class MainActivity : ComponentActivity() {
             setPadding(dp(14), dp(12), dp(14), dp(16))
         }
         renderLocalAssistantModelCard(conversation)
+        if (isEconomicAssistant) {
+            refreshEconomicDailyForecastIfDue()
+            renderEconomicDailyForecast(conversation)
+            addGap(conversation, 8)
+            renderEconomicInvoiceSummary(conversation)
+        }
 
         val turns = try {
             activeAssistantConversationId?.let { assistantChatStore.readTurns(scope, it) }.orEmpty()
