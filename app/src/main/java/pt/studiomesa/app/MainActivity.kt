@@ -784,7 +784,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun economicAssistantPreferenceKey(): String {
-        val scope = if (hasRemoteRestaurant()) backendRestaurantId() else "local-demo"
+        val scope = if (hasRemoteRestaurant()) {
+            backendRestaurantId() + ":" + backendPrefs.getString("user_id", "").orEmpty()
+        } else "local-demo"
         return "economic_assistant_enabled_" + scope.ifBlank { "local-demo" }
     }
 
@@ -2736,27 +2738,45 @@ class MainActivity : ComponentActivity() {
         }
         if (asksAboutInvoices && economicAssistant) {
             val invoices = runCatching { supplierInvoiceStore.list(assistantChatScope()) }.getOrDefault(emptyList())
-            if (invoices.isEmpty()) {
-                return "O arquivo ainda não tem faturas importadas. Abre Documentos e faturas para importar um PDF ou uma fotografia. A leitura é feita localmente e os campos ficam pendentes até os confirmares."
+            val salesInvoices = runCatching { saftSalesInvoiceStore.list(assistantChatScope()) }.getOrDefault(emptyList())
+            if (invoices.isEmpty() && salesInvoices.isEmpty()) {
+                return "Ainda não existem faturas importadas. Para vendas, importa o SAF-T (PT) do programa de faturação; para compras a fornecedores, importa PDFs ou fotografias no arquivo de fornecedores. As vendas entram na previsão mesmo quando o cliente não usa pontos."
             }
             val approved = invoices.filter { it.reviewStatus == "approved" }
             val pending = invoices.filter { it.reviewStatus == "pending_review" }
+            val rejected = invoices.filter { it.reviewStatus == "rejected" }
             val approvedTotal = approved.fold(BigDecimal.ZERO) { sum, item ->
                 sum.add(item.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO)
             }
             val pendingTotal = pending.fold(BigDecimal.ZERO) { sum, item ->
                 sum.add(item.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO)
             }
+            val salesNet = salesInvoices.fold(BigDecimal.ZERO) { sum, item -> sum.add(item.netTotal) }
+            val salesGross = salesInvoices.fold(BigDecimal.ZERO) { sum, item -> sum.add(item.grossTotal) }
             return buildString {
-                appendLine("Resumo do arquivo de fornecedores")
+                appendLine("VENDAS — SAF-T (PT)")
+                appendLine("Documentos válidos importados: ${salesInvoices.size}.")
+                appendLine("Total sem IVA, incluindo notas de crédito: ${salesEuro(salesNet)}.")
+                appendLine("Total com IVA, incluindo notas de crédito: ${salesEuro(salesGross)}.")
+                appendLine("As vendas incluem clientes sem cartão, sem pontos ganhos e sem pontos utilizados. Não se usa a fidelização como filtro.")
+                appendLine("Este arquivo SAF-T está cifrado neste dispositivo e não representa pagamentos recebidos.")
+                appendLine()
+                appendLine("COMPRAS — FATURAS DE FORNECEDORES")
                 appendLine("Documentos guardados: ${invoices.size}.")
-                appendLine("Confirmados pelo proprietário: ${approved.size} · total ${formatInvoiceEuro(approvedTotal)}.")
-                appendLine("Pendentes de revisão: ${pending.size} · total ${formatInvoiceEuro(pendingTotal)}.")
-                appendLine("Estes totais representam documentos importados, não pagamentos efetuados, custos reconhecidos ou valores fiscalmente dedutíveis.")
-                val latest = invoices.take(5)
-                if (latest.isNotEmpty()) {
+                appendLine("Confirmados: ${approved.size} · ${formatInvoiceEuro(approvedTotal)}.")
+                appendLine("Pendentes de revisão: ${pending.size} · ${formatInvoiceEuro(pendingTotal)}.")
+                appendLine("Rejeitados: ${rejected.size}.")
+                appendLine("Os totais de fornecedores representam documentos, não pagamentos efetuados nem custos de comida efetivamente consumida.")
+                salesInvoices.takeLast(5).reversed().takeIf { it.isNotEmpty() }?.let { latest ->
                     appendLine()
-                    appendLine("Documentos recentes:")
+                    appendLine("Faturas de venda recentes:")
+                    latest.forEach { item ->
+                        appendLine("- ${item.invoiceType} ${item.invoiceNumber}, ${item.issueDate}, ${salesEuro(item.netTotal)} sem IVA.")
+                    }
+                }
+                invoices.take(5).takeIf { it.isNotEmpty() }?.let { latest ->
+                    appendLine()
+                    appendLine("Faturas de fornecedores recentes:")
                     latest.forEach { item ->
                         appendLine("- ${item.supplierName}: ${item.invoiceNumber}, ${item.issueDate}, ${formatInvoiceEuro(item.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO)} (${item.reviewStatus}).")
                     }
@@ -8864,37 +8884,59 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun renderEconomicInvoiceSummary(container: LinearLayout) {
-        val invoices = runCatching { supplierInvoiceStore.list(assistantChatScope()) }.getOrDefault(emptyList())
-        val approved = invoices.filter { it.reviewStatus == "approved" }
-        val pending = invoices.filter { it.reviewStatus == "pending_review" }
-        val rejected = invoices.filter { it.reviewStatus == "rejected" }
-        fun total(records: List<SupplierInvoiceRecord>): BigDecimal =
-            records.fold(BigDecimal.ZERO) { sum, invoice ->
-                sum.add(invoice.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO)
-            }
+        val scope = assistantChatScope()
+        val salesInvoices = runCatching { saftSalesInvoiceStore.list(scope) }.getOrDefault(emptyList())
+        val supplierInvoices = runCatching { supplierInvoiceStore.list(scope) }.getOrDefault(emptyList())
+        val approved = supplierInvoices.filter { it.reviewStatus == "approved" }
+        val pending = supplierInvoices.filter { it.reviewStatus == "pending_review" }
+        val rejected = supplierInvoices.filter { it.reviewStatus == "rejected" }
+        val salesNet = salesInvoices.fold(BigDecimal.ZERO) { sum, invoice -> sum.add(invoice.netTotal) }
+        val supplierApprovedTotal = approved.fold(BigDecimal.ZERO) { sum, invoice ->
+            sum.add(invoice.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO)
+        }
 
-        sectionHeading(container, "Faturas de fornecedores", "A IA económica pode consultar estes metadados depois de importares e reveres os documentos.")
+        sectionHeading(
+            container,
+            "Faturas e documentos",
+            "O assistente separa vendas de compras. Nenhum dos arquivos depende dos pontos de fidelização."
+        )
         val card = makeCard(14)
-        card.addView(label("${invoices.size} documentos arquivados", 16f, true, forestDeep))
-        addGap(card, 5)
+        card.addView(label("Faturas de venda · SAF-T (PT)", 15f, true, forestDeep))
+        addGap(card, 4)
         card.addView(label(
-            "Confirmados: ${approved.size} · ${formatInvoiceEuro(total(approved))}\n" +
-                "Pendentes de revisão: ${pending.size} · ${formatInvoiceEuro(total(pending))}\n" +
-                "Rejeitados: ${rejected.size} · ${formatInvoiceEuro(total(rejected))}",
-            12f, false, ink
+            "${salesInvoices.size} documento(s) importado(s) · vendas sem IVA: ${salesEuro(salesNet)}",
+            11.5f, true, forestSoft
         ))
-        addGap(card, 6)
         card.addView(label(
-            "A IA lê fornecedor, número, datas, valores base/IVA/total e estado. Não lê o PDF completo nem as linhas de artigos. Uma fatura confirmada não prova pagamento nem validação contabilística.",
+            "Inclui faturas, faturas simplificadas, faturas-recibo, notas de débito e notas de crédito válidas. Os clientes podem não ter cartão nem ganhar ou utilizar pontos.",
             10.5f, false, muted
         ))
         addGap(card, 8)
-        card.addView(secondaryButton("Abrir arquivo de faturas") {
+        card.addView(secondaryButton("Ver todas as faturas de venda") {
+            showSaftSalesInvoiceArchiveDialog()
+        }, LinearLayout.LayoutParams(-1, dp(42)))
+        addGap(card, 8)
+        card.addView(label("Faturas de fornecedores · compras", 15f, true, forestDeep))
+        addGap(card, 4)
+        card.addView(label(
+            "Total: ${supplierInvoices.size} · confirmadas: ${approved.size} / ${formatInvoiceEuro(supplierApprovedTotal)} · pendentes: ${pending.size} · rejeitadas: ${rejected.size}",
+            11.5f, true, forestSoft
+        ))
+        card.addView(label(
+            "O OCR extrai fornecedor, número, datas, base, IVA e total. As linhas de produtos não são ainda extraídas de forma fiável em todos os formatos. A fatura tem de ser revista antes de ser confirmada.",
+            10.5f, false, muted
+        ))
+        addGap(card, 8)
+        card.addView(secondaryButton("Ver todas as faturas de fornecedores") {
             showSupplierInvoiceArchiveDialog()
-        }, LinearLayout.LayoutParams(-1, dp(44)))
+        }, LinearLayout.LayoutParams(-1, dp(42)))
+        addGap(card, 8)
+        card.addView(label(
+            "SAF-T de vendas: os resumos são guardados cifrados apenas neste dispositivo. Faturas de fornecedores: o arquivo local também é cifrado e, para proprietários ligados, pode ser sincronizado com o servidor privado do restaurante. Os valores dos documentos não provam pagamentos.",
+            9.5f, false, muted
+        ))
         container.addView(card, cardParams())
     }
-
 
     private fun clearEconomicManagerState() {
         economicManagerEnabled = false
