@@ -18,6 +18,7 @@ import org.hamcrest.Matchers.containsString
 import org.hamcrest.Matchers.not
 import org.junit.Assume.assumeFalse
 import org.junit.Assume.assumeTrue
+import org.junit.Before
 import org.junit.Test
 
 /**
@@ -25,6 +26,36 @@ import org.junit.Test
  * Keep these independent of production credentials: all actions use fresh local demo data.
  */
 class MainActivitySmokeTest {
+    @Before
+    fun resetEconomicAssistantOptInForEachTest() {
+        val preferences = InstrumentationRegistry.getInstrumentation().targetContext
+            .getSharedPreferences("studiomesa_backend", android.content.Context.MODE_PRIVATE)
+        val editor = preferences.edit()
+        preferences.all.keys
+            .filter { it.startsWith("economic_assistant_enabled_") }
+            .forEach(editor::remove)
+        check(editor.commit()) { "Could not reset the demo economic-assistant opt-in state." }
+    }
+
+    @Test
+    fun economicAssistantRequiresExplicitActivationAndCanBeDeclined() {
+        assumeFalse("Customer variant has its own customer navigation.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withContentDescription("Abrir menu de navegação")).perform(click())
+            onView(withContentDescription("Abrir secção Assistente económico")).perform(scrollTo(), click())
+            onView(withText("Queres ativar o Assistente económico?")).check(matches(isDisplayed()))
+            onView(withText("Agora não")).perform(scrollTo(), click())
+            onView(withText("Painel de operação")).check(matches(isDisplayed()))
+
+            onView(withContentDescription("Abrir menu de navegação")).perform(click())
+            onView(withContentDescription("Abrir secção Assistente económico")).perform(scrollTo(), click())
+            onView(withText("Queres ativar o Assistente económico?")).check(matches(isDisplayed()))
+            onView(withText("Sim, ativar o Assistente económico")).perform(scrollTo(), click())
+            onView(withContentDescription("Abrir ferramentas económicas")).check(matches(isDisplayed()))
+        }
+    }
+
     private fun isCustomerVariant(): Boolean =
         InstrumentationRegistry.getInstrumentation()
             .targetContext.packageName.endsWith(".cliente")
@@ -43,7 +74,9 @@ class MainActivitySmokeTest {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
             onView(withContentDescription("Abrir secção Assistente económico")).perform(scrollTo(), click())
             onView(withText("Assistente económico")).check(matches(isDisplayed()))
-            onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
+            onView(withText("Queres ativar o Assistente económico?")).check(matches(isDisplayed()))
+onView(withText("Sim, ativar o Assistente económico")).perform(scrollTo(), click())
+onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
 
             onView(withText("Consultor de preços"))
                 .perform(scrollTo())
@@ -520,7 +553,9 @@ class MainActivitySmokeTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
             onView(withContentDescription("Abrir secção Assistente económico")).perform(scrollTo(), click())
-            onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
+            onView(withText("Queres ativar o Assistente económico?")).check(matches(isDisplayed()))
+onView(withText("Sim, ativar o Assistente económico")).perform(scrollTo(), click())
+onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
             onView(withText("Assistente económico")).check(matches(isDisplayed()))
             onView(withText(containsString("SEM API PAGA"))).check(matches(isDisplayed()))
             onView(withHint("Ex.: Como posso melhorar o preço dos pratos?"))
@@ -540,7 +575,9 @@ class MainActivitySmokeTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
             onView(withContentDescription("Abrir secção Assistente económico")).perform(scrollTo(), click())
-            onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
+            onView(withText("Queres ativar o Assistente económico?")).check(matches(isDisplayed()))
+onView(withText("Sim, ativar o Assistente económico")).perform(scrollTo(), click())
+onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
             onView(withText("Engenharia da carta")).perform(scrollTo()).check(matches(isDisplayed()))
             onView(withText("Ideias de conteúdo")).perform(scrollTo()).check(matches(isDisplayed()))
             onView(withText("Gerar resumo da operação")).perform(scrollTo(), click())
@@ -613,7 +650,9 @@ class MainActivitySmokeTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
             onView(withContentDescription("Abrir secção Assistente económico")).perform(scrollTo(), click())
-            onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
+            onView(withText("Queres ativar o Assistente económico?")).check(matches(isDisplayed()))
+onView(withText("Sim, ativar o Assistente económico")).perform(scrollTo(), click())
+onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
 
             onView(withText("Gestor económico · opcional"))
                 .perform(scrollTo())
@@ -650,7 +689,9 @@ class MainActivitySmokeTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
             onView(withContentDescription("Abrir secção Assistente económico")).perform(scrollTo(), click())
-            onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
+            onView(withText("Queres ativar o Assistente económico?")).check(matches(isDisplayed()))
+onView(withText("Sim, ativar o Assistente económico")).perform(scrollTo(), click())
+onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
             onView(withText("Ativar gestão económica")).perform(scrollTo(), click())
 
             onView(withHint("Farinha | 0,2 | 2,50 | 5\nMolho | 0,1 | 4,00 | 0"))
@@ -677,7 +718,9 @@ class MainActivitySmokeTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
             onView(withContentDescription("Abrir secção Assistente económico")).perform(scrollTo(), click())
-            onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
+            onView(withText("Queres ativar o Assistente económico?")).check(matches(isDisplayed()))
+onView(withText("Sim, ativar o Assistente económico")).perform(scrollTo(), click())
+onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
             onView(withText("Ativar gestão económica")).perform(scrollTo(), click())
 
             onView(withHint("Ex.: 18000")).perform(scrollTo(), replaceText("1000000"))
@@ -704,7 +747,9 @@ class MainActivitySmokeTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir menu de navegação")).perform(click())
             onView(withContentDescription("Abrir secção Assistente económico")).perform(scrollTo(), click())
-            onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
+            onView(withText("Queres ativar o Assistente económico?")).check(matches(isDisplayed()))
+onView(withText("Sim, ativar o Assistente económico")).perform(scrollTo(), click())
+onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
             onView(withText("Ativar gestão económica")).perform(scrollTo(), click())
 
             onView(withHint("Frango | 20 | 23 | 6,50\nQueijo | 5 | 4 | 8,00"))

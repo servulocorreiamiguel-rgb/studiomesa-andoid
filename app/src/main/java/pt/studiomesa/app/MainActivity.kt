@@ -31,6 +31,8 @@ import android.widget.EditText
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ListView
+import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.Spinner
 import android.widget.TextView
@@ -57,6 +59,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val REQUEST_EXPORT_ORDERS_CSV = 7812
         private const val REQUEST_IMPORT_SUPPLIER_INVOICE = 7813
+        private const val REQUEST_IMPORT_SAFT_SALES = 7814
     }
 
     private lateinit var store: RestaurantStore
@@ -98,10 +101,12 @@ class MainActivity : ComponentActivity() {
     private var assistantAnswer: StudioMesaAssistantAnswer? = null
     private val assistantChatStore by lazy { AssistantChatStore(this) }
     private val supplierInvoiceStore by lazy { SupplierInvoiceStore(this) }
+    private val saftSalesInvoiceStore by lazy { SaftSalesInvoiceStore(this) }
     private val assistantCloudSyncCoordinator by lazy { AssistantCloudSyncCoordinator() }
     private var assistantCloudSyncInFlight = false
     private var assistantCloudLastSyncAtMillis = 0L
     private var invoiceImportInFlight = false
+    private var saftSalesImportInFlight = false
     private var pendingInvoiceImport: PendingInvoiceImport? = null
 
     private data class PendingInvoiceImport(
@@ -147,6 +152,23 @@ class MainActivity : ComponentActivity() {
     // Owner-controlled economic tools: session-only until persistent authorization is designed.
     private var economicManagerEnabled = false
     private var economicScopeKey: String? = null
+    private var economicDailyForecast: EconomicDailyForecast? = null
+    private var economicForecastLoading = false
+    private var economicForecastError: String? = null
+    private var economicForecastLastAttemptMillis = 0L
+    private var economicForecastLoadedDay = ""
+    private var economicForecastUpdatedAtMillis = 0L
+    private var economicForecastSource = "Pedidos concluídos StudioMesa"
+    private var economicForecastScopeKey: String? = null
+    private val economicDailyRefreshHandler = Handler(Looper.getMainLooper())
+    private val economicDailyRefreshRunnable = object : Runnable {
+        override fun run() {
+            if (!activityResumed || activePage != "Assistente económico" || !economicAssistantIsEnabled()) return
+            val today = java.time.LocalDate.now().toString()
+            if (economicForecastLoadedDay != today) refreshEconomicDailyForecastIfDue(force = true)
+            scheduleEconomicDailyForecastRefresh()
+        }
+    }
     private val economicInputs = mutableMapOf<String, String>()
     private var economicReportText = ""
     private var recipeReportText = ""
@@ -248,12 +270,17 @@ class MainActivity : ComponentActivity() {
         activityResumed = true
         updateKitchenAutoRefresh()
         updateInventoryAutoRefresh()
+        if (activePage == "Assistente económico" && economicAssistantIsEnabled()) {
+            refreshEconomicDailyForecastIfDue()
+            scheduleEconomicDailyForecastRefresh()
+        }
     }
 
     override fun onPause() {
         activityResumed = false
         stopKitchenAutoRefresh()
         stopInventoryAutoRefresh()
+        economicDailyRefreshHandler.removeCallbacks(economicDailyRefreshRunnable)
         super.onPause()
     }
 
@@ -265,6 +292,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        economicDailyRefreshHandler.removeCallbacks(economicDailyRefreshRunnable)
         if (localAssistantModelManagerDelegate.isInitialized()) {
             localAssistantModelManager.close()
         }
@@ -296,6 +324,11 @@ class MainActivity : ComponentActivity() {
                 }
                 processSupplierInvoiceDocument(uri)
             }
+            return
+        }
+        if (requestCode == REQUEST_IMPORT_SAFT_SALES) {
+            val uri = data?.data
+            if (resultCode == RESULT_OK && uri != null) processSaftSalesFile(uri)
             return
         }
         if (requestCode != REQUEST_EXPORT_ORDERS_CSV) return
@@ -616,6 +649,10 @@ class MainActivity : ComponentActivity() {
         if (activePage !in availablePages()) activePage = "Início"
         if (activePage == "IA" || activePage == "Assistente económico") {
             val economicAssistant = activePage == "Assistente económico"
+            if (economicAssistant && !economicAssistantIsEnabled()) {
+                renderEconomicAssistantActivationScreen()
+                return
+            }
             if (economicAssistant && assistantToolsVisible) {
                 renderAssistantToolsScreen()
             } else {
@@ -759,6 +796,109 @@ class MainActivity : ComponentActivity() {
         updateInventoryAutoRefresh()
     }
 
+    private fun economicAssistantPreferenceKey(): String {
+        val scope = if (hasRemoteRestaurant()) {
+            backendRestaurantId() + ":" + backendPrefs.getString("user_id", "").orEmpty()
+        } else "local-demo"
+        return "economic_assistant_enabled_" + scope.ifBlank { "local-demo" }
+    }
+
+    private fun economicAssistantIsEnabled(): Boolean =
+        backendPrefs.getBoolean(economicAssistantPreferenceKey(), false)
+
+    private fun renderEconomicAssistantActivationScreen() {
+        appRoot = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(paper)
+        }
+        applySystemBarInsets(appRoot)
+        val toolbar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(7), dp(12), dp(7))
+            setBackgroundColor(white)
+        }
+        toolbar.addView(secondaryButton("‹ Voltar") {
+            activePage = "Início"
+            renderApp()
+        }, LinearLayout.LayoutParams(dp(96), dp(44)))
+        toolbar.addView(label("Assistente económico", 16f, true, forestDeep).apply {
+            setPadding(dp(12), 0, 0, 0)
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        appRoot.addView(toolbar, LinearLayout.LayoutParams(-1, -2))
+
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(20), dp(18), dp(24))
+        }
+        val card = makeCard(18, white)
+        card.addView(label("Queres ativar o Assistente económico?", 21f, true, forestDeep))
+        addGap(card, 8)
+        card.addView(label(
+            "É uma área privada de apoio à gestão do restaurante. Analisa os dados disponíveis e ajuda-te a perceber para onde vai o dinheiro e o que convém preparar.",
+            13f, false, ink
+        ))
+        addGap(card, 12)
+        sectionHeading(card, "O que faz", "As análises são apresentadas em linguagem simples.")
+        listOf(
+            "Previsão diária das vendas para os próximos sete dias, com um gráfico e indicação da confiança do histórico.",
+            "Estimativa média de ingredientes a preparar, calculada a partir das vendas por prato e das receitas aprovadas ligadas ao stock.",
+            "Importação do SAF-T (PT) exportado pelo programa de faturação para analisar todas as vendas válidas, incluindo clientes sem cartão de fidelização e sem pontos.",
+            "Leitura local de faturas de fornecedores em PDF ou fotografia, com extração de fornecedor, datas, base, IVA e total e confirmação antes de aceitar os valores.",
+            "Dois arquivos separados: faturas de venda e faturas de compra, com pesquisa de todos os estados. Os pontos de fidelização nunca filtram as vendas.",
+            "Análise de custos, desperdício, preços de fornecedores, tesouraria e resultados estimados."
+        ).forEachIndexed { index, itemText ->
+            card.addView(label("${index + 1}. ${itemText}", 12f, false, ink))
+            addGap(card, 7)
+        }
+        addGap(card, 5)
+        card.addView(label(
+            "Privacidade e limites: só o proprietário pode ativar esta área numa conta de restaurante. O OCR é feito no telemóvel. Os valores extraídos ficam pendentes até serem confirmados. As previsões não são garantias, pagamentos recebidos nem contabilidade certificada. O assistente não altera preços, stock, encomendas ou pagamentos.",
+            10.5f, false, muted
+        ))
+        addGap(card, 12)
+        card.addView(primaryButton("Sim, ativar o Assistente económico") {
+            if (hasRemoteRestaurant() && !isRemoteRestaurantOwner()) {
+                Toast.makeText(this, "Só o proprietário pode ativar esta área.", Toast.LENGTH_LONG).show()
+                activePage = "Início"
+            } else {
+                backendPrefs.edit().putBoolean(economicAssistantPreferenceKey(), true).apply()
+            }
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(48)))
+        addGap(card, 6)
+        card.addView(secondaryButton("Agora não") {
+            activePage = "Início"
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(44)))
+        content.addView(card, cardParams())
+        if (hasRemoteRestaurant() && !isRemoteRestaurantOwner()) {
+            content.removeAllViews()
+            content.addView(emptyCard("Esta área é privada e está reservada ao proprietário do restaurante. Pede ao proprietário que a ative na sua conta."), cardParams())
+        }
+        val scroll = ScrollView(this).apply { addView(content) }
+        appRoot.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        setContentView(appRoot)
+    }
+
+    private fun showEconomicAssistantSettingsDialog() {
+        AlertDialog.Builder(this)
+            .setTitle("Assistente económico")
+            .setMessage("Ao desativar, o assistente deixa de abrir nesta conta. As faturas guardadas e o histórico de conversas não são eliminados.")
+            .setNegativeButton("Manter ativo", null)
+            .setPositiveButton("Desativar") { _, _ ->
+                backendPrefs.edit().putBoolean(economicAssistantPreferenceKey(), false).apply()
+                clearEconomicManagerState()
+                economicDailyForecast = null
+                economicForecastLoadedDay = ""
+                economicForecastScopeKey = null
+                assistantToolsVisible = false
+                activePage = "Assistente económico"
+                renderApp()
+            }
+            .show()
+    }
+
     private fun renderAssistantChatScreen(
         isEconomicAssistant: Boolean = activePage == "Assistente económico"
     ) {
@@ -866,6 +1006,19 @@ class MainActivity : ComponentActivity() {
         toolbar.addView(syncButton, LinearLayout.LayoutParams(dp(34), dp(44)))
 
         if (isEconomicAssistant) {
+            val settingsButton = TextView(this).apply {
+                text = "⋯"
+                textSize = 24f
+                gravity = Gravity.CENTER
+                setTextColor(forestDeep)
+                contentDescription = "Definições do Assistente económico"
+                background = rippleBackground(paper, 12)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { showEconomicAssistantSettingsDialog() }
+            }
+            toolbar.addView(settingsButton, LinearLayout.LayoutParams(dp(34), dp(44)))
+
             val documentsButton = TextView(this).apply {
                 text = "▤"
                 textSize = 19f
@@ -936,6 +1089,12 @@ class MainActivity : ComponentActivity() {
             setPadding(dp(14), dp(12), dp(14), dp(16))
         }
         renderLocalAssistantModelCard(conversation)
+        if (isEconomicAssistant) {
+            refreshEconomicDailyForecastIfDue()
+            renderEconomicDailyForecast(conversation)
+            addGap(conversation, 8)
+            renderEconomicInvoiceSummary(conversation)
+        }
 
         val turns = try {
             activeAssistantConversationId?.let { assistantChatStore.readTurns(scope, it) }.orEmpty()
@@ -1135,39 +1294,99 @@ class MainActivity : ComponentActivity() {
     private fun showSupplierInvoiceArchiveDialog() {
         val scope = assistantChatScope()
         val records = runCatching { supplierInvoiceStore.list(scope) }.getOrDefault(emptyList())
-        val total = records.fold(BigDecimal.ZERO) { sum, item ->
-            sum.add(item.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO)
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(6), dp(16), dp(8))
         }
-        val text = buildString {
-            append("Documentos: ").append(records.size)
-            append("\nPendentes de revisão: ").append(records.count { it.reviewStatus == "pending_review" })
-            append("\nTotal arquivado: ").append(formatInvoiceEuro(total))
-            if (records.isEmpty()) {
-                append("\n\nAinda não existem faturas importadas.")
-            } else {
-                append("\n\n")
-                records.take(30).forEach { item ->
-                    val status = when (item.reviewStatus) {
-                        "approved" -> "Confirmada"
-                        "rejected" -> "Rejeitada"
-                        else -> "Pendente"
-                    }
-                    append("• ").append(item.supplierName).append(" · ")
-                        .append(item.invoiceNumber).append(" · ")
-                        .append(item.issueDate).append(" · ")
-                        .append(formatInvoiceEuro(item.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO))
-                        .append(" · ").append(status).append('\n')
+        panel.addView(label(
+            "Arquivo completo de faturas. A inclusão não depende dos pontos de fidelização: são apresentados documentos pendentes, confirmados e rejeitados.",
+            11.5f, false, muted
+        ))
+        addGap(panel, 7)
+        val search = inputField("Pesquisar fornecedor, NIF ou número da fatura", InputType.TYPE_CLASS_TEXT)
+        panel.addView(search, fieldParams())
+        val filter = Spinner(this)
+        val filterAdapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_item,
+            listOf("Todas as faturas", "Pendentes de revisão", "Confirmadas", "Rejeitadas")
+        ).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        filter.adapter = filterAdapter
+        panel.addView(filter, LinearLayout.LayoutParams(-1, dp(44)))
+        addGap(panel, 5)
+        val summary = label("", 10.5f, true, forestSoft)
+        panel.addView(summary)
+        val list = ListView(this).apply {
+            divider = android.graphics.drawable.ColorDrawable(line)
+            dividerHeight = dp(1)
+            isFastScrollEnabled = true
+        }
+        val adapter = ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, mutableListOf())
+        list.adapter = adapter
+        panel.addView(list, LinearLayout.LayoutParams(-1, dp(330)))
+        var visibleInvoices: List<SupplierInvoiceRecord> = emptyList()
+        fun refreshRows() {
+            val query = search.text.toString().trim().lowercase(Locale.ROOT)
+            val statusFilter = filter.selectedItemPosition
+            visibleInvoices = records.filter { invoice ->
+                val statusMatches = when (statusFilter) {
+                    1 -> invoice.reviewStatus == "pending_review"
+                    2 -> invoice.reviewStatus == "approved"
+                    3 -> invoice.reviewStatus == "rejected"
+                    else -> true
                 }
-                if (records.size > 30) append("\nA mostrar os primeiros 30 documentos.")
+                val textMatches = query.isBlank() ||
+                    listOf(invoice.supplierName, invoice.supplierVatNumber, invoice.invoiceNumber, invoice.issueDate)
+                        .any { it.lowercase(Locale.ROOT).contains(query) }
+                statusMatches && textMatches
             }
-            append("\n\nO OCR corre no telemóvel. Só o proprietário pode sincronizar documentos para o arquivo privado do restaurante.")
+            adapter.clear()
+            visibleInvoices.forEach { invoice ->
+                val state = when (invoice.reviewStatus) {
+                    "approved" -> "CONFIRMADA"
+                    "rejected" -> "REJEITADA"
+                    else -> "PENDENTE DE REVISÃO"
+                }
+                adapter.add(
+                    "${invoice.supplierName}\n${invoice.invoiceNumber} · ${invoice.issueDate}\n" +
+                        "${formatInvoiceEuro(invoice.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO)} · $state"
+                )
+            }
+            summary.text = "${visibleInvoices.size} de ${records.size} fatura(s) · sem filtro de pontos"
+            if (visibleInvoices.isEmpty()) {
+                summary.text = if (records.isEmpty()) {
+                    "Ainda não há faturas importadas."
+                } else {
+                    "Nenhuma fatura corresponde à pesquisa ou ao estado selecionado."
+                }
+            }
+        }
+        refreshRows()
+        search.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = refreshRows()
+            override fun afterTextChanged(s: android.text.Editable?) = Unit
+        })
+        filter.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) =
+                refreshRows()
+        }
+        list.setOnItemClickListener { _, _, position, _ ->
+            visibleInvoices.getOrNull(position)?.let(::showSupplierInvoiceDetails)
+        }
+        addGap(panel, 7)
+        if (isRemoteRestaurantOwner()) {
+            panel.addView(secondaryButton("Enviar faturas locais pendentes para o servidor") {
+                syncPendingSupplierInvoiceUploads()
+            }, LinearLayout.LayoutParams(-1, dp(42)))
         }
         val dialog = AlertDialog.Builder(this)
-            .setTitle("Documentos e faturas")
-            .setMessage(text)
+            .setTitle("Todas as faturas e documentos")
+            .setView(panel)
             .setNegativeButton("Fechar", null)
             .setNeutralButton("Importar PDF / imagem", null)
-            .setPositiveButton("Sincronizar pendentes", null)
+            .setPositiveButton("Atualizar arquivo", null)
             .create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
@@ -1175,11 +1394,16 @@ class MainActivity : ComponentActivity() {
                 openSupplierInvoicePicker()
             }
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                dialog.dismiss()
-                syncPendingSupplierInvoiceUploads()
+                if (!isRemoteRestaurantOwner()) {
+                    Toast.makeText(this, "A sincronização do arquivo exige a conta do proprietário.", Toast.LENGTH_LONG).show()
+                } else {
+                    dialog.dismiss()
+                    refreshSupplierInvoicesFromCloud(showFeedback = true)
+                }
             }
         }
         dialog.show()
+        dialog.window?.setLayout(-1, dp(640))
     }
 
     private fun openSupplierInvoicePicker() {
@@ -1724,38 +1948,49 @@ class MainActivity : ComponentActivity() {
         }) { raw ->
             supplierInvoiceRefreshInFlight = false
             val rows = JSONArray(raw)
+            val scope = assistantChatScope()
+            val existingById = runCatching {
+                supplierInvoiceStore.list(scope).associateBy { it.id }
+            }.getOrDefault(emptyMap())
+            val refreshed = mutableListOf<SupplierInvoiceRecord>()
             for (index in 0 until rows.length()) {
                 val row = rows.optJSONObject(index) ?: continue
                 val id = row.optString("id")
                 if (id.isBlank()) continue
                 val warnings = row.optJSONArray("warnings") ?: JSONArray()
-                val existing = supplierInvoiceStore.get(assistantChatScope(), id)
-                supplierInvoiceStore.save(
-                    assistantChatScope(),
-                    SupplierInvoiceRecord(
-                        id = id,
-                        supplierName = row.optString("supplier_name"),
-                        supplierVatNumber = row.optString("supplier_vat_number"),
-                        invoiceNumber = row.optString("invoice_number"),
-                        issueDate = row.optString("issue_date"),
-                        dueDate = row.optString("due_date"),
-                        netAmount = if (row.isNull("net_amount")) null else row.optString("net_amount"),
-                        vatAmount = if (row.isNull("vat_amount")) null else row.optString("vat_amount"),
-                        totalAmount = row.optString("total_amount"),
-                        currency = row.optString("currency", "EUR"),
-                        mimeType = row.optString("mime_type"),
-                        byteSize = row.optLong("byte_size"),
-                        documentSha256 = row.optString("document_sha256"),
-                        documentUri = existing?.documentUri,
-                        documentPath = row.optString("document_path").takeIf { it.isNotBlank() },
-                        sourceType = row.optString("source_type"),
-                        reviewStatus = row.optString("review_status", "pending_review"),
-                        warnings = (0 until warnings.length()).map { warnings.optString(it) },
-                        createdAtMillis = parseServerTimestamp(row.optString("created_at")),
-                        updatedAtMillis = parseServerTimestamp(row.optString("updated_at"))
-                    )
+                val existing = existingById[id]
+                refreshed += SupplierInvoiceRecord(
+                    id = id,
+                    supplierName = row.optString("supplier_name"),
+                    supplierVatNumber = row.optString("supplier_vat_number"),
+                    invoiceNumber = row.optString("invoice_number"),
+                    issueDate = row.optString("issue_date"),
+                    dueDate = row.optString("due_date"),
+                    netAmount = if (row.isNull("net_amount")) null else row.optString("net_amount"),
+                    vatAmount = if (row.isNull("vat_amount")) null else row.optString("vat_amount"),
+                    totalAmount = row.optString("total_amount"),
+                    currency = row.optString("currency", "EUR"),
+                    mimeType = row.optString("mime_type"),
+                    byteSize = row.optLong("byte_size"),
+                    documentSha256 = row.optString("document_sha256"),
+                    documentUri = existing?.documentUri,
+                    documentPath = row.optString("document_path").takeIf { it.isNotBlank() },
+                    sourceType = row.optString("source_type"),
+                    reviewStatus = row.optString("review_status", "pending_review"),
+                    warnings = (0 until warnings.length()).map { warnings.optString(it) },
+                    createdAtMillis = parseServerTimestamp(row.optString("created_at")),
+                    updatedAtMillis = parseServerTimestamp(row.optString("updated_at"))
                 )
             }
+            runCatching { supplierInvoiceStore.saveAll(scope, refreshed) }
+                .onFailure { error ->
+                    Toast.makeText(
+                        this,
+                        error.message ?: "Não foi possível guardar o arquivo de faturas atualizado.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return@runBackend
+                }
             if (showFeedback) Toast.makeText(this, "${rows.length()} fatura(s) no arquivo privado.", Toast.LENGTH_SHORT).show()
             if (activePage in setOf("Assistente económico", "IA") &&
                 !assistantSending && !isFinishing && !isDestroyed) {
@@ -2141,6 +2376,94 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    private fun buildEconomicAssistantDataContext(): String {
+        val scope = assistantChatScope()
+        val salesInvoices = runCatching { saftSalesInvoiceStore.list(scope) }.getOrDefault(emptyList())
+        val supplierInvoices = runCatching { supplierInvoiceStore.list(scope) }.getOrDefault(emptyList())
+        val today = java.time.LocalDate.now()
+        val thirtyDaysAgo = today.minusDays(29)
+
+        val salesSource: String
+        val salesCount: Int
+        val totalNet: BigDecimal
+        val recentNet: BigDecimal
+        if (salesInvoices.isNotEmpty()) {
+            salesSource = "SAF-T (PT) importado. Inclui vendas válidas de clientes com ou sem cartão/pontos."
+            salesCount = salesInvoices.size
+            totalNet = salesInvoices.fold(BigDecimal.ZERO) { sum, invoice -> sum.add(invoice.netTotal) }
+            recentNet = salesInvoices.fold(BigDecimal.ZERO) { sum, invoice ->
+                val date = runCatching { java.time.LocalDate.parse(invoice.issueDate) }.getOrNull()
+                if (date != null && !date.isBefore(thirtyDaysAgo) && !date.isAfter(today)) {
+                    sum.add(invoice.netTotal)
+                } else sum
+            }
+        } else {
+            val history = assistantSalesHistory(hasRemoteRestaurant())
+            val completed = history.filter {
+                it.status == "Concluído" && it.createdAtMillis > 0L &&
+                    it.createdAtMillis <= System.currentTimeMillis() &&
+                    it.unitAmount.isFinite() && it.unitAmount >= 0.0 && it.quantity in 1..99
+            }
+            salesSource = if (hasRemoteRestaurant()) {
+                "Pedidos concluídos do StudioMesa. Não existe filtro de pontos de fidelização."
+            } else {
+                "Pedidos locais de demonstração. Não são vendas reais do restaurante."
+            }
+            salesCount = completed.size
+            totalNet = completed.fold(BigDecimal.ZERO) { sum, order ->
+                sum.add(BigDecimal.valueOf(order.unitAmount).multiply(BigDecimal(order.quantity)))
+            }
+            recentNet = completed.fold(BigDecimal.ZERO) { sum, order ->
+                val date = java.time.Instant.ofEpochMilli(order.createdAtMillis)
+                    .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                if (!date.isBefore(thirtyDaysAgo) && !date.isAfter(today)) {
+                    sum.add(BigDecimal.valueOf(order.unitAmount).multiply(BigDecimal(order.quantity)))
+                } else sum
+            }
+        }
+
+        val approved = supplierInvoices.filter { it.reviewStatus == "approved" }
+        val pending = supplierInvoices.filter { it.reviewStatus == "pending_review" }
+        val rejected = supplierInvoices.filter { it.reviewStatus == "rejected" }
+        fun invoiceTotal(rows: List<SupplierInvoiceRecord>): BigDecimal =
+            rows.fold(BigDecimal.ZERO) { sum, invoice ->
+                sum.add(invoice.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO)
+            }
+
+        return buildString {
+            appendLine("DADOS ECONÓMICOS DISPONÍVEIS — consulta estes valores antes de responder a perguntas sobre vendas, compras ou comida.")
+            appendLine("Origem das vendas: $salesSource")
+            appendLine("Documentos/linhas de venda considerados: $salesCount.")
+            appendLine("Vendas acumuladas sem IVA no arquivo carregado: ${salesEuro(totalNet)}.")
+            appendLine("Vendas sem IVA nos últimos 30 dias: ${salesEuro(recentNet)}.")
+            appendLine("Estes valores representam faturação/documentos concluídos, não lucro líquido nem dinheiro confirmado na conta.")
+            appendLine("Faturas de fornecedores arquivadas: ${supplierInvoices.size}; confirmadas: ${approved.size} (${formatInvoiceEuro(invoiceTotal(approved))}); pendentes: ${pending.size} (${formatInvoiceEuro(invoiceTotal(pending))}); rejeitadas: ${rejected.size}.")
+            appendLine("Faturas de fornecedores são compras/despesas documentadas; não são vendas nem prova de pagamento.")
+            val forecast = economicDailyForecast
+            if (forecast == null || !forecast.hasSalesHistory) {
+                appendLine("Previsão de vendas dos próximos sete dias: ainda não disponível; não inventes valores.")
+            } else {
+                appendLine("PREVISÃO DOS PRÓXIMOS SETE DIAS (estimativa, não garantia):")
+                forecast.days.forEach { day ->
+                    appendLine("- ${day.date} (${day.weekdayLabel}): ${day.expectedRevenue?.let(::salesEuro) ?: "sem dados"}; amostras comparáveis: ${day.comparableDays}.")
+                }
+                appendLine("Previsão alimentar, média por dia e necessidade total:")
+                if (forecast.ingredientAverages.isEmpty()) {
+                    appendLine("Ainda sem quantidades de ingredientes calculáveis. É necessário um artigo de venda associado a uma receita ativa e aprovada ligada ao stock.")
+                } else {
+                    forecast.ingredientAverages.forEach { item ->
+                        appendLine("- ${item.ingredientName}: média ${item.averageDailyQuantity.stripTrailingZeros().toPlainString()} ${item.unit}/dia; necessidade 7 dias ${item.expectedSevenDayQuantity.stripTrailingZeros().toPlainString()} ${item.unit}; stock ${item.currentStock?.stripTrailingZeros()?.toPlainString() ?: "não disponível"}; comprar ${item.suggestedPurchaseQuantity?.stripTrailingZeros()?.toPlainString() ?: "não calculável"} ${item.unit}.")
+                    }
+                }
+                if (forecast.unmappedMenuItems.isNotEmpty()) {
+                    appendLine("Artigos sem correspondência a receitas: ${forecast.unmappedMenuItems.take(20).joinToString(", ")}.")
+                }
+            }
+            appendLine("Limites: SAF-T tem de ser exportado do programa de faturação e importado; os dados SAF-T ficam cifrados neste dispositivo e não sincronizam para outros dispositivos. A previsão alimentar exige Premium, receitas aprovadas com nomes/artigos corretamente associados e stock atualizado.")
+            appendLine("Nunca trates previsão de faturação como lucro. Não recomendes compras para artigos sem receita/stock e não afirmes que as faturas provam pagamentos.")
+        }.trim().take(5_500)
+    }
+
     private fun buildLocalAssistantSystemInstruction(
         scope: String,
         economicAssistant: Boolean = activePage == "Assistente económico"
@@ -2169,6 +2492,10 @@ class MainActivity : ComponentActivity() {
             }
             appendLine("Restaurante: $restaurantName. Modo: ${if (snapshot.isDemo) "demonstração" else "conta autenticada"}.")
             appendLine("Estado: ${snapshot.menuItems.size} artigos; ${snapshot.activeOrderCount} pedidos ativos; stock ${if (snapshot.stockLoaded) "carregado" else "não carregado"}; reservas ${if (snapshot.reservationsLoaded) "carregadas" else "não carregadas"}.")
+            if (economicAssistant) {
+                appendLine()
+                appendLine(buildEconomicAssistantDataContext())
+            }
             if (promptMemory.isNotBlank()) {
                 appendLine("MEMÓRIA RELEVANTE:")
                 appendLine(promptMemory.take(if (economicAssistant) 300 else 600))
@@ -2529,27 +2856,45 @@ class MainActivity : ComponentActivity() {
         }
         if (asksAboutInvoices && economicAssistant) {
             val invoices = runCatching { supplierInvoiceStore.list(assistantChatScope()) }.getOrDefault(emptyList())
-            if (invoices.isEmpty()) {
-                return "O arquivo ainda não tem faturas importadas. Abre Documentos e faturas para importar um PDF ou uma fotografia. A leitura é feita localmente e os campos ficam pendentes até os confirmares."
+            val salesInvoices = runCatching { saftSalesInvoiceStore.list(assistantChatScope()) }.getOrDefault(emptyList())
+            if (invoices.isEmpty() && salesInvoices.isEmpty()) {
+                return "Ainda não existem faturas importadas. Para vendas, importa o SAF-T (PT) do programa de faturação; para compras a fornecedores, importa PDFs ou fotografias no arquivo de fornecedores. As vendas entram na previsão mesmo quando o cliente não usa pontos."
             }
             val approved = invoices.filter { it.reviewStatus == "approved" }
             val pending = invoices.filter { it.reviewStatus == "pending_review" }
+            val rejected = invoices.filter { it.reviewStatus == "rejected" }
             val approvedTotal = approved.fold(BigDecimal.ZERO) { sum, item ->
                 sum.add(item.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO)
             }
             val pendingTotal = pending.fold(BigDecimal.ZERO) { sum, item ->
                 sum.add(item.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO)
             }
+            val salesNet = salesInvoices.fold(BigDecimal.ZERO) { sum, item -> sum.add(item.netTotal) }
+            val salesGross = salesInvoices.fold(BigDecimal.ZERO) { sum, item -> sum.add(item.grossTotal) }
             return buildString {
-                appendLine("Resumo do arquivo de fornecedores")
+                appendLine("VENDAS — SAF-T (PT)")
+                appendLine("Documentos válidos importados: ${salesInvoices.size}.")
+                appendLine("Total sem IVA, incluindo notas de crédito: ${salesEuro(salesNet)}.")
+                appendLine("Total com IVA, incluindo notas de crédito: ${salesEuro(salesGross)}.")
+                appendLine("As vendas incluem clientes sem cartão, sem pontos ganhos e sem pontos utilizados. Não se usa a fidelização como filtro.")
+                appendLine("Este arquivo SAF-T está cifrado neste dispositivo e não representa pagamentos recebidos.")
+                appendLine()
+                appendLine("COMPRAS — FATURAS DE FORNECEDORES")
                 appendLine("Documentos guardados: ${invoices.size}.")
-                appendLine("Confirmados pelo proprietário: ${approved.size} · total ${formatInvoiceEuro(approvedTotal)}.")
-                appendLine("Pendentes de revisão: ${pending.size} · total ${formatInvoiceEuro(pendingTotal)}.")
-                appendLine("Estes totais representam documentos importados, não pagamentos efetuados, custos reconhecidos ou valores fiscalmente dedutíveis.")
-                val latest = invoices.take(5)
-                if (latest.isNotEmpty()) {
+                appendLine("Confirmados: ${approved.size} · ${formatInvoiceEuro(approvedTotal)}.")
+                appendLine("Pendentes de revisão: ${pending.size} · ${formatInvoiceEuro(pendingTotal)}.")
+                appendLine("Rejeitados: ${rejected.size}.")
+                appendLine("Os totais de fornecedores representam documentos, não pagamentos efetuados nem custos de comida efetivamente consumida.")
+                salesInvoices.takeLast(5).reversed().takeIf { it.isNotEmpty() }?.let { latest ->
                     appendLine()
-                    appendLine("Documentos recentes:")
+                    appendLine("Faturas de venda recentes:")
+                    latest.forEach { item ->
+                        appendLine("- ${item.invoiceType} ${item.invoiceNumber}, ${item.issueDate}, ${salesEuro(item.netTotal)} sem IVA.")
+                    }
+                }
+                invoices.take(5).takeIf { it.isNotEmpty() }?.let { latest ->
+                    appendLine()
+                    appendLine("Faturas de fornecedores recentes:")
                     latest.forEach { item ->
                         appendLine("- ${item.supplierName}: ${item.invoiceNumber}, ${item.issueDate}, ${formatInvoiceEuro(item.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO)} (${item.reviewStatus}).")
                     }
@@ -2557,6 +2902,21 @@ class MainActivity : ComponentActivity() {
             }.trim()
         }
 
+
+        val asksAboutSalesForecast = listOf(
+            "previsao", "prever vendas", "quanto vou vender", "quanto vou ganhar",
+            "quanto vou faturar", "vendas dos proximos dias", "faturacao prevista",
+            "receita prevista", "dinheiro previsto"
+        ).any { normalized.contains(it) }
+        val asksAboutFoodPurchases = listOf(
+            "o que devo comprar", "o que comprar", "quantos alimentos", "que alimentos",
+            "quantos ingredientes", "que ingredientes", "comida para a semana",
+            "preparar para a semana", "quanto stock", "quanto devo encomendar",
+            "quanto devo repor"
+        ).any { normalized.contains(it) }
+        if (economicAssistant && (asksAboutSalesForecast || asksAboutFoodPurchases)) {
+            return buildEconomicAssistantDataContext()
+        }
 
         val previousUserQuestion = runCatching {
             assistantChatStore.readTurns(scope, conversationId)
@@ -8072,38 +8432,686 @@ class MainActivity : ComponentActivity() {
     }
 
 
-    private fun renderEconomicInvoiceSummary(container: LinearLayout) {
-        val invoices = runCatching { supplierInvoiceStore.list(assistantChatScope()) }.getOrDefault(emptyList())
-        val approved = invoices.filter { it.reviewStatus == "approved" }
-        val pending = invoices.filter { it.reviewStatus == "pending_review" }
-        val rejected = invoices.filter { it.reviewStatus == "rejected" }
-        fun total(records: List<SupplierInvoiceRecord>): BigDecimal =
-            records.fold(BigDecimal.ZERO) { sum, invoice ->
-                sum.add(invoice.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO)
+    private fun openSaftSalesPicker() {
+        val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/xml", "text/xml", "application/octet-stream"))
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        runCatching {
+            startActivityForResult(picker, REQUEST_IMPORT_SAFT_SALES)
+        }.onFailure {
+            AlertDialog.Builder(this)
+                .setTitle("Não foi possível abrir o SAF-T")
+                .setMessage("O seletor de ficheiros não está disponível neste dispositivo.")
+                .setPositiveButton("OK", null)
+                .show()
+        }
+    }
+
+    private fun processSaftSalesFile(uri: android.net.Uri) {
+        if (saftSalesImportInFlight) return
+        saftSalesImportInFlight = true
+        val progress = AlertDialog.Builder(this)
+            .setTitle("A analisar faturas de venda")
+            .setMessage("A ler o SAF-T (PT) localmente. Os dados dos clientes e pontos de fidelização não são necessários.")
+            .setCancelable(false)
+            .create()
+        progress.show()
+        Thread({
+            val parsed = runCatching {
+                val output = java.io.ByteArrayOutputStream()
+                contentResolver.openInputStream(uri)?.use { input ->
+                    val buffer = ByteArray(64 * 1024)
+                    var total = 0
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        require(total <= SaftPtSalesInvoiceParser.MAX_FILE_BYTES) {
+                            "O ficheiro SAF-T excede 100 MB."
+                        }
+                        output.write(buffer, 0, count)
+                    }
+                } ?: throw java.io.FileNotFoundException("Não foi possível abrir o ficheiro SAF-T.")
+                SaftPtSalesInvoiceParser.parse(output.toByteArray())
+            }
+            runOnUiThread {
+                saftSalesImportInFlight = false
+                progress.dismiss()
+                parsed.fold(
+                    onSuccess = { import ->
+                        val preview = buildString {
+                            append("Versão SAF-T: ").append(import.version).append('\n')
+                            append("Faturas válidas para análise: ").append(import.acceptedInvoices.size).append('\n')
+                            append("Documentos anulados excluídos: ").append(import.excludedVoided).append('\n')
+                            append("Documentos substituídos excluídos: ").append(import.excludedReplaced).append('\n')
+                            append("Resumos de vendas excluídos para evitar duplicação: ").append(import.excludedSummary).append('\n')
+                            append("Outros estados excluídos: ").append(import.excludedOtherStates).append('\n')
+                            append("Documentos incompletos/inválidos ignorados: ").append(import.skippedInvalid)
+                            append("\n\nInclui faturas, faturas simplificadas, faturas-recibo e notas de crédito válidas. A importação não filtra clientes por cartão nem por pontos.")
+                            append("\n\nOs totais de vendas usam valores sem IVA. As notas de crédito reduzem a receita prevista.")
+                        }
+                        AlertDialog.Builder(this)
+                            .setTitle("Confirmar importação SAF-T")
+                            .setMessage(preview)
+                            .setNegativeButton("Cancelar", null)
+                            .setPositiveButton("Importar faturas") { _, _ ->
+                                runCatching {
+                                    saftSalesInvoiceStore.import(assistantChatScope(), import)
+                                }.onSuccess { result ->
+                                    economicDailyForecast = null
+                                    economicForecastLoadedDay = ""
+                                    economicForecastError = null
+                                    val message = when {
+                                        result.repeatedFile -> "Este ficheiro SAF-T já tinha sido importado. Não foram criados registos duplicados."
+                                        else -> "Importadas: ${result.importedInvoices} · atualizadas: ${result.updatedExistingInvoices}. Todas as vendas válidas ficaram disponíveis para a previsão, independentemente dos pontos."
+                                    }
+                                    Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                                    if (activePage == "Assistente económico" && economicAssistantIsEnabled()) {
+                                        refreshEconomicDailyForecastIfDue(force = true)
+                                        renderApp()
+                                    }
+                                }.onFailure { error ->
+                                    AlertDialog.Builder(this)
+                                        .setTitle("Importação não concluída")
+                                        .setMessage(error.message ?: "Não foi possível guardar o arquivo SAF-T cifrado.")
+                                        .setPositiveButton("OK", null)
+                                        .show()
+                                }
+                            }
+                            .show()
+                    },
+                    onFailure = { error ->
+                        AlertDialog.Builder(this)
+                            .setTitle("SAF-T não reconhecido")
+                            .setMessage(error.message ?: "Não foi possível analisar o ficheiro SAF-T.")
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
+                )
+            }
+        }, "StudioMesa-saft-import").start()
+    }
+
+    private fun normalizeSalesProductName(value: String): String =
+        java.text.Normalizer.normalize(value.trim().lowercase(Locale.ROOT), java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+            .replace(Regex("[^a-z0-9]+"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    private fun saftSalesForecastLines(
+        invoices: List<SaftSalesInvoice>,
+        menuItems: List<MenuEntry>
+    ): List<EconomicForecastOrderLine> {
+        val menuByName = menuItems
+            .filter { it.name.isNotBlank() && it.id != null }
+            .associateBy { normalizeSalesProductName(it.name) }
+        val zone = java.time.ZoneId.systemDefault()
+        return buildList {
+            invoices.forEach { invoice ->
+                val millis = runCatching {
+                    java.time.LocalDate.parse(invoice.issueDate).atStartOfDay(zone).toInstant().toEpochMilli()
+                }.getOrNull() ?: return@forEach
+                val validLines = invoice.lines
+                if (validLines.isEmpty()) {
+                    val signedQuantity = if (invoice.invoiceType == "NC") BigDecimal("-1") else BigDecimal.ONE
+                    add(
+                        EconomicForecastOrderLine(
+                            createdAtMillis = millis,
+                            status = "Concluído",
+                            menuItemId = "",
+                            itemName = "Documento ${invoice.invoiceNumber}",
+                            quantity = signedQuantity,
+                            unitAmount = BigDecimal.ZERO,
+                            documentRevenueAmount = invoice.netTotal
+                        )
+                    )
+                } else {
+                    validLines.forEachIndexed { index, line ->
+                        val menuMatch = menuByName[normalizeSalesProductName(line.description)]
+                        val menuId = menuMatch?.id
+                            ?: "unmapped:" + line.description.take(120)
+                        add(
+                            EconomicForecastOrderLine(
+                                createdAtMillis = millis,
+                                status = "Concluído",
+                                menuItemId = menuId,
+                                itemName = line.description,
+                                quantity = line.quantity,
+                                // The invoice total is counted once, on the first line.
+                                // Other lines still contribute to ingredient quantities.
+                                unitAmount = BigDecimal.ZERO,
+                                documentRevenueAmount = if (index == 0) invoice.netTotal else BigDecimal.ZERO
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private fun scheduleEconomicDailyForecastRefresh() {
+        if (!activityResumed || activePage != "Assistente económico" || !economicAssistantIsEnabled()) {
+            economicDailyRefreshHandler.removeCallbacks(economicDailyRefreshRunnable)
+            return
+        }
+        economicDailyRefreshHandler.removeCallbacks(economicDailyRefreshRunnable)
+        val nextRun = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 5)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+            add(Calendar.DAY_OF_YEAR, 1)
+        }.timeInMillis
+        economicDailyRefreshHandler.postDelayed(
+            economicDailyRefreshRunnable,
+            (nextRun - System.currentTimeMillis()).coerceAtLeast(1_000L)
+        )
+    }
+
+    private fun refreshEconomicDailyForecastIfDue(force: Boolean = false) {
+        if (!economicAssistantIsEnabled() || economicForecastLoading) return
+        if (hasRemoteRestaurant() && !isRemoteRestaurantOwner()) return
+        val now = System.currentTimeMillis()
+        val forecastScope = assistantChatScope()
+        if (economicForecastScopeKey != forecastScope) {
+            economicForecastScopeKey = forecastScope
+            economicDailyForecast = null
+            economicForecastLoadedDay = ""
+            economicForecastUpdatedAtMillis = 0L
+            economicForecastError = null
+            economicForecastSource = "Pedidos concluídos StudioMesa"
+        }
+        val todayKey = java.time.LocalDate.now().toString()
+        if (!force && economicForecastLoadedDay == todayKey) return
+        if (!force && now - economicForecastLastAttemptMillis < 15L * 60L * 1000L) return
+        economicForecastLoading = true
+        economicForecastError = null
+        economicForecastLastAttemptMillis = now
+        val restaurantId = backendRestaurantId()
+        val remote = hasRemoteRestaurant()
+
+        Thread({
+            var result: EconomicDailyForecast? = null
+            var failure: String? = null
+            var source = "Pedidos concluídos StudioMesa"
+            try {
+                val importedInvoices = saftSalesInvoiceStore.list(forecastScope)
+                val menuEntries: List<MenuEntry>
+                var token = ""
+                if (remote) {
+                    refreshSessionIfNeeded()
+                    token = backendToken()
+                    require(token.isNotBlank() && backendRestaurantId() == restaurantId) {
+                        "A sessão ou o restaurante já não estão disponíveis."
+                    }
+                    val menuRows = SupabaseApi.listMenuItems(token, restaurantId)
+                    val mapped = mutableListOf<MenuEntry>()
+                    for (index in 0 until menuRows.length()) {
+                        val row = menuRows.optJSONObject(index) ?: continue
+                        mapped += MenuEntry(
+                            name = row.optString("name"),
+                            price = row.optDouble("price", 0.0),
+                            cost = row.optDouble("cost", 0.0),
+                            category = row.optString("category", "Prato principal"),
+                            description = row.optString("description", ""),
+                            id = row.optString("id").takeIf { it.isNotBlank() }
+                        )
+                    }
+                    menuEntries = mapped
+                } else {
+                    menuEntries = store.getMenu()
+                }
+
+                val salesLines: List<EconomicForecastOrderLine>
+                if (importedInvoices.isNotEmpty()) {
+                    salesLines = saftSalesForecastLines(importedInvoices, menuEntries)
+                    source = "Faturas de venda SAF-T (PT) importadas · inclui clientes sem pontos"
+                } else if (remote) {
+                    val orders = SupabaseApi.listOrders(token, restaurantId)
+                    val menuByName = menuEntries.associateBy { normalizeSalesProductName(it.name) }
+                    salesLines = (0 until orders.length()).mapNotNull { index ->
+                        val row = orders.optJSONObject(index) ?: return@mapNotNull null
+                        val itemName = row.optString("item_name")
+                        val matchedMenuId = row.optString("menu_item_id").takeIf { it.isNotBlank() }
+                            ?: menuByName[normalizeSalesProductName(itemName)]?.id
+                        EconomicForecastOrderLine(
+                            createdAtMillis = parseOrderTimestamp(row.optString("created_at")),
+                            status = row.optString("status", "Aberto"),
+                            menuItemId = matchedMenuId ?: "unmapped:$itemName",
+                            itemName = itemName,
+                            quantity = BigDecimal(row.optInt("quantity", 1)),
+                            unitAmount = row.optString("amount").toBigDecimalOrNull() ?: BigDecimal("-1")
+                        )
+                    }
+                    source = "Todos os pedidos concluídos StudioMesa · com ou sem pontos"
+                } else {
+                    val menuByName = menuEntries.associateBy { normalizeSalesProductName(it.name) }
+                    salesLines = store.getOrders().map { order ->
+                        val itemName = order.itemName
+                        val matchedMenuId = menuByName[normalizeSalesProductName(itemName)]?.id
+                            ?: "unmapped:$itemName"
+                        EconomicForecastOrderLine(
+                            createdAtMillis = order.createdAt,
+                            status = order.status,
+                            menuItemId = matchedMenuId,
+                            itemName = itemName,
+                            quantity = BigDecimal(order.quantity),
+                            unitAmount = runCatching { BigDecimal.valueOf(order.amount) }.getOrDefault(BigDecimal("-1"))
+                        )
+                    }
+                    source = "Pedidos da demonstração local"
+                }
+
+                val recipeRequirements = mutableListOf<EconomicRecipeIngredient>()
+                var recipeWarning: String? = null
+                if (remote && isPremium) {
+                    val inventory = SupabaseApi.listInventoryItems(token, restaurantId)
+                    val inventoryById = mutableMapOf<String, JSONObject>()
+                    for (index in 0 until inventory.length()) {
+                        val item = inventory.optJSONObject(index) ?: continue
+                        inventoryById[item.optString("id")] = item
+                    }
+                    val menuIds = salesLines.map { it.menuItemId }
+                        .filter { it.isNotBlank() && !it.startsWith("unmapped:") }
+                        .distinct()
+                    menuIds.forEach { menuId ->
+                        val recipe = try {
+                            SupabaseApi.getRestaurantRecipe(token, restaurantId, menuId)
+                        } catch (error: Exception) {
+                            recipeWarning = "Não foi possível consultar todas as receitas. Confirma se as migrações de receitas e stock estão instaladas no servidor."
+                            return@forEach
+                        } ?: return@forEach
+                        if (!recipe.optBoolean("is_active", false) || recipe.optBoolean("requires_review", true)) {
+                            return@forEach
+                        }
+                        val recipeId = recipe.optString("id")
+                        if (recipeId.isBlank()) return@forEach
+                        val ingredients = try {
+                            SupabaseApi.listRecipeIngredients(token, recipeId)
+                        } catch (error: Exception) {
+                            recipeWarning = "Algumas linhas de receita não puderam ser lidas. A previsão de comida pode estar incompleta."
+                            return@forEach
+                        }
+                        for (ingredientIndex in 0 until ingredients.length()) {
+                            val ingredient = ingredients.optJSONObject(ingredientIndex) ?: continue
+                            val stockId = ingredient.optString("inventory_item_id")
+                            val stockItem = inventoryById[stockId] ?: continue
+                            val quantity = ingredient.optString("quantity_per_portion").toBigDecimalOrNull()
+                                ?: continue
+                            val waste = ingredient.optString("waste_percent", "0").toBigDecimalOrNull()
+                                ?: BigDecimal.ZERO
+                            recipeRequirements += EconomicRecipeIngredient(
+                                menuItemId = menuId,
+                                inventoryItemId = stockId,
+                                ingredientName = stockItem.optString("name"),
+                                unit = stockItem.optString("unit"),
+                                quantityPerPortion = quantity,
+                                wastePercent = waste,
+                                currentStock = stockItem.optString("quantity").toBigDecimalOrNull()
+                            )
+                        }
+                    }
+                }
+
+                result = EconomicDailyForecastCalculator.calculate(
+                    orders = salesLines,
+                    recipes = recipeRequirements,
+                    today = java.time.LocalDate.now(),
+                    daysAhead = 7
+                )
+                failure = recipeWarning
+            } catch (error: Exception) {
+                failure = error.message ?: "Não foi possível atualizar a previsão diária."
             }
 
-        sectionHeading(container, "Faturas de fornecedores", "A IA económica pode consultar estes metadados depois de importares e reveres os documentos.")
-        val card = makeCard(14)
-        card.addView(label("${invoices.size} documentos arquivados", 16f, true, forestDeep))
+            runOnUiThread {
+                economicForecastLoading = false
+                if (isFinishing || isDestroyed || assistantChatScope() != forecastScope) return@runOnUiThread
+                if (result != null) {
+                    economicDailyForecast = result
+                    economicForecastLoadedDay = todayKey
+                    economicForecastUpdatedAtMillis = System.currentTimeMillis()
+                    economicForecastSource = source
+                }
+                economicForecastError = failure
+                if (activePage == "Assistente económico" && economicAssistantIsEnabled()) renderApp()
+            }
+        }, "StudioMesa-economic-daily-forecast").start()
+    }
+
+    private fun renderEconomicDailyForecast(container: LinearLayout) {
+        scheduleEconomicDailyForecastRefresh()
+        sectionHeading(
+            container,
+            "Previsão de vendas e compras",
+            "Analisa as vendas e calcula a comida necessária para os próximos sete dias. Atualiza ao abrir esta área e diariamente enquanto a aplicação está aberta; se a fechares, recalcula na próxima abertura."
+        )
+        val card = makeCard(15)
+        if (economicForecastLoading) {
+            card.addView(label("A atualizar os dados do restaurante…", 12f, false, muted))
+        }
+        val invoiceCount = runCatching { saftSalesInvoiceStore.count(assistantChatScope()) }.getOrDefault(0)
+        card.addView(label(
+            if (invoiceCount > 0) "Fonte de vendas: $invoiceCount faturas SAF-T importadas."
+            else "Fonte de vendas: pedidos concluídos do StudioMesa, incluindo os clientes sem cartão e sem pontos.",
+            10.5f, true, forestSoft
+        ))
+        val report = economicDailyForecast
+        if (report == null) {
+            card.addView(label(
+                economicForecastError ?: "A previsão aparece depois de carregar o histórico de vendas.",
+                11.5f, false, if (economicForecastError != null) red else muted
+            ))
+        } else if (!report.hasSalesHistory) {
+            card.addView(label(
+                "Ainda não existem dias anteriores com vendas válidas para calcular uma previsão. Importa um SAF-T (PT) do programa de faturação ou regista vendas concluídas no StudioMesa.",
+                11.5f, false, muted
+            ))
+        } else {
+            card.addView(label("1 · Quanto se prevê vender em cada dia", 14f, true, forestDeep))
+            card.addView(label(
+                "Estimativa de vendas para os próximos sete dias. Quando a fonte é SAF-T, usa o valor sem IVA. Não é lucro líquido nem dinheiro já recebido.",
+                10.5f, false, muted
+            ))
+            val maximum = report.days.mapNotNull { it.expectedRevenue?.abs() }.maxOrNull() ?: BigDecimal.ZERO
+            val totalForecast = report.days.fold(BigDecimal.ZERO) { sum, day ->
+                sum.add(day.expectedRevenue ?: BigDecimal.ZERO)
+            }
+            report.days.forEach { day ->
+                addGap(card, 6)
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                val date = day.date.format(java.time.format.DateTimeFormatter.ofPattern("EEE dd/MM", Locale("pt", "PT")))
+                row.addView(label(date, 11f, true, ink), LinearLayout.LayoutParams(0, -2, 1f))
+                row.addView(label(
+                    day.expectedRevenue?.let(::salesEuro) ?: "Sem dados",
+                    11f, true, forestSoft
+                ))
+                card.addView(row)
+                val bar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+                    max = 1000
+                    progress = if (maximum.signum() > 0 && day.expectedRevenue != null) {
+                        day.expectedRevenue.abs().multiply(BigDecimal("1000"))
+                            .divide(maximum, 0, java.math.RoundingMode.HALF_UP).toInt().coerceIn(0, 1000)
+                    } else 0
+                    progressTintList = ColorStateList.valueOf(forestSoft)
+                    progressBackgroundTintList = ColorStateList.valueOf(line)
+                }
+                card.addView(bar, LinearLayout.LayoutParams(-1, dp(9)))
+                card.addView(label(
+                    if (day.comparableDays == 0) "Sem dias comparáveis"
+                    else "Média de ${day.comparableDays} dia(s) anterior(es) com vendas neste dia da semana",
+                    9.5f, false, muted
+                ))
+            }
+            addGap(card, 8)
+            card.addView(label(
+                "Total previsto em sete dias: ${salesEuro(totalForecast)}",
+                14f, true, forestDeep
+            ))
+            addGap(card, 12)
+            card.addView(label("2 · Que alimentos comprar ou preparar", 14f, true, forestDeep))
+            if (!isPremium) {
+                card.addView(label(
+                    "A previsão automática de ingredientes usa as receitas ligadas ao stock e está disponível na versão Premium.",
+                    10.5f, false, muted
+                ))
+            } else if (report.ingredientAverages.isEmpty()) {
+                val explanation = if (report.unmappedMenuItems.isNotEmpty()) {
+                    "Há pratos vendidos sem receita aprovada ligada ao stock: " +
+                        report.unmappedMenuItems.take(8).joinToString(", ") +
+                        ". Associa esses artigos à carta e aprova as respetivas receitas."
+                } else {
+                    "Não foram encontradas receitas ativas e aprovadas ligadas ao stock para os pratos vendidos. Configura as receitas para calcular quantidades."
+                }
+                card.addView(label(explanation, 10.5f, false, muted))
+            } else {
+                card.addView(label(
+                    "A quantidade prevista considera as vendas por prato, as quantidades por dose, o desperdício configurado e o stock atual.",
+                    10.5f, false, muted
+                ))
+                val maximumIngredientDaily = report.ingredientAverages
+                    .map { it.averageDailyQuantity }
+                    .maxOrNull() ?: BigDecimal.ZERO
+                report.ingredientAverages.forEach { item ->
+                    addGap(card, 7)
+                    val row = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                    }
+                    row.addView(label(item.ingredientName, 11.5f, true, ink), LinearLayout.LayoutParams(0, -2, 1f))
+                    row.addView(label(
+                        "${item.averageDailyQuantity.stripTrailingZeros().toPlainString()} ${item.unit}/dia",
+                        10.5f, true, forestSoft
+                    ))
+                    card.addView(row)
+                    val foodBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+                        max = 1000
+                        progress = if (maximumIngredientDaily.signum() > 0) {
+                            item.averageDailyQuantity.multiply(BigDecimal("1000"))
+                                .divide(maximumIngredientDaily, 0, java.math.RoundingMode.HALF_UP)
+                                .toInt().coerceIn(0, 1000)
+                        } else 0
+                        progressTintList = ColorStateList.valueOf(copper)
+                        progressBackgroundTintList = ColorStateList.valueOf(line)
+                    }
+                    card.addView(foodBar, LinearLayout.LayoutParams(-1, dp(9)))
+                    card.addView(label(
+                        "Necessário em 7 dias: ${item.expectedSevenDayQuantity.stripTrailingZeros().toPlainString()} ${item.unit}",
+                        10f, false, muted
+                    ))
+                    if (item.currentStock != null && item.suggestedPurchaseQuantity != null) {
+                        val purchaseText = if (item.suggestedPurchaseQuantity.signum() > 0) {
+                            "Comprar: ${item.suggestedPurchaseQuantity.stripTrailingZeros().toPlainString()} ${item.unit} · stock atual: ${item.currentStock.stripTrailingZeros().toPlainString()} ${item.unit}"
+                        } else {
+                            "Stock suficiente para a previsão · stock atual: ${item.currentStock.stripTrailingZeros().toPlainString()} ${item.unit}"
+                        }
+                        card.addView(label(purchaseText, 10.5f, true, forestSoft))
+                    } else {
+                        card.addView(label("Stock atual indisponível; não é possível calcular quanto comprar.", 10f, false, red))
+                    }
+                }
+                if (report.unmappedMenuItems.isNotEmpty()) {
+                    addGap(card, 7)
+                    card.addView(label(
+                        "Faltam receitas para: ${report.unmappedMenuItems.take(8).joinToString(", ")}. Estes pratos não entram na previsão de alimentos.",
+                        10f, true, red
+                    ))
+                }
+            }
+            if (economicForecastUpdatedAtMillis > 0L) {
+                addGap(card, 8)
+                card.addView(label(
+                    "Atualizado em ${SimpleDateFormat("dd/MM/yyyy · HH:mm", Locale("pt", "PT")).format(Date(economicForecastUpdatedAtMillis))} · $economicForecastSource",
+                    9.5f, false, muted
+                ))
+            }
+        }
+        economicForecastError?.let {
+            addGap(card, 7)
+            card.addView(label(it, 10f, false, red))
+        }
+        addGap(card, 8)
+        if (!hasRemoteRestaurant() || isRemoteRestaurantOwner()) {
+            card.addView(primaryButton("Importar todas as faturas de venda (SAF-T PT)") {
+                openSaftSalesPicker()
+            }, LinearLayout.LayoutParams(-1, dp(46)))
+            addGap(card, 5)
+            card.addView(secondaryButton("Ver arquivo de faturas de venda") {
+                showSaftSalesInvoiceArchiveDialog()
+            }, LinearLayout.LayoutParams(-1, dp(42)))
+            addGap(card, 5)
+        }
+        card.addView(secondaryButton("Atualizar previsão agora") {
+            refreshEconomicDailyForecastIfDue(force = true)
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(42)))
         addGap(card, 5)
         card.addView(label(
-            "Confirmados: ${approved.size} · ${formatInvoiceEuro(total(approved))}\n" +
-                "Pendentes de revisão: ${pending.size} · ${formatInvoiceEuro(total(pending))}\n" +
-                "Rejeitados: ${rejected.size} · ${formatInvoiceEuro(total(rejected))}",
-            12f, false, ink
+            "As previsões usam apenas datas com vendas observadas; os dias sem documentos não são assumidos como dias de fecho nem como vendas zero. A necessidade de compra é a procura prevista menos o stock registado, sem embalagens mínimas, prazos de fornecedor ou margem de segurança.",
+            9.5f, false, muted
         ))
-        addGap(card, 6)
-        card.addView(label(
-            "A IA lê fornecedor, número, datas, valores base/IVA/total e estado. Não lê o PDF completo nem as linhas de artigos. Uma fatura confirmada não prova pagamento nem validação contabilística.",
-            10.5f, false, muted
-        ))
-        addGap(card, 8)
-        card.addView(secondaryButton("Abrir arquivo de faturas") {
-            showSupplierInvoiceArchiveDialog()
-        }, LinearLayout.LayoutParams(-1, dp(44)))
         container.addView(card, cardParams())
     }
 
+    private fun showSaftSalesInvoiceArchiveDialog() {
+        val invoices = runCatching { saftSalesInvoiceStore.list(assistantChatScope()) }
+            .getOrDefault(emptyList())
+            .sortedWith(compareByDescending<SaftSalesInvoice> { it.issueDate }.thenByDescending { it.invoiceNumber })
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(6), dp(16), dp(8))
+        }
+        panel.addView(label(
+            "${invoices.size} documentos de venda importados. O arquivo inclui clientes com e sem pontos de fidelização.",
+            11f, false, muted
+        ))
+        addGap(panel, 5)
+        val search = inputField("Pesquisar número, tipo ou data", InputType.TYPE_CLASS_TEXT)
+        panel.addView(search, fieldParams())
+        val pageLabel = label("", 10.5f, true, forestSoft)
+        panel.addView(pageLabel)
+        val list = ListView(this).apply {
+            divider = android.graphics.drawable.ColorDrawable(line)
+            dividerHeight = dp(1)
+        }
+        val adapter = ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, mutableListOf())
+        list.adapter = adapter
+        panel.addView(list, LinearLayout.LayoutParams(-1, dp(330)))
+        var page = 0
+        var filtered: List<SaftSalesInvoice> = invoices
+        val pageSize = 100
+        fun updateRows() {
+            val query = search.text.toString().trim().lowercase(Locale.ROOT)
+            filtered = invoices.filter { invoice ->
+                query.isBlank() || listOf(invoice.invoiceNumber, invoice.invoiceType, invoice.issueDate)
+                    .any { it.lowercase(Locale.ROOT).contains(query) }
+            }
+            val pages = maxOf(1, (filtered.size + pageSize - 1) / pageSize)
+            page = page.coerceIn(0, pages - 1)
+            adapter.clear()
+            filtered.drop(page * pageSize).take(pageSize).forEach { invoice ->
+                adapter.add(
+                    "${invoice.invoiceType} · ${invoice.invoiceNumber}\n${invoice.issueDate} · ${salesEuro(invoice.netTotal)} sem IVA"
+                )
+            }
+            pageLabel.text = "Página ${page + 1} de $pages · ${filtered.size} documento(s)"
+        }
+        updateRows()
+        search.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { page = 0; updateRows() }
+            override fun afterTextChanged(s: android.text.Editable?) = Unit
+        })
+        list.setOnItemClickListener { _, _, position, _ ->
+            val invoice = filtered.getOrNull(page * pageSize + position) ?: return@setOnItemClickListener
+            val message = buildString {
+                append("Documento: ").append(invoice.invoiceType).append(" · ").append(invoice.invoiceNumber).append('\n')
+                append("Data: ").append(invoice.issueDate).append('\n')
+                append("Estado SAF-T: ").append(invoice.invoiceStatus).append('\n')
+                append("Base sem IVA: ").append(salesEuro(invoice.netTotal)).append('\n')
+                append("Total com IVA: ").append(salesEuro(invoice.grossTotal)).append('\n')
+                append("Linhas: ").append(invoice.lines.size).append("\n\n")
+                invoice.lines.take(100).forEach { line ->
+                    append("• ").append(line.description).append(" · ")
+                        .append(line.quantity.stripTrailingZeros().toPlainString()).append(" · ")
+                        .append(salesEuro(line.netAmount)).append('\n')
+                }
+                append("\nNão contém dados de fidelização: estas vendas entram na previsão independentemente de o cliente ter usado pontos.")
+            }
+            AlertDialog.Builder(this).setTitle("Fatura de venda").setMessage(message)
+                .setPositiveButton("Fechar", null).show()
+        }
+        val controls = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        controls.addView(secondaryButton("‹ Anterior") {
+            page = (page - 1).coerceAtLeast(0)
+            updateRows()
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(0, 0, dp(5), 0) })
+        controls.addView(secondaryButton("Seguinte ›") {
+            page = (page + 1).coerceAtMost(maxOf(0, (filtered.size - 1) / pageSize))
+            updateRows()
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(5), 0, 0, 0) })
+        panel.addView(controls)
+        AlertDialog.Builder(this)
+            .setTitle("Arquivo de vendas SAF-T (PT)")
+            .setView(panel)
+            .setNegativeButton("Fechar", null)
+            .setNeutralButton("Importar outro SAF-T", null)
+            .create().also { dialog ->
+                dialog.setOnShowListener {
+                    dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                        dialog.dismiss()
+                        openSaftSalesPicker()
+                    }
+                }
+                dialog.show()
+                dialog.window?.setLayout(-1, dp(620))
+            }
+    }
+
+    private fun renderEconomicInvoiceSummary(container: LinearLayout) {
+        val scope = assistantChatScope()
+        val salesInvoices = runCatching { saftSalesInvoiceStore.list(scope) }.getOrDefault(emptyList())
+        val supplierInvoices = runCatching { supplierInvoiceStore.list(scope) }.getOrDefault(emptyList())
+        val approved = supplierInvoices.filter { it.reviewStatus == "approved" }
+        val pending = supplierInvoices.filter { it.reviewStatus == "pending_review" }
+        val rejected = supplierInvoices.filter { it.reviewStatus == "rejected" }
+        val salesNet = salesInvoices.fold(BigDecimal.ZERO) { sum, invoice -> sum.add(invoice.netTotal) }
+        val supplierApprovedTotal = approved.fold(BigDecimal.ZERO) { sum, invoice ->
+            sum.add(invoice.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO)
+        }
+
+        sectionHeading(
+            container,
+            "Faturas e documentos",
+            "O assistente separa vendas de compras. Nenhum dos arquivos depende dos pontos de fidelização."
+        )
+        val card = makeCard(14)
+        card.addView(label("Faturas de venda · SAF-T (PT)", 15f, true, forestDeep))
+        addGap(card, 4)
+        card.addView(label(
+            "${salesInvoices.size} documento(s) importado(s) · vendas sem IVA: ${salesEuro(salesNet)}",
+            11.5f, true, forestSoft
+        ))
+        card.addView(label(
+            "Inclui faturas, faturas simplificadas, faturas-recibo, notas de débito e notas de crédito válidas. Os clientes podem não ter cartão nem ganhar ou utilizar pontos.",
+            10.5f, false, muted
+        ))
+        addGap(card, 8)
+        card.addView(secondaryButton("Ver todas as faturas de venda") {
+            showSaftSalesInvoiceArchiveDialog()
+        }, LinearLayout.LayoutParams(-1, dp(42)))
+        addGap(card, 8)
+        card.addView(label("Faturas de fornecedores · compras", 15f, true, forestDeep))
+        addGap(card, 4)
+        card.addView(label(
+            "Total: ${supplierInvoices.size} · confirmadas: ${approved.size} / ${formatInvoiceEuro(supplierApprovedTotal)} · pendentes: ${pending.size} · rejeitadas: ${rejected.size}",
+            11.5f, true, forestSoft
+        ))
+        card.addView(label(
+            "O OCR extrai fornecedor, número, datas, base, IVA e total. As linhas de produtos não são ainda extraídas de forma fiável em todos os formatos. A fatura tem de ser revista antes de ser confirmada.",
+            10.5f, false, muted
+        ))
+        addGap(card, 8)
+        card.addView(secondaryButton("Ver todas as faturas de fornecedores") {
+            showSupplierInvoiceArchiveDialog()
+        }, LinearLayout.LayoutParams(-1, dp(42)))
+        addGap(card, 8)
+        card.addView(label(
+            "SAF-T de vendas: os resumos são guardados cifrados apenas neste dispositivo. Faturas de fornecedores: o arquivo local também é cifrado e, para proprietários ligados, pode ser sincronizado com o servidor privado do restaurante. Os valores dos documentos não provam pagamentos.",
+            9.5f, false, muted
+        ))
+        container.addView(card, cardParams())
+    }
 
     private fun clearEconomicManagerState() {
         economicManagerEnabled = false
