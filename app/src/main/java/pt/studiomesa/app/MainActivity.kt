@@ -158,6 +158,7 @@ class MainActivity : ComponentActivity() {
     private var economicForecastLastAttemptMillis = 0L
     private var economicForecastLoadedDay = ""
     private var economicForecastUpdatedAtMillis = 0L
+    private var economicForecastSource = "Pedidos concluídos StudioMesa"
     private val economicInputs = mutableMapOf<String, String>()
     private var economicReportText = ""
     private var recipeReportText = ""
@@ -8438,6 +8439,428 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun refreshEconomicDailyForecastIfDue(force: Boolean = false) {
+        if (!economicAssistantIsEnabled() || economicForecastLoading) return
+        if (hasRemoteRestaurant() && !isRemoteRestaurantOwner()) return
+        val now = System.currentTimeMillis()
+        val todayKey = java.time.LocalDate.now().toString()
+        if (!force && economicForecastLoadedDay == todayKey) return
+        if (!force && now - economicForecastLastAttemptMillis < 15L * 60L * 1000L) return
+        economicForecastLoading = true
+        economicForecastError = null
+        economicForecastLastAttemptMillis = now
+        val restaurantId = backendRestaurantId()
+        val remote = hasRemoteRestaurant()
+
+        Thread({
+            var result: EconomicDailyForecast? = null
+            var failure: String? = null
+            var source = "Pedidos concluídos StudioMesa"
+            try {
+                val importedInvoices = saftSalesInvoiceStore.list(assistantChatScope())
+                val menuEntries: List<MenuEntry>
+                var token = ""
+                if (remote) {
+                    refreshSessionIfNeeded()
+                    token = backendToken()
+                    require(token.isNotBlank() && backendRestaurantId() == restaurantId) {
+                        "A sessão ou o restaurante já não estão disponíveis."
+                    }
+                    val menuRows = SupabaseApi.listMenuItems(token, restaurantId)
+                    val mapped = mutableListOf<MenuEntry>()
+                    for (index in 0 until menuRows.length()) {
+                        val row = menuRows.optJSONObject(index) ?: continue
+                        mapped += MenuEntry(
+                            name = row.optString("name"),
+                            price = row.optDouble("price", 0.0),
+                            cost = row.optDouble("cost", 0.0),
+                            category = row.optString("category", "Prato principal"),
+                            description = row.optString("description", ""),
+                            id = row.optString("id").takeIf { it.isNotBlank() }
+                        )
+                    }
+                    menuEntries = mapped
+                } else {
+                    menuEntries = store.getMenu()
+                }
+
+                val salesLines: List<EconomicForecastOrderLine>
+                if (importedInvoices.isNotEmpty()) {
+                    salesLines = saftSalesForecastLines(importedInvoices, menuEntries)
+                    source = "Faturas de venda SAF-T (PT) importadas · inclui clientes sem pontos"
+                } else if (remote) {
+                    val orders = SupabaseApi.listOrders(token, restaurantId)
+                    val menuByName = menuEntries.associateBy { normalizeSalesProductName(it.name) }
+                    salesLines = (0 until orders.length()).mapNotNull { index ->
+                        val row = orders.optJSONObject(index) ?: return@mapNotNull null
+                        val itemName = row.optString("item_name")
+                        val matchedMenuId = row.optString("menu_item_id").takeIf { it.isNotBlank() }
+                            ?: menuByName[normalizeSalesProductName(itemName)]?.id
+                        EconomicForecastOrderLine(
+                            createdAtMillis = parseOrderTimestamp(row.optString("created_at")),
+                            status = row.optString("status", "Aberto"),
+                            menuItemId = matchedMenuId ?: "unmapped:$itemName",
+                            itemName = itemName,
+                            quantity = BigDecimal(row.optInt("quantity", 1)),
+                            unitAmount = row.optString("amount").toBigDecimalOrNull() ?: BigDecimal("-1")
+                        )
+                    }
+                    source = "Todos os pedidos concluídos StudioMesa · com ou sem pontos"
+                } else {
+                    val menuByName = menuEntries.associateBy { normalizeSalesProductName(it.name) }
+                    salesLines = store.getOrders().map { order ->
+                        val itemName = order.itemName
+                        val matchedMenuId = menuByName[normalizeSalesProductName(itemName)]?.id
+                            ?: "unmapped:$itemName"
+                        EconomicForecastOrderLine(
+                            createdAtMillis = order.createdAt,
+                            status = order.status,
+                            menuItemId = matchedMenuId,
+                            itemName = itemName,
+                            quantity = BigDecimal(order.quantity),
+                            unitAmount = runCatching { BigDecimal.valueOf(order.amount) }.getOrDefault(BigDecimal("-1"))
+                        )
+                    }
+                    source = "Pedidos da demonstração local"
+                }
+
+                val recipeRequirements = mutableListOf<EconomicRecipeIngredient>()
+                var recipeWarning: String? = null
+                if (remote && isPremium) {
+                    val inventory = SupabaseApi.listInventoryItems(token, restaurantId)
+                    val inventoryById = mutableMapOf<String, JSONObject>()
+                    for (index in 0 until inventory.length()) {
+                        val item = inventory.optJSONObject(index) ?: continue
+                        inventoryById[item.optString("id")] = item
+                    }
+                    val menuIds = salesLines.map { it.menuItemId }
+                        .filter { it.isNotBlank() && !it.startsWith("unmapped:") }
+                        .distinct()
+                    menuIds.forEach { menuId ->
+                        val recipe = try {
+                            SupabaseApi.getRestaurantRecipe(token, restaurantId, menuId)
+                        } catch (error: Exception) {
+                            recipeWarning = "Não foi possível consultar todas as receitas. Confirma se as migrações de receitas e stock estão instaladas no servidor."
+                            return@forEach
+                        } ?: return@forEach
+                        if (!recipe.optBoolean("is_active", false) || recipe.optBoolean("requires_review", true)) {
+                            return@forEach
+                        }
+                        val recipeId = recipe.optString("id")
+                        if (recipeId.isBlank()) return@forEach
+                        val ingredients = try {
+                            SupabaseApi.listRecipeIngredients(token, recipeId)
+                        } catch (error: Exception) {
+                            recipeWarning = "Algumas linhas de receita não puderam ser lidas. A previsão de comida pode estar incompleta."
+                            return@forEach
+                        }
+                        for (ingredientIndex in 0 until ingredients.length()) {
+                            val ingredient = ingredients.optJSONObject(ingredientIndex) ?: continue
+                            val stockId = ingredient.optString("inventory_item_id")
+                            val stockItem = inventoryById[stockId] ?: continue
+                            val quantity = ingredient.optString("quantity_per_portion").toBigDecimalOrNull()
+                                ?: continue
+                            val waste = ingredient.optString("waste_percent", "0").toBigDecimalOrNull()
+                                ?: BigDecimal.ZERO
+                            recipeRequirements += EconomicRecipeIngredient(
+                                menuItemId = menuId,
+                                inventoryItemId = stockId,
+                                ingredientName = stockItem.optString("name"),
+                                unit = stockItem.optString("unit"),
+                                quantityPerPortion = quantity,
+                                wastePercent = waste,
+                                currentStock = stockItem.optString("quantity").toBigDecimalOrNull()
+                            )
+                        }
+                    }
+                }
+
+                result = EconomicDailyForecastCalculator.calculate(
+                    orders = salesLines,
+                    recipes = recipeRequirements,
+                    today = java.time.LocalDate.now(),
+                    daysAhead = 7
+                )
+                failure = recipeWarning
+            } catch (error: Exception) {
+                failure = error.message ?: "Não foi possível atualizar a previsão diária."
+            }
+
+            runOnUiThread {
+                economicForecastLoading = false
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (result != null) {
+                    economicDailyForecast = result
+                    economicForecastLoadedDay = todayKey
+                    economicForecastUpdatedAtMillis = System.currentTimeMillis()
+                    economicForecastSource = source
+                }
+                economicForecastError = failure
+                if (activePage == "Assistente económico" && economicAssistantIsEnabled()) renderApp()
+            }
+        }, "StudioMesa-economic-daily-forecast").start()
+    }
+
+    private fun renderEconomicDailyForecast(container: LinearLayout) {
+        sectionHeading(
+            container,
+            "Previsão de vendas e compras",
+            "Todos os dias analisa as vendas registadas e calcula a comida necessária para os próximos sete dias."
+        )
+        val card = makeCard(15)
+        if (economicForecastLoading) {
+            card.addView(label("A atualizar os dados do restaurante…", 12f, false, muted))
+        }
+        val invoiceCount = runCatching { saftSalesInvoiceStore.count(assistantChatScope()) }.getOrDefault(0)
+        card.addView(label(
+            if (invoiceCount > 0) "Fonte de vendas: $invoiceCount faturas SAF-T importadas."
+            else "Fonte de vendas: pedidos concluídos do StudioMesa, incluindo os clientes sem cartão e sem pontos.",
+            10.5f, true, forestSoft
+        ))
+        val report = economicDailyForecast
+        if (report == null) {
+            card.addView(label(
+                economicForecastError ?: "A previsão aparece depois de carregar o histórico de vendas.",
+                11.5f, false, if (economicForecastError != null) red else muted
+            ))
+        } else if (!report.hasSalesHistory) {
+            card.addView(label(
+                "Ainda não existem dias anteriores com vendas válidas para calcular uma previsão. Importa um SAF-T (PT) do programa de faturação ou regista vendas concluídas no StudioMesa.",
+                11.5f, false, muted
+            ))
+        } else {
+            card.addView(label("1 · Quanto se prevê vender em cada dia", 14f, true, forestDeep))
+            card.addView(label(
+                "Estimativa de vendas para os próximos sete dias. Quando a fonte é SAF-T, usa o valor sem IVA. Não é lucro líquido nem dinheiro já recebido.",
+                10.5f, false, muted
+            ))
+            val maximum = report.days.mapNotNull { it.expectedRevenue?.abs() }.maxOrNull() ?: BigDecimal.ZERO
+            val totalForecast = report.days.fold(BigDecimal.ZERO) { sum, day ->
+                sum.add(day.expectedRevenue ?: BigDecimal.ZERO)
+            }
+            report.days.forEach { day ->
+                addGap(card, 6)
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                }
+                val date = day.date.format(java.time.format.DateTimeFormatter.ofPattern("EEE dd/MM", Locale("pt", "PT")))
+                row.addView(label(date, 11f, true, ink), LinearLayout.LayoutParams(0, -2, 1f))
+                row.addView(label(
+                    day.expectedRevenue?.let(::salesEuro) ?: "Sem dados",
+                    11f, true, forestSoft
+                ))
+                card.addView(row)
+                val bar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+                    max = 1000
+                    progress = if (maximum.signum() > 0 && day.expectedRevenue != null) {
+                        day.expectedRevenue.abs().multiply(BigDecimal("1000"))
+                            .divide(maximum, 0, java.math.RoundingMode.HALF_UP).toInt().coerceIn(0, 1000)
+                    } else 0
+                    progressTintList = ColorStateList.valueOf(forestSoft)
+                    progressBackgroundTintList = ColorStateList.valueOf(line)
+                }
+                card.addView(bar, LinearLayout.LayoutParams(-1, dp(9)))
+                card.addView(label(
+                    if (day.comparableDays == 0) "Sem dias comparáveis"
+                    else "Média de ${day.comparableDays} dia(s) anterior(es) com vendas neste dia da semana",
+                    9.5f, false, muted
+                ))
+            }
+            addGap(card, 8)
+            card.addView(label(
+                "Total previsto em sete dias: ${salesEuro(totalForecast)}",
+                14f, true, forestDeep
+            ))
+            addGap(card, 12)
+            card.addView(label("2 · Que alimentos comprar ou preparar", 14f, true, forestDeep))
+            if (!isPremium) {
+                card.addView(label(
+                    "A previsão automática de ingredientes usa as receitas ligadas ao stock e está disponível na versão Premium.",
+                    10.5f, false, muted
+                ))
+            } else if (report.ingredientAverages.isEmpty()) {
+                val explanation = if (report.unmappedMenuItems.isNotEmpty()) {
+                    "Há pratos vendidos sem receita aprovada ligada ao stock: " +
+                        report.unmappedMenuItems.take(8).joinToString(", ") +
+                        ". Associa esses artigos à carta e aprova as respetivas receitas."
+                } else {
+                    "Não foram encontradas receitas ativas e aprovadas ligadas ao stock para os pratos vendidos. Configura as receitas para calcular quantidades."
+                }
+                card.addView(label(explanation, 10.5f, false, muted))
+            } else {
+                card.addView(label(
+                    "A quantidade prevista considera as vendas por prato, as quantidades por dose, o desperdício configurado e o stock atual.",
+                    10.5f, false, muted
+                ))
+                report.ingredientAverages.forEach { item ->
+                    addGap(card, 7)
+                    val row = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                    }
+                    row.addView(label(item.ingredientName, 11.5f, true, ink), LinearLayout.LayoutParams(0, -2, 1f))
+                    row.addView(label(
+                        "${item.averageDailyQuantity.stripTrailingZeros().toPlainString()} ${item.unit}/dia",
+                        10.5f, true, forestSoft
+                    ))
+                    card.addView(row)
+                    card.addView(label(
+                        "Necessário em 7 dias: ${item.expectedSevenDayQuantity.stripTrailingZeros().toPlainString()} ${item.unit}",
+                        10f, false, muted
+                    ))
+                    if (item.currentStock != null && item.suggestedPurchaseQuantity != null) {
+                        val purchaseText = if (item.suggestedPurchaseQuantity.signum() > 0) {
+                            "Comprar: ${item.suggestedPurchaseQuantity.stripTrailingZeros().toPlainString()} ${item.unit} · stock atual: ${item.currentStock.stripTrailingZeros().toPlainString()} ${item.unit}"
+                        } else {
+                            "Stock suficiente para a previsão · stock atual: ${item.currentStock.stripTrailingZeros().toPlainString()} ${item.unit}"
+                        }
+                        card.addView(label(purchaseText, 10.5f, true, forestSoft))
+                    } else {
+                        card.addView(label("Stock atual indisponível; não é possível calcular quanto comprar.", 10f, false, red))
+                    }
+                }
+                if (report.unmappedMenuItems.isNotEmpty()) {
+                    addGap(card, 7)
+                    card.addView(label(
+                        "Faltam receitas para: ${report.unmappedMenuItems.take(8).joinToString(", ")}. Estes pratos não entram na previsão de alimentos.",
+                        10f, true, red
+                    ))
+                }
+            }
+            if (economicForecastUpdatedAtMillis > 0L) {
+                addGap(card, 8)
+                card.addView(label(
+                    "Atualizado em ${SimpleDateFormat("dd/MM/yyyy · HH:mm", Locale("pt", "PT")).format(Date(economicForecastUpdatedAtMillis))} · $economicForecastSource",
+                    9.5f, false, muted
+                ))
+            }
+        }
+        economicForecastError?.let {
+            addGap(card, 7)
+            card.addView(label(it, 10f, false, red))
+        }
+        addGap(card, 8)
+        if (!hasRemoteRestaurant() || isRemoteRestaurantOwner()) {
+            card.addView(primaryButton("Importar todas as faturas de venda (SAF-T PT)") {
+                openSaftSalesPicker()
+            }, LinearLayout.LayoutParams(-1, dp(46)))
+            addGap(card, 5)
+            card.addView(secondaryButton("Ver arquivo de faturas de venda") {
+                showSaftSalesInvoiceArchiveDialog()
+            }, LinearLayout.LayoutParams(-1, dp(42)))
+            addGap(card, 5)
+        }
+        card.addView(secondaryButton("Atualizar previsão agora") {
+            refreshEconomicDailyForecastIfDue(force = true)
+            renderApp()
+        }, LinearLayout.LayoutParams(-1, dp(42)))
+        addGap(card, 5)
+        card.addView(label(
+            "As previsões usam apenas datas com vendas observadas; os dias sem documentos não são assumidos como dias de fecho nem como vendas zero. A necessidade de compra é a procura prevista menos o stock registado, sem embalagens mínimas, prazos de fornecedor ou margem de segurança.",
+            9.5f, false, muted
+        ))
+        container.addView(card, cardParams())
+    }
+
+    private fun showSaftSalesInvoiceArchiveDialog() {
+        val invoices = runCatching { saftSalesInvoiceStore.list(assistantChatScope()) }
+            .getOrDefault(emptyList())
+            .sortedWith(compareByDescending<SaftSalesInvoice> { it.issueDate }.thenByDescending { it.invoiceNumber })
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(6), dp(16), dp(8))
+        }
+        panel.addView(label(
+            "${invoices.size} documentos de venda importados. O arquivo inclui clientes com e sem pontos de fidelização.",
+            11f, false, muted
+        ))
+        addGap(panel, 5)
+        val search = inputField("Pesquisar número, tipo ou data", InputType.TYPE_CLASS_TEXT)
+        panel.addView(search, fieldParams())
+        val pageLabel = label("", 10.5f, true, forestSoft)
+        panel.addView(pageLabel)
+        val list = ListView(this).apply {
+            divider = android.graphics.drawable.ColorDrawable(line)
+            dividerHeight = dp(1)
+        }
+        val adapter = ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, mutableListOf())
+        list.adapter = adapter
+        panel.addView(list, LinearLayout.LayoutParams(-1, dp(330)))
+        var page = 0
+        var filtered: List<SaftSalesInvoice> = invoices
+        val pageSize = 100
+        fun updateRows() {
+            val query = search.text.toString().trim().lowercase(Locale.ROOT)
+            filtered = invoices.filter { invoice ->
+                query.isBlank() || listOf(invoice.invoiceNumber, invoice.invoiceType, invoice.issueDate)
+                    .any { it.lowercase(Locale.ROOT).contains(query) }
+            }
+            val pages = maxOf(1, (filtered.size + pageSize - 1) / pageSize)
+            page = page.coerceIn(0, pages - 1)
+            adapter.clear()
+            filtered.drop(page * pageSize).take(pageSize).forEach { invoice ->
+                adapter.add(
+                    "${invoice.invoiceType} · ${invoice.invoiceNumber}\n${invoice.issueDate} · ${salesEuro(invoice.netTotal)} sem IVA"
+                )
+            }
+            pageLabel.text = "Página ${page + 1} de $pages · ${filtered.size} documento(s)"
+        }
+        updateRows()
+        search.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { page = 0; updateRows() }
+            override fun afterTextChanged(s: android.text.Editable?) = Unit
+        })
+        list.setOnItemClickListener { _, _, position, _ ->
+            val invoice = filtered.getOrNull(page * pageSize + position) ?: return@setOnItemClickListener
+            val message = buildString {
+                append("Documento: ").append(invoice.invoiceType).append(" · ").append(invoice.invoiceNumber).append('\n')
+                append("Data: ").append(invoice.issueDate).append('\n')
+                append("Estado SAF-T: ").append(invoice.invoiceStatus).append('\n')
+                append("Base sem IVA: ").append(salesEuro(invoice.netTotal)).append('\n')
+                append("Total com IVA: ").append(salesEuro(invoice.grossTotal)).append('\n')
+                append("Linhas: ").append(invoice.lines.size).append("\n\n")
+                invoice.lines.take(100).forEach { line ->
+                    append("• ").append(line.description).append(" · ")
+                        .append(line.quantity.stripTrailingZeros().toPlainString()).append(" · ")
+                        .append(salesEuro(line.netAmount)).append('\n')
+                }
+                append("\nNão contém dados de fidelização: estas vendas entram na previsão independentemente de o cliente ter usado pontos.")
+            }
+            AlertDialog.Builder(this).setTitle("Fatura de venda").setMessage(message)
+                .setPositiveButton("Fechar", null).show()
+        }
+        val controls = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        controls.addView(secondaryButton("‹ Anterior") {
+            page = (page - 1).coerceAtLeast(0)
+            updateRows()
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(0, 0, dp(5), 0) })
+        controls.addView(secondaryButton("Seguinte ›") {
+            page = (page + 1).coerceAtMost(maxOf(0, (filtered.size - 1) / pageSize))
+            updateRows()
+        }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(5), 0, 0, 0) })
+        panel.addView(controls)
+        AlertDialog.Builder(this)
+            .setTitle("Arquivo de vendas SAF-T (PT)")
+            .setView(panel)
+            .setNegativeButton("Fechar", null)
+            .setNeutralButton("Importar outro SAF-T", null)
+            .create().also { dialog ->
+                dialog.setOnShowListener {
+                    dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                        dialog.dismiss()
+                        openSaftSalesPicker()
+                    }
+                }
+                dialog.show()
+                dialog.window?.setLayout(-1, dp(620))
+            }
     }
 
     private fun renderEconomicInvoiceSummary(container: LinearLayout) {
