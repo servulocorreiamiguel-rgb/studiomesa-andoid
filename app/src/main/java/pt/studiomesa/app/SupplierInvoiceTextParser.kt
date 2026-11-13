@@ -229,7 +229,7 @@ internal object SupplierInvoiceTextParser {
 
     fun parseQuantity(raw: String): BigDecimal? {
         val value = raw.trim().replace(',', '.')
-        if (!Regex("""^[0-9]+(?:\\.[0-9]{1,3})?$""").matches(value)) return null
+        if (!Regex("""^[0-9]+(?:\.[0-9]{1,3})?$""").matches(value)) return null
         return runCatching {
             BigDecimal(value).takeIf {
                 it.signum() > 0 && it <= BigDecimal("999999")
