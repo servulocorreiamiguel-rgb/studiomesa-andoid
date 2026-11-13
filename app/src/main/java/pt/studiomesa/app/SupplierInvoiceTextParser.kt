@@ -65,7 +65,7 @@ internal object SupplierInvoiceTextParser {
     // Capture only structured rows. Ambiguous OCR fragments are intentionally
     // excluded instead of being guessed into inventory movements.
     private val invoiceLinePattern = Regex(
-        """^\s*(?:(?<line_no>\d{1,4})[.)]?\s+)?(?:(?<product_code>(?=[A-Z0-9./_-]{4,24}\s)(?=[A-Z0-9./_-]*\d)[A-Z0-9][A-Z0-9./_-]{3,23})\s+)?(?<description>[\p{L}][\p{L}\p{N}() /.,'-]{2,79}?)\s+(?<quantity>\d{1,7}(?:[,.]\d{1,4})?)\s*(?<unit>UNIDADES?|UNID(?:ADE)?S?|UND|UN|KG|G|GR|L|LT|ML|CX|CAIXA|PCT|PACOTE|PACK|FD|FARDO|M|MT|M2|M3|DZ|DOZ)\s+(?:[x×]\s*)?(?<unit_price>\d{1,7}(?:[,.]\d{2,4})?)\s+(?<net_amount>\d{1,7}(?:[,.]\d{2,4})?)(?:\s+(?<vat_rate>\d{1,2}(?:[,.]\d{1,2})?)\s*%)?(?:\s+\d{1,7}(?:[,.]\d{2,4})?)?\s*$""",
+        """^\s*(?:(?<lineNo>\d{1,4})[.)]?\s+)?(?:(?<productCode>(?=[A-Z0-9./_-]{4,24}\s)(?=[A-Z0-9./_-]*\d)[A-Z0-9][A-Z0-9./_-]{3,23})\s+)?(?<description>[\p{L}][\p{L}\p{N}() /.,'-]{2,79}?)\s+(?<quantity>\d{1,7}(?:[,.]\d{1,4})?)\s*(?<unit>UNIDADES?|UNID(?:ADE)?S?|UND|UN|KG|G|GR|L|LT|ML|CX|CAIXA|PCT|PACOTE|PACK|FD|FARDO|M|MT|M2|M3|DZ|DOZ)\s+(?:[x×]\s*)?(?<unitPrice>\d{1,7}(?:[,.]\d{2,4})?)\s+(?<netAmount>\d{1,7}(?:[,.]\d{2,4})?)(?:\s+(?<vatRate>\d{1,2}(?:[,.]\d{1,2})?)\s*%)?(?:\s+\d{1,7}(?:[,.]\d{2,4})?)?\s*$""",
         RegexOption.IGNORE_CASE
     )
 
@@ -161,8 +161,8 @@ internal object SupplierInvoiceTextParser {
             val description = match.groups["description"]?.value?.trim()
                 ?.replace(Regex("\\s+"), " ").orEmpty()
             val quantity = match.groups["quantity"]?.value?.let(::parseFlexibleDecimal)
-            val unitPrice = match.groups["unit_price"]?.value?.let(::parseAmount)
-            val netAmount = match.groups["net_amount"]?.value?.let(::parseAmount)
+            val unitPrice = match.groups["unitPrice"]?.value?.let(::parseAmount)
+            val netAmount = match.groups["netAmount"]?.value?.let(::parseAmount)
             if (description.length !in 3..80 || quantity == null || quantity.signum() <= 0 ||
                 quantity > BigDecimal("999999") || unitPrice == null || unitPrice.signum() < 0 ||
                 netAmount == null || netAmount.signum() < 0) return@forEachIndexed
@@ -179,11 +179,11 @@ internal object SupplierInvoiceTextParser {
                 "DZ", "DOZ" -> "dz"
                 else -> unitRaw.lowercase(Locale.ROOT)
             }
-            val vatRate = match.groups["vat_rate"]?.value?.let(::parseFlexibleDecimal)
+            val vatRate = match.groups["vatRate"]?.value?.let(::parseFlexibleDecimal)
             if (vatRate != null && (vatRate.signum() < 0 || vatRate > BigDecimal("100"))) {
                 return@forEachIndexed
             }
-            val productCode = match.groups["product_code"]?.value.orEmpty().take(24)
+            val productCode = match.groups["productCode"]?.value.orEmpty().take(24)
             val stableSource = index.toString() + "|" + line.trim().lowercase(Locale.ROOT)
             val lineId = MessageDigest.getInstance("SHA-256")
                 .digest(stableSource.toByteArray(Charsets.UTF_8))
