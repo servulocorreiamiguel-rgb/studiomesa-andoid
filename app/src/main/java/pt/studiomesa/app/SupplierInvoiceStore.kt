@@ -26,6 +26,18 @@ internal data class SupplierInvoiceLineRecord(
     val inventoryItemId: String? = null
 )
 
+/**
+ * Prefer the shared server copy when it contains reviewed invoice lines. If a
+ * legacy server row has only the migration's default empty array, retain the
+ * encrypted device-local OCR lines instead of silently deleting them.
+ */
+internal object SupplierInvoiceLineMergePolicy {
+    fun resolve(
+        remote: List<SupplierInvoiceLineRecord>,
+        local: List<SupplierInvoiceLineRecord>
+    ): List<SupplierInvoiceLineRecord> = remote.ifEmpty { local }
+}
+
 internal data class SupplierInvoiceRecord(
     val id: String,
     val supplierName: String,
