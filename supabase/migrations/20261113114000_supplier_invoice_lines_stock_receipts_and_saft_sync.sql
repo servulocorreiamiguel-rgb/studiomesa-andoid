@@ -93,7 +93,7 @@ BEGIN
 
         IF v_invoice_id IS NULL OR v_invoice_id !~ '^[a-f0-9]{64}$'
            OR v_issue_date_text IS NULL OR v_issue_date_text !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
-           OR jsonb_typeof(v_payload) <> 'object' THEN
+           OR jsonb_typeof(v_payload) IS DISTINCT FROM 'object' THEN
             RAISE EXCEPTION 'Uma fatura SAF-T do lote contém campos inválidos.';
         END IF;
         v_issue_date := v_issue_date_text::date;
@@ -117,7 +117,7 @@ BEGIN
             RAISE EXCEPTION 'Uma fatura SAF-T excede os limites de linhas ou tamanho.';
         END IF;
         v_updated_at_ms := (v_row->>'updated_at_ms')::bigint;
-        IF v_updated_at_ms <= 0 THEN
+        IF v_updated_at_ms IS NULL OR v_updated_at_ms <= 0 THEN
             RAISE EXCEPTION 'A data de atualização da fatura SAF-T não é válida.';
         END IF;
 
