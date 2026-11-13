@@ -12,16 +12,18 @@ internal data class EconomicForecastOrderLine(
     val status: String,
     val menuItemId: String,
     val itemName: String,
-    val quantity: Int,
+    val quantity: BigDecimal,
     val unitAmount: BigDecimal
 )
 
 internal data class EconomicRecipeIngredient(
     val menuItemId: String,
+    val inventoryItemId: String,
     val ingredientName: String,
     val unit: String,
     val quantityPerPortion: BigDecimal,
-    val wastePercent: BigDecimal
+    val wastePercent: BigDecimal,
+    val currentStock: BigDecimal?
 )
 
 internal data class EconomicRevenueForecastDay(
@@ -32,10 +34,13 @@ internal data class EconomicRevenueForecastDay(
 )
 
 internal data class EconomicIngredientForecast(
+    val inventoryItemId: String,
     val ingredientName: String,
     val unit: String,
     val expectedSevenDayQuantity: BigDecimal,
-    val averageDailyQuantity: BigDecimal
+    val averageDailyQuantity: BigDecimal,
+    val currentStock: BigDecimal?,
+    val suggestedPurchaseQuantity: BigDecimal?
 )
 
 internal data class EconomicDailyForecast(
@@ -75,18 +80,22 @@ internal object EconomicDailyForecastCalculator {
         val daily = linkedMapOf<LocalDate, MutableDaily>()
         orders.forEach { order ->
             if (order.status != "Concluído" || order.createdAtMillis <= 0L ||
-                order.quantity !in 1..99 || order.unitAmount.signum() < 0 ||
+                order.quantity.signum() == 0 ||
+                order.quantity.abs() > BigDecimal("999999") ||
+                order.unitAmount.signum() < 0 ||
                 order.unitAmount > BigDecimal("99999999.99")) return@forEach
             val date = runCatching {
                 Instant.ofEpochMilli(order.createdAtMillis).atZone(zoneId).toLocalDate()
             }.getOrNull() ?: return@forEach
             if (!date.isBefore(today) || date.isBefore(today.minusDays(maxHistoryDays))) return@forEach
-            val amount = order.unitAmount.multiply(BigDecimal(order.quantity))
+            val amount = order.unitAmount.multiply(order.quantity)
             val bucket = daily.getOrPut(date) { MutableDaily() }
             bucket.revenue = bucket.revenue.add(amount)
-            if (order.menuItemId.isNotBlank()) {
+            // A credit note reduces revenue, but it does not prove that food was
+            // physically returned to stock. Keep it out of recipe consumption.
+            if (order.menuItemId.isNotBlank() && order.quantity.signum() > 0) {
                 bucket.portions[order.menuItemId] =
-                    (bucket.portions[order.menuItemId] ?: zero).add(BigDecimal(order.quantity))
+                    (bucket.portions[order.menuItemId] ?: zero).add(order.quantity)
             }
         }
         val historical = daily.map { (date, value) ->
@@ -114,7 +123,8 @@ internal object EconomicDailyForecastCalculator {
                 comparableDays = samples.size
             )
         }
-        val ingredientTotals = linkedMapOf<Pair<String, String>, BigDecimal>()
+        val ingredientTotals = linkedMapOf<String, BigDecimal>()
+        val ingredientMetadata = linkedMapOf<String, EconomicRecipeIngredient>()
         forecastDays.forEach { forecastDay ->
             val samples = historical.asReversed()
                 .filter { it.date.dayOfWeek == forecastDay.date.dayOfWeek }
@@ -137,18 +147,25 @@ internal object EconomicDailyForecastCalculator {
                         .multiply(hundred)
                         .divide(usablePercent, 8, RoundingMode.HALF_UP)
                     val quantity = adjustedPerPortion.multiply(perDayAverage)
-                    val key = ingredient.ingredientName to ingredient.unit
+                    val key = ingredient.inventoryItemId
+                    if (key.isBlank()) return@forEach
                     ingredientTotals[key] = (ingredientTotals[key] ?: zero).add(quantity)
+                    ingredientMetadata[key] = ingredient
                 }
             }
         }
         val ingredients = ingredientTotals.map { (key, total) ->
-            val totalRounded = total.setScale(3, RoundingMode.HALF_UP)
+            val ingredient = ingredientMetadata.getValue(key)
+            val totalRounded = total.max(zero).setScale(3, RoundingMode.HALF_UP)
+            val available = ingredient.currentStock?.max(zero)?.setScale(3, RoundingMode.HALF_UP)
             EconomicIngredientForecast(
-                ingredientName = key.first,
-                unit = key.second,
+                inventoryItemId = key,
+                ingredientName = ingredient.ingredientName,
+                unit = ingredient.unit,
                 expectedSevenDayQuantity = totalRounded,
-                averageDailyQuantity = total.divide(BigDecimal(daysAhead), 3, RoundingMode.HALF_UP)
+                averageDailyQuantity = total.max(zero).divide(BigDecimal(daysAhead), 3, RoundingMode.HALF_UP),
+                currentStock = available,
+                suggestedPurchaseQuantity = available?.let { totalRounded.subtract(it).max(zero).setScale(3, RoundingMode.HALF_UP) }
             )
         }.sortedBy { it.ingredientName.lowercase() }
         return EconomicDailyForecast(
@@ -165,7 +182,8 @@ internal object EconomicDailyForecastCalculator {
     )
 
     private fun validRecipe(item: EconomicRecipeIngredient): Boolean =
-        item.menuItemId.isNotBlank() && item.ingredientName.isNotBlank() && item.unit.isNotBlank() &&
+        item.menuItemId.isNotBlank() && item.inventoryItemId.isNotBlank() &&
+            item.ingredientName.isNotBlank() && item.unit.isNotBlank() &&
             item.quantityPerPortion.signum() > 0 &&
             item.wastePercent.signum() >= 0 && item.wastePercent < hundred
 }
