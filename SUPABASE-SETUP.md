@@ -1,10 +1,18 @@
 # StudioMesa — configuração do backend e preparação para produção
-> **Fotografia atual — 06/11/2026: NÃO FAZER DEPLOY.** O Supabase alojado regista 54 versões; o repositório tem 53 ficheiros de migration, 48 prefixos comuns, cinco apenas locais e seis apenas remotos. As tabelas de receitas, permissões granulares, sync do assistente, arquivo de faturas e bucket privado não existem no projeto alojado.
+> **Fotografia atual — 12/11/2026: NÃO FAZER DEPLOY DIRETO EM PRODUÇÃO.** A auditoria read-only encontrou 70 ficheiros de migration no repositório e 63 versões no histórico Supabase. As 63 versões remotas têm correspondência exata por versão/nome e não há versões remotas órfãs. Existem sete migrations locais ainda não aplicadas. As tabelas de receitas/ingredientes, permissões granulares e entitlements comerciais por plano continuam ausentes no projeto alojado.
 >
-> Antes de qualquer alteração: recuperar os seis SQL remotos sem ficheiro, comparar os cinco ficheiros locais pendentes com o catálogo real, obter backup verificável, testar restauro e replay em base descartável, e aprovar uma ordem de deployment/rollback.
+> Migrations locais pendentes:
+> `20261030111815_restaurant_recipes_and_order_stock_consumption`,
+> `20261102103000_granular_restaurant_staff_permissions`,
+> `20261102120000_require_loyalty_permission_for_reward_fulfillment`,
+> `20261102121000_enforce_loyalty_permission_for_staff_loyalty_operations`,
+> `20261104100000_price_adviser_actor_indexes`,
+> `20261107170000_loyalty_shop_photos_and_plan_limits`,
+> `20261112120000_restaurant_membership_request_actor_indexes`.
+>
+> O replay das migrations e testes de autorização em PostgreSQL isolado passaram na CI; isto não substitui backup/restauro verificados nem autoriza deployment direto no projeto alojado. Não foi criada branch Supabase de desenvolvimento porque custa 0,01344 USD/hora; nesta fase não serão assumidos custos.
 >
 > A página de eliminação atual usa resetPasswordForEmail + PKCE (não signInWithOtp). O percurso completo com email e contas descartáveis ainda não foi validado. A proteção contra palavras-passe comprometidas está desativada; o advisor indica que requer Pro ou superior.
-
 > **Importante:** este documento substitui instruções antigas de configuração. O código e a base de dados evoluíram; não executes o ficheiro `supabase/schema.sql` no projeto ligado à aplicação sem antes comparar o esquema e validar uma migração. Esse ficheiro é um protótipo inicial da parte de fidelização e não representa, por si só, todo o esquema atualmente utilizado pela aplicação.
 
 ## Estado técnico
