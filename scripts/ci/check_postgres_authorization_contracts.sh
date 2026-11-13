@@ -3031,6 +3031,36 @@ then
   exit 1
 fi
 
+# Equivalent unit labels are accepted, but a different physical dimension must be rejected.
+update_inventory_item_with_cost "$USER_G" "$RESTAURANT_G" "$INVOICE_ALT_STOCK_ITEM" "l" "" >/dev/null
+if psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_G', true);
+SET LOCAL ROLE authenticated;
+SELECT public.receive_supplier_invoice_stock(
+  '$SUPPLIER_INVOICE_ID'::uuid, 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'::uuid,
+  jsonb_build_array(jsonb_build_object(
+    'line_id', '$SUPPLIER_LINE_ID',
+    'inventory_item_id', '$INVOICE_ALT_STOCK_ITEM',
+    'accepted_quantity', '1.500'
+  ))
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: supplier invoice receipt converted kilograms into litres." >&2
+  exit 1
+fi
+mismatched_stock_after="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT quantity::text FROM public.restaurant_inventory_items WHERE id = '$INVOICE_ALT_STOCK_ITEM'::uuid;")"
+receipt_count_after_mismatch="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*)::text FROM private.restaurant_supplier_invoice_stock_receipts WHERE invoice_id = '$SUPPLIER_INVOICE_ID'::uuid;")"
+if [ "$mismatched_stock_after" != "0" ] || [ "$receipt_count_after_mismatch" != "0" ]; then
+  echo "ERROR: rejected incompatible supplier units still changed stock or created a receipt." >&2
+  exit 1
+fi
+update_inventory_item_with_cost "$USER_G" "$RESTAURANT_G" "$INVOICE_ALT_STOCK_ITEM" "kg" "" >/dev/null
+
 # A valid owner receipt updates quantity and weighted unit cost exactly once.
 receipt_result="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL
 BEGIN;
