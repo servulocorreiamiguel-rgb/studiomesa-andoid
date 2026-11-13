@@ -10,7 +10,7 @@ CREATE TABLE private.restaurant_saft_sales_invoices (
     issue_date date NOT NULL,
     updated_at_ms bigint NOT NULL CHECK (updated_at_ms > 0),
     payload jsonb NOT NULL CHECK (jsonb_typeof(payload) = 'object'),
-    updated_by uuid NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT,
+    updated_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
     PRIMARY KEY (restaurant_id, invoice_id)
 );
 
@@ -101,6 +101,7 @@ BEGIN
            OR v_payload->>'id' IS DISTINCT FROM v_invoice_id
            OR v_payload->>'issue_date' IS DISTINCT FROM v_issue_date_text
            OR char_length(coalesce(v_payload->>'invoice_number', '')) NOT BETWEEN 1 AND 100
+           OR v_payload->>'invoice_type' IS NULL
            OR v_payload->>'invoice_type' NOT IN ('FT', 'FS', 'FR', 'ND', 'NC', 'VD', 'TV', 'TD') THEN
             RAISE EXCEPTION 'A identidade ou os campos principais de uma fatura SAF-T não são válidos.';
         END IF;
@@ -108,7 +109,7 @@ BEGIN
            OR (v_payload->>'gross_total') !~ '^-?[0-9]{1,12}(\.[0-9]{1,2})?$' THEN
             RAISE EXCEPTION 'Os totais de uma fatura SAF-T não são numéricos.';
         END IF;
-        IF jsonb_typeof(v_payload->'lines') <> 'array' THEN
+        IF jsonb_typeof(v_payload->'lines') IS DISTINCT FROM 'array' THEN
             RAISE EXCEPTION 'As linhas de uma fatura SAF-T não têm um formato válido.';
         END IF;
         v_line_count := jsonb_array_length(v_payload->'lines');
@@ -234,7 +235,7 @@ ALTER TABLE public.restaurant_supplier_invoices
         CHECK (
             (stock_received_at IS NULL AND stock_received_by IS NULL AND stock_receipt_request_id IS NULL)
             OR
-            (stock_received_at IS NOT NULL AND stock_received_by IS NOT NULL AND stock_receipt_request_id IS NOT NULL)
+            (stock_received_at IS NOT NULL AND stock_receipt_request_id IS NOT NULL)
         );
 
 CREATE TABLE private.restaurant_supplier_invoice_stock_receipts (
@@ -243,7 +244,7 @@ CREATE TABLE private.restaurant_supplier_invoice_stock_receipts (
     invoice_id uuid NOT NULL REFERENCES public.restaurant_supplier_invoices(id) ON DELETE RESTRICT,
     request_id uuid NOT NULL,
     mapping jsonb NOT NULL CHECK (jsonb_typeof(mapping) = 'array'),
-    received_by uuid NOT NULL REFERENCES auth.users(id) ON DELETE RESTRICT,
+    received_by uuid REFERENCES auth.users(id) ON DELETE SET NULL,
     received_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (restaurant_id, invoice_id),
     UNIQUE (restaurant_id, request_id)
