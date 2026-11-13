@@ -4,6 +4,18 @@
 
 **IA — integração na `main` desde 12/11/2026:** um único assistente encaminha pedidos online para DeepSeek R1, Cohere North Mini Code, Qwen3.8 27B `:free`, GPT-OSS 20B `:free` e OpenRouter Free Router, sem fallback pago. No Android, Gemma 4 E2B é o motor local preferido quando há RAM/espaço suficiente; LFM2.5-1.2B INT4 é alternativa mais leve e reserva instalável. A função `studiomesa-ai-router` está publicada no Supabase alojado (versão 1, `verify_jwt=true`). A utilização dos modelos online exige a secret de servidor `OPENROUTER_API_KEY`; a sua presença não foi confirmada e a cloud continua desligada por omissão. A inferência local requer download inicial dos pesos e testes físicos de qualidade, RAM, temperatura e bateria — incluindo no OPPO A5m. Não anunciar a Mega IA online como ativa ou ilimitada.
 
+## Funcionalidades em validação — PR #128 (13/11/2026)
+
+A PR #128 acrescenta melhorias ao fluxo económico, ainda fora da versão integrada em `main`:
+
+- Sincronização autenticada entre dispositivos do histórico SAF-T de vendas, sem depender da utilização de pontos de fidelização.
+- Previsão de sete dias das doses por prato, calculada a partir das linhas de venda importadas.
+- Extração OCR de linhas de faturas de fornecedores para revisão pelo proprietário antes de qualquer entrada de stock.
+- Receção de mercadoria com confirmação explícita, associação das linhas a artigos de inventário, registo idempotente e atualização do custo médio ponderado.
+- O custo da mercadoria recebida é rateado proporcionalmente à quantidade efetivamente aceite; uma receção parcial não contabiliza o valor total da linha faturada.
+
+A migração `20261113114000_supplier_invoice_lines_stock_receipts_and_saft_sync.sql` continua local e não foi aplicada ao Supabase alojado. Estas funcionalidades só passam a estar disponíveis no backend após a integração do código e uma validação/deployment controlados da migração. Não usar faturas reais nem anunciar sincronização/receção cloud como ativa antes dessa validação.
+
 ## O que ainda falta antes da venda ou utilização em serviço real
 
 - Testes ponta a ponta em telemóveis reais, incluindo vários dispositivos, utilizadores, perda de internet, sessões expiradas e erros de servidor. A compilação de um APK não substitui esses testes.
