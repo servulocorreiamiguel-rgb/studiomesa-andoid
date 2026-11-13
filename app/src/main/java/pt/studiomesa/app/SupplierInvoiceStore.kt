@@ -106,7 +106,21 @@ internal class SupplierInvoiceStore(context: Context) {
             }
         }
         if (!found) array.put(replacement)
-        while (array.length() > MAX_RECORDS) array.remove(0)
+        while (array.length() > MAX_RECORDS) {
+            // Remote invoice sync is ordered newest-first. Remove the oldest
+            // update by timestamp, not index zero, so a large sync keeps recent bills.
+            var oldestIndex = -1
+            var oldestUpdatedAt = Long.MAX_VALUE
+            for (index in 0 until array.length()) {
+                val updatedAt = array.optJSONObject(index)?.optLong("updated_at", 0L) ?: 0L
+                if (updatedAt < oldestUpdatedAt) {
+                    oldestUpdatedAt = updatedAt
+                    oldestIndex = index
+                }
+            }
+            if (oldestIndex < 0) break
+            array.remove(oldestIndex)
+        }
         root.put("invoices", array)
         persist(scope, root)
     }
