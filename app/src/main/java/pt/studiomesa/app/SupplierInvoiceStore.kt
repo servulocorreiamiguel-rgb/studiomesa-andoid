@@ -93,35 +93,35 @@ internal class SupplierInvoiceStore(context: Context) {
 
     @Synchronized
     fun save(scope: String, record: SupplierInvoiceRecord) {
+        saveAll(scope, listOf(record))
+    }
+
+    @Synchronized
+    fun saveAll(scope: String, records: List<SupplierInvoiceRecord>) {
         require(scope.isNotBlank())
+        if (records.isEmpty()) return
         val root = load(scope)
-        val array = root.optJSONArray("invoices") ?: JSONArray()
-        val replacement = record.toJson()
-        var found = false
-        for (index in 0 until array.length()) {
-            if (array.optJSONObject(index)?.optString("id") == record.id) {
-                array.put(index, replacement)
-                found = true
-                break
-            }
+        val existing = root.optJSONArray("invoices") ?: JSONArray()
+        val byId = linkedMapOf<String, JSONObject>()
+        for (index in 0 until existing.length()) {
+            val row = existing.optJSONObject(index) ?: continue
+            val id = row.optString("id")
+            if (id.isNotBlank()) byId[id] = row
         }
-        if (!found) array.put(replacement)
-        while (array.length() > MAX_RECORDS) {
+        records.forEach { record ->
+            require(record.id.isNotBlank()) { "A fatura não tem um identificador válido." }
+            byId[record.id] = record.toJson()
+        }
+        while (byId.size > MAX_RECORDS) {
             // Remote invoice sync is ordered newest-first. Remove the oldest
-            // update by timestamp, not index zero, so a large sync keeps recent bills.
-            var oldestIndex = -1
-            var oldestUpdatedAt = Long.MAX_VALUE
-            for (index in 0 until array.length()) {
-                val updatedAt = array.optJSONObject(index)?.optLong("updated_at", 0L) ?: 0L
-                if (updatedAt < oldestUpdatedAt) {
-                    oldestUpdatedAt = updatedAt
-                    oldestIndex = index
-                }
-            }
-            if (oldestIndex < 0) break
-            array.remove(oldestIndex)
+            // update by timestamp, not insertion order, to preserve recent bills.
+            val oldest = byId.entries.minByOrNull { it.value.optLong("updated_at", 0L) }
+                ?: break
+            byId.remove(oldest.key)
         }
-        root.put("invoices", array)
+        root.put("invoices", JSONArray().apply {
+            byId.values.forEach(::put)
+        })
         persist(scope, root)
     }
 
