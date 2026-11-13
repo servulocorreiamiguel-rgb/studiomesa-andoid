@@ -1,60 +1,81 @@
 # StudioMesa — lista de preparação para uso profissional
 
-**Estado consolidado em 12/11/2026:** o código está suficientemente avançado para demonstração com dados fictícios, mas **NÃO está LIBERADO para venda operacional, piloto com dados reais ou produção**. Esta fotografia substitui os estados contraditórios ou desatualizados dos registos históricos que se seguem.
+**Ponto de situação verificado em 13/11/2026:** a `main` está pronta para demonstração com dados fictícios e tem CI integral verde, mas **não está autorizada para operação com dados reais nem venda operacional**. A PR #128 acrescenta novas funcionalidades económicas e também passou CI integral, mas continua em rascunho e fora da `main`.
 
-Auditoria detalhada: [docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-12.md](docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-12.md).
+Auditoria histórica de 12/11: [docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-12.md](docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-12.md). O ponto de situação abaixo substitui as contagens e estados históricos que se seguem.
 
 ## Código e CI
 
-- [x] PR #119 integrada: o texto da gestão de equipa corresponde ao comportamento real das permissões no backend atual.
-- [x] PR #120 integrada no commit `e2b23b65416a600e2fb1d8a699cba1a0d37ec9d6`: índices de adesão movidos para uma migração posterior à criação da tabela.
-- [x] CI da PR #120 [43219206624](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43219206624) passou os quatro jobs: compilação e testes/Lint, replay PostgreSQL/autorização, Android 8 e Android 16.
-- [ ] CI pós-merge da `main` no commit `e2b23b65416a600e2fb1d8a699cba1a0d37ec9d6`: execução [43223886131](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43223886131) em curso na última consulta; só marcar concluída depois dos quatro jobs passarem.
-- [x] Cinco variantes Android de demonstração/debug compiladas. Não são pacotes comerciais assinados nem foram testadas fisicamente no OPPO A5m.
-- [x] Um só assistente, modelos locais Gemma 4 E2B e LFM2.5-1.2B INT4, router cloud publicado com JWT obrigatório.
-- [ ] Validar fisicamente os modelos locais, qualidade, latência, RAM, temperatura, bateria e fallback.
+- [x] A `main`, commit `4f8fb77ef971bca1e33b0f4969b7459ae25c7c0a`, passou os quatro jobs na execução [43412340401](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43412340401): compilação APK/testes/Lint, replay PostgreSQL/autorização, Android 8 e Android 16.
+- [x] A PR #128, commit `ed05c86b7fae26dc01c571c2318072a1c03bba12`, passou os mesmos quatro jobs na execução [43449161757](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43449161757).
+- [x] A PR #128 inclui testes de isolamento de arquivo por conta, importações SAF-T repetidas, cifragem local, sincronização antiga/nova, eliminação de dados locais, autorização de receção de mercadoria, idempotência e atualização do custo médio ponderado.
+- [ ] A CI não substitui os testes físicos no OPPO A5m, a autenticação/SMTP reais, a perda de rede móvel nem a validação do Supabase alojado.
+- [x] Existem APKs de demonstração/debug. Não são releases comerciais assinadas e não foram testadas fisicamente no OPPO A5m.
+- [x] Um único assistente integra modelos locais Gemma 4 E2B e LFM2.5-1.2B INT4, com router cloud publicado e JWT obrigatório.
+- [ ] Validar fisicamente os modelos locais, qualidade, latência, RAM, temperatura, bateria, libertação de memória e fallback.
 
-## Supabase e migrações
+## Supabase alojado e migrações
 
-- [x] Projeto alojado observado em estado `ACTIVE_HEALTHY`, PostgreSQL 17.6.1.166, região `eu-west-1`.
-- [x] Comparação read-only: 69 ficheiros SQL locais; 63 migrações remotas. As 63 versões remotas têm correspondência exata por versão e nome; não há versões remotas sem ficheiro.
-- [ ] Aplicar e validar em ambiente isolado seis migrações locais ainda não aplicadas:
+Projeto `svwvkfsyevuyabelrtjk`: estado `ACTIVE_HEALTHY`, PostgreSQL 17.6.1.166, região `eu-west-1`. A organização está no plano Free.
+
+Comparação read-only feita em 13/11/2026:
+- `main`: 70 ficheiros SQL de migração; 63 migrações no histórico remoto.
+- As 63 versões remotas têm correspondência exata por versão e nome no repositório; não há versões remotas sem ficheiro local.
+- Sete migrações existentes em `main` ainda não foram aplicadas no Supabase alojado:
   - `20261030111815_restaurant_recipes_and_order_stock_consumption`
   - `20261102103000_granular_restaurant_staff_permissions`
   - `20261102120000_require_loyalty_permission_for_reward_fulfillment`
   - `20261102121000_enforce_loyalty_permission_for_staff_loyalty_operations`
   - `20261104100000_price_adviser_actor_indexes`
+  - `20261107170000_loyalty_shop_photos_and_plan_limits`
   - `20261112120000_restaurant_membership_request_actor_indexes`
-- [ ] Criar uma branch Supabase de desenvolvimento, testar schema/RLS/RPCs e advisors. O preço consultado é 0,01344 USD/hora. Não foi criada por não existir aprovação explícita para o custo.
-- [ ] Validar as tabelas ausentes `public.restaurant_recipes`, `public.restaurant_recipe_ingredients` e `private.restaurant_staff_permissions`. Até lá, não anunciar fichas técnicas/consumo automático de ingredientes nem permissões granulares.
-- [ ] Rever individualmente as 42 funções `SECURITY DEFINER` executáveis por `authenticated`. Não revogar permissões em bloco.
-- [ ] Rever o aviso do Auth sobre proteção contra palavras-passe comprometidas, tendo em conta o plano/custo do projeto.
-- [ ] Confirmar backup e executar restauro controlado antes de qualquer alteração de produção.
+- A PR #128 acrescenta a migração local `20261113114000_supplier_invoice_lines_stock_receipts_and_saft_sync`. Se for integrada, a sequência local passa a 71 ficheiros e ficam oito migrações por aplicar no projeto alojado até haver deployment controlado.
+- As tabelas `public.restaurant_recipes`, `public.restaurant_recipe_ingredients`, `private.restaurant_staff_permissions` e `private.restaurant_loyalty_entitlements` continuam ausentes no servidor. Por isso, fichas técnicas/consumo automático, permissões granulares, limites por plano e os novos fluxos de sincronização/receção de faturas da PR #128 não devem ser anunciados como ativos no backend alojado.
+- [ ] Rever as migrações e o schema, garantir backup/restauro verificável e executar os testes de autorização antes de qualquer alteração no projeto de produção.
+- [ ] Criar uma branch Supabase isolada e validar nela as migrações, RLS, RPCs e advisors. A criação consultada custa 0,01344 USD/hora; não foi criada por não existir autorização para esse custo.
+
+## Auditoria de segurança no servidor
+
+Consultas read-only e Supabase Advisors em 13/11/2026:
+- 20 tabelas públicas observadas com RLS ativada.
+- O Advisor assinala 11 tabelas com RLS e sem políticas diretas: seis no esquema privado e cinco no esquema público. A consulta de privilégios confirmou que nem `anon` nem `authenticated` têm permissões diretas SELECT/INSERT/UPDATE/DELETE nessas 11 tabelas. Não criar políticas genéricas apenas para silenciar o aviso.
+- Nenhuma função `SECURITY DEFINER` nos esquemas `public`/`private` é executável por `anon`; todas as 52 funções verificadas têm `search_path = ''`. O Advisor identifica 42 RPCs públicas executáveis por `authenticated`, em grande parte chamadas intencionais da aplicação. Ainda é necessária revisão funcional individual de autorização, âmbito do restaurante, parâmetros e concorrência; não revogar permissões em bloco.
+- [ ] A proteção de palavras-passe comprometidas está desativada. A organização está no plano Free; a documentação Supabase indica que esta opção exige Pro ou superior. Não foi alterado o plano nem assumido qualquer custo: [documentação oficial](https://supabase.com/docs/guides/auth/password-security).
+- [ ] O Performance Advisor assinala quatro foreign keys sem índice no projeto alojado; as correções correspondentes existem em migrações locais ainda não aplicadas.
+- [ ] O Performance Advisor mostra 45 índices sem utilização observada. Não remover índices automaticamente enquanto não houver tráfego real e medição.
 
 ## Autenticação, IA e integrações
 
-- [ ] Configurar SMTP/domínio próprio e testar registo, confirmação, recuperação, refresh, logout e eliminação de conta com contas descartáveis.
-- [ ] Confirmar/configurar `OPENROUTER_API_KEY` como segredo do servidor e executar testes autenticados de owner, staff, token expirado, privacidade, filtros, quotas e fallback. A IA cloud continua desligada por omissão.
+- [ ] Configurar SMTP/domínio e testar registo, confirmação, recuperação, refresh, logout e eliminação de conta com contas descartáveis.
+- [ ] Confirmar/configurar `OPENROUTER_API_KEY` como segredo do servidor e executar testes autenticados de proprietário, funcionário, token expirado, privacidade, filtros, quotas e fallback. A IA cloud permanece desligada por omissão até à validação.
 - [ ] Confirmar `SEARXNG_BASE_URL` HTTPS e testar pesquisa Web sem enviar dados privados.
 - [x] Google/Microsoft ocultos por decisão para a primeira venda; OAuth/PKCE preservado para fase posterior.
-- [ ] Testar a sincronização de histórico/memória entre dois dispositivos com consentimento, perda de rede e eliminação. A cópia cloud não é encriptação ponta a ponta.
+- [ ] Testar sincronização do histórico/memória entre dois dispositivos com consentimento, perda de rede e eliminação. A cópia cloud não é encriptação ponta a ponta.
+
+## Funcionalidades em validação — PR #128
+
+- A PR acrescenta sincronização autenticada do arquivo SAF-T de vendas e previsão de doses por prato, sem depender da utilização de pontos de fidelização.
+- A leitura OCR de faturas de fornecedores é local e sujeita a revisão do proprietário; não movimenta stock automaticamente.
+- A receção de mercadoria exige confirmação explícita, destino de cada linha, verificação de unidades e operação idempotente com custo médio ponderado.
+- Estas operações de sincronização/receção dependem da migração `20261113114000`, que não foi aplicada ao Supabase alojado. A PR continua em rascunho, não integrada e não pronta para dados reais.
 
 ## Produto, segurança e testes de aceitação
 
-- [ ] E2E com dois restaurantes e contas owner/staff/cliente: isolamento, menus, pedidos, cozinha, reservas, inventário, fidelização, campanhas, faturas e revogação de acesso.
-- [ ] Testar falhas de rede, repetição idempotente, sessão expirada, conflitos concorrentes, restauração e atualização.
+- [ ] E2E com dois restaurantes e contas de proprietário, funcionário e cliente: isolamento, menus, pedidos, cozinha, reservas, inventário, fidelização, campanhas, faturas e revogação de acesso.
+- [ ] Testar falhas de rede, repetição idempotente, sessão expirada, conflitos concorrentes, restauro e atualização em dispositivos reais.
 - [ ] Testar Gemma/LFM no OPPO A5m e em equipamentos Android representativos.
-- [ ] Rever retenção, exportação, eliminação, incident response, backups e suporte.
-- [ ] Não anunciar POS, pagamentos, faturação, SAF-T, contabilidade ou impressoras como funcionalidades integradas. O saldo de pontos permanece parcialmente manual.
+- [ ] Rever retenção, exportação, eliminação, resposta a incidentes, backups e suporte.
+- [ ] Não anunciar POS, pagamentos, faturação, SAF-T, contabilidade ou impressoras como integrações operacionais. A importação e análise de SAF-T da PR #128 não equivale a integração direta com POS/contabilidade nem a prova de pagamentos recebidos.
+- [ ] Finalizar termos, política de privacidade, DPA, subprocessadores, declaração Data Safety, licenças da IA e suporte com a entidade responsável.
 
 ## Release comercial e distribuição
 
 - [x] Workflow manual de release assinado existe e bloqueia builds sem CI verde para o commit exato, confirmação manual, keystore e package ID.
-- [ ] Escolher os identificadores finais após decidir a estratégia de distribuição; os identificadores ficam permanentes após publicação.
-- [ ] Criar keystore privada e backup controlado pelo proprietário; configurar os GitHub Actions Secrets/Variables. Nunca enviar chaves ou passwords por chat ou Git.
-- [ ] Rever a estratégia Google Play: cinco variantes técnicas não significam cinco listagens permitidas. Considerar apps distintas Gestão/Cliente e entitlement seguro para os planos ou distribuição B2B privada.
-- [ ] Gerar AAB/APKs assinados, verificar assinatura/checksums e testar atualização em dispositivos reais. O workflow não publica automaticamente na Play Store.
-- [ ] Finalizar termos, política de privacidade, DPA, subprocessadores, declaração Data Safety, licenças da IA e suporte com a entidade responsável.
+- [ ] Escolher os identificadores finais após decidir a estratégia de distribuição; ficam permanentes após publicação.
+- [ ] Criar keystore privada e backup sob controlo do proprietário; configurar GitHub Actions Secrets/Variables. Nunca enviar chaves ou passwords por chat ou Git.
+- [ ] Rever a estratégia Google Play: cinco variantes técnicas não significam cinco listagens permitidas. Considerar apps Gestão/Cliente e entitlements seguros por plano ou distribuição B2B privada.
+- [ ] Gerar AAB/APKs assinados com a chave comercial, verificar assinaturas/checksums e testar atualização em dispositivos reais. O workflow não publica automaticamente na Play Store.
+- [ ] Confirmar procedimento de backups/restauro antes de operar com dados de restaurantes.
 
 **Regra de lançamento:** a StudioMesa só fica autorizada para operação comercial depois de todos os bloqueios de backend, Auth, autorização, E2E/físicos, release e legal/privacidade acima estarem resolvidos e documentados.
 
