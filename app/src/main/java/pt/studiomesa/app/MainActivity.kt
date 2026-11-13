@@ -59,6 +59,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val REQUEST_EXPORT_ORDERS_CSV = 7812
         private const val REQUEST_IMPORT_SUPPLIER_INVOICE = 7813
+        private const val REQUEST_IMPORT_SAFT_SALES = 7814
     }
 
     private lateinit var store: RestaurantStore
@@ -100,10 +101,12 @@ class MainActivity : ComponentActivity() {
     private var assistantAnswer: StudioMesaAssistantAnswer? = null
     private val assistantChatStore by lazy { AssistantChatStore(this) }
     private val supplierInvoiceStore by lazy { SupplierInvoiceStore(this) }
+    private val saftSalesInvoiceStore by lazy { SaftSalesInvoiceStore(this) }
     private val assistantCloudSyncCoordinator by lazy { AssistantCloudSyncCoordinator() }
     private var assistantCloudSyncInFlight = false
     private var assistantCloudLastSyncAtMillis = 0L
     private var invoiceImportInFlight = false
+    private var saftSalesImportInFlight = false
     private var pendingInvoiceImport: PendingInvoiceImport? = null
 
     private data class PendingInvoiceImport(
@@ -307,6 +310,11 @@ class MainActivity : ComponentActivity() {
                 }
                 processSupplierInvoiceDocument(uri)
             }
+            return
+        }
+        if (requestCode == REQUEST_IMPORT_SAFT_SALES) {
+            val uri = data?.data
+            if (resultCode == RESULT_OK && uri != null) processSaftSalesFile(uri)
             return
         }
         if (requestCode != REQUEST_EXPORT_ORDERS_CSV) return
@@ -8269,6 +8277,168 @@ class MainActivity : ComponentActivity() {
         ))
     }
 
+
+    private fun openSaftSalesPicker() {
+        val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/xml", "text/xml", "application/octet-stream"))
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        runCatching {
+            startActivityForResult(picker, REQUEST_IMPORT_SAFT_SALES)
+        }.onFailure {
+            AlertDialog.Builder(this)
+                .setTitle("Não foi possível abrir o SAF-T")
+                .setMessage("O seletor de ficheiros não está disponível neste dispositivo.")
+                .setPositiveButton("OK", null)
+                .show()
+        }
+    }
+
+    private fun processSaftSalesFile(uri: android.net.Uri) {
+        if (saftSalesImportInFlight) return
+        saftSalesImportInFlight = true
+        val progress = AlertDialog.Builder(this)
+            .setTitle("A analisar faturas de venda")
+            .setMessage("A ler o SAF-T (PT) localmente. Os dados dos clientes e pontos de fidelização não são necessários.")
+            .setCancelable(false)
+            .create()
+        progress.show()
+        Thread({
+            val parsed = runCatching {
+                val output = java.io.ByteArrayOutputStream()
+                contentResolver.openInputStream(uri)?.use { input ->
+                    val buffer = ByteArray(64 * 1024)
+                    var total = 0
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        require(total <= SaftPtSalesInvoiceParser.MAX_FILE_BYTES) {
+                            "O ficheiro SAF-T excede 100 MB."
+                        }
+                        output.write(buffer, 0, count)
+                    }
+                } ?: throw java.io.FileNotFoundException("Não foi possível abrir o ficheiro SAF-T.")
+                SaftPtSalesInvoiceParser.parse(output.toByteArray())
+            }
+            runOnUiThread {
+                saftSalesImportInFlight = false
+                progress.dismiss()
+                parsed.fold(
+                    onSuccess = { import ->
+                        val preview = buildString {
+                            append("Versão SAF-T: ").append(import.version).append('\n')
+                            append("Faturas válidas para análise: ").append(import.acceptedInvoices.size).append('\n')
+                            append("Documentos anulados excluídos: ").append(import.excludedVoided).append('\n')
+                            append("Documentos substituídos excluídos: ").append(import.excludedReplaced).append('\n')
+                            append("Resumos de vendas excluídos para evitar duplicação: ").append(import.excludedSummary).append('\n')
+                            append("Outros estados excluídos: ").append(import.excludedOtherStates).append('\n')
+                            append("Documentos incompletos/inválidos ignorados: ").append(import.skippedInvalid)
+                            append("\n\nInclui faturas, faturas simplificadas, faturas-recibo e notas de crédito válidas. A importação não filtra clientes por cartão nem por pontos.")
+                            append("\n\nOs totais de vendas usam valores sem IVA. As notas de crédito reduzem a receita prevista.")
+                        }
+                        AlertDialog.Builder(this)
+                            .setTitle("Confirmar importação SAF-T")
+                            .setMessage(preview)
+                            .setNegativeButton("Cancelar", null)
+                            .setPositiveButton("Importar faturas") { _, _ ->
+                                runCatching {
+                                    saftSalesInvoiceStore.import(assistantChatScope(), import)
+                                }.onSuccess { result ->
+                                    economicDailyForecast = null
+                                    economicForecastLoadedDay = ""
+                                    economicForecastError = null
+                                    val message = when {
+                                        result.repeatedFile -> "Este ficheiro SAF-T já tinha sido importado. Não foram criados registos duplicados."
+                                        else -> "Importadas: ${result.importedInvoices} · atualizadas: ${result.updatedExistingInvoices}. Todas as vendas válidas ficaram disponíveis para a previsão, independentemente dos pontos."
+                                    }
+                                    Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                                    if (activePage == "Assistente económico" && economicAssistantIsEnabled()) {
+                                        refreshEconomicDailyForecastIfDue(force = true)
+                                        renderApp()
+                                    }
+                                }.onFailure { error ->
+                                    AlertDialog.Builder(this)
+                                        .setTitle("Importação não concluída")
+                                        .setMessage(error.message ?: "Não foi possível guardar o arquivo SAF-T cifrado.")
+                                        .setPositiveButton("OK", null)
+                                        .show()
+                                }
+                            }
+                            .show()
+                    },
+                    onFailure = { error ->
+                        AlertDialog.Builder(this)
+                            .setTitle("SAF-T não reconhecido")
+                            .setMessage(error.message ?: "Não foi possível analisar o ficheiro SAF-T.")
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
+                )
+            }
+        }, "StudioMesa-saft-import").start()
+    }
+
+    private fun normalizeSalesProductName(value: String): String =
+        java.text.Normalizer.normalize(value.trim().lowercase(Locale.ROOT), java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
+            .replace(Regex("[^a-z0-9]+"), " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    private fun saftSalesForecastLines(
+        invoices: List<SaftSalesInvoice>,
+        menuItems: List<MenuEntry>
+    ): List<EconomicForecastOrderLine> {
+        val menuByName = menuItems
+            .filter { it.name.isNotBlank() && it.id != null }
+            .associateBy { normalizeSalesProductName(it.name) }
+        val zone = java.time.ZoneId.systemDefault()
+        return buildList {
+            invoices.forEach { invoice ->
+                val millis = runCatching {
+                    java.time.LocalDate.parse(invoice.issueDate).atStartOfDay(zone).toInstant().toEpochMilli()
+                }.getOrNull() ?: return@forEach
+                val validLines = invoice.lines
+                if (validLines.isEmpty()) {
+                    val signedQuantity = if (invoice.invoiceType == "NC") BigDecimal("-1") else BigDecimal.ONE
+                    add(
+                        EconomicForecastOrderLine(
+                            createdAtMillis = millis,
+                            status = "Concluído",
+                            menuItemId = "",
+                            itemName = "Documento ${invoice.invoiceNumber}",
+                            quantity = signedQuantity,
+                            unitAmount = BigDecimal.ZERO,
+                            documentRevenueAmount = invoice.netTotal
+                        )
+                    )
+                } else {
+                    validLines.forEachIndexed { index, line ->
+                        val menuMatch = menuByName[normalizeSalesProductName(line.description)]
+                        val menuId = menuMatch?.id
+                            ?: "unmapped:" + line.description.take(120)
+                        val unitNet = if (line.quantity.signum() == 0) BigDecimal.ZERO else {
+                            line.netAmount.abs().divide(line.quantity.abs(), 8, java.math.RoundingMode.HALF_UP)
+                        }
+                        add(
+                            EconomicForecastOrderLine(
+                                createdAtMillis = millis,
+                                status = "Concluído",
+                                menuItemId = menuId,
+                                itemName = line.description,
+                                quantity = line.quantity,
+                                unitAmount = unitNet,
+                                documentRevenueAmount = if (index == 0) invoice.netTotal else null
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
 
     private fun renderEconomicInvoiceSummary(container: LinearLayout) {
         val invoices = runCatching { supplierInvoiceStore.list(assistantChatScope()) }.getOrDefault(emptyList())
