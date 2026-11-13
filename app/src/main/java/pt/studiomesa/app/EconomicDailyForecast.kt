@@ -103,6 +103,9 @@ internal object EconomicDailyForecastCalculator {
         }
         val recipeByMenu = recipes.filter(::validRecipe)
             .groupBy { it.menuItemId }
+        val menuNames = orders.filter { it.menuItemId.isNotBlank() }
+            .groupBy { it.menuItemId }
+            .mapValues { (_, rows) -> rows.firstOrNull()?.itemName.orEmpty() }
         val unmapped = linkedSetOf<String>()
         val forecastDays = (1..daysAhead).map { offset ->
             val target = today.plusDays(offset.toLong())
@@ -138,7 +141,7 @@ internal object EconomicDailyForecastCalculator {
                 if (perDayAverage.signum() <= 0) return@menuLoop
                 val requirements = recipeByMenu[menuId].orEmpty()
                 if (requirements.isEmpty()) {
-                    unmapped += menuId.removePrefix("unmapped:")
+                    unmapped += menuNames[menuId].orEmpty().ifBlank { menuId.removePrefix("unmapped:") }
                     return@menuLoop
                 }
                 requirements.forEach ingredientLoop@ { ingredient ->
