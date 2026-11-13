@@ -842,8 +842,9 @@ class MainActivity : ComponentActivity() {
         listOf(
             "Previsão diária das vendas para os próximos sete dias, com um gráfico e indicação da confiança do histórico.",
             "Estimativa média de ingredientes a preparar, calculada a partir das vendas por prato e das receitas aprovadas ligadas ao stock.",
-            "Leitura local de faturas PDF e imagens, extração de fornecedor, datas, base, IVA e total, com confirmação antes de aceitar os valores.",
-            "Arquivo de todas as faturas importadas — pendentes, confirmadas e rejeitadas — sem depender dos pontos de fidelização.",
+            "Importação do SAF-T (PT) exportado pelo programa de faturação para analisar todas as vendas válidas, incluindo clientes sem cartão de fidelização e sem pontos.",
+            "Leitura local de faturas de fornecedores em PDF ou fotografia, com extração de fornecedor, datas, base, IVA e total e confirmação antes de aceitar os valores.",
+            "Dois arquivos separados: faturas de venda e faturas de compra, com pesquisa de todos os estados. Os pontos de fidelização nunca filtram as vendas.",
             "Análise de custos, desperdício, preços de fornecedores, tesouraria e resultados estimados."
         ).forEachIndexed { index, itemText ->
             card.addView(label("${index + 1}. ${itemText}", 12f, false, ink))
