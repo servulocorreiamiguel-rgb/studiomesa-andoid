@@ -230,7 +230,7 @@ internal class SaftSalesInvoiceStore(context: Context) :
                     if (updatedAt == existingUpdatedAt) {
                         db.execSQL(
                             "UPDATE sales_invoices SET cloud_synced_at = MAX(cloud_synced_at, ?) WHERE scope_key = ? AND invoice_id = ?",
-                            arrayOf(updatedAt, scopeKey(scope), invoiceId)
+                            arrayOf<Any>(updatedAt, scopeKey(scope), invoiceId)
                         )
                     }
                     return@forEach
