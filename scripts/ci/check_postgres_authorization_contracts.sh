@@ -3052,9 +3052,9 @@ stock_after_invoice="$(psql --no-psqlrc --quiet --tuples-only --no-align --set O
 receipt_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
   -c "SELECT count(*)::text FROM private.restaurant_supplier_invoice_stock_receipts WHERE invoice_id = '$SUPPLIER_INVOICE_ID'::uuid;")"
 if ! grep -Fq '"already_applied": false' <<<"$receipt_result" ||
-   [ "$stock_after_invoice" != "4.500|7.7778" ] ||
+   [ "$stock_after_invoice" != "4.500|6.6667" ] ||
    [ "$receipt_count" != "1" ]; then
-  echo "ERROR: owner supplier invoice receipt did not add stock and weighted cost exactly once." >&2
+  echo "ERROR: owner supplier invoice receipt did not add stock and proportionate weighted cost exactly once." >&2
   printf 'Result: %s; stock: %s; receipts: %s\\n' "$receipt_result" "$stock_after_invoice" "$receipt_count" >&2
   exit 1
 fi
@@ -3078,7 +3078,7 @@ SQL
 stock_after_retry="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
   -c "SELECT quantity::text || '|' || unit_cost_per_unit::text FROM public.restaurant_inventory_items WHERE id = '$INVOICE_STOCK_ITEM'::uuid;")"
 if ! grep -Fq '"already_applied": true' <<<"$retry_result" ||
-   [ "$stock_after_retry" != "4.500|7.7778" ]; then
+   [ "$stock_after_retry" != "4.500|6.6667" ]; then
   echo "ERROR: retrying a supplier invoice receipt changed stock a second time." >&2
   exit 1
 fi
