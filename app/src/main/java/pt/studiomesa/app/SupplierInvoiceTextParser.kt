@@ -1,6 +1,7 @@
 package pt.studiomesa.app
 
 import java.math.BigDecimal
+import java.security.MessageDigest
 import java.math.RoundingMode
 import java.text.Normalizer
 import java.time.LocalDate
