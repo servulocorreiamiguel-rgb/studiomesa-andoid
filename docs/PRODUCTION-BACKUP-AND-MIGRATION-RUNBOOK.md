@@ -1,7 +1,7 @@
 # StudioMesa — backup e execução segura de migrações
 
 **Âmbito:** projeto Supabase `svwvkfsyevuyabelrtjk` (região `eu-west-1`).
-**Estado em 13/11/2026:** não executar migrações remotas. A organização está no plano Free e não existe ainda um backup completo com restauro ensaiado.
+**Estado em 13/11/2026:** não executar migrações remotas. A `main` está no commit `cbfc0e8c671d647bc0c6b3ddea80af3695c637c5`; o Supabase Free tem 63 migrações aplicadas e oito pendentes. Não existe ainda um backup completo com restauro ensaiado.
 
 ## 1. Porque é obrigatório parar antes de produção
 
@@ -56,7 +56,7 @@ supabase migration list --remote
 supabase db push --dry-run --remote
 ```
 
-Na `main` (commit `4f8fb77ef971bca1e33b0f4969b7459ae25c7c0a`) são esperadas sete migrações pendentes, por esta ordem:
+Na `main` atual são esperadas **oito migrações pendentes**, por esta ordem:
 
 1. `20261030111815_restaurant_recipes_and_order_stock_consumption`
 2. `20261102103000_granular_restaurant_staff_permissions`
@@ -65,8 +65,9 @@ Na `main` (commit `4f8fb77ef971bca1e33b0f4969b7459ae25c7c0a`) são esperadas set
 5. `20261104100000_price_adviser_actor_indexes`
 6. `20261107170000_loyalty_shop_photos_and_plan_limits`
 7. `20261112120000_restaurant_membership_request_actor_indexes`
+8. `20261113114000_supplier_invoice_lines_stock_receipts_and_saft_sync`
 
-A PR #128 acrescenta a migração `20261113114000_supplier_invoice_lines_stock_receipts_and_saft_sync`. Se for integrada, a pré-visualização passará a incluir oito migrações pendentes. Não executar uma lista diferente sem reconciliação explícita.
+A migração SAF-T/receção de mercadoria já faz parte da `main`; não é uma alteração futura nem depende de uma PR por integrar. O número e a ordem acima foram comparados com o histórico remoto em 13/11/2026. Voltar sempre a confirmar o dry-run imediatamente antes do deployment. Não executar uma lista diferente sem reconciliação explícita.
 
 ## 5. Revisão humana obrigatória antes do push
 
