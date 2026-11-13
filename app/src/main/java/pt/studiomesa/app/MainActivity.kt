@@ -159,6 +159,7 @@ class MainActivity : ComponentActivity() {
     private var economicForecastLoadedDay = ""
     private var economicForecastUpdatedAtMillis = 0L
     private var economicForecastSource = "Pedidos concluídos StudioMesa"
+    private var economicForecastScopeKey: String? = null
     private val economicDailyRefreshHandler = Handler(Looper.getMainLooper())
     private val economicDailyRefreshRunnable = object : Runnable {
         override fun run() {
@@ -890,6 +891,7 @@ class MainActivity : ComponentActivity() {
                 clearEconomicManagerState()
                 economicDailyForecast = null
                 economicForecastLoadedDay = ""
+                economicForecastScopeKey = null
                 assistantToolsVisible = false
                 activePage = "Assistente económico"
                 renderApp()
@@ -8496,6 +8498,15 @@ class MainActivity : ComponentActivity() {
         if (!economicAssistantIsEnabled() || economicForecastLoading) return
         if (hasRemoteRestaurant() && !isRemoteRestaurantOwner()) return
         val now = System.currentTimeMillis()
+        val forecastScope = assistantChatScope()
+        if (economicForecastScopeKey != forecastScope) {
+            economicForecastScopeKey = forecastScope
+            economicDailyForecast = null
+            economicForecastLoadedDay = ""
+            economicForecastUpdatedAtMillis = 0L
+            economicForecastError = null
+            economicForecastSource = "Pedidos concluídos StudioMesa"
+        }
         val todayKey = java.time.LocalDate.now().toString()
         if (!force && economicForecastLoadedDay == todayKey) return
         if (!force && now - economicForecastLastAttemptMillis < 15L * 60L * 1000L) return
@@ -8510,7 +8521,7 @@ class MainActivity : ComponentActivity() {
             var failure: String? = null
             var source = "Pedidos concluídos StudioMesa"
             try {
-                val importedInvoices = saftSalesInvoiceStore.list(assistantChatScope())
+                val importedInvoices = saftSalesInvoiceStore.list(forecastScope)
                 val menuEntries: List<MenuEntry>
                 var token = ""
                 if (remote) {
@@ -8641,7 +8652,7 @@ class MainActivity : ComponentActivity() {
 
             runOnUiThread {
                 economicForecastLoading = false
-                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (isFinishing || isDestroyed || assistantChatScope() != forecastScope) return@runOnUiThread
                 if (result != null) {
                     economicDailyForecast = result
                     economicForecastLoadedDay = todayKey
