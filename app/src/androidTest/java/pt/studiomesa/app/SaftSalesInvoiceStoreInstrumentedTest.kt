@@ -34,7 +34,9 @@ class SaftSalesInvoiceStoreInstrumentedTest {
             assertEquals(0, initial.updatedExistingInvoices)
             assertFalse(initial.repeatedFile)
             assertEquals(1, store.count(scope))
-            assertEquals(0, store.count(otherScope))
+            // The same invoice identity is isolated by account scope.
+            assertEquals(1, store.import(otherScope, firstImport).importedInvoices)
+            assertEquals(1, store.count(otherScope))
 
             val repeated = store.import(scope, firstImport)
             assertTrue(repeated.repeatedFile)
@@ -101,6 +103,8 @@ class SaftSalesInvoiceStoreInstrumentedTest {
             assertEquals(0, store.count(scope))
             assertTrue(store.list(scope).isEmpty())
             assertTrue(store.pendingCloudRows(scope, limit = 10).isEmpty())
+            assertEquals(1, store.count(otherScope))
+            assertEquals(BigDecimal("14.76"), store.list(otherScope).single().grossTotal)
 
             // Deletion also removes file fingerprints, so a restored/new account
             // scope is not blocked by stale local deduplication state.
