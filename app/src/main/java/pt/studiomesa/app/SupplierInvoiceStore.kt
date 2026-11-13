@@ -14,6 +14,18 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
+internal data class SupplierInvoiceLineRecord(
+    val id: String,
+    val productCode: String,
+    val description: String,
+    val quantity: String,
+    val unit: String,
+    val unitPrice: String,
+    val netAmount: String,
+    val vatRate: String?,
+    val inventoryItemId: String? = null
+)
+
 internal data class SupplierInvoiceRecord(
     val id: String,
     val supplierName: String,
@@ -34,7 +46,10 @@ internal data class SupplierInvoiceRecord(
     val reviewStatus: String,
     val warnings: List<String>,
     val createdAtMillis: Long,
-    val updatedAtMillis: Long
+    val updatedAtMillis: Long,
+    val lineItems: List<SupplierInvoiceLineRecord> = emptyList(),
+    val stockReceivedAtMillis: Long? = null,
+    val stockReceiptRequestId: String? = null
 ) {
     fun toDraft(): SupplierInvoiceDraft = SupplierInvoiceDraft(
         supplierName = supplierName,
@@ -190,7 +205,34 @@ internal class SupplierInvoiceStore(context: Context) {
             (0 until values.length()).map { values.optString(it) }.filter { it.isNotBlank() }
         },
         createdAtMillis = optLong("created_at"),
-        updatedAtMillis = optLong("updated_at")
+        updatedAtMillis = optLong("updated_at"),
+        lineItems = (optJSONArray("line_items") ?: JSONArray()).let { values ->
+            (0 until values.length()).mapNotNull { index ->
+                values.optJSONObject(index)?.let { row ->
+                    val id = row.optString("id")
+                    val description = row.optString("description")
+                    val quantity = row.optString("quantity")
+                    val unit = row.optString("unit")
+                    val unitPrice = row.optString("unit_price")
+                    val netAmount = row.optString("net_amount")
+                    if (id.isBlank() || description.isBlank() || quantity.isBlank() || unit.isBlank() ||
+                        unitPrice.isBlank() || netAmount.isBlank()) null
+                    else SupplierInvoiceLineRecord(
+                        id = id,
+                        productCode = row.optString("product_code"),
+                        description = description,
+                        quantity = quantity,
+                        unit = unit,
+                        unitPrice = unitPrice,
+                        netAmount = netAmount,
+                        vatRate = if (row.isNull("vat_rate")) null else row.optString("vat_rate"),
+                        inventoryItemId = if (row.isNull("inventory_item_id")) null else row.optString("inventory_item_id")
+                    )
+                }
+            }.take(MAX_LINES_PER_INVOICE)
+        },
+        stockReceivedAtMillis = optLong("stock_received_at").takeIf { it > 0L },
+        stockReceiptRequestId = optNullableString("stock_receipt_request_id")
     )
 
     private fun JSONObject.optNullableString(key: String): String? =
@@ -217,6 +259,22 @@ internal class SupplierInvoiceStore(context: Context) {
         .put("warnings", JSONArray(warnings))
         .put("created_at", createdAtMillis)
         .put("updated_at", updatedAtMillis)
+        .put("line_items", JSONArray().apply {
+            lineItems.forEach { line ->
+                put(JSONObject()
+                    .put("id", line.id)
+                    .put("product_code", line.productCode)
+                    .put("description", line.description)
+                    .put("quantity", line.quantity)
+                    .put("unit", line.unit)
+                    .put("unit_price", line.unitPrice)
+                    .put("net_amount", line.netAmount)
+                    .put("vat_rate", line.vatRate ?: JSONObject.NULL)
+                    .put("inventory_item_id", line.inventoryItemId ?: JSONObject.NULL))
+            }
+        })
+        .put("stock_received_at", stockReceivedAtMillis ?: JSONObject.NULL)
+        .put("stock_receipt_request_id", stockReceiptRequestId ?: JSONObject.NULL)
 
     private fun encrypt(value: String): String {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -259,5 +317,6 @@ internal class SupplierInvoiceStore(context: Context) {
         const val KEY_ALIAS = "pt.studiomesa.assistant.invoices.v1"
         const val FORMAT_VERSION = 1
         const val MAX_RECORDS = 5_000
+        const val MAX_LINES_PER_INVOICE = 500
     }
 }
