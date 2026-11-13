@@ -1947,9 +1947,15 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, friendlyBackendError(error.message), Toast.LENGTH_LONG).show()
         }) { raw ->
             val inventoryJson = JSONArray(raw)
-            data class StockChoice(val label: String, val id: String?) {
+            data class StockChoice(val label: String, val id: String?, val createNew: Boolean = false) {
                 override fun toString(): String = label
             }
+            data class ReceiptLineSelection(
+                val line: SupplierInvoiceLineRecord,
+                val inventoryId: String?,
+                val createNew: Boolean,
+                val acceptedQuantity: BigDecimal
+            )
             val inventory = (0 until inventoryJson.length()).mapNotNull { index ->
                 val row = inventoryJson.optJSONObject(index) ?: return@mapNotNull null
                 val id = row.optString("id")
@@ -1963,7 +1969,7 @@ class MainActivity : ComponentActivity() {
                 setPadding(dp(16), dp(8), dp(16), dp(8))
             }
             form.addView(label(
-                "Associa cada linha a um artigo existente. Só são apresentados artigos com a mesma unidade; não faço conversões automáticas. Linhas sem correspondência podem ficar por lançar.",
+                "A StudioMesa tenta associar automaticamente os produtos já existentes. Quando não encontra uma correspondência exata, podes criar o artigo de stock diretamente a partir do nome e da unidade da fatura. Não são feitas conversões automáticas; confirma sempre os dados antes de lançar a mercadoria.",
                 11f, false, muted
             ))
             addGap(form, 8)
@@ -1979,6 +1985,11 @@ class MainActivity : ComponentActivity() {
                 val compatible = inventory.filter { normalizeSupplierInvoiceStockUnit(it.second) == normalizeSupplierInvoiceStockUnit(line.unit) }
                 val choices = mutableListOf(StockChoice("Não lançar esta linha", null))
                 choices += compatible.map { it.first }.sortedBy { it.label.lowercase(Locale.ROOT) }
+                choices += StockChoice(
+                    "Criar automaticamente: ${line.description} · ${line.unit}",
+                    null,
+                    createNew = true
+                )
                 val spinner = Spinner(this)
                 val adapter = ArrayAdapter(
                     this,
@@ -1993,9 +2004,10 @@ class MainActivity : ComponentActivity() {
                 if (exactMatches.size == 1) {
                     val exactIndex = choices.indexOfFirst { it.id == exactMatches.single().first.id }
                     if (exactIndex > 0) spinner.setSelection(exactIndex)
-                }
-                if (compatible.isEmpty()) {
-                    card.addView(label("Não existe artigo de stock com a unidade \"" + line.unit + "\".", 9.5f, false, muted))
+                } else if (compatible.isEmpty()) {
+                    // No same-unit stock item exists: preselect safe creation from the reviewed invoice row.
+                    spinner.setSelection(choices.lastIndex)
+                    card.addView(label("Será criado um artigo novo com esta designação e unidade.", 9.5f, false, muted))
                 }
                 card.addView(spinner, LinearLayout.LayoutParams(-1, dp(44)))
                 addGap(card, 5)
@@ -2018,9 +2030,9 @@ class MainActivity : ComponentActivity() {
             dialog.setOnShowListener {
                 dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                     var invalidQuantity = false
-                    val mappings = selections.mapNotNull { (line, spinner, quantityField) ->
-                        val choice = spinner.selectedItem as? StockChoice
-                        val inventoryId = choice?.id ?: return@mapNotNull null
+                    val selectedLines = selections.mapNotNull { (line, spinner, quantityField) ->
+                        val choice = spinner.selectedItem as? StockChoice ?: return@mapNotNull null
+                        if (choice.id.isNullOrBlank() && !choice.createNew) return@mapNotNull null
                         val acceptedQuantity = SupplierInvoiceTextParser.parseQuantity(
                             quantityField.text.toString()
                         )
@@ -2029,18 +2041,26 @@ class MainActivity : ComponentActivity() {
                             invalidQuantity = true
                             return@mapNotNull null
                         }
-                        JSONObject()
-                            .put("line_id", line.id)
-                            .put("inventory_item_id", inventoryId)
-                            .put("accepted_quantity", acceptedQuantity.setScale(3, java.math.RoundingMode.HALF_UP).toPlainString())
+                        ReceiptLineSelection(
+                            line = line,
+                            inventoryId = choice.id,
+                            createNew = choice.createNew,
+                            acceptedQuantity = acceptedQuantity
+                        )
                     }
                     if (invalidQuantity) return@setOnClickListener
-                    if (mappings.isEmpty()) {
-                        Toast.makeText(this, "Escolhe pelo menos um artigo de stock.", Toast.LENGTH_LONG).show()
+                    if (selectedLines.isEmpty()) {
+                        Toast.makeText(this, "Escolhe pelo menos um artigo de stock ou a criação automática.", Toast.LENGTH_LONG).show()
                         return@setOnClickListener
                     }
-                    val confirmation = mappings.size.toString() +
-                        " artigo(s) vão receber as quantidades e os custos das linhas revistas. A operação ficará registada uma única vez. Não serão criadas encomendas a fornecedores."
+                    val newStockItems = selectedLines
+                        .filter { it.createNew }
+                        .map { normalizeSalesProductName(it.line.description) + "|" + normalizeSupplierInvoiceStockUnit(it.line.unit) }
+                        .distinct()
+                        .size
+                    val confirmation = selectedLines.size.toString() +
+                        " linha(s) vão entrar no stock; " + newStockItems +
+                        " novo(s) artigo(s) serão criados automaticamente a partir da fatura quando necessário. As quantidades só serão lançadas depois desta confirmação. A operação fica registada uma única vez."
                     AlertDialog.Builder(this)
                         .setTitle("Confirmar entrada de mercadoria")
                         .setMessage(confirmation)
@@ -2048,8 +2068,50 @@ class MainActivity : ComponentActivity() {
                         .setPositiveButton("Adicionar ao stock") { _, _ ->
                             dialog.dismiss()
                             runBackend({
+                                val token = backendToken()
+                                val restaurantId = backendRestaurantId()
+                                val createdItems = mutableMapOf<String, String>()
+                                val mappings = selectedLines.map { selection ->
+                                    val line = selection.line
+                                    val inventoryId = selection.inventoryId ?: run {
+                                        val productKey = normalizeSalesProductName(line.description) +
+                                            "|" + normalizeSupplierInvoiceStockUnit(line.unit)
+                                        createdItems[productKey] ?: run {
+                                            // Stable request IDs make an interrupted retry return the same
+                                            // stock item instead of creating duplicates.
+                                            val requestId = java.util.UUID.nameUUIDFromBytes(
+                                                ("supplier-invoice-stock:" + invoice.id + ":" + line.id)
+                                                    .toByteArray(Charsets.UTF_8)
+                                            ).toString()
+                                            val unitCost = (line.unitPrice.toBigDecimalOrNull() ?: BigDecimal.ZERO)
+                                                .setScale(4, java.math.RoundingMode.HALF_UP)
+                                            val createdId = SupabaseApi.createInventoryItemWithCost(
+                                                token = token,
+                                                requestId = requestId,
+                                                restaurantId = restaurantId,
+                                                name = line.description.take(100),
+                                                unit = line.unit,
+                                                quantity = 0.0,
+                                                lowStockThreshold = 0.0,
+                                                note = "Criado automaticamente a partir da fatura " +
+                                                    invoice.invoiceNumber.take(40) +
+                                                    "; entrada de mercadoria confirmada em separado.",
+                                                unitCostPerUnit = unitCost
+                                            )
+                                            createdItems[productKey] = createdId
+                                            createdId
+                                        }
+                                    }
+                                    JSONObject()
+                                        .put("line_id", line.id)
+                                        .put("inventory_item_id", inventoryId)
+                                        .put(
+                                            "accepted_quantity",
+                                            selection.acceptedQuantity.setScale(3, java.math.RoundingMode.HALF_UP).toPlainString()
+                                        )
+                                }
                                 val result = SupabaseApi.receiveSupplierInvoiceStock(
-                                    backendToken(),
+                                    token,
                                     invoice.id,
                                     java.util.UUID.randomUUID().toString(),
                                     mappings
