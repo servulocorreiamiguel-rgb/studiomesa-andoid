@@ -227,6 +227,16 @@ internal object SupplierInvoiceTextParser {
         }.getOrNull()
     }
 
+    fun parseQuantity(raw: String): BigDecimal? {
+        val value = raw.trim().replace(',', '.')
+        if (!Regex("""^[0-9]+(?:\\.[0-9]{1,3})?$""").matches(value)) return null
+        return runCatching {
+            BigDecimal(value).takeIf {
+                it.signum() > 0 && it <= BigDecimal("999999")
+            }
+        }.getOrNull()
+    }
+
     fun isValidPortugueseVatNumber(raw: String): Boolean {
         val nif = raw.filter(Char::isDigit)
         if (nif.length != 9 || nif[0] !in "1235689") return false
