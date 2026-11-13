@@ -115,6 +115,75 @@ class SupplierInvoiceTextParserTest {
         assertNull(draft.arithmeticWarning())
     }
 
+
+    @Test
+    fun extractsInvoiceProductRowsWithCodesQuantitiesUnitsAndTaxRates() {
+        val draft = SupplierInvoiceTextParser.parse(
+            """
+                FORNECEDOR: Mercearia Central Lda
+                FATURA FT/2026/000128
+                Data da fatura: 09/11/2026
+                Código Descrição Quantidade Un. Preço Total IVA
+                100003 ARROZ CAROLINO 5,000 KG 1,20 6,00 6%
+                100004 AZEITE VIRGEM EXTRA 2,000 LT 4,50 9,00 23%
+                Base tributável: 15,00 €
+                Total IVA: 2,43 €
+                Total a pagar: 17,43 €
+            """.trimIndent()
+        )
+
+        assertEquals(2, draft.lines.size)
+        assertEquals("100003", draft.lines[0].productCode)
+        assertEquals("ARROZ CAROLINO", draft.lines[0].description)
+        assertEquals(BigDecimal("5.000"), draft.lines[0].quantity)
+        assertEquals("kg", draft.lines[0].unit)
+        assertEquals(BigDecimal("1.20"), draft.lines[0].unitPrice)
+        assertEquals(BigDecimal("6.00"), draft.lines[0].netAmount)
+        assertEquals(BigDecimal("6"), draft.lines[0].vatRate)
+        assertEquals("AZEITE VIRGEM EXTRA", draft.lines[1].description)
+        assertEquals(BigDecimal("2.000"), draft.lines[1].quantity)
+        assertEquals("l", draft.lines[1].unit)
+        assertEquals(BigDecimal("9.00"), draft.lines[1].netAmount)
+    }
+
+    @Test
+    fun doesNotTreatInvoiceTotalsHeadersOrAmbiguousRowsAsProducts() {
+        val draft = SupplierInvoiceTextParser.parse(
+            """
+                FORNECEDOR: Distribuidor Norte
+                FATURA FT/2026/000129
+                Data da fatura: 10/11/2026
+                Descrição Quantidade Valor
+                Subtotal 90,00 €
+                Total IVA 20,00 €
+                Total a pagar 110,00 €
+                Transporte 4,50
+                100003 ARROZ CAROLINO 5,000 KG 1,20
+                100004 AZEITE 2,000 LT 4,50 9,00 23%
+            """.trimIndent()
+        )
+
+        assertEquals(1, draft.lines.size)
+        assertEquals("AZEITE", draft.lines.single().description)
+        assertEquals(BigDecimal("9.00"), draft.lines.single().netAmount)
+    }
+
+    @Test
+    fun rejectsNonPositiveAndUnboundedInvoiceLineQuantities() {
+        val draft = SupplierInvoiceTextParser.parse(
+            """
+                FORNECEDOR: Distribuidor Norte
+                FATURA FT/2026/000130
+                Data da fatura: 11/11/2026
+                100003 ARROZ CAROLINO 0,000 KG 1,20 0,00 6%
+                100004 AZEITE 2,000 LT 4,50 9,00 23%
+            """.trimIndent()
+        )
+
+        assertEquals(1, draft.lines.size)
+        assertEquals("AZEITE", draft.lines.single().description)
+    }
+
     @Test
     fun rejectsInvalidPortugueseVatNumber() {
         assertTrue(SupplierInvoiceTextParser.isValidPortugueseVatNumber("501234560"))
