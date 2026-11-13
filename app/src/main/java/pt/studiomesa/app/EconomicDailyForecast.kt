@@ -126,30 +126,30 @@ internal object EconomicDailyForecastCalculator {
         }
         val ingredientTotals = linkedMapOf<String, BigDecimal>()
         val ingredientMetadata = linkedMapOf<String, EconomicRecipeIngredient>()
-        forecastDays.forEach { forecastDay ->
+        forecastDays.forEach dayLoop@ { forecastDay ->
             val samples = historical.asReversed()
                 .filter { it.date.dayOfWeek == forecastDay.date.dayOfWeek }
                 .take(maxComparableDays)
-            if (samples.isEmpty()) return@forEach
+            if (samples.isEmpty()) return@dayLoop
             val allMenuIds = samples.flatMap { it.portionsByMenuItem.keys }.toSet()
-            allMenuIds.forEach { menuId ->
+            allMenuIds.forEach menuLoop@ { menuId ->
                 val perDayAverage = samples.fold(zero) { sum, row ->
                     sum.add(row.portionsByMenuItem[menuId] ?: zero)
                 }.divide(BigDecimal(samples.size), 6, RoundingMode.HALF_UP)
-                if (perDayAverage.signum() <= 0) return@forEach
+                if (perDayAverage.signum() <= 0) return@menuLoop
                 val requirements = recipeByMenu[menuId].orEmpty()
                 if (requirements.isEmpty()) {
                     unmapped += menuId
                     return@forEach
                 }
-                requirements.forEach { ingredient ->
+                requirements.forEach ingredientLoop@ { ingredient ->
                     val usablePercent = hundred.subtract(ingredient.wastePercent)
                     val adjustedPerPortion = ingredient.quantityPerPortion
                         .multiply(hundred)
                         .divide(usablePercent, 8, RoundingMode.HALF_UP)
                     val quantity = adjustedPerPortion.multiply(perDayAverage)
                     val key = ingredient.inventoryItemId
-                    if (key.isBlank()) return@forEach
+                    if (key.isBlank()) return@ingredientLoop
                     ingredientTotals[key] = (ingredientTotals[key] ?: zero).add(quantity)
                     ingredientMetadata[key] = ingredient
                 }
