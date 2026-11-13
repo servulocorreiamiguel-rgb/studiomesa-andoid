@@ -38,6 +38,7 @@ internal class SaftSalesInvoiceStore(context: Context) :
                 issue_date TEXT NOT NULL,
                 encrypted_payload TEXT NOT NULL,
                 updated_at INTEGER NOT NULL,
+                cloud_synced_at INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY(scope_key, invoice_id)
             )""".trimIndent()
         )
@@ -53,7 +54,10 @@ internal class SaftSalesInvoiceStore(context: Context) :
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if (oldVersion != newVersion) {
+        if (oldVersion < 2 && newVersion >= 2) {
+            db.execSQL("ALTER TABLE sales_invoices ADD COLUMN cloud_synced_at INTEGER NOT NULL DEFAULT 0")
+        }
+        if (newVersion != DATABASE_VERSION) {
             throw IllegalStateException("A versão do arquivo SAF-T não é compatível; os dados não foram eliminados.")
         }
     }
@@ -80,19 +84,27 @@ internal class SaftSalesInvoiceStore(context: Context) :
             var imported = 0
             var updated = 0
             parsed.acceptedInvoices.forEach { invoice ->
-                val exists = db.query(
+                val existingUpdatedAt = db.query(
                     "sales_invoices",
-                    arrayOf("invoice_id"),
+                    arrayOf("updated_at"),
                     "scope_key = ? AND invoice_id = ?",
                     arrayOf(scopeKey, invoice.id),
                     null, null, null, "1"
-                ).use { it.moveToFirst() }
+                ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else null }
+                val exists = existingUpdatedAt != null
+                // A stale acknowledgement from an earlier upload must never mark a
+                // newer local edit as synchronized, even when both imports happen
+                // within the same millisecond or the device clock moves backwards.
+                val nextUpdatedAt = maxOf(
+                    System.currentTimeMillis(),
+                    (existingUpdatedAt ?: 0L) + 1L
+                )
                 val values = ContentValues().apply {
                     put("scope_key", scopeKey)
                     put("invoice_id", invoice.id)
                     put("issue_date", invoice.issueDate)
                     put("encrypted_payload", encrypt(invoice.toJson().toString()))
-                    put("updated_at", System.currentTimeMillis())
+                    put("updated_at", nextUpdatedAt)
                 }
                 db.insertWithOnConflict(
                     "sales_invoices",
@@ -136,6 +148,137 @@ internal class SaftSalesInvoiceStore(context: Context) :
             }
         }
         return result
+    }
+
+
+    /**
+     * Returns only locally changed invoices. Payloads are decrypted in memory for
+     * transport over TLS; records remain AES-GCM encrypted in the local database.
+     */
+    @Synchronized
+    fun pendingCloudRows(scope: String, limit: Int = 250): List<JSONObject> {
+        require(scope.isNotBlank())
+        require(limit in 1..500)
+        val rows = mutableListOf<JSONObject>()
+        readableDatabase.query(
+            "sales_invoices",
+            arrayOf("invoice_id", "issue_date", "encrypted_payload", "updated_at"),
+            "scope_key = ? AND updated_at > cloud_synced_at",
+            arrayOf(scopeKey(scope)),
+            null, null,
+            "updated_at ASC, invoice_id ASC",
+            limit.toString()
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                rows += JSONObject()
+                    .put("invoice_id", cursor.getString(0))
+                    .put("issue_date", cursor.getString(1))
+                    .put("payload", JSONObject(decrypt(cursor.getString(2))))
+                    .put("updated_at_ms", cursor.getLong(3))
+            }
+        }
+        return rows
+    }
+
+    /** Mark only the exact versions acknowledged by the server as synchronized. */
+    @Synchronized
+    fun markCloudRowsSynced(scope: String, rows: List<JSONObject>) {
+        require(scope.isNotBlank())
+        if (rows.isEmpty()) return
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            rows.forEach { row ->
+                val id = row.optString("invoice_id")
+                val updatedAt = row.optLong("updated_at_ms", 0L)
+                require(id.matches(Regex("^[a-f0-9]{64}$")) && updatedAt > 0L)
+                db.execSQL(
+                    "UPDATE sales_invoices SET cloud_synced_at = ? WHERE scope_key = ? AND invoice_id = ? AND updated_at = ?",
+                    arrayOf<Any>(updatedAt, scopeKey(scope), id, updatedAt)
+                )
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /**
+     * Merge a server page without replacing a newer local edit. Incoming payloads
+     * are validated before they are re-encrypted with the current device key.
+     */
+    @Synchronized
+    fun mergeCloudRows(scope: String, rows: List<JSONObject>): Int {
+        require(scope.isNotBlank())
+        require(rows.size <= 1_000)
+        if (rows.isEmpty()) return 0
+        val db = writableDatabase
+        var merged = 0
+        db.beginTransaction()
+        try {
+            rows.forEach { row ->
+                val invoiceId = row.optString("invoice_id")
+                val issueDate = row.optString("issue_date")
+                val updatedAt = row.optLong("updated_at_ms", 0L)
+                val payload = row.optJSONObject("payload")
+                    ?: throw IllegalArgumentException("O servidor devolveu uma fatura SAF-T inválida.")
+                require(invoiceId.matches(Regex("^[a-f0-9]{64}$")) && updatedAt > 0L)
+                val invoice = payload.toInvoice()
+                require(invoice.id == invoiceId && invoice.issueDate == issueDate) {
+                    "A identidade ou a data da fatura SAF-T não corresponde ao conteúdo recebido."
+                }
+                val existingUpdatedAt = db.query(
+                    "sales_invoices",
+                    arrayOf("updated_at"),
+                    "scope_key = ? AND invoice_id = ?",
+                    arrayOf(scopeKey(scope), invoiceId),
+                    null, null, null, "1"
+                ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else 0L }
+                if (updatedAt <= existingUpdatedAt) {
+                    if (updatedAt == existingUpdatedAt) {
+                        db.execSQL(
+                            "UPDATE sales_invoices SET cloud_synced_at = MAX(cloud_synced_at, ?) WHERE scope_key = ? AND invoice_id = ?",
+                            arrayOf<Any>(updatedAt, scopeKey(scope), invoiceId)
+                        )
+                    }
+                    return@forEach
+                }
+                db.insertWithOnConflict(
+                    "sales_invoices",
+                    null,
+                    ContentValues().apply {
+                        put("scope_key", scopeKey(scope))
+                        put("invoice_id", invoiceId)
+                        put("issue_date", issueDate)
+                        put("encrypted_payload", encrypt(payload.toString()))
+                        put("updated_at", updatedAt)
+                        put("cloud_synced_at", updatedAt)
+                    },
+                    SQLiteDatabase.CONFLICT_REPLACE
+                )
+                merged++
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        return merged
+    }
+
+    /** Remove every locally stored invoice and import fingerprint for a deleted account. */
+    @Synchronized
+    fun clearScope(scope: String) {
+        require(scope.isNotBlank()) { "A conta do arquivo SAF-T não está identificada." }
+        val key = scopeKey(scope)
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("sales_invoices", "scope_key = ?", arrayOf(key))
+            db.delete("sales_invoice_import_files", "scope_key = ?", arrayOf(key))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     @Synchronized
@@ -238,7 +381,7 @@ internal class SaftSalesInvoiceStore(context: Context) :
 
     private companion object {
         const val DATABASE_NAME = "studiomesa_saft_sales_v1.db"
-        const val DATABASE_VERSION = 1
+        const val DATABASE_VERSION = 2
         const val KEY_ALIAS = "pt.studiomesa.assistant.saft.sales.v1"
     }
 }

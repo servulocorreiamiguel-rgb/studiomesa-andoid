@@ -1,12 +1,24 @@
 package pt.studiomesa.app
 
 import java.math.BigDecimal
+import java.security.MessageDigest
 import java.math.RoundingMode
 import java.text.Normalizer
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 import java.util.Locale
+
+internal data class SupplierInvoiceLineDraft(
+    val id: String,
+    val productCode: String,
+    val description: String,
+    val quantity: BigDecimal,
+    val unit: String,
+    val unitPrice: BigDecimal,
+    val netAmount: BigDecimal,
+    val vatRate: BigDecimal?
+)
 
 internal data class SupplierInvoiceDraft(
     val supplierName: String = "",
@@ -17,6 +29,7 @@ internal data class SupplierInvoiceDraft(
     val netAmount: BigDecimal? = null,
     val vatAmount: BigDecimal? = null,
     val totalAmount: BigDecimal? = null,
+    val lines: List<SupplierInvoiceLineDraft> = emptyList(),
     val currency: String = "EUR",
     val source: String = "ocr",
     val rawText: String = "",
@@ -48,6 +61,12 @@ internal object SupplierInvoiceTextParser {
     )
     private val supplierLabelPattern = Regex(
         """(?im)^\s*(?:FORNECEDOR|EMITENTE|SUPPLIER|DENOMINAÇÃO SOCIAL)\s*[:\-]\s*(.{2,100})\s*$"""
+    )
+    // Capture only structured rows. Ambiguous OCR fragments are intentionally
+    // excluded instead of being guessed into inventory movements.
+    private val invoiceLinePattern = Regex(
+        """^\s*(?:(?<lineNo>\d{1,4})[.)]?\s+)?(?:(?<productCode>(?=[A-Z0-9./_-]{4,24}\s)(?=[A-Z0-9./_-]*\d)[A-Z0-9][A-Z0-9./_-]{3,23})\s+)?(?<description>[\p{L}][\p{L}\p{N}() /.,'-]{2,79}?)\s+(?<quantity>\d{1,7}(?:[,.]\d{1,4})?)\s*(?<unit>UNIDADES?|UNID(?:ADE)?S?|UND|UN|KG|G|GR|L|LT|ML|CX|CAIXA|PCT|PACOTE|PACK|FD|FARDO|M|MT|M2|M3|DZ|DOZ)\s+(?:[x×]\s*)?(?<unitPrice>\d{1,7}(?:[,.]\d{2,4})?)\s+(?<netAmount>\d{1,7}(?:[,.]\d{2,4})?)(?:\s+(?<vatRate>\d{1,2}(?:[,.]\d{1,2})?)\s*%)?(?:\s+\d{1,7}(?:[,.]\d{2,4})?)?\s*$""",
+        RegexOption.IGNORE_CASE
     )
 
     fun parse(rawText: String, source: String = "ocr"): SupplierInvoiceDraft {
@@ -98,6 +117,7 @@ internal object SupplierInvoiceTextParser {
             labels = listOf("total iva", "valor iva", "iva total", "imposto total", "iva", "vat")
         )
 
+        val extractedLines = extractInvoiceLines(lines)
         val warnings = buildList {
             if (supplierName.isBlank()) add("Não foi possível identificar o fornecedor. Confirma manualmente.")
             if (nif.isBlank()) add("NIF/NIPC não identificado ou inválido. Confirma o número no documento.")
@@ -121,11 +141,100 @@ internal object SupplierInvoiceTextParser {
             netAmount = net,
             vatAmount = vat,
             totalAmount = total,
+            lines = extractedLines,
             rawText = text,
             source = source,
             warnings = warnings
         )
         return draft.copy(warnings = warnings + listOfNotNull(draft.arithmeticWarning()))
+    }
+
+    private fun extractInvoiceLines(lines: List<String>): List<SupplierInvoiceLineDraft> {
+        val extracted = linkedMapOf<String, SupplierInvoiceLineDraft>()
+        lines.forEachIndexed { index, line ->
+            val normalized = normalize(line)
+            if (normalized.isBlank() || listOf(
+                    "subtotal", "total", "iva", "vat", "base tributavel", "desconto",
+                    "transporte", "a pagar", "descricao quantidade", "preco unitario"
+                ).any { normalized.startsWith(it) }) return@forEachIndexed
+            val match = invoiceLinePattern.matchEntire(line) ?: return@forEachIndexed
+            val description = match.groups["description"]?.value?.trim()
+                ?.replace(Regex("\\s+"), " ").orEmpty()
+            val quantity = match.groups["quantity"]?.value?.let(::parseFlexibleDecimal)
+            val unitPrice = match.groups["unitPrice"]?.value?.let(::parseAmount)
+            val netAmount = match.groups["netAmount"]?.value?.let(::parseAmount)
+            if (description.length !in 3..80 || quantity == null || quantity.signum() <= 0 ||
+                quantity > BigDecimal("999999") || unitPrice == null || unitPrice.signum() < 0 ||
+                netAmount == null || netAmount.signum() < 0) return@forEachIndexed
+
+            val unitRaw = match.groups["unit"]?.value.orEmpty().uppercase(Locale.ROOT)
+            val unit = when (unitRaw) {
+                "UNIDADE", "UNIDADES", "UNID", "UNIDS", "UND", "UN" -> "un"
+                "GR", "G" -> "g"
+                "LT", "L" -> "l"
+                "MT", "M" -> "m"
+                "CX", "CAIXA" -> "cx"
+                "PCT", "PACOTE", "PACK" -> "pct"
+                "FD", "FARDO" -> "fardo"
+                "DZ", "DOZ" -> "dz"
+                else -> unitRaw.lowercase(Locale.ROOT)
+            }
+            val vatRate = match.groups["vatRate"]?.value?.let(::parseFlexibleDecimal)
+            if (vatRate != null && (vatRate.signum() < 0 || vatRate > BigDecimal("100"))) {
+                return@forEachIndexed
+            }
+            val productCode = match.groups["productCode"]?.value.orEmpty().take(24)
+            val stableSource = index.toString() + "|" + line.trim().lowercase(Locale.ROOT)
+            val lineId = MessageDigest.getInstance("SHA-256")
+                .digest(stableSource.toByteArray(Charsets.UTF_8))
+                .joinToString("") { "%02x".format(it) }
+            extracted.putIfAbsent(
+                lineId,
+                SupplierInvoiceLineDraft(
+                    id = lineId,
+                    productCode = productCode,
+                    description = description,
+                    quantity = quantity,
+                    unit = unit,
+                    unitPrice = unitPrice,
+                    netAmount = netAmount,
+                    vatRate = vatRate
+                )
+            )
+        }
+        return extracted.values.take(MAX_INVOICE_LINES)
+    }
+
+    private fun parseFlexibleDecimal(raw: String): BigDecimal? {
+        var value = raw.trim().replace(" ", "")
+        if (value.isBlank()) return null
+        val comma = value.lastIndexOf(',')
+        val dot = value.lastIndexOf('.')
+        value = when {
+            comma >= 0 && dot >= 0 && comma > dot ->
+                value.replace(".", "").replace(',', '.')
+            comma >= 0 && dot >= 0 && dot > comma ->
+                value.replace(",", "")
+            comma >= 0 -> value.replace(',', '.')
+            dot >= 0 && Regex("""^-?\d{1,3}(?:\.\d{3})+$""").matches(value) ->
+                value.replace(".", "")
+            else -> value
+        }
+        return runCatching {
+            BigDecimal(value).takeIf {
+                it.scale().coerceAtLeast(0) <= 4 && it.abs() <= BigDecimal("999999999")
+            }
+        }.getOrNull()
+    }
+
+    fun parseQuantity(raw: String): BigDecimal? {
+        val value = raw.trim().replace(',', '.')
+        if (!Regex("""^[0-9]+(?:\.[0-9]{1,3})?$""").matches(value)) return null
+        return runCatching {
+            BigDecimal(value).takeIf {
+                it.signum() > 0 && it <= BigDecimal("999999")
+            }
+        }.getOrNull()
     }
 
     fun isValidPortugueseVatNumber(raw: String): Boolean {
@@ -228,4 +337,5 @@ internal object SupplierInvoiceTextParser {
             .trim()
 
     private const val MAX_OCR_CHARS = 50_000
+    private const val MAX_INVOICE_LINES = 500
 }

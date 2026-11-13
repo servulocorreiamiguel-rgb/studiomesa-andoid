@@ -107,6 +107,11 @@ class MainActivity : ComponentActivity() {
     private var assistantCloudLastSyncAtMillis = 0L
     private var invoiceImportInFlight = false
     private var saftSalesImportInFlight = false
+    private var saftCloudSyncInFlight = false
+    private var lastSaftCloudSyncAtMillis = 0L
+    private var saftCloudSyncAvailable: Boolean? = null
+    private var saftCloudSyncError: String? = null
+    private var supplierInvoiceLineItemsSyncSupported = false
     private var pendingInvoiceImport: PendingInvoiceImport? = null
 
     private data class PendingInvoiceImport(
@@ -909,6 +914,7 @@ class MainActivity : ComponentActivity() {
         if (isEconomicAssistant || ownerInvoiceAccess) {
             refreshSupplierInvoicesFromCloud(showFeedback = false)
         }
+        if (isEconomicAssistant) syncSaftSalesInvoicesWithCloud(showFeedback = false)
         if (assistantChatScopeKey != scope) {
             assistantChatScopeKey = scope
             activeAssistantConversationId = null
@@ -1492,6 +1498,37 @@ class MainActivity : ComponentActivity() {
         val vatAmount = field("IVA (€)", "0,00", pending.draft.vatAmount?.toPlainString().orEmpty(), amountType)
         val total = field("Total a pagar (€)", "0,00", pending.draft.totalAmount?.toPlainString().orEmpty(), amountType)
 
+        if (pending.draft.lines.isEmpty()) {
+            addGap(form, 6)
+            form.addView(label(
+                "Não foram reconhecidas linhas de produtos com estrutura suficientemente clara. A fatura pode ser guardada, mas não estará disponível para entrada no stock.",
+                10.5f, true, muted
+            ))
+        } else {
+            addGap(form, 8)
+            form.addView(label(
+                "LINHAS DE PRODUTOS RECONHECIDAS · " + pending.draft.lines.size,
+                10f, true, forestSoft
+            ))
+            val linesCard = makeCard(10)
+            pending.draft.lines.forEach { line ->
+                linesCard.addView(label(
+                    (if (line.productCode.isBlank()) "" else line.productCode + " · ") +
+                        line.description + "\n" +
+                        line.quantity.stripTrailingZeros().toPlainString() + " " + line.unit +
+                        " · " + formatInvoiceEuro(line.netAmount) + " sem IVA" +
+                        (line.vatRate?.let { " · IVA " + it.stripTrailingZeros().toPlainString() + "%" } ?: ""),
+                    10.5f, false, ink
+                ))
+                addGap(linesCard, 4)
+            }
+            linesCard.addView(label(
+                "Confirma descrição, quantidade, unidade e valores na fatura original. Linhas ambíguas são omitidas; nenhuma quantidade é lançada no stock nesta etapa.",
+                9.5f, false, muted
+            ))
+            form.addView(linesCard, cardParams())
+        }
+
         val dialog = AlertDialog.Builder(this)
             .setTitle("Rever fatura")
             .setView(ScrollView(this).apply { addView(form) })
@@ -1621,7 +1658,19 @@ class MainActivity : ComponentActivity() {
             reviewStatus = status,
             warnings = warnings,
             createdAtMillis = now,
-            updatedAtMillis = now
+            updatedAtMillis = now,
+            lineItems = pending.draft.lines.map { line ->
+                SupplierInvoiceLineRecord(
+                    id = line.id,
+                    productCode = line.productCode,
+                    description = line.description,
+                    quantity = line.quantity.toPlainString(),
+                    unit = line.unit,
+                    unitPrice = line.unitPrice.toPlainString(),
+                    netAmount = line.netAmount.toPlainString(),
+                    vatRate = line.vatRate?.toPlainString()
+                )
+            }
         )
         try {
             supplierInvoiceStore.save(scope, record)
@@ -1654,21 +1703,37 @@ class MainActivity : ComponentActivity() {
                 val row = buildSupplierInvoiceMetadataRow(
                     record, objectPath, backendRestaurantId(), backendPrefs.getString("user_id", "").orEmpty()
                 )
-                SupabaseApi.insertSupplierInvoice(backendToken(), row)
+                val lineItemsSynced = SupabaseApi.insertSupplierInvoice(backendToken(), row)
+                JSONObject()
+                    .put("document_path", objectPath)
+                    .put("line_items_synced", lineItemsSynced)
+                    .toString()
             } catch (error: Exception) {
                 runCatching { SupabaseApi.deleteSupplierInvoiceDocument(backendToken(), objectPath) }
                 throw error
             }
-            objectPath
         }, onError = { error ->
             Toast.makeText(
                 this,
                 "A cópia local está guardada, mas a sincronização falhou: ${friendlyBackendError(error.message)}",
                 Toast.LENGTH_LONG
             ).show()
-        }) { objectPath ->
-            supplierInvoiceStore.save(scope, record.copy(documentPath = objectPath, documentUri = null, updatedAtMillis = System.currentTimeMillis()))
-            Toast.makeText(this, "Fatura enviada para o arquivo privado do restaurante.", Toast.LENGTH_LONG).show()
+        }) { raw ->
+            val upload = JSONObject(raw)
+            val objectPath = upload.optString("document_path")
+            val linesSynced = upload.optBoolean("line_items_synced", false)
+            supplierInvoiceLineItemsSyncSupported = linesSynced
+            supplierInvoiceStore.save(scope, record.copy(
+                documentPath = objectPath,
+                documentUri = null,
+                updatedAtMillis = System.currentTimeMillis()
+            ))
+            Toast.makeText(
+                this,
+                if (linesSynced) "Fatura e linhas de produtos enviadas para o arquivo privado."
+                else "Fatura sincronizada. As linhas de produtos ficam locais até a migração do servidor.",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
@@ -1698,6 +1763,20 @@ class MainActivity : ComponentActivity() {
             .put("document_sha256", record.documentSha256)
             .put("document_path", objectPath)
             .put("warnings", JSONArray(record.warnings))
+            .put("line_items", JSONArray().apply {
+                record.lineItems.forEach { line ->
+                    put(JSONObject()
+                        .put("id", line.id)
+                        .put("product_code", line.productCode)
+                        .put("description", line.description)
+                        .put("quantity", line.quantity)
+                        .put("unit", line.unit)
+                        .put("unit_price", line.unitPrice)
+                        .put("net_amount", line.netAmount)
+                        .put("vat_rate", line.vatRate ?: JSONObject.NULL)
+                        .put("inventory_item_id", line.inventoryItemId ?: JSONObject.NULL))
+                }
+            })
             .put("created_by", userId)
         if (record.reviewStatus != "pending_review") {
             row.put("reviewed_by", userId)
@@ -1761,6 +1840,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showSupplierInvoiceDetails(invoice: SupplierInvoiceRecord) {
+        val ownerConnected = hasRemoteRestaurant() && backendToken().isNotBlank() &&
+            backendPrefs.getString("restaurant_role", "") == "owner"
+        val canReceiveStock = invoice.reviewStatus == "approved" &&
+            invoice.stockReceivedAtMillis == null &&
+            invoice.lineItems.isNotEmpty() &&
+            ownerConnected &&
+            supplierInvoiceLineItemsSyncSupported
         val message = buildString {
             append("Fornecedor: ").append(invoice.supplierName).append('\n')
             append("NIF / VAT: ").append(invoice.supplierVatNumber.ifBlank { "Não registado" }).append('\n')
@@ -1772,20 +1858,59 @@ class MainActivity : ComponentActivity() {
             append("Total: ").append(invoice.totalAmount).append(" €\n")
             append("Estado: ").append(invoice.reviewStatus)
             if (invoice.warnings.isNotEmpty()) append("\n\nAvisos:\n• ").append(invoice.warnings.joinToString("\n• "))
-            append("\n\nNão é um lançamento contabilístico nem prova de pagamento.")
+            append("\n\nLINHAS DE PRODUTOS: ").append(invoice.lineItems.size)
+            invoice.lineItems.take(30).forEach { line ->
+                append("\n• ").append(line.description).append(" · ")
+                    .append(line.quantity).append(' ').append(line.unit)
+                    .append(" · ").append(line.netAmount).append(" € sem IVA")
+            }
+            if (invoice.lineItems.size > 30) {
+                append("\n… e mais ").append(invoice.lineItems.size - 30).append(" linha(s).")
+            }
+            when {
+                invoice.stockReceivedAtMillis != null ->
+                    append("\n\nEntrada de stock já registada em ").append(
+                        java.time.Instant.ofEpochMilli(invoice.stockReceivedAtMillis)
+                            .atZone(java.time.ZoneId.systemDefault())
+                            .format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"))
+                    ).append(". Não pode ser repetida.")
+                canReceiveStock ->
+                    append("\n\nPodes selecionar os artigos de stock e confirmar a entrada. Só são permitidas unidades compatíveis.")
+                invoice.reviewStatus == "approved" && invoice.lineItems.isNotEmpty() && !supplierInvoiceLineItemsSyncSupported ->
+                    append("\n\nA receção no stock estará disponível depois de a migração de linhas de faturas ser aplicada no servidor.")
+                invoice.reviewStatus == "approved" && invoice.lineItems.isNotEmpty() && !ownerConnected ->
+                    append("\n\nPara atualizar o stock, liga a conta do proprietário do restaurante.")
+                invoice.lineItems.isEmpty() ->
+                    append("\n\nNão há linhas suficientemente claras para uma receção automática. Não alterei o stock.")
+            }
+            append("\n\nO registo documental não prova, por si só, que a fatura foi paga.")
         }
         val hasAttachment = !invoice.documentUri.isNullOrBlank() || !invoice.documentPath.isNullOrBlank()
         val builder = AlertDialog.Builder(this)
-            .setTitle("Fatura · ${invoice.invoiceNumber}")
+            .setTitle("Fatura · " + invoice.invoiceNumber)
             .setMessage(message)
             .setNegativeButton("Fechar", null)
-        if (invoice.reviewStatus == "pending_review") {
-            builder.setPositiveButton("Confirmar fatura") { _, _ ->
-                updateSupplierInvoiceReview(invoice, "approved")
+        when {
+            invoice.reviewStatus == "pending_review" -> {
+                builder.setPositiveButton("Confirmar fatura") { _, _ ->
+                    updateSupplierInvoiceReview(invoice, "approved")
+                }
             }
-        } else {
-            builder.setPositiveButton("Eliminar do arquivo") { _, _ ->
-                deleteSupplierInvoice(invoice)
+            canReceiveStock -> {
+                builder.setPositiveButton("Receber mercadoria") { _, _ ->
+                    showSupplierInvoiceStockReceiptDialog(invoice)
+                }
+            }
+            invoice.stockReceivedAtMillis != null -> {
+                builder.setPositiveButton("Receção registada", null)
+            }
+            invoice.reviewStatus == "approved" && invoice.lineItems.isNotEmpty() -> {
+                builder.setPositiveButton("Fechar", null)
+            }
+            else -> {
+                builder.setPositiveButton("Eliminar do arquivo") { _, _ ->
+                    deleteSupplierInvoice(invoice)
+                }
             }
         }
         if (hasAttachment) builder.setNeutralButton("Abrir documento original", null)
@@ -1799,6 +1924,259 @@ class MainActivity : ComponentActivity() {
             }
         }
         dialog.show()
+    }
+
+    private fun showSupplierInvoiceStockReceiptDialog(invoice: SupplierInvoiceRecord) {
+        if (invoice.stockReceivedAtMillis != null) {
+            Toast.makeText(this, "Esta fatura já foi recebida no stock.", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (!supplierInvoiceLineItemsSyncSupported || !hasRemoteRestaurant() ||
+            backendToken().isBlank() || backendPrefs.getString("restaurant_role", "") != "owner") {
+            Toast.makeText(this, "A receção no stock requer a conta do proprietário e a migração de linhas de faturas no servidor.", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (invoice.lineItems.isEmpty()) {
+            Toast.makeText(this, "Esta fatura não tem linhas de produtos reconhecidas.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        runBackend({
+            SupabaseApi.listInventoryItems(backendToken(), backendRestaurantId()).toString()
+        }, onError = { error ->
+            Toast.makeText(this, friendlyBackendError(error.message), Toast.LENGTH_LONG).show()
+        }) { raw ->
+            val inventoryJson = JSONArray(raw)
+            data class StockChoice(
+                val label: String,
+                val id: String?,
+                val createNew: Boolean = false,
+                val ignore: Boolean = false,
+                val placeholder: Boolean = false
+            ) {
+                override fun toString(): String = label
+            }
+            data class ReceiptLineSelection(
+                val line: SupplierInvoiceLineRecord,
+                val inventoryId: String?,
+                val createNew: Boolean,
+                val acceptedQuantity: BigDecimal
+            )
+            val inventory = (0 until inventoryJson.length()).mapNotNull { index ->
+                val row = inventoryJson.optJSONObject(index) ?: return@mapNotNull null
+                val id = row.optString("id")
+                val name = row.optString("name").trim()
+                val unit = row.optString("unit").trim()
+                if (id.isBlank() || name.isBlank() || unit.isBlank()) null
+                else StockChoice(name + " · " + unit, id) to unit
+            }
+            val form = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(16), dp(8), dp(16), dp(8))
+            }
+            form.addView(label(
+                "A StudioMesa tenta associar automaticamente os produtos já existentes. Quando não encontra uma correspondência exata, podes criar o artigo de stock diretamente a partir do nome e da unidade da fatura. Não são feitas conversões automáticas; confirma sempre os dados antes de lançar a mercadoria.",
+                11f, false, muted
+            ))
+            addGap(form, 8)
+            val selections = mutableListOf<Triple<SupplierInvoiceLineRecord, Spinner, EditText>>()
+            invoice.lineItems.forEach { line ->
+                val card = makeCard(9)
+                card.addView(label(
+                    line.description + "\n" + line.quantity + " " + line.unit +
+                        " · " + line.netAmount + " € sem IVA",
+                    11f, true, forestDeep
+                ))
+                addGap(card, 5)
+                val compatible = inventory.filter { normalizeSupplierInvoiceStockUnit(it.second) == normalizeSupplierInvoiceStockUnit(line.unit) }
+                val choices = mutableListOf(
+                    StockChoice("Seleciona o destino desta linha...", null, placeholder = true),
+                    StockChoice("Ignorar explicitamente — serviço/artigo sem stock", null, ignore = true)
+                )
+                choices += compatible.map { it.first }.sortedBy { it.label.lowercase(Locale.ROOT) }
+                choices += StockChoice(
+                    "Criar automaticamente: ${line.description} · ${line.unit}",
+                    null,
+                    createNew = true
+                )
+                val spinner = Spinner(this)
+                val adapter = ArrayAdapter(
+                    this,
+                    android.R.layout.simple_spinner_item,
+                    choices
+                ).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+                spinner.adapter = adapter
+                val exactMatches = compatible.filter {
+                    normalizeSalesProductName(it.first.label.substringBefore(" · ")) ==
+                        normalizeSalesProductName(line.description)
+                }
+                if (exactMatches.size == 1) {
+                    val exactIndex = choices.indexOfFirst { it.id == exactMatches.single().first.id }
+                    if (exactIndex > 0) spinner.setSelection(exactIndex)
+                } else if (compatible.isEmpty()) {
+                    // No same-unit stock item exists: preselect safe creation from the reviewed invoice row.
+                    spinner.setSelection(choices.lastIndex)
+                    card.addView(label("Será criado um artigo novo com esta designação e unidade.", 9.5f, false, muted))
+                }
+                card.addView(spinner, LinearLayout.LayoutParams(-1, dp(44)))
+                addGap(card, 5)
+                card.addView(label("Quantidade a receber (${line.unit}) · confirma ou corrige a leitura OCR", 9.5f, true, forestSoft))
+                val quantityType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+                val quantityField = inputField("Quantidade (${line.unit})", quantityType).apply {
+                    setText(line.quantity)
+                }
+                card.addView(quantityField, fieldParams())
+                form.addView(card, cardParams())
+                addGap(form, 5)
+                selections += Triple(line, spinner, quantityField)
+            }
+            val dialog = AlertDialog.Builder(this)
+                .setTitle("Receber mercadoria · " + invoice.invoiceNumber)
+                .setView(ScrollView(this).apply { addView(form) })
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Confirmar entrada no stock", null)
+                .create()
+            dialog.setOnShowListener {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                    val missingDestination = selections.any { (_, spinner, _) ->
+                        (spinner.selectedItem as? StockChoice)?.placeholder == true
+                    }
+                    if (missingDestination) {
+                        Toast.makeText(
+                            this,
+                            "Escolhe um destino para cada linha: artigo existente, criar artigo ou ignorar explicitamente.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        return@setOnClickListener
+                    }
+                    var invalidQuantity = false
+                    val selectedLines = selections.mapNotNull { (line, spinner, quantityField) ->
+                        val choice = spinner.selectedItem as? StockChoice ?: return@mapNotNull null
+                        if (choice.ignore) return@mapNotNull null
+                        if (choice.id.isNullOrBlank() && !choice.createNew) return@mapNotNull null
+                        val acceptedQuantity = SupplierInvoiceTextParser.parseQuantity(
+                            quantityField.text.toString()
+                        )
+                        if (acceptedQuantity == null) {
+                            quantityField.error = "Indica uma quantidade positiva, até três casas decimais."
+                            invalidQuantity = true
+                            return@mapNotNull null
+                        }
+                        ReceiptLineSelection(
+                            line = line,
+                            inventoryId = choice.id,
+                            createNew = choice.createNew,
+                            acceptedQuantity = acceptedQuantity
+                        )
+                    }
+                    if (invalidQuantity) return@setOnClickListener
+                    if (selectedLines.isEmpty()) {
+                        Toast.makeText(this, "Escolhe pelo menos um artigo de stock ou a criação automática.", Toast.LENGTH_LONG).show()
+                        return@setOnClickListener
+                    }
+                    val newStockItems = selectedLines
+                        .filter { it.createNew }
+                        .map { normalizeSalesProductName(it.line.description) + "|" + normalizeSupplierInvoiceStockUnit(it.line.unit) }
+                        .distinct()
+                        .size
+                    val ignoredLines = selections.count { (_, spinner, _) ->
+                        (spinner.selectedItem as? StockChoice)?.ignore == true
+                    }
+                    val confirmation = selectedLines.size.toString() +
+                        " linha(s) vão entrar no stock; " + ignoredLines +
+                        " linha(s) serão ignoradas por decisão explícita; " + newStockItems +
+                        " novo(s) artigo(s) serão criados automaticamente a partir da fatura quando necessário. As quantidades só serão lançadas depois desta confirmação. A operação fica registada uma única vez."
+                    AlertDialog.Builder(this)
+                        .setTitle("Confirmar entrada de mercadoria")
+                        .setMessage(confirmation)
+                        .setNegativeButton("Voltar", null)
+                        .setPositiveButton("Adicionar ao stock") { _, _ ->
+                            dialog.dismiss()
+                            runBackend({
+                                val token = backendToken()
+                                val restaurantId = backendRestaurantId()
+                                val createdItems = mutableMapOf<String, String>()
+                                val mappings = selectedLines.map { selection ->
+                                    val line = selection.line
+                                    val inventoryId = selection.inventoryId ?: run {
+                                        val productKey = normalizeSalesProductName(line.description) +
+                                            "|" + normalizeSupplierInvoiceStockUnit(line.unit)
+                                        createdItems[productKey] ?: run {
+                                            // Stable request IDs make an interrupted retry return the same
+                                            // stock item instead of creating duplicates.
+                                            val requestId = java.util.UUID.nameUUIDFromBytes(
+                                                ("supplier-invoice-stock:" + invoice.id + ":" + line.id)
+                                                    .toByteArray(Charsets.UTF_8)
+                                            ).toString()
+                                            val unitCost = (line.unitPrice.toBigDecimalOrNull() ?: BigDecimal.ZERO)
+                                                .setScale(4, java.math.RoundingMode.HALF_UP)
+                                            val createdId = SupabaseApi.createInventoryItemWithCost(
+                                                token = token,
+                                                requestId = requestId,
+                                                restaurantId = restaurantId,
+                                                name = line.description.take(100),
+                                                unit = line.unit,
+                                                quantity = 0.0,
+                                                lowStockThreshold = 0.0,
+                                                note = "Criado automaticamente a partir da fatura " +
+                                                    invoice.invoiceNumber.take(40) +
+                                                    "; entrada de mercadoria confirmada em separado.",
+                                                unitCostPerUnit = unitCost
+                                            )
+                                            createdItems[productKey] = createdId
+                                            createdId
+                                        }
+                                    }
+                                    JSONObject()
+                                        .put("line_id", line.id)
+                                        .put("inventory_item_id", inventoryId)
+                                        .put(
+                                            "accepted_quantity",
+                                            selection.acceptedQuantity.setScale(3, java.math.RoundingMode.HALF_UP).toPlainString()
+                                        )
+                                }
+                                val result = SupabaseApi.receiveSupplierInvoiceStock(
+                                    token,
+                                    invoice.id,
+                                    java.util.UUID.randomUUID().toString(),
+                                    mappings
+                                )
+                                result.toString()
+                            }, onError = { error ->
+                                Toast.makeText(
+                                    this,
+                                    "Não foi possível receber a mercadoria: " + friendlyBackendError(error.message),
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }) { rawResult ->
+                                val result = JSONObject(rawResult)
+                                val alreadyApplied = result.optBoolean("already_applied", false)
+                                refreshSupplierInvoicesFromCloud(showFeedback = false)
+                                refreshEconomicDailyForecastIfDue(force = true)
+                                Toast.makeText(
+                                    this,
+                                    if (alreadyApplied) "Esta receção já estava aplicada. O stock não foi duplicado."
+                                    else "Entrada de mercadoria registada no stock.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
+                        .show()
+                }
+            }
+            dialog.show()
+            dialog.window?.setLayout(-1, dp(620))
+        }
+    }
+
+    private fun normalizeSupplierInvoiceStockUnit(value: String): String = when (
+        value.trim().lowercase(Locale.ROOT)
+    ) {
+        "unidade", "unidades", "und", "un" -> "un"
+        "gr", "gramas" -> "g"
+        "litro", "litros", "lt" -> "l"
+        "kilograma", "kilogramas" -> "kg"
+        else -> value.trim().lowercase(Locale.ROOT)
     }
 
     private fun openSupplierInvoiceAttachment(invoice: SupplierInvoiceRecord) {
@@ -1941,13 +2319,19 @@ class MainActivity : ComponentActivity() {
         supplierInvoiceRefreshInFlight = true
         lastSupplierInvoiceRefreshAtMillis = now
         runBackend({
-            SupabaseApi.listSupplierInvoices(backendToken(), backendRestaurantId()).toString()
+            val archive = SupabaseApi.listSupplierInvoices(backendToken(), backendRestaurantId())
+            JSONObject()
+                .put("rows", archive.rows)
+                .put("supports_line_items", archive.supportsLineItems)
+                .toString()
         }, onError = { error ->
             supplierInvoiceRefreshInFlight = false
-            if (showFeedback) Toast.makeText(this, "O arquivo remoto não está disponível: ${friendlyBackendError(error.message)}", Toast.LENGTH_LONG).show()
+            if (showFeedback) Toast.makeText(this, "O arquivo remoto não está disponível: " + friendlyBackendError(error.message), Toast.LENGTH_LONG).show()
         }) { raw ->
             supplierInvoiceRefreshInFlight = false
-            val rows = JSONArray(raw)
+            val response = JSONObject(raw)
+            val rows = response.optJSONArray("rows") ?: JSONArray()
+            supplierInvoiceLineItemsSyncSupported = response.optBoolean("supports_line_items", false)
             val scope = assistantChatScope()
             val existingById = runCatching {
                 supplierInvoiceStore.list(scope).associateBy { it.id }
@@ -1959,6 +2343,29 @@ class MainActivity : ComponentActivity() {
                 if (id.isBlank()) continue
                 val warnings = row.optJSONArray("warnings") ?: JSONArray()
                 val existing = existingById[id]
+                val remoteLineItems = if (supplierInvoiceLineItemsSyncSupported) {
+                    val parsedRemoteLineItems =
+                        parseSupplierInvoiceLineRows(row.optJSONArray("line_items") ?: JSONArray())
+                    // A row uploaded before the server migration may have no cloud
+                    // line data. Preserve its encrypted local OCR lines rather than
+                    // replacing them with the new column's default empty array.
+                    SupplierInvoiceLineMergePolicy.resolve(
+                        remote = parsedRemoteLineItems,
+                        local = existing?.lineItems.orEmpty()
+                    )
+                } else {
+                    existing?.lineItems.orEmpty()
+                }
+                val receivedAt = if (supplierInvoiceLineItemsSyncSupported && !row.isNull("stock_received_at")) {
+                    parseServerTimestamp(row.optString("stock_received_at")).takeIf { it > 0L }
+                } else {
+                    existing?.stockReceivedAtMillis
+                }
+                val receiptRequestId = if (supplierInvoiceLineItemsSyncSupported && !row.isNull("stock_receipt_request_id")) {
+                    row.optString("stock_receipt_request_id").takeIf { it.isNotBlank() }
+                } else {
+                    existing?.stockReceiptRequestId
+                }
                 refreshed += SupplierInvoiceRecord(
                     id = id,
                     supplierName = row.optString("supplier_name"),
@@ -1979,7 +2386,10 @@ class MainActivity : ComponentActivity() {
                     reviewStatus = row.optString("review_status", "pending_review"),
                     warnings = (0 until warnings.length()).map { warnings.optString(it) },
                     createdAtMillis = parseServerTimestamp(row.optString("created_at")),
-                    updatedAtMillis = parseServerTimestamp(row.optString("updated_at"))
+                    updatedAtMillis = parseServerTimestamp(row.optString("updated_at")),
+                    lineItems = remoteLineItems,
+                    stockReceivedAtMillis = receivedAt,
+                    stockReceiptRequestId = receiptRequestId
                 )
             }
             runCatching { supplierInvoiceStore.saveAll(scope, refreshed) }
@@ -1991,12 +2401,145 @@ class MainActivity : ComponentActivity() {
                     ).show()
                     return@runBackend
                 }
-            if (showFeedback) Toast.makeText(this, "${rows.length()} fatura(s) no arquivo privado.", Toast.LENGTH_SHORT).show()
+            if (showFeedback) {
+                val suffix = if (supplierInvoiceLineItemsSyncSupported) ""
+                    else " As linhas de produtos continuam locais até a migração do servidor."
+                Toast.makeText(this, rows.length().toString() + " fatura(s) no arquivo privado." + suffix, Toast.LENGTH_LONG).show()
+            }
             if (activePage in setOf("Assistente económico", "IA") &&
                 !assistantSending && !isFinishing && !isDestroyed) {
                 renderApp()
             }
         }
+    }
+
+    private fun parseSupplierInvoiceLineRows(values: JSONArray): List<SupplierInvoiceLineRecord> {
+        return (0 until values.length()).mapNotNull { index ->
+            val row = values.optJSONObject(index) ?: return@mapNotNull null
+            val id = row.optString("id")
+            val description = row.optString("description").trim()
+            val quantity = row.optString("quantity")
+            val unit = row.optString("unit")
+            val unitPrice = row.optString("unit_price")
+            val netAmount = row.optString("net_amount")
+            if (!id.matches(Regex("^[a-f0-9]{64}$")) || description.isBlank() ||
+                quantity.toBigDecimalOrNull()?.signum() != 1 || unit.isBlank() ||
+                unitPrice.toBigDecimalOrNull() == null || netAmount.toBigDecimalOrNull() == null) {
+                null
+            } else {
+                SupplierInvoiceLineRecord(
+                    id = id,
+                    productCode = row.optString("product_code"),
+                    description = description.take(120),
+                    quantity = quantity,
+                    unit = unit.take(20),
+                    unitPrice = unitPrice,
+                    netAmount = netAmount,
+                    vatRate = if (row.isNull("vat_rate")) null else row.optString("vat_rate"),
+                    inventoryItemId = if (row.isNull("inventory_item_id")) null else row.optString("inventory_item_id")
+                )
+            }
+        }.take(500)
+    }
+
+    private fun syncSaftSalesInvoicesWithCloud(showFeedback: Boolean) {
+        if (!hasRemoteRestaurant() || backendToken().isBlank() ||
+            backendPrefs.getString("restaurant_role", "") != "owner") {
+            if (showFeedback) Toast.makeText(this, "Só o proprietário pode sincronizar o arquivo SAF-T.", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (saftCloudSyncInFlight) return
+        val now = System.currentTimeMillis()
+        if (!showFeedback && now - lastSaftCloudSyncAtMillis < 60_000L) return
+        saftCloudSyncInFlight = true
+        lastSaftCloudSyncAtMillis = now
+        val scope = assistantChatScope()
+        val restaurantId = backendRestaurantId()
+        val userId = backendPrefs.getString("user_id", "").orEmpty()
+        Thread({
+            try {
+                refreshSessionIfNeeded()
+                require(backendRestaurantId() == restaurantId &&
+                    backendPrefs.getString("user_id", "").orEmpty() == userId) {
+                    "A conta ou o restaurante mudaram durante a sincronização."
+                }
+                val token = backendToken()
+                require(token.isNotBlank()) { "A sessão expirou. Inicia sessão novamente." }
+
+                var uploaded = 0
+                while (true) {
+                    val batch = saftSalesInvoiceStore.pendingCloudRows(scope, limit = 10)
+                    if (batch.isEmpty()) break
+                    SupabaseApi.syncSaftSalesInvoiceBatch(token, restaurantId, batch)
+                    saftSalesInvoiceStore.markCloudRowsSynced(scope, batch)
+                    uploaded += batch.size
+                }
+
+                var offset = 0
+                var totalCount = Int.MAX_VALUE
+                var downloaded = 0
+                var pageCount = 0
+                while (offset < totalCount && pageCount < 10_000) {
+                    val page = SupabaseApi.listSaftSalesInvoiceBatch(token, restaurantId, offset, limit = 10)
+                    totalCount = page.optInt("total_count", 0).coerceAtLeast(0)
+                    val rows = page.optJSONArray("rows") ?: JSONArray()
+                    if (rows.length() == 0) break
+                    val pageRows = (0 until rows.length()).mapNotNull { rows.optJSONObject(it) }
+                    downloaded += saftSalesInvoiceStore.mergeCloudRows(scope, pageRows)
+                    offset += rows.length()
+                    pageCount++
+                    if (rows.length() < 10) break
+                }
+
+                runOnUiThread {
+                    saftCloudSyncInFlight = false
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    if (backendRestaurantId() != restaurantId ||
+                        backendPrefs.getString("user_id", "").orEmpty() != userId) return@runOnUiThread
+                    saftCloudSyncAvailable = true
+                    saftCloudSyncError = null
+                    if (downloaded > 0) {
+                        economicDailyForecast = null
+                        economicForecastLoadedDay = ""
+                        economicForecastError = null
+                        if (activePage == "Assistente económico" && economicAssistantIsEnabled()) {
+                            refreshEconomicDailyForecastIfDue(force = true)
+                            renderApp()
+                        }
+                    }
+                    if (showFeedback) {
+                        Toast.makeText(
+                            this,
+                            "SAF-T sincronizado: " + uploaded + " enviado(s), " + downloaded + " recebido(s).",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    saftCloudSyncInFlight = false
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    val missingMigration = error is BackendHttpException &&
+                        error.statusCode in 400..404 &&
+                        (error.endpointPath.contains("sync_restaurant_saft_sales_invoice_batch") ||
+                            error.endpointPath.contains("list_restaurant_saft_sales_invoice_batch"))
+                    if (missingMigration) {
+                        saftCloudSyncAvailable = false
+                        saftCloudSyncError = "O servidor ainda não tem a migração de sincronização SAF-T."
+                    } else {
+                        saftCloudSyncError = friendlyBackendError(error.message)
+                    }
+                    if (showFeedback) {
+                        Toast.makeText(
+                            this,
+                            saftCloudSyncError ?: "Não foi possível sincronizar o SAF-T.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                    if (activePage == "Assistente económico" && !assistantSending) renderApp()
+                }
+            }
+        }, "StudioMesa-saft-cloud-sync").start()
     }
 
     private fun parseServerTimestamp(value: String): Long =
@@ -2380,6 +2923,10 @@ class MainActivity : ComponentActivity() {
         val scope = assistantChatScope()
         val salesInvoices = runCatching { saftSalesInvoiceStore.list(scope) }.getOrDefault(emptyList())
         val supplierInvoices = runCatching { supplierInvoiceStore.list(scope) }.getOrDefault(emptyList())
+        val recentPurchaseLines = supplierInvoices
+            .filter { it.reviewStatus == "approved" }
+            .sortedByDescending { it.issueDate }
+            .flatMap { invoice -> invoice.lineItems.map { line -> invoice to line } }
         val today = java.time.LocalDate.now()
         val thirtyDaysAgo = today.minusDays(29)
 
@@ -2439,6 +2986,16 @@ class MainActivity : ComponentActivity() {
             appendLine("Estes valores representam faturação/documentos concluídos, não lucro líquido nem dinheiro confirmado na conta.")
             appendLine("Faturas de fornecedores arquivadas: ${supplierInvoices.size}; confirmadas: ${approved.size} (${formatInvoiceEuro(invoiceTotal(approved))}); pendentes: ${pending.size} (${formatInvoiceEuro(invoiceTotal(pending))}); rejeitadas: ${rejected.size}.")
             appendLine("Faturas de fornecedores são compras/despesas documentadas; não são vendas nem prova de pagamento.")
+            appendLine("PRODUTOS RECONHECIDOS EM FATURAS DE COMPRA APROVADAS (histórico de compras, não stock atual):")
+            if (recentPurchaseLines.isEmpty()) {
+                appendLine("Ainda não existem linhas de produtos reconhecidas em faturas de fornecedores aprovadas.")
+            } else {
+                recentPurchaseLines.take(25).forEach { (invoice, line) ->
+                    appendLine("- ${line.description}: ${line.quantity} ${line.unit}; fatura ${invoice.invoiceNumber} de ${invoice.issueDate}; " +
+                        if (invoice.stockReceivedAtMillis != null) "entrada no stock confirmada."
+                        else "entrada no stock ainda não confirmada.")
+                }
+            }
             val forecast = economicDailyForecast
             if (forecast == null || !forecast.hasSalesHistory) {
                 appendLine("Previsão de vendas dos próximos sete dias: ainda não disponível; não inventes valores.")
@@ -2447,9 +3004,17 @@ class MainActivity : ComponentActivity() {
                 forecast.days.forEach { day ->
                     appendLine("- ${day.date} (${day.weekdayLabel}): ${day.expectedRevenue?.let(::salesEuro) ?: "sem dados"}; amostras comparáveis: ${day.comparableDays}.")
                 }
-                appendLine("Previsão alimentar, média por dia e necessidade total:")
+                appendLine("PRATOS A PREPARAR — procura estimada nos próximos sete dias, calculada diretamente pelas quantidades das linhas de venda:")
+                if (forecast.menuItemForecasts.isEmpty()) {
+                    appendLine("Ainda não existem linhas de venda por prato suficientes para estimar doses.")
+                } else {
+                    forecast.menuItemForecasts.take(30).forEach { item ->
+                        appendLine("- ${item.itemName}: cerca de ${item.expectedSevenDayPortions.stripTrailingZeros().toPlainString()} doses em sete dias; média ${item.averageDailyPortions.stripTrailingZeros().toPlainString()}/dia; dias comparáveis ${item.comparableDays}.")
+                    }
+                }
+                appendLine("INGREDIENTES A COMPRAR — apenas quando existe receita aprovada ligada a stock atualizado:")
                 if (forecast.ingredientAverages.isEmpty()) {
-                    appendLine("Ainda sem quantidades de ingredientes calculáveis. É necessário um artigo de venda associado a uma receita ativa e aprovada ligada ao stock.")
+                    appendLine("Ainda não há ingredientes calculáveis. A quantidade prevista de pratos pode ser apresentada sem receitas, mas não se devem inventar ingredientes nem quantidades por dose.")
                 } else {
                     forecast.ingredientAverages.forEach { item ->
                         appendLine("- ${item.ingredientName}: média ${item.averageDailyQuantity.stripTrailingZeros().toPlainString()} ${item.unit}/dia; necessidade 7 dias ${item.expectedSevenDayQuantity.stripTrailingZeros().toPlainString()} ${item.unit}; stock ${item.currentStock?.stripTrailingZeros()?.toPlainString() ?: "não disponível"}; comprar ${item.suggestedPurchaseQuantity?.stripTrailingZeros()?.toPlainString() ?: "não calculável"} ${item.unit}.")
@@ -2459,8 +3024,8 @@ class MainActivity : ComponentActivity() {
                     appendLine("Artigos sem correspondência a receitas: ${forecast.unmappedMenuItems.take(20).joinToString(", ")}.")
                 }
             }
-            appendLine("Limites: SAF-T tem de ser exportado do programa de faturação e importado; os dados SAF-T ficam cifrados neste dispositivo e não sincronizam para outros dispositivos. A previsão alimentar exige Premium, receitas aprovadas com nomes/artigos corretamente associados e stock atualizado.")
-            appendLine("Nunca trates previsão de faturação como lucro. Não recomendes compras para artigos sem receita/stock e não afirmes que as faturas provam pagamentos.")
+            appendLine("Limites: SAF-T tem de ser exportado do programa de faturação e importado. O arquivo fica cifrado no dispositivo e a cópia privada entre dispositivos do proprietário depende da migração do servidor estar instalada. A previsão de doses por prato usa diretamente as linhas de venda e não exige receitas. A previsão de ingredientes concretos exige receitas aprovadas, correspondência aos artigos de stock e quantidades atuais.")
+            appendLine("Podes indicar quantas doses de cada prato se prevê preparar/comercializar. Não inventes ingredientes nem quantidades de compra quando não existem receitas e stock fiáveis. Nunca trates faturação como lucro nem faturas como prova de pagamento.")
         }.trim().take(5_500)
     }
 
@@ -5500,10 +6065,22 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun performAccountDeletion(deleteRestaurantData: Boolean) {
+        // Capture the local account scope before backendPrefs is cleared. Local
+        // archives and assistant history are encrypted but still need deletion.
+        val localScope = runCatching { assistantChatScope() }.getOrNull()
         runBackend({
             val restaurantDeleted = SupabaseApi.deleteAccount(backendToken(), deleteRestaurantData)
             if (restaurantDeleted) "DELETED_RESTAURANT" else "DELETED_ACCOUNT"
         }) { result ->
+            val localDataCleared = localScope?.let { scope ->
+                listOf(
+                    runCatching { assistantChatStore.clearScope(scope) },
+                    runCatching { assistantChatStore.clearScope("$scope:economic") },
+                    runCatching { supplierInvoiceStore.clearScope(scope) },
+                    runCatching { saftSalesInvoiceStore.clearScope(scope) }
+                ).all { it.isSuccess }
+            } ?: false
+
             secureSession.clear()
             runCatching { pendingRequestIds.clearAll() }
             store.clearLocalDemoData()
@@ -5519,14 +6096,19 @@ class MainActivity : ComponentActivity() {
 
             if (isCustomerApp) renderCustomerApp() else renderApp()
 
-            val message = if (result == "DELETED_RESTAURANT") {
+            val baseMessage = if (result == "DELETED_RESTAURANT") {
                 "A conta e os dados do restaurante foram eliminados permanentemente."
             } else {
                 "A conta foi eliminada. A associação de fidelização foi removida e a autoria dos registos operacionais preservados foi anonimizada."
             }
+            val localMessage = if (localDataCleared) {
+                "\n\nO histórico, a memória e os arquivos locais de faturas SAF-T e de fornecedores também foram removidos deste dispositivo."
+            } else {
+                "\n\nNão foi possível confirmar a remoção de todos os arquivos locais cifrados. Antes de entregar este dispositivo a outra pessoa, elimina os dados da StudioMesa nas definições do Android."
+            }
             AlertDialog.Builder(this)
                 .setTitle("Conta eliminada")
-                .setMessage(message)
+                .setMessage(baseMessage + localMessage)
                 .setPositiveButton("OK", null)
                 .show()
         }
@@ -8856,7 +9438,47 @@ class MainActivity : ComponentActivity() {
                 14f, true, forestDeep
             ))
             addGap(card, 12)
-            card.addView(label("2 · Que alimentos comprar ou preparar", 14f, true, forestDeep))
+            card.addView(label("2 · Pratos a preparar nos próximos sete dias", 14f, true, forestDeep))
+            card.addView(label(
+                "Esta previsão é feita automaticamente com as quantidades de cada prato vendidas nas faturas SAF-T ou nos pedidos concluídos. Não é preciso registar os pratos manualmente nem introduzir os alimentos para ver estas doses.",
+                10.5f, false, muted
+            ))
+            if (report.menuItemForecasts.isEmpty()) {
+                card.addView(label(
+                    "Ainda não existem linhas de venda por prato suficientes. Importa as faturas SAF-T com as linhas dos artigos para obter esta previsão.",
+                    10.5f, false, muted
+                ))
+            } else {
+                report.menuItemForecasts.take(15).forEach { item ->
+                    addGap(card, 7)
+                    val row = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                    }
+                    row.addView(label(item.itemName, 11.5f, true, ink), LinearLayout.LayoutParams(0, -2, 1f))
+                    row.addView(label(
+                        "${item.expectedSevenDayPortions.stripTrailingZeros().toPlainString()} doses",
+                        11f, true, forestSoft
+                    ))
+                    card.addView(row)
+                    card.addView(label(
+                        "Média diária: ${item.averageDailyPortions.stripTrailingZeros().toPlainString()} · dias comparáveis: ${item.comparableDays}",
+                        9.5f, false, muted
+                    ))
+                }
+                if (report.menuItemForecasts.size > 15) {
+                    card.addView(label(
+                        "E mais ${report.menuItemForecasts.size - 15} pratos.",
+                        9.5f, false, muted
+                    ))
+                }
+            }
+            addGap(card, 12)
+            card.addView(label("3 · Ingredientes a comprar", 14f, true, forestDeep))
+            card.addView(label(
+                "Para transformar as doses previstas numa lista exata de ingredientes e quantidades de compra, a app precisa de receitas aprovadas ligadas aos artigos de stock e de stock atualizado. As faturas, por si só, não revelam a composição de cada prato.",
+                10.5f, false, muted
+            ))
             if (!isPremium) {
                 card.addView(label(
                     "A previsão automática de ingredientes usa as receitas ligadas ao stock e está disponível na versão Premium.",
@@ -8864,11 +9486,10 @@ class MainActivity : ComponentActivity() {
                 ))
             } else if (report.ingredientAverages.isEmpty()) {
                 val explanation = if (report.unmappedMenuItems.isNotEmpty()) {
-                    "Há pratos vendidos sem receita aprovada ligada ao stock: " +
-                        report.unmappedMenuItems.take(8).joinToString(", ") +
-                        ". Associa esses artigos à carta e aprova as respetivas receitas."
+                    "A previsão de doses dos pratos acima está disponível. Para calcular os ingredientes dos seguintes artigos, ainda falta uma receita aprovada ligada ao stock: " +
+                        report.unmappedMenuItems.take(8).joinToString(", ") + "."
                 } else {
-                    "Não foram encontradas receitas ativas e aprovadas ligadas ao stock para os pratos vendidos. Configura as receitas para calcular quantidades."
+                    "A previsão de doses dos pratos acima já está disponível. Ainda não existem receitas ativas e aprovadas ligadas ao stock para calcular os ingredientes e as quantidades exatas a comprar."
                 }
                 card.addView(label(explanation, 10.5f, false, muted))
             } else {
@@ -9098,7 +9719,7 @@ class MainActivity : ComponentActivity() {
             11.5f, true, forestSoft
         ))
         card.addView(label(
-            "O OCR extrai fornecedor, número, datas, base, IVA e total. As linhas de produtos não são ainda extraídas de forma fiável em todos os formatos. A fatura tem de ser revista antes de ser confirmada.",
+            "O OCR extrai fornecedor, número, datas, valores e linhas de produto quando o formato é claro. Linhas ambíguas são omitidas; confirma sempre os campos e as quantidades na fatura original antes de aprovar ou dar entrada no stock.",
             10.5f, false, muted
         ))
         addGap(card, 8)
@@ -9107,7 +9728,7 @@ class MainActivity : ComponentActivity() {
         }, LinearLayout.LayoutParams(-1, dp(42)))
         addGap(card, 8)
         card.addView(label(
-            "SAF-T de vendas: os resumos são guardados cifrados apenas neste dispositivo. Faturas de fornecedores: o arquivo local também é cifrado e, para proprietários ligados, pode ser sincronizado com o servidor privado do restaurante. Os valores dos documentos não provam pagamentos.",
+            "Os arquivos locais SAF-T e de faturas de fornecedores são cifrados no dispositivo. Com o Assistente económico ativo e sessão de proprietário, o SAF-T sincroniza por lotes com o espaço privado do restaurante no Supabase; os registos cloud não têm cifragem ponta a ponta. As faturas de fornecedores podem ser arquivadas no servidor quando o proprietário está ligado. Os valores dos documentos não provam pagamentos.",
             9.5f, false, muted
         ))
         container.addView(card, cardParams())
