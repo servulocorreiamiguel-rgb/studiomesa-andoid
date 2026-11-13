@@ -54,7 +54,8 @@ internal object SaftPtSalesInvoiceParser {
         "urn:OECD:StandardAuditFile-Tax:PT_1.03_01",
         "urn:OECD:StandardAuditFile-Tax:PT_1.04_01"
     )
-    private val supportedInvoiceTypes = setOf("FT", "FS", "FR", "ND", "NC")
+    // VD, TV and TD are retained for historical SAF-T records (through 2012).
+    private val supportedInvoiceTypes = setOf("FT", "FS", "FR", "ND", "NC", "VD", "TV", "TD")
 
     fun parse(bytes: ByteArray): SaftSalesImport {
         require(bytes.isNotEmpty() && bytes.size <= MAX_FILE_BYTES) {
@@ -181,7 +182,7 @@ internal object SaftPtSalesInvoiceParser {
             netTotal == null || grossTotal == null
         ) return null to "invalid"
 
-        val sign = if (type == "NC") BigDecimal("-1") else BigDecimal.ONE
+        val sign = if (type in setOf("NC", "TD")) BigDecimal("-1") else BigDecimal.ONE
         val signedLines = lines.map { line ->
             line.copy(
                 quantity = line.quantity.multiply(sign),
