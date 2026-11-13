@@ -1967,7 +1967,7 @@ class MainActivity : ComponentActivity() {
                 11f, false, muted
             ))
             addGap(form, 8)
-            val selections = mutableListOf<Pair<SupplierInvoiceLineRecord, Spinner>>()
+            val selections = mutableListOf<Triple<SupplierInvoiceLineRecord, Spinner, EditText>>()
             invoice.lineItems.forEach { line ->
                 val card = makeCard(9)
                 card.addView(label(
@@ -1998,9 +1998,16 @@ class MainActivity : ComponentActivity() {
                     card.addView(label("Não existe artigo de stock com a unidade \"" + line.unit + "\".", 9.5f, false, muted))
                 }
                 card.addView(spinner, LinearLayout.LayoutParams(-1, dp(44)))
+                addGap(card, 5)
+                card.addView(label("Quantidade a receber (${line.unit}) · confirma ou corrige a leitura OCR", 9.5f, true, forestSoft))
+                val quantityType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+                val quantityField = inputField("Quantidade (${line.unit})", quantityType).apply {
+                    setText(line.quantity)
+                }
+                card.addView(quantityField, fieldParams())
                 form.addView(card, cardParams())
                 addGap(form, 5)
-                selections += line to spinner
+                selections += Triple(line, spinner, quantityField)
             }
             val dialog = AlertDialog.Builder(this)
                 .setTitle("Receber mercadoria · " + invoice.invoiceNumber)
@@ -2010,14 +2017,24 @@ class MainActivity : ComponentActivity() {
                 .create()
             dialog.setOnShowListener {
                 dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                    val mappings = selections.mapNotNull { (line, spinner) ->
+                    var invalidQuantity = false
+                    val mappings = selections.mapNotNull { (line, spinner, quantityField) ->
                         val choice = spinner.selectedItem as? StockChoice
-                        choice?.id?.let { inventoryId ->
-                            JSONObject()
-                                .put("line_id", line.id)
-                                .put("inventory_item_id", inventoryId)
+                        val inventoryId = choice?.id ?: return@mapNotNull null
+                        val acceptedQuantity = SupplierInvoiceTextParser.parseQuantity(
+                            quantityField.text.toString()
+                        )
+                        if (acceptedQuantity == null) {
+                            quantityField.error = "Indica uma quantidade positiva, até três casas decimais."
+                            invalidQuantity = true
+                            return@mapNotNull null
                         }
+                        JSONObject()
+                            .put("line_id", line.id)
+                            .put("inventory_item_id", inventoryId)
+                            .put("accepted_quantity", acceptedQuantity.setScale(3, java.math.RoundingMode.HALF_UP).toPlainString())
                     }
+                    if (invalidQuantity) return@setOnClickListener
                     if (mappings.isEmpty()) {
                         Toast.makeText(this, "Escolhe pelo menos um artigo de stock.", Toast.LENGTH_LONG).show()
                         return@setOnClickListener
