@@ -89,7 +89,7 @@ class SaftPtSalesInvoiceParserTest {
 
     @Test
     fun rejectsUnsupportedVersion() {
-        val xml = """<AuditFile><Header><AuditFileVersion>9.99</AuditFileVersion></Header><SourceDocuments><SalesInvoices/></SourceDocuments></AuditFile>"""
+        val xml = """<AuditFile xmlns="urn:OECD:StandardAuditFile-Tax:PT_1.04_01"><Header><AuditFileVersion>9.99</AuditFileVersion></Header><SourceDocuments><SalesInvoices/></SourceDocuments></AuditFile>"""
         val error = runCatching {
             SaftPtSalesInvoiceParser.parse(xml.toByteArray())
         }.exceptionOrNull()
@@ -107,7 +107,7 @@ class SaftPtSalesInvoiceParserTest {
               <DocumentTotals><NetTotal>1</NetTotal><GrossTotal>1</GrossTotal></DocumentTotals>
             </Invoice>
         """.trimIndent()
-        val xml = """<AuditFile><Header><AuditFileVersion>1.04_01</AuditFileVersion></Header><SourceDocuments><SalesInvoices>$invoice$invoice</SalesInvoices></SourceDocuments></AuditFile>"""
+        val xml = """<AuditFile xmlns="urn:OECD:StandardAuditFile-Tax:PT_1.04_01"><Header><AuditFileVersion>1.04_01</AuditFileVersion></Header><SourceDocuments><SalesInvoices>$invoice$invoice</SalesInvoices></SourceDocuments></AuditFile>"""
         val result = SaftPtSalesInvoiceParser.parse(xml.toByteArray())
         assertEquals(1, result.acceptedInvoices.size)
     }
