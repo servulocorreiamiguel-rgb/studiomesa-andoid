@@ -1,6 +1,6 @@
 package pt.studiomesa.app
 
-import android.util.Xml
+import org.xmlpull.v1.XmlPullParserFactory
 import org.xmlpull.v1.XmlPullParser
 import java.io.ByteArrayInputStream
 import java.math.BigDecimal
@@ -58,8 +58,9 @@ internal object SaftPtSalesInvoiceParser {
         }
         val digest = MessageDigest.getInstance("SHA-256")
             .digest(bytes).joinToString("") { "%02x".format(it) }
-        val parser = Xml.newPullParser()
-        parser.setFeature(XmlPullParser.FEATURE_PROCESS_NAMESPACES, true)
+        val factory = XmlPullParserFactory.newInstance()
+        factory.isNamespaceAware = true
+        val parser = factory.newPullParser()
         runCatching { parser.setFeature(XmlPullParser.FEATURE_PROCESS_DOCDECL, false) }
         parser.setInput(ByteArrayInputStream(bytes), null)
 
