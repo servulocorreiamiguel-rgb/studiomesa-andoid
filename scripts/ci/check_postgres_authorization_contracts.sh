@@ -2979,7 +2979,7 @@ INSERT INTO public.restaurant_supplier_invoices (
     'product_code', 'FL001',
     'description', 'Farinha',
     'quantity', '2.000',
-    'unit', 'kg',
+    'unit', 'kilogramas',
     'unit_price', '10.00',
     'net_amount', '20.00',
     'vat_rate', '23'
