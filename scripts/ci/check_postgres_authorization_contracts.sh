@@ -3052,10 +3052,10 @@ then
   exit 1
 fi
 mismatched_stock_after="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
-  -c "SELECT (quantity = 0)::text FROM public.restaurant_inventory_items WHERE id = '$INVOICE_ALT_STOCK_ITEM'::uuid;")"
+  -c "SELECT CASE WHEN quantity = 0 THEN 1 ELSE 0 END FROM public.restaurant_inventory_items WHERE id = '$INVOICE_ALT_STOCK_ITEM'::uuid;")"
 receipt_count_after_mismatch="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
   -c "SELECT count(*)::text FROM private.restaurant_supplier_invoice_stock_receipts WHERE invoice_id = '$SUPPLIER_INVOICE_ID'::uuid;")"
-if [ "$mismatched_stock_after" != "true" ] || [ "$receipt_count_after_mismatch" != "0" ]; then
+if [ "$mismatched_stock_after" != "1" ] || [ "$receipt_count_after_mismatch" != "0" ]; then
   echo "ERROR: rejected incompatible supplier units still changed stock or created a receipt." >&2
   exit 1
 fi
