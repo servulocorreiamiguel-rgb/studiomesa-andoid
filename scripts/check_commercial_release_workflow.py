@@ -66,14 +66,12 @@ def audit_workflow(text: str) -> list[str]:
         if not re.search(r"(?m)^\s*exit 1\s*$", body):
             errors.append("The release branch guard must stop the workflow when the selected ref is not main.")
 
-    readiness_step = re.search(
-        r"(?ms)^      - name: Require production readiness sign-off\\s*\\n(.*?)(?=^      - name: |\\Z)",
-        text,
-    )
-    if readiness_step is None:
+    readiness_start = text.find("      - name: Require production readiness sign-off")
+    if readiness_start < 0:
         errors.append("Commercial release must require production readiness sign-off.")
     else:
-        body = readiness_step.group(1)
+        next_step = text.find("      - name: ", readiness_start + 10)
+        body = text[readiness_start:next_step if next_step >= 0 else len(text)]
         required_attestations = {
             "STUDIOMESA_BACKEND_MIGRATIONS_VERIFIED": "BACKEND_READY",
             "STUDIOMESA_AUTH_SMTP_VERIFIED": "AUTH_READY",
