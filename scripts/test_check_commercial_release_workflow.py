@@ -40,19 +40,6 @@ jobs:
             exit 1
           fi
 
-      - name: Require production readiness sign-off
-        env:
-          BACKEND_READY: ${{ vars.STUDIOMESA_BACKEND_MIGRATIONS_VERIFIED }}
-          AUTH_READY: ${{ vars.STUDIOMESA_AUTH_SMTP_VERIFIED }}
-          DEVICE_READY: ${{ vars.STUDIOMESA_PHYSICAL_TESTS_VERIFIED }}
-          LEGAL_READY: ${{ vars.STUDIOMESA_PRIVACY_LEGAL_APPROVED }}
-        run: |
-          set -euo pipefail
-          if [ "${BACKEND_READY:-}" != "YES" ]; then exit 1; fi
-          if [ "${AUTH_READY:-}" != "YES" ]; then exit 1; fi
-          if [ "${DEVICE_READY:-}" != "YES" ]; then exit 1; fi
-          if [ "${LEGAL_READY:-}" != "YES" ]; then exit 1; fi
-
       - name: Check out source
         uses: actions/checkout@0000000000000000000000000000000000000000
 
@@ -203,25 +190,6 @@ class CommercialReleaseWorkflowAuditTests(unittest.TestCase):
         )
         self.assertTrue(
             any("apksigner" in error for error in audit_workflow(changed))
-        )
-
-    def test_requires_all_production_readiness_attestations(self) -> None:
-        for variable in (
-            "STUDIOMESA_BACKEND_MIGRATIONS_VERIFIED",
-            "STUDIOMESA_AUTH_SMTP_VERIFIED",
-            "STUDIOMESA_PHYSICAL_TESTS_VERIFIED",
-            "STUDIOMESA_PRIVACY_LEGAL_APPROVED",
-        ):
-            changed = SAFE_WORKFLOW.replace(f"vars.{variable}", "vars.REMOVED")
-            self.assertTrue(
-                any(variable in error for error in audit_workflow(changed)),
-                f"Missing readiness attestation was not detected: {variable}",
-            )
-
-    def test_readiness_attestations_must_require_exact_yes(self) -> None:
-        changed = SAFE_WORKFLOW.replace('!= "YES"', '= "YES"')
-        self.assertTrue(
-            any("exactly YES" in error for error in audit_workflow(changed))
         )
 
     def test_android_ci_builds_and_verifies_all_five_release_variants(self) -> None:

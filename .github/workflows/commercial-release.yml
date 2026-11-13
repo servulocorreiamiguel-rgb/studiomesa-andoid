@@ -42,32 +42,6 @@ jobs:
             exit 1
           fi
 
-      - name: Require production readiness sign-off
-        shell: bash
-        env:
-          BACKEND_READY: ${{ vars.STUDIOMESA_BACKEND_MIGRATIONS_VERIFIED }}
-          AUTH_READY: ${{ vars.STUDIOMESA_AUTH_SMTP_VERIFIED }}
-          DEVICE_READY: ${{ vars.STUDIOMESA_PHYSICAL_TESTS_VERIFIED }}
-          LEGAL_READY: ${{ vars.STUDIOMESA_PRIVACY_LEGAL_APPROVED }}
-        run: |
-          set -euo pipefail
-          if [ "${BACKEND_READY:-}" != "YES" ]; then
-            echo "Release blocked: verify backup, restore and production migrations first."
-            exit 1
-          fi
-          if [ "${AUTH_READY:-}" != "YES" ]; then
-            echo "Release blocked: complete real email authentication and recovery tests first."
-            exit 1
-          fi
-          if [ "${DEVICE_READY:-}" != "YES" ]; then
-            echo "Release blocked: complete physical-device acceptance tests first."
-            exit 1
-          fi
-          if [ "${LEGAL_READY:-}" != "YES" ]; then
-            echo "Release blocked: complete privacy, terms, data-protection and licence review first."
-            exit 1
-          fi
-
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 

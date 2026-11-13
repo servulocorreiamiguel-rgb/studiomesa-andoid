@@ -70,7 +70,9 @@ def audit_workflow(text: str) -> list[str]:
         r"(?ms)^      - name: Require production readiness sign-off\\s*\\n(.*?)(?=^      - name: |\\Z)",
         text,
     )
-    if readiness_step is not None:
+    if readiness_step is None:
+        errors.append("Commercial release must require production readiness sign-off.")
+    else:
         body = readiness_step.group(1)
         required_attestations = {
             "STUDIOMESA_BACKEND_MIGRATIONS_VERIFIED": "BACKEND_READY",
@@ -79,120 +81,20 @@ def audit_workflow(text: str) -> list[str]:
             "STUDIOMESA_PRIVACY_LEGAL_APPROVED": "LEGAL_READY",
         }
         for variable, env_name in required_attestations.items():
-            if not re.search(
-                rf"(?m)^\\s*{env_name}: \\$\\{{\\{{ vars\\.{variable} \\}}\\}}\\s*$",
-                body,
-            ):
+            binding = f"{env_name}: ${{{{ vars.{variable} }}}}"
+            if binding not in body:
                 errors.append(
                     f"Production sign-off must read the {variable} Actions variable."
                 )
-        for env_name in required_attestations.values():
-            if not re.search(
-                rf'(?m)^\\s*if \\[ "\\$\\{{{env_name}:-\\}}" \\] != "YES" \\]; then
-    unsafe_echo_patterns = (
-        r"(?im)^\s*echo\s+.*ANDROID_KEYSTORE_BASE64",
-        r"(?im)^\s*echo\s+.*ANDROID_KEYSTORE_PASSWORD",
-        r"(?im)^\s*echo\s+.*ANDROID_KEY_PASSWORD",
-    )
-    for pattern in unsafe_echo_patterns:
-        if re.search(pattern, text):
-            errors.append("Do not print signing secrets to workflow logs.")
-            break
-
-    if 'verification_output="$(jarsigner -verify "$bundle" 2>&1)"' not in text:
-        errors.append("The commercial workflow must capture jarsigner verification output.")
-    if 'grep -Fq "jar verified."' not in text:
-        errors.append("The commercial workflow must explicitly reject AABs without the 'jar verified.' result.")
-    release_apk_tasks = (
-        "assembleEssencialRestauranteRelease",
-        "assembleProfissionalRestauranteRelease",
-        "assembleProfissionalClienteRelease",
-        "assemblePremiumRestauranteRelease",
-        "assemblePremiumClienteRelease",
-    )
-    if not all(task in text for task in release_apk_tasks):
-        errors.append("The commercial workflow must build all five signed release APK variants.")
-    if "mapfile -d '' apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' -print0)" not in text:
-        errors.append("The commercial workflow must enumerate the release APKs before uploading them.")
-    if '"$APKSIGNER" verify --verbose "$apk"' not in text:
-        errors.append("The commercial workflow must verify each release APK with apksigner.")
-    if "app/build/outputs/apk/**/release/*.apk" not in text:
-        errors.append("The commercial artifact must include the signed APKs for direct installation.")
-
-    return errors
-
-
-def audit_ci_test_bundle(text: str) -> list[str]:
-    """Require CI to prove all five temporary commercial variants are signed."""
-    errors: list[str] = []
-    if "mapfile -d '' bundles < <(find app/build/outputs/bundle -type f -name '*.aab' -print0)" not in text:
-        errors.append("Android CI must enumerate all temporary commercial AABs.")
-    if 'if [ "${#bundles[@]}" -ne 5 ]; then' not in text:
-        errors.append("Android CI must require exactly five temporary commercial AABs.")
-    if 'verification_output="$(jarsigner -verify "$aab" 2>&1)"' not in text:
-        errors.append("Android CI must run jarsigner verification against every temporary release AAB.")
-    if 'grep -Fq "jar verified."' not in text:
-        errors.append("Android CI must require the explicit 'jar verified.' result for its test AABs.")
-    release_tasks = (
-        "bundleEssencialRestauranteRelease",
-        "bundleProfissionalRestauranteRelease",
-        "bundleProfissionalClienteRelease",
-        "bundlePremiumRestauranteRelease",
-        "bundlePremiumClienteRelease",
-        "assembleEssencialRestauranteRelease",
-        "assembleProfissionalRestauranteRelease",
-        "assembleProfissionalClienteRelease",
-        "assemblePremiumRestauranteRelease",
-        "assemblePremiumClienteRelease",
-    )
-    if not all(task in text for task in release_tasks):
-        errors.append("Android CI must build all five temporary signed AAB and APK variants.")
-    if "mapfile -d '' apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' -print0)" not in text:
-        errors.append("Android CI must enumerate all temporary commercial APKs.")
-    if 'if [ "${#apks[@]}" -ne 5 ]; then' not in text:
-        errors.append("Android CI must require exactly five temporary commercial APKs.")
-    if 'for apk in "${apks[@]}"; do' not in text:
-        errors.append("Android CI must verify every temporary commercial APK.")
-    if '"$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$apk"' not in text:
-        errors.append("Android CI must verify every temporary signed APK with apksigner.")
-    if "name: StudioMesa-1.5.0-Demo-APKs" not in text:
-        errors.append("Android CI must upload the named demo APK artifact.")
-    if "path: app/build/outputs/apk/**/debug/*.apk" not in text:
-        errors.append("Android CI must upload only debug APKs to the demo artifact.")
-    if "path: app/build/outputs/apk/**/*.apk" in text:
-        errors.append("The demo artifact must exclude release APKs signed with the temporary CI key.")
-    return errors
-
-
-def main() -> int:
-    try:
-        text = WORKFLOW.read_text(encoding="utf-8")
-        android_text = (ROOT / ".github" / "workflows" / "android.yml").read_text(encoding="utf-8")
-    except OSError as exc:
-        print(f"Could not read workflow file: {exc}", file=sys.stderr)
-        return 2
-
-    errors = audit_workflow(text) + audit_ci_test_bundle(android_text)
-    if errors:
-        print("Commercial release workflow audit failed:")
-        for error in errors:
-            print(f" - {error}")
-        return 1
-
-    print("Commercial release workflow audit passed: manual trigger, confirmation, main-only guard and secret ordering.")
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
-,
-                body,
-            ):
+            guard = f'if [ "${{{env_name}:-}}" != "YES" ]; then'
+            if guard not in body:
                 errors.append(
                     f"Production sign-off must block unless {env_name} is exactly YES."
                 )
-        if not re.search(r"(?m)^\\s*exit 1\\s*$", body):
-            errors.append("Production sign-off must stop the workflow when a readiness attestation is missing.")
+        if "exit 1" not in body:
+            errors.append(
+                "Production sign-off must stop the workflow when a readiness attestation is missing."
+            )
 
     # These strings would expose the base64 keystore or passwords if used in shell output.
     unsafe_echo_patterns = (
