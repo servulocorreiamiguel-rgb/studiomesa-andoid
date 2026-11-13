@@ -78,6 +78,7 @@ Consultas read-only e Supabase Advisors em 13/11/2026:
 - [ ] Rever a estratégia Google Play: cinco variantes técnicas não significam cinco listagens permitidas. Considerar apps Gestão/Cliente e entitlements seguros por plano ou distribuição B2B privada.
 - [ ] Gerar AAB/APKs assinados com a chave comercial, verificar assinaturas/checksums e testar atualização em dispositivos reais. O workflow não publica automaticamente na Play Store.
 - [ ] Confirmar procedimento de backups/restauro antes de operar com dados de restaurantes.
+- [ ] Definir uma pessoa adulta/entidade com capacidade legal como titular dos contratos, faturação, responsabilidades de proteção de dados e conta Play Console. Não usar a identidade de terceiros como fachada; o Código Civil português regula a capacidade dos menores nos artigos 122.º–127.º e a Play Console exige titular com pelo menos 18 anos.
 
 **Regra de lançamento:** a StudioMesa só fica autorizada para operação comercial depois de todos os bloqueios de backend, Auth, autorização, E2E/físicos, release e legal/privacidade acima estarem resolvidos e documentados.
 
