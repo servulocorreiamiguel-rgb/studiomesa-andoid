@@ -57,6 +57,27 @@ class SaftPtSalesInvoiceParserTest {
                     <DocumentTotals><NetTotal>90.00</NetTotal><GrossTotal>110.70</GrossTotal></DocumentTotals>
                   </Invoice>
                   <Invoice>
+                    <InvoiceNo>VD A/8</InvoiceNo>
+                    <DocumentStatus><InvoiceStatus>N</InvoiceStatus></DocumentStatus>
+                    <InvoiceDate>2012-11-08</InvoiceDate><InvoiceType>VD</InvoiceType>
+                    <Line><Quantity>1</Quantity><UnitPrice>7.00</UnitPrice><Description>Venda a dinheiro</Description><DebitAmount>7.00</DebitAmount></Line>
+                    <DocumentTotals><NetTotal>7.00</NetTotal><GrossTotal>8.61</GrossTotal></DocumentTotals>
+                  </Invoice>
+                  <Invoice>
+                    <InvoiceNo>TV A/9</InvoiceNo>
+                    <DocumentStatus><InvoiceStatus>N</InvoiceStatus></DocumentStatus>
+                    <InvoiceDate>2012-11-09</InvoiceDate><InvoiceType>TV</InvoiceType>
+                    <Line><Quantity>1</Quantity><UnitPrice>6.00</UnitPrice><Description>Talao de venda</Description><DebitAmount>6.00</DebitAmount></Line>
+                    <DocumentTotals><NetTotal>6.00</NetTotal><GrossTotal>7.38</GrossTotal></DocumentTotals>
+                  </Invoice>
+                  <Invoice>
+                    <InvoiceNo>TD A/10</InvoiceNo>
+                    <DocumentStatus><InvoiceStatus>N</InvoiceStatus></DocumentStatus>
+                    <InvoiceDate>2012-11-10</InvoiceDate><InvoiceType>TD</InvoiceType>
+                    <Line><Quantity>1</Quantity><UnitPrice>5.00</UnitPrice><Description>Devolucao</Description><DebitAmount>5.00</DebitAmount></Line>
+                    <DocumentTotals><NetTotal>5.00</NetTotal><GrossTotal>6.15</GrossTotal></DocumentTotals>
+                  </Invoice>
+                  <Invoice>
                     <InvoiceNo>FR A/7</InvoiceNo>
                     <DocumentStatus><InvoiceStatus>S</InvoiceStatus></DocumentStatus>
                     <InvoiceDate>2026-11-07</InvoiceDate><InvoiceType>FR</InvoiceType>
@@ -71,7 +92,7 @@ class SaftPtSalesInvoiceParserTest {
         val result = SaftPtSalesInvoiceParser.parse(xml)
 
         assertEquals("1.04_01", result.version)
-        assertEquals(4, result.acceptedInvoices.size)
+        assertEquals(7, result.acceptedInvoices.size)
         assertEquals(1, result.excludedVoided)
         assertEquals(1, result.excludedReplaced)
         assertEquals(1, result.excludedSummary)
@@ -84,6 +105,9 @@ class SaftPtSalesInvoiceParserTest {
         assertEquals(BigDecimal("-10.00"), credit.netTotal)
         assertEquals(BigDecimal("-1"), credit.lines.single().quantity)
         assertEquals(BigDecimal("-10.00"), credit.lines.single().netAmount)
+        val returnTicket = result.acceptedInvoices.first { it.invoiceType == "TD" }
+        assertEquals(BigDecimal("-5.00"), returnTicket.netTotal)
+        assertEquals(BigDecimal("-1"), returnTicket.lines.single().quantity)
         assertTrue(result.fileSha256.matches(Regex("^[a-f0-9]{64}$")))
     }
 
