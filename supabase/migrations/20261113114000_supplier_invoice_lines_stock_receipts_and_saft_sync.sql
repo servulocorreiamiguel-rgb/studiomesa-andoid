@@ -464,6 +464,8 @@ BEGIN
     )
     RETURNING id INTO v_receipt_id;
 
+    -- Prorate each invoice line's net amount to the accepted quantity. This keeps
+    -- partial receipts and owner-corrected OCR quantities from inflating unit cost.
     -- Aggregate multiple invoice lines mapped to the same stock item.
     FOR v_item IN
         WITH selected_lines AS (
@@ -471,7 +473,12 @@ BEGIN
                 (mapping.value->>'inventory_item_id')::uuid AS item_id,
                 lower(trim(line.value->>'unit')) AS line_unit,
                 (mapping.value->>'accepted_quantity')::numeric AS quantity,
-                (line.value->>'net_amount')::numeric AS net_amount
+                round(
+                    (line.value->>'net_amount')::numeric
+                    * (mapping.value->>'accepted_quantity')::numeric
+                    / (line.value->>'quantity')::numeric,
+                    2
+                ) AS net_amount
             FROM jsonb_array_elements(v_mapping) AS mapping(value)
             JOIN jsonb_array_elements(v_invoice.line_items) AS line(value)
               ON line.value->>'id' = mapping.value->>'line_id'
@@ -525,7 +532,7 @@ BEGIN
             RAISE EXCEPTION 'A quantidade resultante de stock está fora do intervalo permitido.';
         END IF;
 
-        IF v_item.net_amount > 0 AND v_new_quantity > 0 THEN
+        IF v_new_quantity > 0 THEN
             IF v_old_cost IS NULL OR v_old_quantity <= 0 THEN
                 v_new_cost := round(v_item.net_amount / v_item.quantity, 4);
             ELSE
