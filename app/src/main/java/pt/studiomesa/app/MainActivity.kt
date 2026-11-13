@@ -8441,9 +8441,6 @@ class MainActivity : ComponentActivity() {
                         val menuMatch = menuByName[normalizeSalesProductName(line.description)]
                         val menuId = menuMatch?.id
                             ?: "unmapped:" + line.description.take(120)
-                        val unitNet = if (line.quantity.signum() == 0) BigDecimal.ZERO else {
-                            line.netAmount.abs().divide(line.quantity.abs(), 8, java.math.RoundingMode.HALF_UP)
-                        }
                         add(
                             EconomicForecastOrderLine(
                                 createdAtMillis = millis,
@@ -8451,8 +8448,10 @@ class MainActivity : ComponentActivity() {
                                 menuItemId = menuId,
                                 itemName = line.description,
                                 quantity = line.quantity,
-                                unitAmount = unitNet,
-                                documentRevenueAmount = if (index == 0) invoice.netTotal else null
+                                // The invoice total is counted once, on the first line.
+                                // Other lines still contribute to ingredient quantities.
+                                unitAmount = BigDecimal.ZERO,
+                                documentRevenueAmount = if (index == 0) invoice.netTotal else BigDecimal.ZERO
                             )
                         )
                     }
