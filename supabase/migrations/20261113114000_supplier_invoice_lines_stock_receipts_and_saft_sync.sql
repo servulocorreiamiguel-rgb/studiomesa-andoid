@@ -382,7 +382,15 @@ BEGIN
         v_seen_line_ids := array_append(v_seen_line_ids, v_line_id);
         v_accepted_quantity_text := v_map->>'accepted_quantity';
         IF v_accepted_quantity_text IS NULL
-           OR v_accepted_quantity_text !~ '^[0-9]+(\\.[0-9]{1,3})?
+           OR v_accepted_quantity_text !~ '^[0-9]+([.][0-9]{1,3})?$' THEN
+            RAISE EXCEPTION 'Indica uma quantidade positiva com, no máximo, três casas decimais.';
+        END IF;
+        v_accepted_quantity := v_accepted_quantity_text::numeric;
+        IF v_accepted_quantity <= 0 OR v_accepted_quantity > 999999 THEN
+            RAISE EXCEPTION 'A quantidade recebida está fora do intervalo permitido.';
+        END IF;
+
+        BEGIN
             v_inventory_id := (v_map->>'inventory_item_id')::uuid;
         EXCEPTION WHEN invalid_text_representation THEN
             RAISE EXCEPTION 'Um artigo de stock selecionado não é válido.';
