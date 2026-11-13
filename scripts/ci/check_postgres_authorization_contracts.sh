@@ -2935,3 +2935,242 @@ if [ "$shared_restaurant_rows" != "1" ] || [ "$deleted_staff_rows" != "0" ] || [
   exit 1
 fi
 echo "PASS: staff deletion preserves shared stock, anonymizes inventory audit actors and clears the deletion request."
+
+# Supplier invoice receipt and SAF-T cloud synchronization contracts.
+# Dedicated fresh tenant: this must not depend on earlier destructive account tests.
+USER_G="77777777-7777-4777-8777-777777777777"
+USER_H="88888888-8888-4888-8888-888888888888"
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO auth.users (id, email)
+VALUES ('$USER_G', 'ci-invoice-owner@example.invalid'),
+       ('$USER_H', 'ci-invoice-staff@example.invalid');
+SQL
+RESTAURANT_G="$(create_restaurant "$USER_G" "CI Invoice Restaurant" "SMOKECC001")"
+test -n "$RESTAURANT_G"
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+INSERT INTO private.restaurant_loyalty_entitlements (restaurant_id, plan_code)
+VALUES ('$RESTAURANT_G'::uuid, 'premium')
+ON CONFLICT (restaurant_id) DO UPDATE SET plan_code = EXCLUDED.plan_code;
+SQL
+add_staff_member "$USER_H" "$RESTAURANT_G"
+INVOICE_STOCK_ITEM="$(create_inventory_item "$USER_G" "$RESTAURANT_G" "c7777777-7777-4777-8777-777777777777" "Farinha" "3")"
+INVOICE_ALT_STOCK_ITEM="$(create_inventory_item "$USER_G" "$RESTAURANT_G" "c8888888-8888-4888-8888-888888888888" "Farinha alternativa" "0")"
+test -n "$INVOICE_STOCK_ITEM"
+test -n "$INVOICE_ALT_STOCK_ITEM"
+update_inventory_item_with_cost "$USER_G" "$RESTAURANT_G" "$INVOICE_STOCK_ITEM" "" "5.0000::numeric" >/dev/null
+
+SUPPLIER_INVOICE_ID="99999999-9999-4999-8999-999999999999"
+SUPPLIER_LINE_ID="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+SUPPLIER_RECEIPT_REQUEST="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_G', true);
+SET LOCAL ROLE authenticated;
+INSERT INTO public.restaurant_supplier_invoices (
+  id, restaurant_id, supplier_name, supplier_vat_number, invoice_number,
+  issue_date, currency, net_amount, vat_amount, total_amount, review_status,
+  source_type, line_items, created_by, reviewed_by, reviewed_at
+) VALUES (
+  '$SUPPLIER_INVOICE_ID'::uuid, '$RESTAURANT_G'::uuid,
+  'Fornecedor CI', '501234560', 'FT-CI-001', '2026-11-12', 'EUR',
+  20, 4.60, 24.60, 'approved', 'manual',
+  jsonb_build_array(jsonb_build_object(
+    'id', '$SUPPLIER_LINE_ID',
+    'product_code', 'FL001',
+    'description', 'Farinha',
+    'quantity', '2.000',
+    'unit', 'kg',
+    'unit_price', '10.00',
+    'net_amount', '20.00',
+    'vat_rate', '23'
+  )),
+  '$USER_G'::uuid, '$USER_G'::uuid, now()
+);
+COMMIT;
+SQL
+
+# Another tenant and a restaurant staff member must not receive the invoice.
+for unauthorized_user in "$USER_B" "$USER_H"; do
+  if psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$unauthorized_user', true);
+SET LOCAL ROLE authenticated;
+SELECT public.receive_supplier_invoice_stock(
+  '$SUPPLIER_INVOICE_ID'::uuid, '$SUPPLIER_RECEIPT_REQUEST'::uuid,
+  jsonb_build_array(jsonb_build_object(
+    'line_id', '$SUPPLIER_LINE_ID',
+    'inventory_item_id', '$INVOICE_STOCK_ITEM'
+  ))
+);
+COMMIT;
+SQL
+  then
+    echo "ERROR: an unauthorized user received supplier invoice stock." >&2
+    exit 1
+  fi
+done
+
+# An owner cannot map a reviewed purchase line to stock from another restaurant.
+if psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_G', true);
+SET LOCAL ROLE authenticated;
+SELECT public.receive_supplier_invoice_stock(
+  '$SUPPLIER_INVOICE_ID'::uuid, '$SUPPLIER_RECEIPT_REQUEST'::uuid,
+  jsonb_build_array(jsonb_build_object(
+    'line_id', '$SUPPLIER_LINE_ID',
+    'inventory_item_id', '$ITEM_B'
+  ))
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: supplier invoice receipt accepted stock owned by another restaurant." >&2
+  exit 1
+fi
+
+# A valid owner receipt updates quantity and weighted unit cost exactly once.
+receipt_result="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_G', true);
+SET LOCAL ROLE authenticated;
+SELECT public.receive_supplier_invoice_stock(
+  '$SUPPLIER_INVOICE_ID'::uuid, '$SUPPLIER_RECEIPT_REQUEST'::uuid,
+  jsonb_build_array(jsonb_build_object(
+    'line_id', '$SUPPLIER_LINE_ID',
+    'inventory_item_id', '$INVOICE_STOCK_ITEM'
+  ))
+);
+COMMIT;
+SQL
+)"
+stock_after_invoice="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT quantity::text || '|' || unit_cost_per_unit::text FROM public.restaurant_inventory_items WHERE id = '$INVOICE_STOCK_ITEM'::uuid;")"
+receipt_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*)::text FROM private.restaurant_supplier_invoice_stock_receipts WHERE invoice_id = '$SUPPLIER_INVOICE_ID'::uuid;")"
+if ! grep -Fq '"already_applied": false' <<<"$receipt_result" ||
+   [ "$stock_after_invoice" != "5.000|7.0000" ] ||
+   [ "$receipt_count" != "1" ]; then
+  echo "ERROR: owner supplier invoice receipt did not add stock and weighted cost exactly once." >&2
+  printf 'Result: %s; stock: %s; receipts: %s\\n' "$receipt_result" "$stock_after_invoice" "$receipt_count" >&2
+  exit 1
+fi
+
+# A retry with the identical line-to-stock mapping must not add the stock twice.
+retry_result="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_G', true);
+SET LOCAL ROLE authenticated;
+SELECT public.receive_supplier_invoice_stock(
+  '$SUPPLIER_INVOICE_ID'::uuid, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'::uuid,
+  jsonb_build_array(jsonb_build_object(
+    'line_id', '$SUPPLIER_LINE_ID',
+    'inventory_item_id', '$INVOICE_STOCK_ITEM'
+  ))
+);
+COMMIT;
+SQL
+)"
+stock_after_retry="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT quantity::text || '|' || unit_cost_per_unit::text FROM public.restaurant_inventory_items WHERE id = '$INVOICE_STOCK_ITEM'::uuid;")"
+if ! grep -Fq '"already_applied": true' <<<"$retry_result" ||
+   [ "$stock_after_retry" != "5.000|7.0000" ]; then
+  echo "ERROR: retrying a supplier invoice receipt changed stock a second time." >&2
+  exit 1
+fi
+
+# Even an owner may not replay the invoice with a different stock mapping.
+if psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_G', true);
+SET LOCAL ROLE authenticated;
+SELECT public.receive_supplier_invoice_stock(
+  '$SUPPLIER_INVOICE_ID'::uuid, 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'::uuid,
+  jsonb_build_array(jsonb_build_object(
+    'line_id', '$SUPPLIER_LINE_ID',
+    'inventory_item_id', '$INVOICE_ALT_STOCK_ITEM'
+  ))
+);
+COMMIT;
+SQL
+then
+  echo "ERROR: a received supplier invoice accepted a different stock mapping on replay." >&2
+  exit 1
+fi
+
+# Private SAF-T payloads are owner-only and stale device data cannot overwrite newer rows.
+SAFT_INVOICE_ID="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_G', true);
+SET LOCAL ROLE authenticated;
+SELECT public.sync_restaurant_saft_sales_invoice_batch(
+  '$RESTAURANT_G'::uuid,
+  jsonb_build_array(jsonb_build_object(
+    'invoice_id', '$SAFT_INVOICE_ID',
+    'issue_date', '2026-11-12',
+    'updated_at_ms', 200,
+    'payload', jsonb_build_object(
+      'id', '$SAFT_INVOICE_ID',
+      'invoice_number', 'FT-CI-SAFT-001',
+      'issue_date', '2026-11-12',
+      'invoice_type', 'FT',
+      'invoice_status', 'N',
+      'net_total', '20.00',
+      'gross_total', '24.60',
+      'lines', jsonb_build_array(jsonb_build_object(
+        'product_code', 'FL001',
+        'description', 'Farinha',
+        'quantity', '2.000',
+        'net_amount', '20.00'
+      ))
+    )
+  ))
+);
+COMMIT;
+SQL
+
+if psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
+SET LOCAL ROLE authenticated;
+SELECT public.list_restaurant_saft_sales_invoice_batch('$RESTAURANT_G'::uuid, 0, 10);
+COMMIT;
+SQL
+then
+  echo "ERROR: another restaurant owner read private SAF-T invoices." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_G', true);
+SET LOCAL ROLE authenticated;
+SELECT public.sync_restaurant_saft_sales_invoice_batch(
+  '$RESTAURANT_G'::uuid,
+  jsonb_build_array(jsonb_build_object(
+    'invoice_id', '$SAFT_INVOICE_ID',
+    'issue_date', '2026-11-12',
+    'updated_at_ms', 100,
+    'payload', jsonb_build_object(
+      'id', '$SAFT_INVOICE_ID',
+      'invoice_number', 'FT-CI-STALE',
+      'issue_date', '2026-11-12',
+      'invoice_type', 'FT',
+      'invoice_status', 'N',
+      'net_total', '1.00',
+      'gross_total', '1.23',
+      'lines', jsonb_build_array()
+    )
+  ))
+);
+COMMIT;
+SQL
+saft_invoice_number="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT payload->>'invoice_number' FROM private.restaurant_saft_sales_invoices WHERE restaurant_id = '$RESTAURANT_G'::uuid AND invoice_id = '$SAFT_INVOICE_ID';")"
+if [ "$saft_invoice_number" != "FT-CI-SAFT-001" ]; then
+  echo "ERROR: an older SAF-T device snapshot overwrote a newer cloud invoice." >&2
+  exit 1
+fi
+
+echo "PASS: supplier invoice stock receipts are owner-only, tenant-isolated and idempotent; SAF-T history is private and rejects stale overwrites."
