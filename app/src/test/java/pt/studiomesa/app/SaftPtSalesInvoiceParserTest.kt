@@ -98,8 +98,9 @@ class SaftPtSalesInvoiceParserTest {
         assertEquals(1, result.excludedSummary)
         assertEquals(0, result.excludedOtherStates)
         assertEquals(0, result.skippedInvalid)
-        assertEquals(BigDecimal("20.00"), result.acceptedInvoices[0].netTotal)
-        assertEquals("Hambúrguer", result.acceptedInvoices[0].lines.single().description)
+        val firstRegularInvoice = result.acceptedInvoices.first { it.invoiceNumber == "FT A/1" }
+        assertEquals(BigDecimal("20.00"), firstRegularInvoice.netTotal)
+        assertEquals("Hambúrguer", firstRegularInvoice.lines.single().description)
 
         val credit = result.acceptedInvoices.first { it.invoiceType == "NC" }
         assertEquals(BigDecimal("-10.00"), credit.netTotal)
