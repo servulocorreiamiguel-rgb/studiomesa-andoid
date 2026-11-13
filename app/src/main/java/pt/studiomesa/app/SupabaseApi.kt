@@ -21,6 +21,11 @@ object SupabaseApi {
 
     data class Session(val accessToken: String, val userId: String, val email: String, val refreshToken: String)
 
+    data class SupplierInvoiceCloudArchive(
+        val rows: JSONArray,
+        val supportsLineItems: Boolean
+    )
+
     /** Public web search via an authenticated Edge Function; provider keys stay server-side. */
     fun searchPublicWeb(token: String, query: String): JSONObject {
         require(token.isNotBlank()) { "Inicia sessão para pesquisar na Web." }
@@ -453,26 +458,64 @@ object SupabaseApi {
             .also { require(it.size <= MAX_INVOICE_DOCUMENT_BYTES) { "O documento excede 25 MB." } }
     }
 
-    fun insertSupplierInvoice(token: String, row: JSONObject): JSONObject {
-        val response = call("POST", "/rest/v1/restaurant_supplier_invoices", row, token, returnRepresentation = true)
-        return JSONArray(response).optJSONObject(0)
-            ?: throw IllegalStateException("O servidor não confirmou o registo da fatura.")
+    fun insertSupplierInvoice(token: String, row: JSONObject): Boolean {
+        fun insert(payload: JSONObject) {
+            val response = call(
+                "POST",
+                "/rest/v1/restaurant_supplier_invoices",
+                payload,
+                token,
+                returnRepresentation = true
+            )
+            if (JSONArray(response).optJSONObject(0) == null) {
+                throw IllegalStateException("O servidor não confirmou o registo da fatura.")
+            }
+        }
+        return try {
+            insert(row)
+            true
+        } catch (error: BackendHttpException) {
+            if (!isMissingSupplierInvoiceLinesSchema(error)) throw error
+            val legacy = JSONObject(row.toString()).apply {
+                remove("line_items")
+                remove("stock_received_at")
+                remove("stock_received_by")
+                remove("stock_receipt_request_id")
+            }
+            insert(legacy)
+            false
+        }
     }
 
-    fun listSupplierInvoices(token: String, restaurantId: String): JSONArray {
+    private fun isMissingSupplierInvoiceLinesSchema(error: BackendHttpException): Boolean {
+        if (error.statusCode != 400) return false
+        val message = error.message.orEmpty().lowercase(Locale.ROOT)
+        return listOf(
+            "line_items", "stock_received_at", "stock_received_by",
+            "stock_receipt_request_id", "pgrst204"
+        ).any(message::contains)
+    }
+
+    fun listSupplierInvoices(token: String, restaurantId: String): SupplierInvoiceCloudArchive {
         require(token.isNotBlank() && restaurantId.isNotBlank())
         val restaurant = URLEncoder.encode(restaurantId, "UTF-8")
         val result = JSONArray()
         val pageSize = 200
         var offset = 0
-        // Fetch every accessible invoice page, regardless of its review status.
-        // This is deliberately independent of the customer loyalty-points system.
+        var supportsLineItems = true
+        // Fetch every accessible invoice page, regardless of its review status or
+        // loyalty-point state. Older hosted schemas fall back to the legacy fields.
         while (offset < 5_000) {
-            val page = JSONArray(call(
-                "GET",
-                "/rest/v1/restaurant_supplier_invoices?select=id,restaurant_id,supplier_name,supplier_vat_number,invoice_number,issue_date,due_date,currency,net_amount,vat_amount,total_amount,review_status,source_type,mime_type,byte_size,document_sha256,document_path,warnings,created_by,reviewed_by,reviewed_at,created_at,updated_at&restaurant_id=eq.$restaurant&order=issue_date.desc,created_at.desc&limit=$pageSize&offset=$offset",
-                accessToken = token
-            ))
+            val richPath = "/rest/v1/restaurant_supplier_invoices?select=id,restaurant_id,supplier_name,supplier_vat_number,invoice_number,issue_date,due_date,currency,net_amount,vat_amount,total_amount,review_status,source_type,mime_type,byte_size,document_sha256,document_path,warnings,line_items,stock_received_at,stock_received_by,stock_receipt_request_id,created_by,reviewed_by,reviewed_at,created_at,updated_at&restaurant_id=eq.$restaurant&order=issue_date.desc,created_at.desc&limit=$pageSize&offset=$offset"
+            val legacyPath = "/rest/v1/restaurant_supplier_invoices?select=id,restaurant_id,supplier_name,supplier_vat_number,invoice_number,issue_date,due_date,currency,net_amount,vat_amount,total_amount,review_status,source_type,mime_type,byte_size,document_sha256,document_path,warnings,created_by,reviewed_by,reviewed_at,created_at,updated_at&restaurant_id=eq.$restaurant&order=issue_date.desc,created_at.desc&limit=$pageSize&offset=$offset"
+            val page = try {
+                if (supportsLineItems) JSONArray(call("GET", richPath, accessToken = token))
+                else JSONArray(call("GET", legacyPath, accessToken = token))
+            } catch (error: BackendHttpException) {
+                if (!supportsLineItems || !isMissingSupplierInvoiceLinesSchema(error)) throw error
+                supportsLineItems = false
+                JSONArray(call("GET", legacyPath, accessToken = token))
+            }
             for (index in 0 until page.length()) {
                 val row = page.optJSONObject(index) ?: continue
                 result.put(row)
@@ -480,7 +523,70 @@ object SupabaseApi {
             if (page.length() < pageSize) break
             offset += pageSize
         }
-        return result
+        return SupplierInvoiceCloudArchive(result, supportsLineItems)
+    }
+
+    fun syncSaftSalesInvoiceBatch(
+        token: String,
+        restaurantId: String,
+        rows: List<JSONObject>
+    ): Int {
+        require(token.isNotBlank() && restaurantId.isNotBlank())
+        require(restaurantId.matches(Regex("^[0-9a-fA-F-]{36}$")))
+        require(rows.size in 1..10) { "O lote SAF-T deve conter entre 1 e 10 faturas." }
+        val payload = JSONArray().apply { rows.forEach(::put) }
+        require(payload.toString().toByteArray(Charsets.UTF_8).size <= 3 * 1024 * 1024) {
+            "O lote SAF-T excede o limite de transferência."
+        }
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/sync_restaurant_saft_sales_invoice_batch",
+            JSONObject().put("p_restaurant_id", restaurantId).put("p_rows", payload),
+            token
+        )
+        return response.trim().trim('"').toIntOrNull()
+            ?: throw IllegalStateException("O servidor não confirmou a sincronização SAF-T.")
+    }
+
+    fun listSaftSalesInvoiceBatch(
+        token: String,
+        restaurantId: String,
+        offset: Int,
+        limit: Int = 10
+    ): JSONObject {
+        require(token.isNotBlank() && restaurantId.isNotBlank())
+        require(offset in 0..1_000_000 && limit in 1..500)
+        return jsonCall(
+            "POST",
+            "/rest/v1/rpc/list_restaurant_saft_sales_invoice_batch",
+            JSONObject()
+                .put("p_restaurant_id", restaurantId)
+                .put("p_offset", offset)
+                .put("p_limit", limit),
+            token
+        )
+    }
+
+    fun receiveSupplierInvoiceStock(
+        token: String,
+        invoiceId: String,
+        requestId: String,
+        lines: List<JSONObject>
+    ): JSONObject {
+        require(token.isNotBlank())
+        require(runCatching { java.util.UUID.fromString(invoiceId) }.isSuccess)
+        require(runCatching { java.util.UUID.fromString(requestId) }.isSuccess)
+        require(lines.isNotEmpty() && lines.size <= 500)
+        val payload = JSONArray().apply { lines.forEach(::put) }
+        return jsonCall(
+            "POST",
+            "/rest/v1/rpc/receive_supplier_invoice_stock",
+            JSONObject()
+                .put("p_invoice_id", invoiceId)
+                .put("p_request_id", requestId)
+                .put("p_lines", payload),
+            token
+        )
     }
 
     fun updateSupplierInvoiceReview(
