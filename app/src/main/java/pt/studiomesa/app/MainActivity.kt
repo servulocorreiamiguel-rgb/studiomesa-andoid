@@ -8777,7 +8777,7 @@ class MainActivity : ComponentActivity() {
         sectionHeading(
             container,
             "Previsão de vendas e compras",
-            "Todos os dias analisa as vendas registadas e calcula a comida necessária para os próximos sete dias."
+            "Analisa as vendas e calcula a comida necessária para os próximos sete dias. Atualiza ao abrir esta área e diariamente enquanto a aplicação está aberta; se a fechares, recalcula na próxima abertura."
         )
         val card = makeCard(15)
         if (economicForecastLoading) {
