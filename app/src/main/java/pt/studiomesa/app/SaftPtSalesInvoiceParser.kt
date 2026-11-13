@@ -91,6 +91,7 @@ internal object SaftPtSalesInvoiceParser {
                             "voided" -> excludedVoided++
                             "replaced" -> excludedReplaced++
                             "summary" -> excludedSummary++
+                            "invalid" -> skippedInvalid++
                             else -> excludedOther++
                         }
                     }
