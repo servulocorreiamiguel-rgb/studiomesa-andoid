@@ -102,6 +102,15 @@ internal object ModelDownloadResumePolicy {
             rangeStart == requestedOffset &&
             rangeEnd == expectedBytes - 1L &&
             rangeTotal == expectedBytes
+
+    fun shouldSyncProgress(
+        downloadedBytes: Long,
+        lastSyncedBytes: Long,
+        syncIntervalBytes: Long
+    ): Boolean =
+        syncIntervalBytes > 0L &&
+            downloadedBytes >= lastSyncedBytes &&
+            downloadedBytes - lastSyncedBytes >= syncIntervalBytes
 }
 
 internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
@@ -355,29 +364,40 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
 
                     var downloaded = outputOffset
                     onProgress(downloaded, artifact.sizeBytes)
+                    var lastSyncedBytes = downloaded
                     BufferedInputStream(connection.inputStream, BUFFER_SIZE).use { input ->
-                        BufferedOutputStream(
-                            FileOutputStream(temporaryFile, appendToPartial),
-                            BUFFER_SIZE
-                        ).use { output ->
-                            val buffer = ByteArray(BUFFER_SIZE)
-                            while (true) {
-                                if (closed) {
-                                    throw CancellationException(
-                                        "Transferência interrompida. O progresso ficou guardado para retomar mais tarde."
-                                    )
+                        FileOutputStream(temporaryFile, appendToPartial).use { fileOutput ->
+                            BufferedOutputStream(fileOutput, BUFFER_SIZE).use { output ->
+                                val buffer = ByteArray(BUFFER_SIZE)
+                                while (true) {
+                                    if (closed) {
+                                        throw CancellationException(
+                                            "Transferência interrompida. O progresso ficou guardado para retomar mais tarde."
+                                        )
+                                    }
+                                    val count = input.read(buffer)
+                                    if (count < 0) break
+                                    if (downloaded + count > artifact.sizeBytes) {
+                                        temporaryFile.delete()
+                                        throw IllegalStateException("O servidor enviou mais dados do que o tamanho validado do modelo.")
+                                    }
+                                    output.write(buffer, 0, count)
+                                    downloaded += count
+                                    onProgress(downloaded, artifact.sizeBytes)
+                                    if (ModelDownloadResumePolicy.shouldSyncProgress(
+                                            downloadedBytes = downloaded,
+                                            lastSyncedBytes = lastSyncedBytes,
+                                            syncIntervalBytes = DOWNLOAD_SYNC_INTERVAL_BYTES
+                                        )
+                                    ) {
+                                        output.flush()
+                                        fileOutput.fd.sync()
+                                        lastSyncedBytes = downloaded
+                                    }
                                 }
-                                val count = input.read(buffer)
-                                if (count < 0) break
-                                if (downloaded + count > artifact.sizeBytes) {
-                                    temporaryFile.delete()
-                                    throw IllegalStateException("O servidor enviou mais dados do que o tamanho validado do modelo.")
-                                }
-                                output.write(buffer, 0, count)
-                                downloaded += count
-                                onProgress(downloaded, artifact.sizeBytes)
+                                output.flush()
+                                fileOutput.fd.sync()
                             }
-                            output.flush()
                         }
                     }
 
@@ -749,5 +769,7 @@ internal class LocalAssistantModelManager(context: Context) : AutoCloseable {
         const val MAX_USER_MESSAGE_CHARS = 1200
         const val MINIMUM_FREE_SPACE_BYTES = 512L * 1024L * 1024L
         const val BUFFER_SIZE = 1024 * 1024
+        // Persist partial model bytes periodically so abrupt process/device shutdown loses little progress.
+        const val DOWNLOAD_SYNC_INTERVAL_BYTES = 16L * 1024L * 1024L
     }
 }
