@@ -159,6 +159,15 @@ class MainActivity : ComponentActivity() {
     private var economicForecastLoadedDay = ""
     private var economicForecastUpdatedAtMillis = 0L
     private var economicForecastSource = "Pedidos concluídos StudioMesa"
+    private val economicDailyRefreshHandler = Handler(Looper.getMainLooper())
+    private val economicDailyRefreshRunnable = object : Runnable {
+        override fun run() {
+            if (!activityResumed || activePage != "Assistente económico" || !economicAssistantIsEnabled()) return
+            val today = java.time.LocalDate.now().toString()
+            if (economicForecastLoadedDay != today) refreshEconomicDailyForecastIfDue(force = true)
+            scheduleEconomicDailyForecastRefresh()
+        }
+    }
     private val economicInputs = mutableMapOf<String, String>()
     private var economicReportText = ""
     private var recipeReportText = ""
@@ -262,6 +271,7 @@ class MainActivity : ComponentActivity() {
         updateInventoryAutoRefresh()
         if (activePage == "Assistente económico" && economicAssistantIsEnabled()) {
             refreshEconomicDailyForecastIfDue()
+            scheduleEconomicDailyForecastRefresh()
         }
     }
 
@@ -269,6 +279,7 @@ class MainActivity : ComponentActivity() {
         activityResumed = false
         stopKitchenAutoRefresh()
         stopInventoryAutoRefresh()
+        economicDailyRefreshHandler.removeCallbacks(economicDailyRefreshRunnable)
         super.onPause()
     }
 
@@ -280,6 +291,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        economicDailyRefreshHandler.removeCallbacks(economicDailyRefreshRunnable)
         if (localAssistantModelManagerDelegate.isInitialized()) {
             localAssistantModelManager.close()
         }
@@ -8460,6 +8472,25 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun scheduleEconomicDailyForecastRefresh() {
+        if (!activityResumed || activePage != "Assistente económico" || !economicAssistantIsEnabled()) {
+            economicDailyRefreshHandler.removeCallbacks(economicDailyRefreshRunnable)
+            return
+        }
+        economicDailyRefreshHandler.removeCallbacks(economicDailyRefreshRunnable)
+        val nextRun = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 5)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+            add(Calendar.DAY_OF_YEAR, 1)
+        }.timeInMillis
+        economicDailyRefreshHandler.postDelayed(
+            economicDailyRefreshRunnable,
+            (nextRun - System.currentTimeMillis()).coerceAtLeast(1_000L)
+        )
+    }
+
     private fun refreshEconomicDailyForecastIfDue(force: Boolean = false) {
         if (!economicAssistantIsEnabled() || economicForecastLoading) return
         if (hasRemoteRestaurant() && !isRemoteRestaurantOwner()) return
@@ -8623,6 +8654,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun renderEconomicDailyForecast(container: LinearLayout) {
+        scheduleEconomicDailyForecastRefresh()
         sectionHeading(
             container,
             "Previsão de vendas e compras",
