@@ -5,7 +5,6 @@ import java.math.RoundingMode
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.util.UUID
 
 internal data class EconomicForecastOrderLine(
     val createdAtMillis: Long,
@@ -140,7 +139,7 @@ internal object EconomicDailyForecastCalculator {
                 val requirements = recipeByMenu[menuId].orEmpty()
                 if (requirements.isEmpty()) {
                     unmapped += menuId
-                    return@forEach
+                    return@menuLoop
                 }
                 requirements.forEach ingredientLoop@ { ingredient ->
                     val usablePercent = hundred.subtract(ingredient.wastePercent)
