@@ -34,6 +34,8 @@ Comparação read-only feita em 13/11/2026:
 - [ ] Rever as migrações e o schema, garantir backup/restauro verificável e executar os testes de autorização antes de qualquer alteração no projeto de produção.
 - [ ] Criar uma branch Supabase isolada e validar nela as migrações, RLS, RPCs e advisors. A criação consultada custa 0,01344 USD/hora; não foi criada por não existir autorização para esse custo.
 
+Procedimento passo a passo para exportação, ensaio de restauro e pré-visualização antes de produção: [runbook de backup e migrações](docs/PRODUCTION-BACKUP-AND-MIGRATION-RUNBOOK.md). O plano Free não inclui backups automáticos; não aplicar DDL enquanto o restauro de Auth/Storage e da base de dados não estiver verificado.
+
 ## Auditoria de segurança no servidor
 
 Consultas read-only e Supabase Advisors em 13/11/2026:
