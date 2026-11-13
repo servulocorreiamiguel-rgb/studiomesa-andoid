@@ -2327,7 +2327,7 @@ class MainActivity : ComponentActivity() {
                     inventoryItemId = if (row.isNull("inventory_item_id")) null else row.optString("inventory_item_id")
                 )
             }
-        }.take(SupplierInvoiceStore.MAX_LINES_PER_INVOICE)
+        }.take(500)
     }
 
     private fun syncSaftSalesInvoicesWithCloud(showFeedback: Boolean) {
