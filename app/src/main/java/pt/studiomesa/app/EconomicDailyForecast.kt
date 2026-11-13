@@ -138,7 +138,7 @@ internal object EconomicDailyForecastCalculator {
                 if (perDayAverage.signum() <= 0) return@menuLoop
                 val requirements = recipeByMenu[menuId].orEmpty()
                 if (requirements.isEmpty()) {
-                    unmapped += menuId
+                    unmapped += menuId.removePrefix("unmapped:")
                     return@menuLoop
                 }
                 requirements.forEach ingredientLoop@ { ingredient ->
