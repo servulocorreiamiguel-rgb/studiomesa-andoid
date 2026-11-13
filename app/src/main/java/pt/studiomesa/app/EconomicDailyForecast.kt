@@ -43,11 +43,21 @@ internal data class EconomicIngredientForecast(
     val suggestedPurchaseQuantity: BigDecimal?
 )
 
+internal data class EconomicMenuItemForecast(
+    val menuItemId: String,
+    val itemName: String,
+    val expectedSevenDayPortions: BigDecimal,
+    val averageDailyPortions: BigDecimal,
+    val comparableDays: Int
+)
+
 internal data class EconomicDailyForecast(
     val days: List<EconomicRevenueForecastDay>,
     val ingredientAverages: List<EconomicIngredientForecast>,
     val hasSalesHistory: Boolean,
-    val unmappedMenuItems: List<String>
+    val unmappedMenuItems: List<String>,
+    /** Menu demand is inferred directly from invoice/order lines; it does not need recipes. */
+    val menuItemForecasts: List<EconomicMenuItemForecast> = emptyList()
 )
 
 /**
@@ -128,6 +138,8 @@ internal object EconomicDailyForecastCalculator {
         }
         val ingredientTotals = linkedMapOf<String, BigDecimal>()
         val ingredientMetadata = linkedMapOf<String, EconomicRecipeIngredient>()
+        val menuPortionTotals = linkedMapOf<String, BigDecimal>()
+        val menuComparableDays = linkedMapOf<String, Int>()
         forecastDays.forEach dayLoop@ { forecastDay ->
             val samples = historical.asReversed()
                 .filter { it.date.dayOfWeek == forecastDay.date.dayOfWeek }
@@ -139,6 +151,10 @@ internal object EconomicDailyForecastCalculator {
                     sum.add(row.portionsByMenuItem[menuId] ?: zero)
                 }.divide(BigDecimal(samples.size), 6, RoundingMode.HALF_UP)
                 if (perDayAverage.signum() <= 0) return@menuLoop
+                // Forecast sold portions even when the restaurant has not configured recipes.
+                // This lets the owner see dish demand (e.g. bitoques and soups) straight from SAF-T.
+                menuPortionTotals[menuId] = (menuPortionTotals[menuId] ?: zero).add(perDayAverage)
+                menuComparableDays[menuId] = (menuComparableDays[menuId] ?: 0) + samples.size
                 val requirements = recipeByMenu[menuId].orEmpty()
                 if (requirements.isEmpty()) {
                     unmapped += menuNames[menuId].orEmpty().ifBlank { menuId.removePrefix("unmapped:") }
@@ -171,11 +187,25 @@ internal object EconomicDailyForecastCalculator {
                 suggestedPurchaseQuantity = available?.let { totalRounded.subtract(it).max(zero).setScale(3, RoundingMode.HALF_UP) }
             )
         }.sortedBy { it.ingredientName.lowercase() }
+        val menuForecasts = menuPortionTotals.mapNotNull { (menuId, total) ->
+            if (total.signum() <= 0) return@mapNotNull null
+            EconomicMenuItemForecast(
+                menuItemId = menuId,
+                itemName = menuNames[menuId].orEmpty().ifBlank { menuId.removePrefix("unmapped:") },
+                expectedSevenDayPortions = total.setScale(2, RoundingMode.HALF_UP),
+                averageDailyPortions = total.divide(BigDecimal(daysAhead), 2, RoundingMode.HALF_UP),
+                comparableDays = menuComparableDays[menuId] ?: 0
+            )
+        }.sortedWith(
+            compareByDescending<EconomicMenuItemForecast> { it.expectedSevenDayPortions }
+                .thenBy { it.itemName.lowercase() }
+        )
         return EconomicDailyForecast(
             days = forecastDays,
             ingredientAverages = ingredients,
             hasSalesHistory = historical.isNotEmpty(),
-            unmappedMenuItems = unmapped.toList()
+            unmappedMenuItems = unmapped.toList(),
+            menuItemForecasts = menuForecasts
         )
     }
 
