@@ -75,6 +75,39 @@ class EconomicDailyForecastTest {
     }
 
     @Test
+    fun documentTotalIsCountedOnceEvenWhenInvoiceHasSeveralProductLines() {
+        val day = today.minusDays(7)
+        val report = EconomicDailyForecastCalculator.calculate(
+            orders = listOf(
+                EconomicForecastOrderLine(
+                    createdAtMillis = day.atStartOfDay(zone).toInstant().toEpochMilli(),
+                    status = "Concluído",
+                    menuItemId = "dish-1",
+                    itemName = "Hambúrguer",
+                    quantity = BigDecimal("2"),
+                    unitAmount = BigDecimal.ZERO,
+                    documentRevenueAmount = BigDecimal("30.00")
+                ),
+                EconomicForecastOrderLine(
+                    createdAtMillis = day.atStartOfDay(zone).toInstant().toEpochMilli(),
+                    status = "Concluído",
+                    menuItemId = "dish-2",
+                    itemName = "Sopa",
+                    quantity = BigDecimal("1"),
+                    unitAmount = BigDecimal.ZERO,
+                    documentRevenueAmount = BigDecimal.ZERO
+                )
+            ),
+            recipes = emptyList(),
+            today = today,
+            daysAhead = 7,
+            zoneId = zone
+        )
+
+        assertEquals(BigDecimal("30.00"), report.days.last().expectedRevenue)
+    }
+
+    @Test
     fun ignoresOpenCancelledAndCurrentDayOrders() {
         val report = EconomicDailyForecastCalculator.calculate(
             orders = listOf(
