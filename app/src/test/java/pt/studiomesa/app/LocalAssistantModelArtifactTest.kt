@@ -85,6 +85,46 @@ class LocalAssistantModelArtifactTest {
     }
 
     @Test
+    fun interruptedModelDownloadProgressIsSyncedAtTheConfiguredInterval() {
+        val interval = 16L * 1024L * 1024L
+        assertFalse(
+            ModelDownloadResumePolicy.shouldSyncProgress(
+                downloadedBytes = interval - 1L,
+                lastSyncedBytes = 0L,
+                syncIntervalBytes = interval
+            )
+        )
+        assertTrue(
+            ModelDownloadResumePolicy.shouldSyncProgress(
+                downloadedBytes = interval,
+                lastSyncedBytes = 0L,
+                syncIntervalBytes = interval
+            )
+        )
+        assertFalse(
+            ModelDownloadResumePolicy.shouldSyncProgress(
+                downloadedBytes = interval,
+                lastSyncedBytes = interval,
+                syncIntervalBytes = interval
+            )
+        )
+        assertFalse(
+            ModelDownloadResumePolicy.shouldSyncProgress(
+                downloadedBytes = 100L,
+                lastSyncedBytes = 101L,
+                syncIntervalBytes = interval
+            )
+        )
+        assertFalse(
+            ModelDownloadResumePolicy.shouldSyncProgress(
+                downloadedBytes = interval,
+                lastSyncedBytes = 0L,
+                syncIntervalBytes = 0L
+            )
+        )
+    }
+
+    @Test
     fun modelArtifactIsPinnedAndIntegrityChecked() {
         assertEquals(
             "LFM2.5-1.2B-Instruct_int4.litertlm",
