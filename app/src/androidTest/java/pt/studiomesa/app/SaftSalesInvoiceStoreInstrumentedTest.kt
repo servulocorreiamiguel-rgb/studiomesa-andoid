@@ -1,7 +1,6 @@
 package pt.studiomesa.app
 
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import java.math.BigDecimal
