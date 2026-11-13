@@ -107,6 +107,11 @@ class MainActivity : ComponentActivity() {
     private var assistantCloudLastSyncAtMillis = 0L
     private var invoiceImportInFlight = false
     private var saftSalesImportInFlight = false
+    private var saftCloudSyncInFlight = false
+    private var lastSaftCloudSyncAtMillis = 0L
+    private var saftCloudSyncAvailable: Boolean? = null
+    private var saftCloudSyncError: String? = null
+    private var supplierInvoiceLineItemsSyncSupported = false
     private var pendingInvoiceImport: PendingInvoiceImport? = null
 
     private data class PendingInvoiceImport(
@@ -909,6 +914,7 @@ class MainActivity : ComponentActivity() {
         if (isEconomicAssistant || ownerInvoiceAccess) {
             refreshSupplierInvoicesFromCloud(showFeedback = false)
         }
+        if (isEconomicAssistant) syncSaftSalesInvoicesWithCloud(showFeedback = false)
         if (assistantChatScopeKey != scope) {
             assistantChatScopeKey = scope
             activeAssistantConversationId = null
@@ -1492,6 +1498,37 @@ class MainActivity : ComponentActivity() {
         val vatAmount = field("IVA (€)", "0,00", pending.draft.vatAmount?.toPlainString().orEmpty(), amountType)
         val total = field("Total a pagar (€)", "0,00", pending.draft.totalAmount?.toPlainString().orEmpty(), amountType)
 
+        if (pending.draft.lines.isEmpty()) {
+            addGap(form, 6)
+            form.addView(label(
+                "Não foram reconhecidas linhas de produtos com estrutura suficientemente clara. A fatura pode ser guardada, mas não estará disponível para entrada no stock.",
+                10.5f, true, muted
+            ))
+        } else {
+            addGap(form, 8)
+            form.addView(label(
+                "LINHAS DE PRODUTOS RECONHECIDAS · " + pending.draft.lines.size,
+                10f, true, forestSoft
+            ))
+            val linesCard = makeCard(10)
+            pending.draft.lines.forEach { line ->
+                linesCard.addView(label(
+                    (if (line.productCode.isBlank()) "" else line.productCode + " · ") +
+                        line.description + "\n" +
+                        line.quantity.stripTrailingZeros().toPlainString() + " " + line.unit +
+                        " · " + formatInvoiceEuro(line.netAmount) + " sem IVA" +
+                        (line.vatRate?.let { " · IVA " + it.stripTrailingZeros().toPlainString() + "%" } ?: ""),
+                    10.5f, false, ink
+                ))
+                addGap(linesCard, 4)
+            }
+            linesCard.addView(label(
+                "Confirma descrição, quantidade, unidade e valores na fatura original. Linhas ambíguas são omitidas; nenhuma quantidade é lançada no stock nesta etapa.",
+                9.5f, false, muted
+            ))
+            form.addView(linesCard, cardParams())
+        }
+
         val dialog = AlertDialog.Builder(this)
             .setTitle("Rever fatura")
             .setView(ScrollView(this).apply { addView(form) })
@@ -1621,7 +1658,19 @@ class MainActivity : ComponentActivity() {
             reviewStatus = status,
             warnings = warnings,
             createdAtMillis = now,
-            updatedAtMillis = now
+            updatedAtMillis = now,
+            lineItems = pending.draft.lines.map { line ->
+                SupplierInvoiceLineRecord(
+                    id = line.id,
+                    productCode = line.productCode,
+                    description = line.description,
+                    quantity = line.quantity.toPlainString(),
+                    unit = line.unit,
+                    unitPrice = line.unitPrice.toPlainString(),
+                    netAmount = line.netAmount.toPlainString(),
+                    vatRate = line.vatRate?.toPlainString()
+                )
+            }
         )
         try {
             supplierInvoiceStore.save(scope, record)
@@ -1654,21 +1703,37 @@ class MainActivity : ComponentActivity() {
                 val row = buildSupplierInvoiceMetadataRow(
                     record, objectPath, backendRestaurantId(), backendPrefs.getString("user_id", "").orEmpty()
                 )
-                SupabaseApi.insertSupplierInvoice(backendToken(), row)
+                val lineItemsSynced = SupabaseApi.insertSupplierInvoice(backendToken(), row)
+                JSONObject()
+                    .put("document_path", objectPath)
+                    .put("line_items_synced", lineItemsSynced)
+                    .toString()
             } catch (error: Exception) {
                 runCatching { SupabaseApi.deleteSupplierInvoiceDocument(backendToken(), objectPath) }
                 throw error
             }
-            objectPath
         }, onError = { error ->
             Toast.makeText(
                 this,
                 "A cópia local está guardada, mas a sincronização falhou: ${friendlyBackendError(error.message)}",
                 Toast.LENGTH_LONG
             ).show()
-        }) { objectPath ->
-            supplierInvoiceStore.save(scope, record.copy(documentPath = objectPath, documentUri = null, updatedAtMillis = System.currentTimeMillis()))
-            Toast.makeText(this, "Fatura enviada para o arquivo privado do restaurante.", Toast.LENGTH_LONG).show()
+        }) { raw ->
+            val upload = JSONObject(raw)
+            val objectPath = upload.optString("document_path")
+            val linesSynced = upload.optBoolean("line_items_synced", false)
+            supplierInvoiceLineItemsSyncSupported = linesSynced
+            supplierInvoiceStore.save(scope, record.copy(
+                documentPath = objectPath,
+                documentUri = null,
+                updatedAtMillis = System.currentTimeMillis()
+            ))
+            Toast.makeText(
+                this,
+                if (linesSynced) "Fatura e linhas de produtos enviadas para o arquivo privado."
+                else "Fatura sincronizada. As linhas de produtos ficam locais até a migração do servidor.",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
@@ -1698,6 +1763,20 @@ class MainActivity : ComponentActivity() {
             .put("document_sha256", record.documentSha256)
             .put("document_path", objectPath)
             .put("warnings", JSONArray(record.warnings))
+            .put("line_items", JSONArray().apply {
+                record.lineItems.forEach { line ->
+                    put(JSONObject()
+                        .put("id", line.id)
+                        .put("product_code", line.productCode)
+                        .put("description", line.description)
+                        .put("quantity", line.quantity)
+                        .put("unit", line.unit)
+                        .put("unit_price", line.unitPrice)
+                        .put("net_amount", line.netAmount)
+                        .put("vat_rate", line.vatRate ?: JSONObject.NULL)
+                        .put("inventory_item_id", line.inventoryItemId ?: JSONObject.NULL))
+                }
+            })
             .put("created_by", userId)
         if (record.reviewStatus != "pending_review") {
             row.put("reviewed_by", userId)
