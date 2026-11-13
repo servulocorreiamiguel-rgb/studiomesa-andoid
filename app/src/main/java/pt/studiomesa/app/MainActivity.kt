@@ -2895,9 +2895,17 @@ class MainActivity : ComponentActivity() {
                 forecast.days.forEach { day ->
                     appendLine("- ${day.date} (${day.weekdayLabel}): ${day.expectedRevenue?.let(::salesEuro) ?: "sem dados"}; amostras comparáveis: ${day.comparableDays}.")
                 }
-                appendLine("Previsão alimentar, média por dia e necessidade total:")
+                appendLine("PRATOS A PREPARAR — procura estimada nos próximos sete dias, calculada diretamente pelas quantidades das linhas de venda:")
+                if (forecast.menuItemForecasts.isEmpty()) {
+                    appendLine("Ainda não existem linhas de venda por prato suficientes para estimar doses.")
+                } else {
+                    forecast.menuItemForecasts.take(30).forEach { item ->
+                        appendLine("- ${item.itemName}: cerca de ${item.expectedSevenDayPortions.stripTrailingZeros().toPlainString()} doses em sete dias; média ${item.averageDailyPortions.stripTrailingZeros().toPlainString()}/dia; dias comparáveis ${item.comparableDays}.")
+                    }
+                }
+                appendLine("INGREDIENTES A COMPRAR — apenas quando existe receita aprovada ligada a stock atualizado:")
                 if (forecast.ingredientAverages.isEmpty()) {
-                    appendLine("Ainda sem quantidades de ingredientes calculáveis. É necessário um artigo de venda associado a uma receita ativa e aprovada ligada ao stock.")
+                    appendLine("Ainda não há ingredientes calculáveis. A quantidade prevista de pratos pode ser apresentada sem receitas, mas não se devem inventar ingredientes nem quantidades por dose.")
                 } else {
                     forecast.ingredientAverages.forEach { item ->
                         appendLine("- ${item.ingredientName}: média ${item.averageDailyQuantity.stripTrailingZeros().toPlainString()} ${item.unit}/dia; necessidade 7 dias ${item.expectedSevenDayQuantity.stripTrailingZeros().toPlainString()} ${item.unit}; stock ${item.currentStock?.stripTrailingZeros()?.toPlainString() ?: "não disponível"}; comprar ${item.suggestedPurchaseQuantity?.stripTrailingZeros()?.toPlainString() ?: "não calculável"} ${item.unit}.")
@@ -2907,8 +2915,8 @@ class MainActivity : ComponentActivity() {
                     appendLine("Artigos sem correspondência a receitas: ${forecast.unmappedMenuItems.take(20).joinToString(", ")}.")
                 }
             }
-            appendLine("Limites: SAF-T tem de ser exportado do programa de faturação e importado; os dados SAF-T ficam cifrados neste dispositivo e não sincronizam para outros dispositivos. A previsão alimentar exige Premium, receitas aprovadas com nomes/artigos corretamente associados e stock atualizado.")
-            appendLine("Nunca trates previsão de faturação como lucro. Não recomendes compras para artigos sem receita/stock e não afirmes que as faturas provam pagamentos.")
+            appendLine("Limites: SAF-T tem de ser exportado do programa de faturação e importado. O arquivo fica cifrado no dispositivo e a cópia privada entre dispositivos do proprietário depende da migração do servidor estar instalada. A previsão de doses por prato usa diretamente as linhas de venda e não exige receitas. A previsão de ingredientes concretos exige receitas aprovadas, correspondência aos artigos de stock e quantidades atuais.")
+            appendLine("Podes indicar quantas doses de cada prato se prevê preparar/comercializar. Não inventes ingredientes nem quantidades de compra quando não existem receitas e stock fiáveis. Nunca trates faturação como lucro nem faturas como prova de pagamento.")
         }.trim().take(5_500)
     }
 
@@ -9304,7 +9312,47 @@ class MainActivity : ComponentActivity() {
                 14f, true, forestDeep
             ))
             addGap(card, 12)
-            card.addView(label("2 · Que alimentos comprar ou preparar", 14f, true, forestDeep))
+            card.addView(label("2 · Pratos a preparar nos próximos sete dias", 14f, true, forestDeep))
+            card.addView(label(
+                "Esta previsão é feita automaticamente com as quantidades de cada prato vendidas nas faturas SAF-T ou nos pedidos concluídos. Não é preciso cadastrar os pratos nem introduzir manualmente os alimentos para ver estas doses.",
+                10.5f, false, muted
+            ))
+            if (report.menuItemForecasts.isEmpty()) {
+                card.addView(label(
+                    "Ainda não existem linhas de venda por prato suficientes. Importa as faturas SAF-T com as linhas dos artigos para obter esta previsão.",
+                    10.5f, false, muted
+                ))
+            } else {
+                report.menuItemForecasts.take(15).forEach { item ->
+                    addGap(card, 7)
+                    val row = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                    }
+                    row.addView(label(item.itemName, 11.5f, true, ink), LinearLayout.LayoutParams(0, -2, 1f))
+                    row.addView(label(
+                        "${item.expectedSevenDayPortions.stripTrailingZeros().toPlainString()} doses",
+                        11f, true, forestSoft
+                    ))
+                    card.addView(row)
+                    card.addView(label(
+                        "Média diária: ${item.averageDailyPortions.stripTrailingZeros().toPlainString()} · dias comparáveis: ${item.comparableDays}",
+                        9.5f, false, muted
+                    ))
+                }
+                if (report.menuItemForecasts.size > 15) {
+                    card.addView(label(
+                        "E mais ${report.menuItemForecasts.size - 15} pratos.",
+                        9.5f, false, muted
+                    ))
+                }
+            }
+            addGap(card, 12)
+            card.addView(label("3 · Ingredientes a comprar", 14f, true, forestDeep))
+            card.addView(label(
+                "Para transformar as doses previstas numa lista exata de ingredientes e quantidades de compra, a app precisa de receitas aprovadas ligadas aos artigos de stock e de stock atualizado. As faturas, por si só, não revelam a composição de cada prato.",
+                10.5f, false, muted
+            ))
             if (!isPremium) {
                 card.addView(label(
                     "A previsão automática de ingredientes usa as receitas ligadas ao stock e está disponível na versão Premium.",
@@ -9316,7 +9364,7 @@ class MainActivity : ComponentActivity() {
                         report.unmappedMenuItems.take(8).joinToString(", ") +
                         ". Associa esses artigos à carta e aprova as respetivas receitas."
                 } else {
-                    "Não foram encontradas receitas ativas e aprovadas ligadas ao stock para os pratos vendidos. Configura as receitas para calcular quantidades."
+                    "A previsão de doses dos pratos acima já está disponível. Ainda não existem receitas ativas e aprovadas ligadas ao stock para calcular os ingredientes e as quantidades exatas a comprar."
                 }
                 card.addView(label(explanation, 10.5f, false, muted))
             } else {
