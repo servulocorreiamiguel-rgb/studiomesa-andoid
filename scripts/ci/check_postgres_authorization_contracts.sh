@@ -2999,7 +2999,8 @@ SELECT public.receive_supplier_invoice_stock(
   '$SUPPLIER_INVOICE_ID'::uuid, '$SUPPLIER_RECEIPT_REQUEST'::uuid,
   jsonb_build_array(jsonb_build_object(
     'line_id', '$SUPPLIER_LINE_ID',
-    'inventory_item_id', '$INVOICE_STOCK_ITEM'
+    'inventory_item_id', '$INVOICE_STOCK_ITEM',
+    'accepted_quantity', '1.500'
   ))
 );
 COMMIT;
@@ -3019,7 +3020,8 @@ SELECT public.receive_supplier_invoice_stock(
   '$SUPPLIER_INVOICE_ID'::uuid, '$SUPPLIER_RECEIPT_REQUEST'::uuid,
   jsonb_build_array(jsonb_build_object(
     'line_id', '$SUPPLIER_LINE_ID',
-    'inventory_item_id', '$ITEM_B'
+    'inventory_item_id', '$ITEM_B',
+    'accepted_quantity', '1.500'
   ))
 );
 COMMIT;
@@ -3038,7 +3040,8 @@ SELECT public.receive_supplier_invoice_stock(
   '$SUPPLIER_INVOICE_ID'::uuid, '$SUPPLIER_RECEIPT_REQUEST'::uuid,
   jsonb_build_array(jsonb_build_object(
     'line_id', '$SUPPLIER_LINE_ID',
-    'inventory_item_id', '$INVOICE_STOCK_ITEM'
+    'inventory_item_id', '$INVOICE_STOCK_ITEM',
+    'accepted_quantity', '1.500'
   ))
 );
 COMMIT;
@@ -3049,7 +3052,7 @@ stock_after_invoice="$(psql --no-psqlrc --quiet --tuples-only --no-align --set O
 receipt_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
   -c "SELECT count(*)::text FROM private.restaurant_supplier_invoice_stock_receipts WHERE invoice_id = '$SUPPLIER_INVOICE_ID'::uuid;")"
 if ! grep -Fq '"already_applied": false' <<<"$receipt_result" ||
-   [ "$stock_after_invoice" != "5.000|7.0000" ] ||
+   [ "$stock_after_invoice" != "4.500|7.7778" ] ||
    [ "$receipt_count" != "1" ]; then
   echo "ERROR: owner supplier invoice receipt did not add stock and weighted cost exactly once." >&2
   printf 'Result: %s; stock: %s; receipts: %s\\n' "$receipt_result" "$stock_after_invoice" "$receipt_count" >&2
@@ -3065,7 +3068,8 @@ SELECT public.receive_supplier_invoice_stock(
   '$SUPPLIER_INVOICE_ID'::uuid, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'::uuid,
   jsonb_build_array(jsonb_build_object(
     'line_id', '$SUPPLIER_LINE_ID',
-    'inventory_item_id', '$INVOICE_STOCK_ITEM'
+    'inventory_item_id', '$INVOICE_STOCK_ITEM',
+    'accepted_quantity', '1.500'
   ))
 );
 COMMIT;
@@ -3074,7 +3078,7 @@ SQL
 stock_after_retry="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
   -c "SELECT quantity::text || '|' || unit_cost_per_unit::text FROM public.restaurant_inventory_items WHERE id = '$INVOICE_STOCK_ITEM'::uuid;")"
 if ! grep -Fq '"already_applied": true' <<<"$retry_result" ||
-   [ "$stock_after_retry" != "5.000|7.0000" ]; then
+   [ "$stock_after_retry" != "4.500|7.7778" ]; then
   echo "ERROR: retrying a supplier invoice receipt changed stock a second time." >&2
   exit 1
 fi
@@ -3088,7 +3092,8 @@ SELECT public.receive_supplier_invoice_stock(
   '$SUPPLIER_INVOICE_ID'::uuid, 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'::uuid,
   jsonb_build_array(jsonb_build_object(
     'line_id', '$SUPPLIER_LINE_ID',
-    'inventory_item_id', '$INVOICE_ALT_STOCK_ITEM'
+    'inventory_item_id', '$INVOICE_ALT_STOCK_ITEM',
+    'accepted_quantity', '1.500'
   ))
 );
 COMMIT;
