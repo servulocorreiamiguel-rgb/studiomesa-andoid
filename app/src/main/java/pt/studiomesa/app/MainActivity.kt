@@ -6057,10 +6057,22 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun performAccountDeletion(deleteRestaurantData: Boolean) {
+        // Capture the local account scope before backendPrefs is cleared. Local
+        // archives and assistant history are encrypted but still need deletion.
+        val localScope = runCatching { assistantChatScope() }.getOrNull()
         runBackend({
             val restaurantDeleted = SupabaseApi.deleteAccount(backendToken(), deleteRestaurantData)
             if (restaurantDeleted) "DELETED_RESTAURANT" else "DELETED_ACCOUNT"
         }) { result ->
+            val localDataCleared = localScope?.let { scope ->
+                listOf(
+                    runCatching { assistantChatStore.clearScope(scope) },
+                    runCatching { assistantChatStore.clearScope("$scope:economic") },
+                    runCatching { supplierInvoiceStore.clearScope(scope) },
+                    runCatching { saftSalesInvoiceStore.clearScope(scope) }
+                ).all { it.isSuccess }
+            } ?: false
+
             secureSession.clear()
             runCatching { pendingRequestIds.clearAll() }
             store.clearLocalDemoData()
@@ -6076,14 +6088,19 @@ class MainActivity : ComponentActivity() {
 
             if (isCustomerApp) renderCustomerApp() else renderApp()
 
-            val message = if (result == "DELETED_RESTAURANT") {
+            val baseMessage = if (result == "DELETED_RESTAURANT") {
                 "A conta e os dados do restaurante foram eliminados permanentemente."
             } else {
                 "A conta foi eliminada. A associação de fidelização foi removida e a autoria dos registos operacionais preservados foi anonimizada."
             }
+            val localMessage = if (localDataCleared) {
+                "\n\nO histórico, a memória e os arquivos locais de faturas SAF-T e de fornecedores também foram removidos deste dispositivo."
+            } else {
+                "\n\nNão foi possível confirmar a remoção de todos os arquivos locais cifrados. Antes de entregar este dispositivo a outra pessoa, elimina os dados da StudioMesa nas definições do Android."
+            }
             AlertDialog.Builder(this)
                 .setTitle("Conta eliminada")
-                .setMessage(message)
+                .setMessage(baseMessage + localMessage)
                 .setPositiveButton("OK", null)
                 .show()
         }
