@@ -2344,7 +2344,15 @@ class MainActivity : ComponentActivity() {
                 val warnings = row.optJSONArray("warnings") ?: JSONArray()
                 val existing = existingById[id]
                 val remoteLineItems = if (supplierInvoiceLineItemsSyncSupported) {
-                    parseSupplierInvoiceLineRows(row.optJSONArray("line_items") ?: JSONArray())
+                    val parsedRemoteLineItems =
+                        parseSupplierInvoiceLineRows(row.optJSONArray("line_items") ?: JSONArray())
+                    // A row uploaded before the server migration may have no cloud
+                    // line data. Preserve its encrypted local OCR lines rather than
+                    // replacing them with the new column's default empty array.
+                    SupplierInvoiceLineMergePolicy.resolve(
+                        remote = parsedRemoteLineItems,
+                        local = existing?.lineItems.orEmpty()
+                    )
                 } else {
                     existing?.lineItems.orEmpty()
                 }
