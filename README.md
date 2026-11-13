@@ -12,7 +12,7 @@ A PR #128 acrescenta melhorias ao fluxo económico, ainda fora da versão integr
 - Previsão de sete dias das doses por prato, calculada a partir das linhas de venda importadas.
 - Extração OCR de linhas de faturas de fornecedores para revisão pelo proprietário antes de qualquer entrada de stock.
 - Receção de mercadoria com confirmação explícita, associação das linhas a artigos de inventário, registo idempotente e atualização do custo médio ponderado.
-- O custo da mercadoria recebida é rateado proporcionalmente à quantidade efetivamente aceite; uma receção parcial não contabiliza o valor total da linha faturada.
+- O custo da mercadoria recebida é rateado proporcionalmente à quantidade efetivamente aceite; uma receção parcial não contabiliza o valor total da linha faturada. Por exemplo, numa linha de 2 kg por 20 €, receber 1,5 kg acrescenta 15 € ao custo do stock, não os 20 € completos.
 
 A migração `20261113114000_supplier_invoice_lines_stock_receipts_and_saft_sync.sql` continua local e não foi aplicada ao Supabase alojado. Estas funcionalidades só passam a estar disponíveis no backend após a integração do código e uma validação/deployment controlados da migração. Não usar faturas reais nem anunciar sincronização/receção cloud como ativa antes dessa validação.
 
