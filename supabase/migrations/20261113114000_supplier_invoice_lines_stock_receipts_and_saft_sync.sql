@@ -316,6 +316,8 @@ DECLARE
     v_line jsonb;
     v_line_id text;
     v_inventory_id uuid;
+    v_accepted_quantity_text text;
+    v_accepted_quantity numeric;
     v_seen_line_ids text[] := ARRAY[]::text[];
     v_selected_count integer;
     v_valid_count integer := 0;
@@ -364,8 +366,9 @@ BEGIN
         RAISE EXCEPTION 'Esta fatura não tem linhas de produtos reconhecidas. Revê ou introduz as linhas antes da receção.';
     END IF;
 
-    -- Validate each mapping against the exact reviewed line. No quantity, price
-    -- or unit supplied by the client is trusted by this RPC.
+    -- Validate each mapping against the exact reviewed line. The owner may correct
+    -- an OCR quantity in the receipt dialog, but the server validates its precision
+    -- and continues to trust the saved invoice for the product, unit and net amount.
     FOR v_map IN SELECT value FROM jsonb_array_elements(p_lines)
     LOOP
         v_line_id := v_map->>'line_id';
@@ -377,6 +380,207 @@ BEGIN
             RAISE EXCEPTION 'A mesma linha da fatura foi selecionada mais do que uma vez.';
         END IF;
         v_seen_line_ids := array_append(v_seen_line_ids, v_line_id);
+        v_accepted_quantity_text := v_map->>'accepted_quantity';
+        IF v_accepted_quantity_text IS NULL
+           OR v_accepted_quantity_text !~ '^[0-9]+(\\.[0-9]{1,3})?
+            v_inventory_id := (v_map->>'inventory_item_id')::uuid;
+        EXCEPTION WHEN invalid_text_representation THEN
+            RAISE EXCEPTION 'Um artigo de stock selecionado não é válido.';
+        END;
+
+        SELECT value INTO v_line
+        FROM jsonb_array_elements(v_invoice.line_items)
+        WHERE value->>'id' = v_line_id;
+
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'Uma linha selecionada não pertence à fatura guardada.';
+        END IF;
+        IF coalesce(v_line->>'description', '') = ''
+           OR coalesce(v_line->>'unit', '') = ''
+           OR coalesce(v_line->>'quantity', '') !~ '^[0-9]+(\.[0-9]{1,4})?$'
+           OR (v_line->>'quantity')::numeric <= 0
+           OR (v_line->>'quantity')::numeric > 999999
+           OR coalesce(v_line->>'net_amount', '') !~ '^[0-9]+(\.[0-9]{1,2})?$'
+           OR (v_line->>'net_amount')::numeric < 0 THEN
+            RAISE EXCEPTION 'Uma linha da fatura contém quantidade ou valor inválido.';
+        END IF;
+
+        v_mapping := v_mapping || jsonb_build_array(
+            jsonb_build_object(
+                'line_id', v_line_id,
+                'inventory_item_id', v_inventory_id,
+                'accepted_quantity', v_accepted_quantity::text
+            )
+        );
+        v_valid_count := v_valid_count + 1;
+    END LOOP;
+
+    SELECT coalesce(jsonb_agg(value ORDER BY value->>'line_id'), '[]'::jsonb)
+      INTO v_mapping
+      FROM jsonb_array_elements(v_mapping);
+
+    -- If the response was lost after commit, an identical retry confirms the
+    -- original receipt without changing stock again. A different mapping is rejected.
+    SELECT receipt.*
+      INTO v_existing
+      FROM private.restaurant_supplier_invoice_stock_receipts AS receipt
+     WHERE receipt.restaurant_id = v_invoice.restaurant_id
+       AND receipt.invoice_id = p_invoice_id
+     FOR UPDATE;
+
+    IF FOUND THEN
+        IF v_existing.mapping IS DISTINCT FROM v_mapping THEN
+            RAISE EXCEPTION 'Esta fatura já foi recebida no stock com outra seleção. Atualiza o arquivo antes de tentar novamente.';
+        END IF;
+        RETURN jsonb_build_object(
+            'already_applied', true,
+            'receipt_id', v_existing.id,
+            'received_at', v_existing.received_at,
+            'stock_items', (
+                SELECT count(DISTINCT value->>'inventory_item_id')
+                FROM jsonb_array_elements(v_existing.mapping)
+            )
+        );
+    END IF;
+
+    IF v_invoice.stock_received_at IS NOT NULL THEN
+        RAISE EXCEPTION 'A fatura já está marcada como recebida no stock. Atualiza o arquivo partilhado.';
+    END IF;
+
+    INSERT INTO private.restaurant_supplier_invoice_stock_receipts (
+        restaurant_id, invoice_id, request_id, mapping, received_by
+    )
+    VALUES (
+        v_invoice.restaurant_id, p_invoice_id, p_request_id, v_mapping, v_uid
+    )
+    RETURNING id INTO v_receipt_id;
+
+    -- Aggregate multiple invoice lines mapped to the same stock item.
+    FOR v_item IN
+        WITH selected_lines AS (
+            SELECT
+                (mapping.value->>'inventory_item_id')::uuid AS item_id,
+                lower(trim(line.value->>'unit')) AS line_unit,
+                (mapping.value->>'accepted_quantity')::numeric AS quantity,
+                (line.value->>'net_amount')::numeric AS net_amount
+            FROM jsonb_array_elements(v_mapping) AS mapping(value)
+            JOIN jsonb_array_elements(v_invoice.line_items) AS line(value)
+              ON line.value->>'id' = mapping.value->>'line_id'
+        )
+        SELECT
+            item_id,
+            min(line_unit) AS line_unit,
+            max(line_unit) AS line_unit_max,
+            sum(quantity) AS quantity,
+            sum(net_amount) AS net_amount
+        FROM selected_lines
+        GROUP BY item_id
+        ORDER BY item_id
+    LOOP
+        SELECT
+            item.unit,
+            item.quantity,
+            item.unit_cost_per_unit
+        INTO v_stock_unit, v_old_quantity, v_old_cost
+        FROM public.restaurant_inventory_items AS item
+        WHERE item.id = v_item.item_id
+          AND item.restaurant_id = v_invoice.restaurant_id
+        FOR UPDATE;
+
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'Um dos artigos de stock já não pertence a este restaurante.';
+        END IF;
+        IF v_item.line_unit <> v_item.line_unit_max THEN
+            RAISE EXCEPTION 'As linhas mapeadas para o mesmo artigo usam unidades diferentes. Separa os artigos de stock.';
+        END IF;
+
+        v_stock_unit := CASE lower(trim(v_stock_unit))
+            WHEN 'unidades' THEN 'un'
+            WHEN 'unidade' THEN 'un'
+            WHEN 'und' THEN 'un'
+            WHEN 'gr' THEN 'g'
+            WHEN 'litro' THEN 'l'
+            WHEN 'litros' THEN 'l'
+            WHEN 'lt' THEN 'l'
+            ELSE lower(trim(v_stock_unit))
+        END;
+        IF v_stock_unit <> v_item.line_unit THEN
+            RAISE EXCEPTION 'A unidade do stock (%) não coincide com a unidade da fatura (%). Converte a unidade manualmente antes de receber.', v_stock_unit, v_item.line_unit;
+        END IF;
+        IF v_item.quantity <> round(v_item.quantity, 3) THEN
+            RAISE EXCEPTION 'O stock admite três casas decimais. Corrige a quantidade da linha antes de receber.';
+        END IF;
+
+        v_new_quantity := v_old_quantity + v_item.quantity;
+        IF v_new_quantity < 0 OR v_new_quantity > 999999999 THEN
+            RAISE EXCEPTION 'A quantidade resultante de stock está fora do intervalo permitido.';
+        END IF;
+
+        IF v_item.net_amount > 0 AND v_new_quantity > 0 THEN
+            IF v_old_cost IS NULL OR v_old_quantity <= 0 THEN
+                v_new_cost := round(v_item.net_amount / v_item.quantity, 4);
+            ELSE
+                v_new_cost := round(
+                    ((v_old_quantity * v_old_cost) + v_item.net_amount) / v_new_quantity,
+                    4
+                );
+            END IF;
+        ELSE
+            v_new_cost := v_old_cost;
+        END IF;
+
+        UPDATE public.restaurant_inventory_items
+           SET quantity = v_new_quantity,
+               unit_cost_per_unit = v_new_cost,
+               updated_at = now()
+         WHERE id = v_item.item_id;
+
+        INSERT INTO public.restaurant_inventory_movements (
+            restaurant_id, item_id, delta, quantity_after, note,
+            created_by, client_request_id, unit_cost_at_movement
+        )
+        VALUES (
+            v_invoice.restaurant_id,
+            v_item.item_id,
+            v_item.quantity,
+            v_new_quantity,
+            left('Receção da fatura ' || v_invoice.invoice_number || ' · ' || v_invoice.supplier_name, 500),
+            v_uid,
+            md5(p_invoice_id::text || ':' || v_item.item_id::text)::uuid,
+            v_new_cost
+        );
+
+        v_received_items := v_received_items + 1;
+    END LOOP;
+
+    UPDATE public.restaurant_supplier_invoices
+       SET stock_received_at = now(),
+           stock_received_by = v_uid,
+           stock_receipt_request_id = p_request_id,
+           updated_at = now()
+     WHERE id = p_invoice_id;
+
+    RETURN jsonb_build_object(
+        'already_applied', false,
+        'receipt_id', v_receipt_id,
+        'received_at', now(),
+        'stock_items', v_received_items,
+        'mapped_lines', v_valid_count
+    );
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.receive_supplier_invoice_stock(uuid, uuid, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.receive_supplier_invoice_stock(uuid, uuid, jsonb) TO authenticated;
+
+COMMIT;
+ THEN
+            RAISE EXCEPTION 'Indica uma quantidade positiva com, no máximo, três casas decimais.';
+        END IF;
+        v_accepted_quantity := v_accepted_quantity_text::numeric;
+        IF v_accepted_quantity <= 0 OR v_accepted_quantity > 999999 THEN
+            RAISE EXCEPTION 'A quantidade recebida está fora do intervalo permitido.';
+        END IF;
 
         BEGIN
             v_inventory_id := (v_map->>'inventory_item_id')::uuid;
