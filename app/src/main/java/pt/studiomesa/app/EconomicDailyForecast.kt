@@ -108,7 +108,9 @@ internal object EconomicDailyForecastCalculator {
                     (bucket.portions[order.menuItemId] ?: zero).add(order.quantity)
             }
         }
-        val historical = daily.map { (date, value) ->
+        // Sort by calendar date before selecting the most recent comparable weekdays.
+        // Input order can differ between SAF-T imports, local orders and paginated APIs.
+        val historical = daily.entries.sortedBy { it.key }.map { (date, value) ->
             DailySales(date, value.revenue, value.portions.toMap())
         }
         val recipeByMenu = recipes.filter(::validRecipe)
