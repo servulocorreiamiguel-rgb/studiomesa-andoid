@@ -184,6 +184,17 @@ class SupplierInvoiceTextParserTest {
         assertEquals("AZEITE", draft.lines.single().description)
     }
 
+
+    @Test
+    fun parsesOnlyPositiveStockQuantitiesWithAtMostThreeDecimals() {
+        assertEquals(BigDecimal("1.500"), SupplierInvoiceTextParser.parseQuantity("1,500"))
+        assertEquals(BigDecimal("12"), SupplierInvoiceTextParser.parseQuantity("12"))
+        assertNull(SupplierInvoiceTextParser.parseQuantity("0"))
+        assertNull(SupplierInvoiceTextParser.parseQuantity("-1"))
+        assertNull(SupplierInvoiceTextParser.parseQuantity("1.5004"))
+        assertNull(SupplierInvoiceTextParser.parseQuantity("1,2,3"))
+    }
+
     @Test
     fun rejectsInvalidPortugueseVatNumber() {
         assertTrue(SupplierInvoiceTextParser.isValidPortugueseVatNumber("501234560"))
