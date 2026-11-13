@@ -19,9 +19,9 @@ Auditoria histórica de 12/11: [docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-12.md](do
 Projeto `svwvkfsyevuyabelrtjk`: estado `ACTIVE_HEALTHY`, PostgreSQL 17.6.1.166, região `eu-west-1`. A organização está no plano Free.
 
 Comparação read-only feita em 13/11/2026:
-- `main`: 70 ficheiros SQL de migração; 63 migrações no histórico remoto.
+- `main`: 71 ficheiros SQL de migração; 63 migrações no histórico remoto.
 - As 63 versões remotas têm correspondência exata por versão e nome no repositório; não há versões remotas sem ficheiro local.
-- Sete migrações existentes em `main` ainda não foram aplicadas no Supabase alojado:
+- Oito migrações existentes em `main` ainda não foram aplicadas no Supabase alojado:
   - `20261030111815_restaurant_recipes_and_order_stock_consumption`
   - `20261102103000_granular_restaurant_staff_permissions`
   - `20261102120000_require_loyalty_permission_for_reward_fulfillment`
@@ -29,7 +29,8 @@ Comparação read-only feita em 13/11/2026:
   - `20261104100000_price_adviser_actor_indexes`
   - `20261107170000_loyalty_shop_photos_and_plan_limits`
   - `20261112120000_restaurant_membership_request_actor_indexes`
-- A PR #128 acrescenta a migração local `20261113114000_supplier_invoice_lines_stock_receipts_and_saft_sync`. Se for integrada, a sequência local passa a 71 ficheiros e ficam oito migrações por aplicar no projeto alojado até haver deployment controlado.
+  - `20261113114000_supplier_invoice_lines_stock_receipts_and_saft_sync`
+- A migração `20261113114000` já faz parte da `main`; não é uma alteração futura. No Supabase alojado continuam por aplicar as oito migrações listadas acima.
 - As tabelas `public.restaurant_recipes`, `public.restaurant_recipe_ingredients`, `private.restaurant_staff_permissions` e `private.restaurant_loyalty_entitlements` continuam ausentes no servidor. Por isso, fichas técnicas/consumo automático, permissões granulares, limites por plano e os novos fluxos de sincronização/receção de faturas da PR #128 não devem ser anunciados como ativos no backend alojado.
 - [ ] Rever as migrações e o schema, garantir backup/restauro verificável e executar os testes de autorização antes de qualquer alteração no projeto de produção.
 - [ ] Criar uma branch Supabase isolada e validar nela as migrações, RLS, RPCs e advisors. A criação consultada custa 0,01344 USD/hora; não foi criada por não existir autorização para esse custo.
