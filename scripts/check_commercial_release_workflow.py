@@ -38,6 +38,7 @@ def audit_workflow(text: str) -> list[str]:
     required_order = (
         "Require explicit confirmation",
         "Require the reviewed main branch",
+        "Require production readiness sign-off",
         "Check out source",
         "Validate signing secrets and keystore",
     )
@@ -64,6 +65,34 @@ def audit_workflow(text: str) -> list[str]:
             errors.append("The release branch guard must reject every ref except refs/heads/main.")
         if not re.search(r"(?m)^\s*exit 1\s*$", body):
             errors.append("The release branch guard must stop the workflow when the selected ref is not main.")
+
+    readiness_start = text.find("      - name: Require production readiness sign-off")
+    if readiness_start < 0:
+        errors.append("Commercial release must require production readiness sign-off.")
+    else:
+        next_step = text.find("      - name: ", readiness_start + 10)
+        body = text[readiness_start:next_step if next_step >= 0 else len(text)]
+        required_attestations = {
+            "STUDIOMESA_BACKEND_MIGRATIONS_VERIFIED": "BACKEND_READY",
+            "STUDIOMESA_AUTH_SMTP_VERIFIED": "AUTH_READY",
+            "STUDIOMESA_PHYSICAL_TESTS_VERIFIED": "DEVICE_READY",
+            "STUDIOMESA_PRIVACY_LEGAL_APPROVED": "LEGAL_READY",
+        }
+        for variable, env_name in required_attestations.items():
+            binding = f"{env_name}: ${{{{ vars.{variable} }}}}"
+            if binding not in body:
+                errors.append(
+                    f"Production sign-off must read the {variable} Actions variable."
+                )
+            guard = f'if [ "${{{env_name}:-}}" != "YES" ]; then'
+            if guard not in body:
+                errors.append(
+                    f"Production sign-off must block unless {env_name} is exactly YES."
+                )
+        if "exit 1" not in body:
+            errors.append(
+                "Production sign-off must stop the workflow when a readiness attestation is missing."
+            )
 
     # These strings would expose the base64 keystore or passwords if used in shell output.
     unsafe_echo_patterns = (
