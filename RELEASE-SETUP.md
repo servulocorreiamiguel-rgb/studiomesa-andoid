@@ -1,14 +1,15 @@
 # StudioMesa — preparação para lançamento comercial
 
-> **Estado verificado em 13/11/2026: NÃO LIBERADO PARA OPERAÇÃO COM DADOS REAIS OU VENDA OPERACIONAL.** A `main` está no commit `cbfc0e8c671d647bc0c6b3ddea80af3695c637c5`. A PR #130, já integrada, acrescenta uma barreira obrigatória antes da assinatura comercial. Os quatro jobs da CI da PR #130 passaram no respetivo head SHA antes do merge; a CI do commit de merge na `main` deve ser confirmada separadamente.
+> **Estado verificado em 13/11/2026: NÃO LIBERADO PARA OPERAÇÃO COM DADOS REAIS OU VENDA OPERACIONAL.** A `main` está no commit `319c68fe69d7047ba99e4595fe93146f1bf26877`. A última CI integral concluída para código na `main` (commit `cbfc0e8c671d647bc0c6b3ddea80af3695c637c5`, execução [43486619914](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43486619914)) passou os quatro jobs. A CI do merge documental actual [43507010245](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43507010245) estava em execução na última consulta. A PR #132 já foi integrada; a PR #133 actualiza a restante documentação e aguarda CI.
+>
+> **Backend:** o Supabase está activo e saudável, com 63 migrações remotas e oito migrações locais pendentes. As estruturas de receitas/consumo de stock, permissões granulares e entitlements por plano continuam ausentes. A migração de linhas de faturas, recepção de mercadoria e sincronização SAF-T também não foi aplicada. Não executar `db push` em produção antes de backup/restauro comprovados, validação isolada e aprovação.
+>
+> **Backups e custo:** a organização está no plano Free, sem backups automáticos diários nem Point-in-Time Recovery. Não existe ainda um backup integral com restauro ensaiado. O runbook exige exportação e ensaio separados de PostgreSQL, Auth e Storage antes de qualquer migração remota.
+>
+> **Auth e segurança:** SMTP próprio, confirmação de email, recuperação e eliminação de conta ainda precisam de testes ponta a ponta com contas descartáveis. A protecção contra palavras-passe comprometidas está desactivada. Os avisos de funções `SECURITY DEFINER`, tabelas com RLS sem políticas e índices devem ser avaliados individualmente; não aplicar revogações ou políticas genéricas em massa.
+>
+> **Release:** continuam por definir o identificador final da aplicação, a keystore comercial e os secrets/variables de assinatura. O workflow comercial exige quatro variáveis de prontidão exactamente iguais a `YES`: migrações/backup/restauro do backend, autenticação SMTP, testes físicos e aprovação legal/privacidade/licenças. Estes valores só devem ser definidos após os controlos serem efectivamente concluídos. Política de privacidade, Data Safety, termos, DPA e revisão de licenças continuam por aprovar.
 
-> **Backend:** o projeto Supabase está ativo e saudável na região `eu-west-1`, mas o histórico remoto contém 63 migrações aplicadas e existem oito migrações da `main` por aplicar. A ausência das estruturas de receitas, permissões granulares, entitlements de fidelização, receção de stock e sincronização SAF-T foi confirmada por consulta read-only. Não anunciar estas funções como operacionais em produção até ao deployment controlado.
-
-> **Backups e custo:** a organização está no plano Free, sem backups automáticos diários nem Point-in-Time Recovery. Não existe ainda um backup integral com restauro ensaiado. O runbook abaixo exige exportação e ensaio separados de PostgreSQL, Auth e Storage antes de qualquer migração remota.
-
-> **Auth e segurança:** SMTP próprio, confirmação de email, recuperação e eliminação de conta ainda precisam de testes ponta a ponta com contas descartáveis. A proteção contra palavras-passe comprometidas está desativada. Os avisos de funções `SECURITY DEFINER` e tabelas com RLS sem políticas estão a ser avaliados individualmente; não aplicar revogações ou políticas genéricas em massa.
-
-> **Release:** continuam por definir o identificador final da aplicação, a keystore comercial e os quatro secrets de assinatura. A política de privacidade, Data Safety, termos, DPA e revisão de licenças não estão aprovados. O workflow comercial bloqueia a assinatura até existirem quatro variáveis de prontidão exatamente iguais a `YES`, além dos testes e da assinatura. A correção documental Gemma está na PR #132 e aguarda CI.
 
 ## Toolchain Android
 

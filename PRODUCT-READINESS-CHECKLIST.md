@@ -1,15 +1,16 @@
 # StudioMesa — lista de preparação para uso profissional
 
-**Ponto de situação verificado em 13/11/2026:** a `main` está pronta para demonstração com dados fictícios e tem CI integral verde, mas **não está autorizada para operação com dados reais nem venda operacional**. A PR #128 acrescenta novas funcionalidades económicas e também passou CI integral, mas continua em rascunho e fora da `main`.
+**Ponto de situação verificado em 13/11/2026:** a `main` está pronta para demonstração com dados fictícios, mas **não está autorizada para operação com dados reais nem venda operacional**. A PR #128 já foi integrada na `main` (merge commit `2b06b232f6282b73c8cae79ae074804d5ea244b2`) e acrescenta arquivo/sincronização SAF-T, previsões económicas, OCR local de faturas e receção confirmada de mercadoria. A PR #130 também foi integrada e bloqueia a assinatura comercial até os requisitos de produção serem comprovados. A documentação foi actualizada na PR #132 (merge `319c68fe69d7047ba99e4595fe93146f1bf26877`). A CI da `main` para este último merge documental estava em execução na última consulta; a última CI completa do código, no commit `cbfc0e8c671d647bc0c6b3ddea80af3695c637c5`, passou os quatro jobs.
 
 Auditoria histórica de 12/11: [docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-12.md](docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-12.md). O ponto de situação abaixo substitui as contagens e estados históricos que se seguem.
 
 ## Código e CI
 
-- [x] A `main`, commit `4f8fb77ef971bca1e33b0f4969b7459ae25c7c0a`, passou os quatro jobs na execução [43412340401](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43412340401): compilação APK/testes/Lint, replay PostgreSQL/autorização, Android 8 e Android 16.
-- [x] A PR #128, commit `ed05c86b7fae26dc01c571c2318072a1c03bba12`, passou os mesmos quatro jobs na execução [43449161757](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43449161757).
-- [x] A PR #128 inclui testes de isolamento de arquivo por conta, importações SAF-T repetidas, cifragem local, sincronização antiga/nova, eliminação de dados locais, autorização de receção de mercadoria, idempotência e atualização do custo médio ponderado.
-- [ ] A CI não substitui os testes físicos no OPPO A5m, a autenticação/SMTP reais, a perda de rede móvel nem a validação do Supabase alojado.
+- [x] A `main`, commit `cbfc0e8c671d647bc0c6b3ddea80af3695c637c5`, passou os quatro jobs na execução [43486619914](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43486619914): compilação APK, replay PostgreSQL/autorização, Android 8 e Android 16.
+- [x] A PR #128 foi integrada no merge commit `2b06b232f6282b73c8cae79ae074804d5ea244b2`; a CI pós-merge da `main` [43474362932](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43474362932) passou os quatro jobs.
+- [x] A PR #128 inclui arquivo e sincronização de vendas SAF-T, previsões de procura por prato/dia, OCR local de faturas de fornecedores e receção de mercadoria após confirmação explícita, com idempotência e custo médio ponderado. Os testes abrangem isolamento por conta, sincronização, cifragem, repetição e receções parciais.
+- [x] Testes manuais já confirmados pelo proprietário no OPPO A5m: funcionalidades gratuitas, reservas, sincronização entre a aplicação de gestão e a aplicação Cliente e isolamento dos dados entre restaurantes. Esta confirmação não volta a ser tratada como pendente.
+- [ ] A CI e estes testes manuais não substituem a validação física dos fluxos ainda não testados, SMTP/autenticação reais, migrações alojadas e cenário de perda de rede móvel.
 - [x] Existem APKs de demonstração/debug. Não são releases comerciais assinadas e não foram testadas fisicamente no OPPO A5m.
 - [x] Um único assistente integra modelos locais Gemma 4 E2B e LFM2.5-1.2B INT4, com router cloud publicado e JWT obrigatório.
 - [ ] Validar fisicamente os modelos locais, qualidade, latência, RAM, temperatura, bateria, libertação de memória e fallback.
@@ -19,9 +20,9 @@ Auditoria histórica de 12/11: [docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-12.md](do
 Projeto `svwvkfsyevuyabelrtjk`: estado `ACTIVE_HEALTHY`, PostgreSQL 17.6.1.166, região `eu-west-1`. A organização está no plano Free.
 
 Comparação read-only feita em 13/11/2026:
-- `main`: 70 ficheiros SQL de migração; 63 migrações no histórico remoto.
+- `main`: 71 ficheiros SQL de migração; 63 migrações no histórico remoto.
 - As 63 versões remotas têm correspondência exata por versão e nome no repositório; não há versões remotas sem ficheiro local.
-- Sete migrações existentes em `main` ainda não foram aplicadas no Supabase alojado:
+- Oito migrações existentes em `main` ainda não foram aplicadas no Supabase alojado:
   - `20261030111815_restaurant_recipes_and_order_stock_consumption`
   - `20261102103000_granular_restaurant_staff_permissions`
   - `20261102120000_require_loyalty_permission_for_reward_fulfillment`
@@ -29,8 +30,9 @@ Comparação read-only feita em 13/11/2026:
   - `20261104100000_price_adviser_actor_indexes`
   - `20261107170000_loyalty_shop_photos_and_plan_limits`
   - `20261112120000_restaurant_membership_request_actor_indexes`
-- A PR #128 acrescenta a migração local `20261113114000_supplier_invoice_lines_stock_receipts_and_saft_sync`. Se for integrada, a sequência local passa a 71 ficheiros e ficam oito migrações por aplicar no projeto alojado até haver deployment controlado.
-- As tabelas `public.restaurant_recipes`, `public.restaurant_recipe_ingredients`, `private.restaurant_staff_permissions` e `private.restaurant_loyalty_entitlements` continuam ausentes no servidor. Por isso, fichas técnicas/consumo automático, permissões granulares, limites por plano e os novos fluxos de sincronização/receção de faturas da PR #128 não devem ser anunciados como ativos no backend alojado.
+  - `20261113114000_supplier_invoice_lines_stock_receipts_and_saft_sync`
+- A migração `20261113114000` já faz parte da `main`; não é uma alteração futura. No Supabase alojado continuam por aplicar as oito migrações listadas acima.
+- As tabelas `public.restaurant_recipes`, `public.restaurant_recipe_ingredients`, `private.restaurant_staff_permissions` e `private.restaurant_loyalty_entitlements` continuam ausentes no servidor. Por isso, fichas técnicas/consumo automático de ingredientes, matriz granular de permissões e limites comerciais por plano ainda não estão activos no backend alojado. A migração `20261113114000` também está pendente e é necessária para activar a sincronização cloud das linhas de faturas, receções de stock e arquivo SAF-T. O código Android e os testes de CI existem, mas estas funções não devem ser anunciadas como operacionais até à migração controlada.
 - [ ] Rever as migrações e o schema, garantir backup/restauro verificável e executar os testes de autorização antes de qualquer alteração no projeto de produção.
 - [ ] Criar uma branch Supabase isolada e validar nela as migrações, RLS, RPCs e advisors. A criação consultada custa 0,01344 USD/hora; não foi criada por não existir autorização para esse custo.
 
@@ -54,20 +56,27 @@ Consultas read-only e Supabase Advisors em 13/11/2026:
 - [x] Google/Microsoft ocultos por decisão para a primeira venda; OAuth/PKCE preservado para fase posterior.
 - [ ] Testar sincronização do histórico/memória entre dois dispositivos com consentimento, perda de rede e eliminação. A cópia cloud não é encriptação ponta a ponta.
 
-## Funcionalidades em validação — PR #128
+## Funcionalidades económicas integradas no código — implantação cloud pendente
 
-- A PR acrescenta sincronização autenticada do arquivo SAF-T de vendas e previsão de doses por prato, sem depender da utilização de pontos de fidelização.
-- A leitura OCR de faturas de fornecedores é local e sujeita a revisão do proprietário; não movimenta stock automaticamente.
-- A receção de mercadoria exige confirmação explícita, destino de cada linha, verificação de unidades e operação idempotente com custo médio ponderado.
-- Estas operações de sincronização/receção dependem da migração `20261113114000`, que não foi aplicada ao Supabase alojado. A PR continua em rascunho, não integrada e não pronta para dados reais.
+- A PR #128 já está integrada na `main`: o código inclui sincronização autenticada do arquivo de vendas SAF-T, previsão de procura por prato e dia da semana, OCR local de faturas de fornecedores e receção de mercadoria com confirmação explícita do proprietário, validação de unidades, idempotência e custo médio ponderado.
+- O OCR é uma sugestão para revisão; não movimenta stock sozinho. O proprietário tem de aprovar a correspondência de cada linha e confirmar a receção.
+- A migração `20261113114000_supplier_invoice_lines_stock_receipts_and_saft_sync` ainda não está aplicada ao Supabase alojado. Por isso, a sincronização cloud das linhas de faturas/receções e do arquivo SAF-T não deve ser considerada operacional em produção até à reconciliação, backup/restauro e deployment controlado.
+
+## Funcionalidades comerciais ainda não integradas na aplicação
+
+- [ ] **Campanhas de reactivação:** as tabelas `public.restaurant_reactivation_campaigns` e `public.restaurant_customer_notifications` existem no Supabase, mas a `main` ainda não contém o editor/envio Android para o proprietário. A implementação está na [PR #94](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/94), que precisa de rebase, revisão de conflitos e CI antes de ser integrada.
+- [ ] **Centro de notificações e push:** a `main` ainda não contém o centro de notificações de actividade nem a integração FCM/push. As propostas [PR #91](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/91) e [PR #92](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/92) sobrepõem-se; é necessário consolidar uma implementação, rever permissões Android e configuração do servidor, e testar notificações reais.
+- [ ] **Perfis pré-configurados da equipa:** existe `StaffPermissionSet.kt` no cliente, mas a tabela privada `private.restaurant_staff_permissions` ainda não existe no Supabase alojado e a implementação de perfis pré-configurados proposta na PR #92 não está na `main`. Até à migração e aos testes, não anunciar a matriz granular como activa.
+- [ ] A geração de ideias de conteúdo pelo assistente não equivale a campanhas automáticas, envio de ofertas a clientes inactivos ou notificações push. Estas capacidades só devem ser vendidas depois de integradas e testadas.
+
 
 ## Produto, segurança e testes de aceitação
 
-- [ ] E2E com dois restaurantes e contas de proprietário, funcionário e cliente: isolamento, menus, pedidos, cozinha, reservas, inventário, fidelização, campanhas, faturas e revogação de acesso.
+- [ ] Completar E2E com dois restaurantes e contas de proprietário, funcionário e cliente: permissões por função, menus, pedidos, cozinha, inventário, fidelização, campanhas, faturas e revogação de acesso. O fluxo básico de reservas, a sincronização Gestão/Cliente e o isolamento de dados entre restaurantes já foram confirmados manualmente pelo proprietário no OPPO A5m; o objectivo aqui é testar também contas/roles, concorrência, sessões e falhas.
 - [ ] Testar falhas de rede, repetição idempotente, sessão expirada, conflitos concorrentes, restauro e atualização em dispositivos reais.
 - [ ] Testar Gemma/LFM no OPPO A5m e em equipamentos Android representativos.
 - [ ] Rever retenção, exportação, eliminação, resposta a incidentes, backups e suporte.
-- [ ] Não anunciar POS, pagamentos, faturação, SAF-T, contabilidade ou impressoras como integrações operacionais. A importação e análise de SAF-T da PR #128 não equivale a integração direta com POS/contabilidade nem a prova de pagamentos recebidos.
+- [ ] Não anunciar integração directa com POS, pagamentos, contabilidade ou impressoras. A importação/análise de ficheiros SAF-T não equivale a ligação directa ao POS/contabilidade nem prova pagamentos recebidos; a sincronização cloud SAF-T continua dependente da migração pendente.
 - [ ] Finalizar termos, política de privacidade, DPA, subprocessadores, declaração Data Safety, licenças da IA e suporte com a entidade responsável.
 
 ## Release comercial e distribuição
