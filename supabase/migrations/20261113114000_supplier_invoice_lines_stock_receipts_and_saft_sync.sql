@@ -295,6 +295,37 @@ BEFORE UPDATE ON public.restaurant_supplier_invoices
 FOR EACH ROW
 EXECUTE FUNCTION private.guard_supplier_invoice_received_lines();
 
+-- Canonicalize only equivalent purchase units. Do not infer or convert between
+-- mass, volume and count; incompatible units must still require manual correction.
+CREATE OR REPLACE FUNCTION private.normalize_supplier_invoice_stock_unit(p_unit text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+STRICT
+SET search_path = ''
+AS $function$
+    SELECT CASE lower(trim(p_unit))
+        WHEN 'unidade' THEN 'un'
+        WHEN 'unidades' THEN 'un'
+        WHEN 'und' THEN 'un'
+        WHEN 'un' THEN 'un'
+        WHEN 'gr' THEN 'g'
+        WHEN 'gramas' THEN 'g'
+        WHEN 'g' THEN 'g'
+        WHEN 'litro' THEN 'l'
+        WHEN 'litros' THEN 'l'
+        WHEN 'lt' THEN 'l'
+        WHEN 'l' THEN 'l'
+        WHEN 'kilograma' THEN 'kg'
+        WHEN 'kilogramas' THEN 'kg'
+        WHEN 'kg' THEN 'kg'
+        ELSE lower(trim(p_unit))
+    END;
+$function$;
+
+REVOKE ALL ON FUNCTION private.normalize_supplier_invoice_stock_unit(text)
+    FROM PUBLIC, anon, authenticated;
+
 -- Only the authenticated restaurant owner may receive goods. The selected line
 -- IDs and quantities come from the saved, reviewed OCR record, while the owner
 -- only maps each line to an existing stock item with the same unit.
@@ -471,7 +502,7 @@ BEGIN
         WITH selected_lines AS (
             SELECT
                 (mapping.value->>'inventory_item_id')::uuid AS item_id,
-                lower(trim(line.value->>'unit')) AS line_unit,
+                private.normalize_supplier_invoice_stock_unit(line.value->>'unit') AS line_unit,
                 (mapping.value->>'accepted_quantity')::numeric AS quantity,
                 round(
                     (line.value->>'net_amount')::numeric
@@ -510,16 +541,7 @@ BEGIN
             RAISE EXCEPTION 'As linhas mapeadas para o mesmo artigo usam unidades diferentes. Separa os artigos de stock.';
         END IF;
 
-        v_stock_unit := CASE lower(trim(v_stock_unit))
-            WHEN 'unidades' THEN 'un'
-            WHEN 'unidade' THEN 'un'
-            WHEN 'und' THEN 'un'
-            WHEN 'gr' THEN 'g'
-            WHEN 'litro' THEN 'l'
-            WHEN 'litros' THEN 'l'
-            WHEN 'lt' THEN 'l'
-            ELSE lower(trim(v_stock_unit))
-        END;
+        v_stock_unit := private.normalize_supplier_invoice_stock_unit(v_stock_unit);
         IF v_stock_unit <> v_item.line_unit THEN
             RAISE EXCEPTION 'A unidade do stock (%) não coincide com a unidade da fatura (%). Converte a unidade manualmente antes de receber.', v_stock_unit, v_item.line_unit;
         END IF;
