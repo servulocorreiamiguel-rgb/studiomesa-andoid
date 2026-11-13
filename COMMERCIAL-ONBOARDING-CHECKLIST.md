@@ -26,7 +26,7 @@
 - [ ] Definir regras da fidelização, pontos, recompensas, QR, resgates e limites antiabuso.
 - [ ] Configurar inventário, unidades, quantidades, custos e limites mínimos, se incluído.
 - [ ] Confirmar a aprovação do proprietário antes de ativar qualquer consumo automático de receita quando esse módulo estiver disponível.
-- [ ] Rever as opções da IA e explicar o download local (~736 MB) e o limite do modelo.
+- [ ] Rever as opções da IA e explicar que o modelo principal Gemma 4 E2B ocupa cerca de 2,59 GB e é descarregado a pedido; o LFM2.5-1.2B INT4 (cerca de 736 MB) só é usado como fallback quando o dispositivo não suporta o Gemma ou este não pode ser validado/inicializado, e apenas se o ficheiro alternativo passar a validação.
 
 ## Testes de aceitação com o cliente
 

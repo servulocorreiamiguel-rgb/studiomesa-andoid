@@ -8,7 +8,7 @@ Esta matriz ajuda a preparar a declaração Data safety. Não substitui a respos
 
 - StudioMesa Android 1.5.0, cinco variantes de plano/tipo, minSdk 24 e targetSdk 36.
 - Backend Supabase na região EU West 1.
-- O modelo generativo LFM2.5-1.2B-Instruct corre localmente depois de ser descarregado.
+- O modelo generativo principal é o Gemma 4 E2B em formato LiteRT-LM (cerca de 2,59 GB), descarregado a pedido e validado por tamanho exato e SHA-256, e corre localmente no Android. O LFM2.5-1.2B-Instruct INT4 (cerca de 736 MB) é apenas fallback para dispositivos que não cumpram os requisitos do Gemma ou quando este não possa ser validado/inicializado; o ficheiro alternativo também tem de passar a validação de integridade. Os prompts e os dados da aplicação não são enviados ao alojamento dos modelos durante a inferência local; o alojamento recebe apenas o pedido e metadados normais do download.
 - Quando a pesquisa pública na Web está configurada e é acionada, a consulta é enviada ao endpoint SearXNG configurado; o histórico completo e as faturas não são enviados pela função de pesquisa.
 - A sincronização do histórico/Memória existe no backend Supabase, é limitada ao proprietário por RLS e passa a ficar desligada por defeito, exigindo ativação explícita na aplicação. A cópia cloud não é cifrada ponta a ponta.
 - O OCR de PDFs/imagens é local. Quando o proprietário arquiva a fatura no servidor, o documento original e os metadados são enviados para a tabela de faturas e para o bucket privado `studiomesa-invoices`, com políticas de acesso limitadas ao proprietário.
