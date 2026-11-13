@@ -182,4 +182,26 @@ class EconomicDailyForecastTest {
         assertEquals(BigDecimal("2.00"), report.menuItemForecasts.single().expectedSevenDayPortions)
     }
 
+
+    @Test
+    fun comparableSamplesAreSelectedByDateNotInputOrder() {
+        // The newest 12 Fridays are €10; the 13th-oldest is €100.
+        // Deliberately supply newest-to-oldest, as a paginated API may do.
+        val unorderedSales = (1L..12L).map { week ->
+            order(today.minusDays(week * 7L), amount = "10.00")
+        } + order(today.minusDays(91), amount = "100.00")
+
+        val report = EconomicDailyForecastCalculator.calculate(
+            orders = unorderedSales,
+            recipes = emptyList(),
+            today = today,
+            daysAhead = 7,
+            zoneId = zone
+        )
+
+        val nextFriday = report.days.last()
+        assertEquals(BigDecimal("10.00"), nextFriday.expectedRevenue)
+        assertEquals(12, nextFriday.comparableDays)
+    }
+
 }
