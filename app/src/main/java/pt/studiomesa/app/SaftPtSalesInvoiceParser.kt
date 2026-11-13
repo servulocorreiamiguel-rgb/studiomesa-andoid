@@ -11,7 +11,7 @@ import java.time.LocalDate
 internal data class SaftSalesInvoiceLine(
     val productCode: String,
     val description: String,
-    /** Signed quantity; credit notes reduce both revenue and expected ingredient use. */
+    /** Signed quantity; negative quantities on credit notes reduce sales, not stock consumption. */
     val quantity: BigDecimal,
     val netAmount: BigDecimal
 )
@@ -50,6 +50,10 @@ internal object SaftPtSalesInvoiceParser {
     private const val MAX_INVOICES = 100_000
     private const val MAX_LINES_PER_INVOICE = 2_000
     private val supportedVersions = setOf("1.03_01", "1.04_01")
+    private val supportedNamespaces = setOf(
+        "urn:OECD:StandardAuditFile-Tax:PT_1.03_01",
+        "urn:OECD:StandardAuditFile-Tax:PT_1.04_01"
+    )
     private val supportedInvoiceTypes = setOf("FT", "FS", "FR", "ND", "NC")
 
     fun parse(bytes: ByteArray): SaftSalesImport {
@@ -65,6 +69,9 @@ internal object SaftPtSalesInvoiceParser {
         parser.setInput(ByteArrayInputStream(bytes), null)
 
         var version = ""
+        var rootSeen = false
+        var rootNamespace = ""
+        var parsedDocumentCount = 0
         var inSalesInvoices = false
         var excludedVoided = 0
         var excludedReplaced = 0
@@ -75,11 +82,19 @@ internal object SaftPtSalesInvoiceParser {
         var event = parser.eventType
         while (event != XmlPullParser.END_DOCUMENT) {
             if (event == XmlPullParser.START_TAG) {
+                if (!rootSeen) {
+                    require(localName(parser) == "AuditFile") {
+                        "O ficheiro não tem a estrutura SAF-T (PT) esperada."
+                    }
+                    rootSeen = true
+                    rootNamespace = parser.namespace.orEmpty()
+                }
                 when (localName(parser)) {
                     "AuditFileVersion" -> version = readText(parser).trim()
                     "SalesInvoices" -> inSalesInvoices = true
                     "Invoice" -> if (inSalesInvoices) {
-                        require(invoices.size < MAX_INVOICES) {
+                        parsedDocumentCount++
+                        require(parsedDocumentCount <= MAX_INVOICES) {
                             "O SAF-T contém demasiadas faturas para esta importação."
                         }
                         val parsed = parseInvoice(parser)
@@ -101,6 +116,9 @@ internal object SaftPtSalesInvoiceParser {
                 inSalesInvoices = false
             }
             event = parser.next()
+        }
+        require(rootSeen && rootNamespace in supportedNamespaces) {
+            "O XML não pertence ao namespace oficial SAF-T (PT) 1.03_01 ou 1.04_01."
         }
         require(version in supportedVersions) {
             "Versão SAF-T não suportada: ${version.ifBlank { "não identificada" }}. São aceites 1.03_01 e 1.04_01."
