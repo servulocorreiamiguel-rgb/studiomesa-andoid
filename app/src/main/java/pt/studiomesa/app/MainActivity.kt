@@ -1268,39 +1268,99 @@ class MainActivity : ComponentActivity() {
     private fun showSupplierInvoiceArchiveDialog() {
         val scope = assistantChatScope()
         val records = runCatching { supplierInvoiceStore.list(scope) }.getOrDefault(emptyList())
-        val total = records.fold(BigDecimal.ZERO) { sum, item ->
-            sum.add(item.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO)
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(6), dp(16), dp(8))
         }
-        val text = buildString {
-            append("Documentos: ").append(records.size)
-            append("\nPendentes de revisão: ").append(records.count { it.reviewStatus == "pending_review" })
-            append("\nTotal arquivado: ").append(formatInvoiceEuro(total))
-            if (records.isEmpty()) {
-                append("\n\nAinda não existem faturas importadas.")
-            } else {
-                append("\n\n")
-                records.take(30).forEach { item ->
-                    val status = when (item.reviewStatus) {
-                        "approved" -> "Confirmada"
-                        "rejected" -> "Rejeitada"
-                        else -> "Pendente"
-                    }
-                    append("• ").append(item.supplierName).append(" · ")
-                        .append(item.invoiceNumber).append(" · ")
-                        .append(item.issueDate).append(" · ")
-                        .append(formatInvoiceEuro(item.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO))
-                        .append(" · ").append(status).append('\n')
+        panel.addView(label(
+            "Arquivo completo de faturas. A inclusão não depende dos pontos de fidelização: são apresentados documentos pendentes, confirmados e rejeitados.",
+            11.5f, false, muted
+        ))
+        addGap(panel, 7)
+        val search = inputField("Pesquisar fornecedor, NIF ou número da fatura", InputType.TYPE_CLASS_TEXT)
+        panel.addView(search, fieldParams())
+        val filter = Spinner(this)
+        val filterAdapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_item,
+            listOf("Todas as faturas", "Pendentes de revisão", "Confirmadas", "Rejeitadas")
+        ).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        filter.adapter = filterAdapter
+        panel.addView(filter, LinearLayout.LayoutParams(-1, dp(44)))
+        addGap(panel, 5)
+        val summary = label("", 10.5f, true, forestSoft)
+        panel.addView(summary)
+        val list = ListView(this).apply {
+            divider = android.graphics.drawable.ColorDrawable(line)
+            dividerHeight = dp(1)
+            isFastScrollEnabled = true
+        }
+        val adapter = ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, mutableListOf())
+        list.adapter = adapter
+        panel.addView(list, LinearLayout.LayoutParams(-1, dp(330)))
+        var visibleInvoices: List<SupplierInvoiceRecord> = emptyList()
+        fun refreshRows() {
+            val query = search.text.toString().trim().lowercase(Locale.ROOT)
+            val statusFilter = filter.selectedItemPosition
+            visibleInvoices = records.filter { invoice ->
+                val statusMatches = when (statusFilter) {
+                    1 -> invoice.reviewStatus == "pending_review"
+                    2 -> invoice.reviewStatus == "approved"
+                    3 -> invoice.reviewStatus == "rejected"
+                    else -> true
                 }
-                if (records.size > 30) append("\nA mostrar os primeiros 30 documentos.")
+                val textMatches = query.isBlank() ||
+                    listOf(invoice.supplierName, invoice.supplierVatNumber, invoice.invoiceNumber, invoice.issueDate)
+                        .any { it.lowercase(Locale.ROOT).contains(query) }
+                statusMatches && textMatches
             }
-            append("\n\nO OCR corre no telemóvel. Só o proprietário pode sincronizar documentos para o arquivo privado do restaurante.")
+            adapter.clear()
+            visibleInvoices.forEach { invoice ->
+                val state = when (invoice.reviewStatus) {
+                    "approved" -> "CONFIRMADA"
+                    "rejected" -> "REJEITADA"
+                    else -> "PENDENTE DE REVISÃO"
+                }
+                adapter.add(
+                    "${invoice.supplierName}\n${invoice.invoiceNumber} · ${invoice.issueDate}\n" +
+                        "${formatInvoiceEuro(invoice.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO)} · $state"
+                )
+            }
+            summary.text = "${visibleInvoices.size} de ${records.size} fatura(s) · sem filtro de pontos"
+            if (visibleInvoices.isEmpty()) {
+                summary.text = if (records.isEmpty()) {
+                    "Ainda não há faturas importadas."
+                } else {
+                    "Nenhuma fatura corresponde à pesquisa ou ao estado selecionado."
+                }
+            }
+        }
+        refreshRows()
+        search.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = refreshRows()
+            override fun afterTextChanged(s: android.text.Editable?) = Unit
+        })
+        filter.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) =
+                refreshRows()
+        }
+        list.setOnItemClickListener { _, _, position, _ ->
+            visibleInvoices.getOrNull(position)?.let(::showSupplierInvoiceDetails)
+        }
+        addGap(panel, 7)
+        if (isRemoteRestaurantOwner()) {
+            panel.addView(secondaryButton("Enviar faturas locais pendentes para o servidor") {
+                syncPendingSupplierInvoiceUploads()
+            }, LinearLayout.LayoutParams(-1, dp(42)))
         }
         val dialog = AlertDialog.Builder(this)
-            .setTitle("Documentos e faturas")
-            .setMessage(text)
+            .setTitle("Todas as faturas e documentos")
+            .setView(panel)
             .setNegativeButton("Fechar", null)
             .setNeutralButton("Importar PDF / imagem", null)
-            .setPositiveButton("Sincronizar pendentes", null)
+            .setPositiveButton("Atualizar arquivo", null)
             .create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
@@ -1308,11 +1368,16 @@ class MainActivity : ComponentActivity() {
                 openSupplierInvoicePicker()
             }
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                dialog.dismiss()
-                syncPendingSupplierInvoiceUploads()
+                if (!isRemoteRestaurantOwner()) {
+                    Toast.makeText(this, "A sincronização do arquivo exige a conta do proprietário.", Toast.LENGTH_LONG).show()
+                } else {
+                    dialog.dismiss()
+                    refreshSupplierInvoicesFromCloud(showFeedback = true)
+                }
             }
         }
         dialog.show()
+        dialog.window?.setLayout(-1, dp(640))
     }
 
     private fun openSupplierInvoicePicker() {
