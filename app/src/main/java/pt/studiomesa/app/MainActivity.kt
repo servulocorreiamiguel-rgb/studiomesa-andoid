@@ -1947,7 +1947,13 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, friendlyBackendError(error.message), Toast.LENGTH_LONG).show()
         }) { raw ->
             val inventoryJson = JSONArray(raw)
-            data class StockChoice(val label: String, val id: String?, val createNew: Boolean = false) {
+            data class StockChoice(
+                val label: String,
+                val id: String?,
+                val createNew: Boolean = false,
+                val ignore: Boolean = false,
+                val placeholder: Boolean = false
+            ) {
                 override fun toString(): String = label
             }
             data class ReceiptLineSelection(
@@ -1983,7 +1989,10 @@ class MainActivity : ComponentActivity() {
                 ))
                 addGap(card, 5)
                 val compatible = inventory.filter { normalizeSupplierInvoiceStockUnit(it.second) == normalizeSupplierInvoiceStockUnit(line.unit) }
-                val choices = mutableListOf(StockChoice("Não lançar esta linha", null))
+                val choices = mutableListOf(
+                    StockChoice("Seleciona o destino desta linha...", null, placeholder = true),
+                    StockChoice("Ignorar explicitamente — serviço/artigo sem stock", null, ignore = true)
+                )
                 choices += compatible.map { it.first }.sortedBy { it.label.lowercase(Locale.ROOT) }
                 choices += StockChoice(
                     "Criar automaticamente: ${line.description} · ${line.unit}",
@@ -2029,9 +2038,21 @@ class MainActivity : ComponentActivity() {
                 .create()
             dialog.setOnShowListener {
                 dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                    val missingDestination = selections.any { (_, spinner, _) ->
+                        (spinner.selectedItem as? StockChoice)?.placeholder == true
+                    }
+                    if (missingDestination) {
+                        Toast.makeText(
+                            this,
+                            "Escolhe um destino para cada linha: artigo existente, criar artigo ou ignorar explicitamente.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        return@setOnClickListener
+                    }
                     var invalidQuantity = false
                     val selectedLines = selections.mapNotNull { (line, spinner, quantityField) ->
                         val choice = spinner.selectedItem as? StockChoice ?: return@mapNotNull null
+                        if (choice.ignore) return@mapNotNull null
                         if (choice.id.isNullOrBlank() && !choice.createNew) return@mapNotNull null
                         val acceptedQuantity = SupplierInvoiceTextParser.parseQuantity(
                             quantityField.text.toString()
@@ -2058,8 +2079,12 @@ class MainActivity : ComponentActivity() {
                         .map { normalizeSalesProductName(it.line.description) + "|" + normalizeSupplierInvoiceStockUnit(it.line.unit) }
                         .distinct()
                         .size
+                    val ignoredLines = selections.count { (_, spinner, _) ->
+                        (spinner.selectedItem as? StockChoice)?.ignore == true
+                    }
                     val confirmation = selectedLines.size.toString() +
-                        " linha(s) vão entrar no stock; " + newStockItems +
+                        " linha(s) vão entrar no stock; " + ignoredLines +
+                        " linha(s) serão ignoradas por decisão explícita; " + newStockItems +
                         " novo(s) artigo(s) serão criados automaticamente a partir da fatura quando necessário. As quantidades só serão lançadas depois desta confirmação. A operação fica registada uma única vez."
                     AlertDialog.Builder(this)
                         .setTitle("Confirmar entrada de mercadoria")
@@ -9669,7 +9694,7 @@ class MainActivity : ComponentActivity() {
             11.5f, true, forestSoft
         ))
         card.addView(label(
-            "O OCR extrai fornecedor, número, datas, base, IVA e total. As linhas de produtos não são ainda extraídas de forma fiável em todos os formatos. A fatura tem de ser revista antes de ser confirmada.",
+            "O OCR extrai fornecedor, número, datas, valores e linhas de produto quando o formato é claro. Linhas ambíguas são omitidas; confirma sempre os campos e as quantidades na fatura original antes de aprovar ou dar entrada no stock.",
             10.5f, false, muted
         ))
         addGap(card, 8)
@@ -9678,7 +9703,7 @@ class MainActivity : ComponentActivity() {
         }, LinearLayout.LayoutParams(-1, dp(42)))
         addGap(card, 8)
         card.addView(label(
-            "SAF-T de vendas: os resumos são guardados cifrados apenas neste dispositivo. Faturas de fornecedores: o arquivo local também é cifrado e, para proprietários ligados, pode ser sincronizado com o servidor privado do restaurante. Os valores dos documentos não provam pagamentos.",
+            "Os arquivos locais SAF-T e de faturas de fornecedores são cifrados no dispositivo. Com o Assistente económico ativo e sessão de proprietário, o SAF-T sincroniza por lotes com o espaço privado do restaurante no Supabase; os registos cloud não têm cifragem ponta a ponta. As faturas de fornecedores podem ser arquivadas no servidor quando o proprietário está ligado. Os valores dos documentos não provam pagamentos.",
             9.5f, false, muted
         ))
         container.addView(card, cardParams())
