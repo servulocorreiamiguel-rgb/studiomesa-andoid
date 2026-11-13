@@ -84,19 +84,27 @@ internal class SaftSalesInvoiceStore(context: Context) :
             var imported = 0
             var updated = 0
             parsed.acceptedInvoices.forEach { invoice ->
-                val exists = db.query(
+                val existingUpdatedAt = db.query(
                     "sales_invoices",
-                    arrayOf("invoice_id"),
+                    arrayOf("updated_at"),
                     "scope_key = ? AND invoice_id = ?",
                     arrayOf(scopeKey, invoice.id),
                     null, null, null, "1"
-                ).use { it.moveToFirst() }
+                ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else null }
+                val exists = existingUpdatedAt != null
+                // A stale acknowledgement from an earlier upload must never mark a
+                // newer local edit as synchronized, even when both imports happen
+                // within the same millisecond or the device clock moves backwards.
+                val nextUpdatedAt = maxOf(
+                    System.currentTimeMillis(),
+                    (existingUpdatedAt ?: 0L) + 1L
+                )
                 val values = ContentValues().apply {
                     put("scope_key", scopeKey)
                     put("invoice_id", invoice.id)
                     put("issue_date", invoice.issueDate)
                     put("encrypted_payload", encrypt(invoice.toJson().toString()))
-                    put("updated_at", System.currentTimeMillis())
+                    put("updated_at", nextUpdatedAt)
                 }
                 db.insertWithOnConflict(
                     "sales_invoices",
@@ -255,6 +263,22 @@ internal class SaftSalesInvoiceStore(context: Context) :
             db.endTransaction()
         }
         return merged
+    }
+
+    /** Remove every locally stored invoice and import fingerprint for a deleted account. */
+    @Synchronized
+    fun clearScope(scope: String) {
+        require(scope.isNotBlank()) { "A conta do arquivo SAF-T não está identificada." }
+        val key = scopeKey(scope)
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("sales_invoices", "scope_key = ?", arrayOf(key))
+            db.delete("sales_invoice_import_files", "scope_key = ?", arrayOf(key))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     @Synchronized
