@@ -2020,13 +2020,19 @@ class MainActivity : ComponentActivity() {
         supplierInvoiceRefreshInFlight = true
         lastSupplierInvoiceRefreshAtMillis = now
         runBackend({
-            SupabaseApi.listSupplierInvoices(backendToken(), backendRestaurantId()).toString()
+            val archive = SupabaseApi.listSupplierInvoices(backendToken(), backendRestaurantId())
+            JSONObject()
+                .put("rows", archive.rows)
+                .put("supports_line_items", archive.supportsLineItems)
+                .toString()
         }, onError = { error ->
             supplierInvoiceRefreshInFlight = false
-            if (showFeedback) Toast.makeText(this, "O arquivo remoto não está disponível: ${friendlyBackendError(error.message)}", Toast.LENGTH_LONG).show()
+            if (showFeedback) Toast.makeText(this, "O arquivo remoto não está disponível: " + friendlyBackendError(error.message), Toast.LENGTH_LONG).show()
         }) { raw ->
             supplierInvoiceRefreshInFlight = false
-            val rows = JSONArray(raw)
+            val response = JSONObject(raw)
+            val rows = response.optJSONArray("rows") ?: JSONArray()
+            supplierInvoiceLineItemsSyncSupported = response.optBoolean("supports_line_items", false)
             val scope = assistantChatScope()
             val existingById = runCatching {
                 supplierInvoiceStore.list(scope).associateBy { it.id }
@@ -2038,6 +2044,21 @@ class MainActivity : ComponentActivity() {
                 if (id.isBlank()) continue
                 val warnings = row.optJSONArray("warnings") ?: JSONArray()
                 val existing = existingById[id]
+                val remoteLineItems = if (supplierInvoiceLineItemsSyncSupported) {
+                    parseSupplierInvoiceLineRows(row.optJSONArray("line_items") ?: JSONArray())
+                } else {
+                    existing?.lineItems.orEmpty()
+                }
+                val receivedAt = if (supplierInvoiceLineItemsSyncSupported && !row.isNull("stock_received_at")) {
+                    parseServerTimestamp(row.optString("stock_received_at")).takeIf { it > 0L }
+                } else {
+                    existing?.stockReceivedAtMillis
+                }
+                val receiptRequestId = if (supplierInvoiceLineItemsSyncSupported && !row.isNull("stock_receipt_request_id")) {
+                    row.optString("stock_receipt_request_id").takeIf { it.isNotBlank() }
+                } else {
+                    existing?.stockReceiptRequestId
+                }
                 refreshed += SupplierInvoiceRecord(
                     id = id,
                     supplierName = row.optString("supplier_name"),
@@ -2058,7 +2079,10 @@ class MainActivity : ComponentActivity() {
                     reviewStatus = row.optString("review_status", "pending_review"),
                     warnings = (0 until warnings.length()).map { warnings.optString(it) },
                     createdAtMillis = parseServerTimestamp(row.optString("created_at")),
-                    updatedAtMillis = parseServerTimestamp(row.optString("updated_at"))
+                    updatedAtMillis = parseServerTimestamp(row.optString("updated_at")),
+                    lineItems = remoteLineItems,
+                    stockReceivedAtMillis = receivedAt,
+                    stockReceiptRequestId = receiptRequestId
                 )
             }
             runCatching { supplierInvoiceStore.saveAll(scope, refreshed) }
@@ -2070,12 +2094,145 @@ class MainActivity : ComponentActivity() {
                     ).show()
                     return@runBackend
                 }
-            if (showFeedback) Toast.makeText(this, "${rows.length()} fatura(s) no arquivo privado.", Toast.LENGTH_SHORT).show()
+            if (showFeedback) {
+                val suffix = if (supplierInvoiceLineItemsSyncSupported) ""
+                    else " As linhas de produtos continuam locais até a migração do servidor."
+                Toast.makeText(this, rows.length().toString() + " fatura(s) no arquivo privado." + suffix, Toast.LENGTH_LONG).show()
+            }
             if (activePage in setOf("Assistente económico", "IA") &&
                 !assistantSending && !isFinishing && !isDestroyed) {
                 renderApp()
             }
         }
+    }
+
+    private fun parseSupplierInvoiceLineRows(values: JSONArray): List<SupplierInvoiceLineRecord> {
+        return (0 until values.length()).mapNotNull { index ->
+            val row = values.optJSONObject(index) ?: return@mapNotNull null
+            val id = row.optString("id")
+            val description = row.optString("description").trim()
+            val quantity = row.optString("quantity")
+            val unit = row.optString("unit")
+            val unitPrice = row.optString("unit_price")
+            val netAmount = row.optString("net_amount")
+            if (!id.matches(Regex("^[a-f0-9]{64}$")) || description.isBlank() ||
+                quantity.toBigDecimalOrNull()?.signum() != 1 || unit.isBlank() ||
+                unitPrice.toBigDecimalOrNull() == null || netAmount.toBigDecimalOrNull() == null) {
+                null
+            } else {
+                SupplierInvoiceLineRecord(
+                    id = id,
+                    productCode = row.optString("product_code"),
+                    description = description.take(120),
+                    quantity = quantity,
+                    unit = unit.take(20),
+                    unitPrice = unitPrice,
+                    netAmount = netAmount,
+                    vatRate = if (row.isNull("vat_rate")) null else row.optString("vat_rate"),
+                    inventoryItemId = if (row.isNull("inventory_item_id")) null else row.optString("inventory_item_id")
+                )
+            }
+        }.take(SupplierInvoiceStore.MAX_LINES_PER_INVOICE)
+    }
+
+    private fun syncSaftSalesInvoicesWithCloud(showFeedback: Boolean) {
+        if (!hasRemoteRestaurant() || backendToken().isBlank() ||
+            backendPrefs.getString("restaurant_role", "") != "owner") {
+            if (showFeedback) Toast.makeText(this, "Só o proprietário pode sincronizar o arquivo SAF-T.", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (saftCloudSyncInFlight) return
+        val now = System.currentTimeMillis()
+        if (!showFeedback && now - lastSaftCloudSyncAtMillis < 60_000L) return
+        saftCloudSyncInFlight = true
+        lastSaftCloudSyncAtMillis = now
+        val scope = assistantChatScope()
+        val restaurantId = backendRestaurantId()
+        val userId = backendPrefs.getString("user_id", "").orEmpty()
+        Thread({
+            try {
+                refreshSessionIfNeeded()
+                require(backendRestaurantId() == restaurantId &&
+                    backendPrefs.getString("user_id", "").orEmpty() == userId) {
+                    "A conta ou o restaurante mudaram durante a sincronização."
+                }
+                val token = backendToken()
+                require(token.isNotBlank()) { "A sessão expirou. Inicia sessão novamente." }
+
+                var uploaded = 0
+                while (true) {
+                    val batch = saftSalesInvoiceStore.pendingCloudRows(scope, limit = 10)
+                    if (batch.isEmpty()) break
+                    SupabaseApi.syncSaftSalesInvoiceBatch(token, restaurantId, batch)
+                    saftSalesInvoiceStore.markCloudRowsSynced(scope, batch)
+                    uploaded += batch.size
+                }
+
+                var offset = 0
+                var totalCount = Int.MAX_VALUE
+                var downloaded = 0
+                var pageCount = 0
+                while (offset < totalCount && pageCount < 10_000) {
+                    val page = SupabaseApi.listSaftSalesInvoiceBatch(token, restaurantId, offset, limit = 10)
+                    totalCount = page.optInt("total_count", 0).coerceAtLeast(0)
+                    val rows = page.optJSONArray("rows") ?: JSONArray()
+                    if (rows.length() == 0) break
+                    val pageRows = (0 until rows.length()).mapNotNull { rows.optJSONObject(it) }
+                    downloaded += saftSalesInvoiceStore.mergeCloudRows(scope, pageRows)
+                    offset += rows.length()
+                    pageCount++
+                    if (rows.length() < 10) break
+                }
+
+                runOnUiThread {
+                    saftCloudSyncInFlight = false
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    if (backendRestaurantId() != restaurantId ||
+                        backendPrefs.getString("user_id", "").orEmpty() != userId) return@runOnUiThread
+                    saftCloudSyncAvailable = true
+                    saftCloudSyncError = null
+                    if (downloaded > 0) {
+                        economicDailyForecast = null
+                        economicForecastLoadedDay = ""
+                        economicForecastError = null
+                        if (activePage == "Assistente económico" && economicAssistantIsEnabled()) {
+                            refreshEconomicDailyForecastIfDue(force = true)
+                            renderApp()
+                        }
+                    }
+                    if (showFeedback) {
+                        Toast.makeText(
+                            this,
+                            "SAF-T sincronizado: " + uploaded + " enviado(s), " + downloaded + " recebido(s).",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    saftCloudSyncInFlight = false
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    val missingMigration = error is BackendHttpException &&
+                        error.statusCode in 400..404 &&
+                        (error.endpointPath.contains("sync_restaurant_saft_sales_invoice_batch") ||
+                            error.endpointPath.contains("list_restaurant_saft_sales_invoice_batch"))
+                    if (missingMigration) {
+                        saftCloudSyncAvailable = false
+                        saftCloudSyncError = "O servidor ainda não tem a migração de sincronização SAF-T."
+                    } else {
+                        saftCloudSyncError = friendlyBackendError(error.message)
+                    }
+                    if (showFeedback) {
+                        Toast.makeText(
+                            this,
+                            saftCloudSyncError ?: "Não foi possível sincronizar o SAF-T.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                    if (activePage == "Assistente económico" && !assistantSending) renderApp()
+                }
+            }
+        }, "StudioMesa-saft-cloud-sync").start()
     }
 
     private fun parseServerTimestamp(value: String): Long =
