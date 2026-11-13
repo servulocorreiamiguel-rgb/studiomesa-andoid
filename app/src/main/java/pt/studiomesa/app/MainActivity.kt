@@ -2892,6 +2892,21 @@ class MainActivity : ComponentActivity() {
         }
 
 
+        val asksAboutSalesForecast = listOf(
+            "previsao", "prever vendas", "quanto vou vender", "quanto vou ganhar",
+            "quanto vou faturar", "vendas dos proximos dias", "faturacao prevista",
+            "receita prevista", "dinheiro previsto"
+        ).any { normalized.contains(it) }
+        val asksAboutFoodPurchases = listOf(
+            "o que devo comprar", "o que comprar", "quantos alimentos", "que alimentos",
+            "quantos ingredientes", "que ingredientes", "comida para a semana",
+            "preparar para a semana", "quanto stock", "quanto devo encomendar",
+            "quanto devo repor"
+        ).any { normalized.contains(it) }
+        if (economicAssistant && (asksAboutSalesForecast || asksAboutFoodPurchases)) {
+            return buildEconomicAssistantDataContext()
+        }
+
         val previousUserQuestion = runCatching {
             assistantChatStore.readTurns(scope, conversationId)
                 .dropLast(1)
