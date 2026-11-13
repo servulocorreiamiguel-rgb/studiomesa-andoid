@@ -2890,6 +2890,10 @@ class MainActivity : ComponentActivity() {
         val scope = assistantChatScope()
         val salesInvoices = runCatching { saftSalesInvoiceStore.list(scope) }.getOrDefault(emptyList())
         val supplierInvoices = runCatching { supplierInvoiceStore.list(scope) }.getOrDefault(emptyList())
+        val recentPurchaseLines = supplierInvoices
+            .filter { it.reviewStatus == "approved" }
+            .sortedByDescending { it.issueDate }
+            .flatMap { invoice -> invoice.lineItems.map { line -> invoice to line } }
         val today = java.time.LocalDate.now()
         val thirtyDaysAgo = today.minusDays(29)
 
@@ -2949,6 +2953,16 @@ class MainActivity : ComponentActivity() {
             appendLine("Estes valores representam faturação/documentos concluídos, não lucro líquido nem dinheiro confirmado na conta.")
             appendLine("Faturas de fornecedores arquivadas: ${supplierInvoices.size}; confirmadas: ${approved.size} (${formatInvoiceEuro(invoiceTotal(approved))}); pendentes: ${pending.size} (${formatInvoiceEuro(invoiceTotal(pending))}); rejeitadas: ${rejected.size}.")
             appendLine("Faturas de fornecedores são compras/despesas documentadas; não são vendas nem prova de pagamento.")
+            appendLine("PRODUTOS RECONHECIDOS EM FATURAS DE COMPRA APROVADAS (histórico de compras, não stock atual):")
+            if (recentPurchaseLines.isEmpty()) {
+                appendLine("Ainda não existem linhas de produtos reconhecidas em faturas de fornecedores aprovadas.")
+            } else {
+                recentPurchaseLines.take(25).forEach { (invoice, line) ->
+                    appendLine("- ${line.description}: ${line.quantity} ${line.unit}; fatura ${invoice.invoiceNumber} de ${invoice.issueDate}; " +
+                        if (invoice.stockReceivedAtMillis != null) "entrada no stock confirmada."
+                        else "entrada no stock ainda não confirmada.")
+                }
+            }
             val forecast = economicDailyForecast
             if (forecast == null || !forecast.hasSalesHistory) {
                 appendLine("Previsão de vendas dos próximos sete dias: ainda não disponível; não inventes valores.")
@@ -9376,7 +9390,7 @@ class MainActivity : ComponentActivity() {
             addGap(card, 12)
             card.addView(label("2 · Pratos a preparar nos próximos sete dias", 14f, true, forestDeep))
             card.addView(label(
-                "Esta previsão é feita automaticamente com as quantidades de cada prato vendidas nas faturas SAF-T ou nos pedidos concluídos. Não é preciso cadastrar os pratos nem introduzir manualmente os alimentos para ver estas doses.",
+                "Esta previsão é feita automaticamente com as quantidades de cada prato vendidas nas faturas SAF-T ou nos pedidos concluídos. Não é preciso registar os pratos manualmente nem introduzir os alimentos para ver estas doses.",
                 10.5f, false, muted
             ))
             if (report.menuItemForecasts.isEmpty()) {
@@ -9422,9 +9436,8 @@ class MainActivity : ComponentActivity() {
                 ))
             } else if (report.ingredientAverages.isEmpty()) {
                 val explanation = if (report.unmappedMenuItems.isNotEmpty()) {
-                    "Há pratos vendidos sem receita aprovada ligada ao stock: " +
-                        report.unmappedMenuItems.take(8).joinToString(", ") +
-                        ". Associa esses artigos à carta e aprova as respetivas receitas."
+                    "A previsão de doses dos pratos acima está disponível. Para calcular os ingredientes dos seguintes artigos, ainda falta uma receita aprovada ligada ao stock: " +
+                        report.unmappedMenuItems.take(8).joinToString(", ") + "."
                 } else {
                     "A previsão de doses dos pratos acima já está disponível. Ainda não existem receitas ativas e aprovadas ligadas ao stock para calcular os ingredientes e as quantidades exatas a comprar."
                 }
