@@ -1948,38 +1948,49 @@ class MainActivity : ComponentActivity() {
         }) { raw ->
             supplierInvoiceRefreshInFlight = false
             val rows = JSONArray(raw)
+            val scope = assistantChatScope()
+            val existingById = runCatching {
+                supplierInvoiceStore.list(scope).associateBy { it.id }
+            }.getOrDefault(emptyMap())
+            val refreshed = mutableListOf<SupplierInvoiceRecord>()
             for (index in 0 until rows.length()) {
                 val row = rows.optJSONObject(index) ?: continue
                 val id = row.optString("id")
                 if (id.isBlank()) continue
                 val warnings = row.optJSONArray("warnings") ?: JSONArray()
-                val existing = supplierInvoiceStore.get(assistantChatScope(), id)
-                supplierInvoiceStore.save(
-                    assistantChatScope(),
-                    SupplierInvoiceRecord(
-                        id = id,
-                        supplierName = row.optString("supplier_name"),
-                        supplierVatNumber = row.optString("supplier_vat_number"),
-                        invoiceNumber = row.optString("invoice_number"),
-                        issueDate = row.optString("issue_date"),
-                        dueDate = row.optString("due_date"),
-                        netAmount = if (row.isNull("net_amount")) null else row.optString("net_amount"),
-                        vatAmount = if (row.isNull("vat_amount")) null else row.optString("vat_amount"),
-                        totalAmount = row.optString("total_amount"),
-                        currency = row.optString("currency", "EUR"),
-                        mimeType = row.optString("mime_type"),
-                        byteSize = row.optLong("byte_size"),
-                        documentSha256 = row.optString("document_sha256"),
-                        documentUri = existing?.documentUri,
-                        documentPath = row.optString("document_path").takeIf { it.isNotBlank() },
-                        sourceType = row.optString("source_type"),
-                        reviewStatus = row.optString("review_status", "pending_review"),
-                        warnings = (0 until warnings.length()).map { warnings.optString(it) },
-                        createdAtMillis = parseServerTimestamp(row.optString("created_at")),
-                        updatedAtMillis = parseServerTimestamp(row.optString("updated_at"))
-                    )
+                val existing = existingById[id]
+                refreshed += SupplierInvoiceRecord(
+                    id = id,
+                    supplierName = row.optString("supplier_name"),
+                    supplierVatNumber = row.optString("supplier_vat_number"),
+                    invoiceNumber = row.optString("invoice_number"),
+                    issueDate = row.optString("issue_date"),
+                    dueDate = row.optString("due_date"),
+                    netAmount = if (row.isNull("net_amount")) null else row.optString("net_amount"),
+                    vatAmount = if (row.isNull("vat_amount")) null else row.optString("vat_amount"),
+                    totalAmount = row.optString("total_amount"),
+                    currency = row.optString("currency", "EUR"),
+                    mimeType = row.optString("mime_type"),
+                    byteSize = row.optLong("byte_size"),
+                    documentSha256 = row.optString("document_sha256"),
+                    documentUri = existing?.documentUri,
+                    documentPath = row.optString("document_path").takeIf { it.isNotBlank() },
+                    sourceType = row.optString("source_type"),
+                    reviewStatus = row.optString("review_status", "pending_review"),
+                    warnings = (0 until warnings.length()).map { warnings.optString(it) },
+                    createdAtMillis = parseServerTimestamp(row.optString("created_at")),
+                    updatedAtMillis = parseServerTimestamp(row.optString("updated_at"))
                 )
             }
+            runCatching { supplierInvoiceStore.saveAll(scope, refreshed) }
+                .onFailure { error ->
+                    Toast.makeText(
+                        this,
+                        error.message ?: "Não foi possível guardar o arquivo de faturas atualizado.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return@runBackend
+                }
             if (showFeedback) Toast.makeText(this, "${rows.length()} fatura(s) no arquivo privado.", Toast.LENGTH_SHORT).show()
             if (activePage in setOf("Assistente económico", "IA") &&
                 !assistantSending && !isFinishing && !isDestroyed) {
