@@ -244,6 +244,6 @@ internal class SupplierInvoiceStore(context: Context) {
     private companion object {
         const val KEY_ALIAS = "pt.studiomesa.assistant.invoices.v1"
         const val FORMAT_VERSION = 1
-        const val MAX_RECORDS = 200
+        const val MAX_RECORDS = 5_000
     }
 }
