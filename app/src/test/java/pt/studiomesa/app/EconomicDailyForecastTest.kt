@@ -137,7 +137,7 @@ class EconomicDailyForecastTest {
         )
 
         assertTrue(report.ingredientAverages.isEmpty())
-        assertEquals(listOf("unmapped"), report.unmappedMenuItems)
+        assertEquals(listOf("Prato"), report.unmappedMenuItems)
         assertFalse(report.days.last().expectedRevenue == null)
     }
 }
