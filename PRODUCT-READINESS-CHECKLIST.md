@@ -62,6 +62,14 @@ Consultas read-only e Supabase Advisors em 13/11/2026:
 - O OCR é uma sugestão para revisão; não movimenta stock sozinho. O proprietário tem de aprovar a correspondência de cada linha e confirmar a receção.
 - A migração `20261113114000_supplier_invoice_lines_stock_receipts_and_saft_sync` ainda não está aplicada ao Supabase alojado. Por isso, a sincronização cloud das linhas de faturas/receções e do arquivo SAF-T não deve ser considerada operacional em produção até à reconciliação, backup/restauro e deployment controlado.
 
+## Funcionalidades comerciais ainda não integradas na aplicação
+
+- [ ] **Campanhas de reactivação:** as tabelas `public.restaurant_reactivation_campaigns` e `public.restaurant_customer_notifications` existem no Supabase, mas a `main` ainda não contém o editor/envio Android para o proprietário. A implementação está na [PR #94](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/94), que precisa de rebase, revisão de conflitos e CI antes de ser integrada.
+- [ ] **Centro de notificações e push:** a `main` ainda não contém o centro de notificações de actividade nem a integração FCM/push. As propostas [PR #91](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/91) e [PR #92](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/92) sobrepõem-se; é necessário consolidar uma implementação, rever permissões Android e configuração do servidor, e testar notificações reais.
+- [ ] **Perfis pré-configurados da equipa:** existe `StaffPermissionSet.kt` no cliente, mas a tabela privada `private.restaurant_staff_permissions` ainda não existe no Supabase alojado e a implementação de perfis pré-configurados proposta na PR #92 não está na `main`. Até à migração e aos testes, não anunciar a matriz granular como activa.
+- [ ] A geração de ideias de conteúdo pelo assistente não equivale a campanhas automáticas, envio de ofertas a clientes inactivos ou notificações push. Estas capacidades só devem ser vendidas depois de integradas e testadas.
+
+
 ## Produto, segurança e testes de aceitação
 
 - [ ] E2E com dois restaurantes e contas de proprietário, funcionário e cliente: isolamento, menus, pedidos, cozinha, reservas, inventário, fidelização, campanhas, faturas e revogação de acesso.
