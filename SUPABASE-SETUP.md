@@ -1,14 +1,25 @@
 # StudioMesa — configuração do backend e preparação para produção
 
-> **Fotografia verificada — 13/11/2026: NÃO FAZER DEPLOY EM PRODUÇÃO.** O projeto `svwvkfsyevuyabelrtjk` está ativo e saudável (PostgreSQL 17.6.1.166, região `eu-west-1`), mas a comparação read-only encontrou 70 ficheiros SQL na `main` e 63 migrações remotas. As 63 remotas têm correspondência exata por versão/nome; sete migrações da `main` continuam pendentes no projeto alojado. Se a PR #128 for integrada, acrescenta uma oitava migração pendente.
+> **Fotografia verificada — 13/11/2026: NÃO FAZER DEPLOY EM PRODUÇÃO.** O projeto `svwvkfsyevuyabelrtjk` está activo e saudável (PostgreSQL 17.6.1.166, região `eu-west-1`). A `main` contém 71 ficheiros SQL de migração; o histórico Supabase tem 63 versões aplicadas. As 63 versões remotas têm correspondência exacta por versão/nome no repositório; existem oito migrações locais ainda não aplicadas:
+> 1. `20261030111815_restaurant_recipes_and_order_stock_consumption`
+> 2. `20261102103000_granular_restaurant_staff_permissions`
+> 3. `20261102120000_require_loyalty_permission_for_reward_fulfillment`
+> 4. `20261102121000_enforce_loyalty_permission_for_staff_loyalty_operations`
+> 5. `20261104100000_price_adviser_actor_indexes`
+> 6. `20261107170000_loyalty_shop_photos_and_plan_limits`
+> 7. `20261112120000_restaurant_membership_request_actor_indexes`
+> 8. `20261113114000_supplier_invoice_lines_stock_receipts_and_saft_sync`
+>
+> **Funcionalidades ainda sem estruturas de backend:** `public.restaurant_recipes`, `public.restaurant_recipe_ingredients`, `private.restaurant_staff_permissions` e `private.restaurant_loyalty_entitlements` não existem no projeto alojado. As fichas técnicas/consumo automático de ingredientes, permissões granulares, limites por plano e a nova sincronização cloud de linhas de faturas/receções/SAF-T não devem ser anunciados como activos em produção. As tabelas de campanhas `public.restaurant_reactivation_campaigns` e avisos `public.restaurant_customer_notifications` existem, mas o ecrã Android de criação/envio ainda não está integrado na `main`.
+>
+> **Segurança read-only — 13/11/2026:** 20 tabelas públicas observadas com RLS activa. O Advisor assinala 11 tabelas com RLS e sem políticas directas; a consulta de privilégios confirmou que `anon` e `authenticated` não têm permissões directas nessas tabelas. O Advisor assinala 42 funções `SECURITY DEFINER` executáveis por `authenticated`; nenhuma das funções verificadas é executável por `anon`. Estas RPCs exigem revisão funcional individual de autenticação, âmbito do restaurante, parâmetros e concorrência — não revogar permissões em bloco. A protecção contra palavras-passe comprometidas está desactivada. O Performance Advisor identifica quatro foreign keys sem índice de cobertura e 45 índices sem utilização observada; não remover índices automaticamente.
+>
+> **Custo e recuperação:** a organização está no plano Free. Não existem backups automáticos diários nem Point-in-Time Recovery, e não há ainda um backup integral com restauro ensaiado. Não foi criada uma branch Supabase paga; a criação anteriormente cotada era 0,01344 USD/hora. Antes de qualquer migração remota, seguir o [runbook de backup, ensaio de restauro e dry-run](docs/PRODUCTION-BACKUP-AND-MIGRATION-RUNBOOK.md). O dump PostgreSQL não inclui automaticamente utilizadores Auth nem objectos binários do Storage; a recuperação destes elementos tem de ser ensaiada separadamente.
+>
+> **Autenticação e serviços externos:** SMTP próprio, confirmação/recuperação de email e eliminação de conta ainda precisam de testes ponta a ponta com contas descartáveis. A presença de `OPENROUTER_API_KEY` e `SEARXNG_BASE_URL` não está confirmada; a IA cloud permanece desligada por omissão.
+>
+> O histórico e as instruções seguintes contêm notas anteriores. Se houver conflito, prevalecem esta fotografia, a [checklist comercial actual](PRODUCT-READINESS-CHECKLIST.md), a [preparação de release](RELEASE-SETUP.md) e o runbook de produção. Não executar comandos históricos de DDL sem rever o estado do projecto e o SQL exacto.
 
-> As tabelas `public.restaurant_recipes`, `public.restaurant_recipe_ingredients`, `private.restaurant_staff_permissions` e `private.restaurant_loyalty_entitlements` não existem ainda no projeto alojado. As fichas técnicas/consumo de ingredientes, permissões granulares e entitlements por plano estão no código/migrações locais, mas não estão ativos no backend de produção. Os novos fluxos de sincronização SAF-T e receção de faturas da PR #128 também exigem a sua migração própria.
-
-> **Estado de segurança read-only:** 20 tabelas públicas observadas com RLS; 11 tabelas sem políticas diretas têm privilégios de cliente revogados para `anon` e `authenticated`. Nenhuma função `SECURITY DEFINER` verificada é executável por `anon`; as 52 funções verificadas têm `search_path = ''`. Continuar a revisão funcional das RPCs acessíveis a `authenticated`. A proteção contra palavras-passe comprometidas está desativada e requer Pro ou superior.
-
-> **Custo/backup:** a organização está no plano Free; não tem backups automáticos diários. Não foi criada uma branch Supabase paga. Antes de qualquer migração remota, seguir o [runbook de backup, ensaio de restauro e dry-run](docs/PRODUCTION-BACKUP-AND-MIGRATION-RUNBOOK.md). O backup lógico SQL não inclui automaticamente utilizadores Auth nem objetos Storage; a recuperação desses elementos tem de ser testada separadamente.
-
-> O histórico e as instruções seguintes contêm notas anteriores. Se houver conflito, prevalecem a fotografia acima, a [checklist comercial atual](PRODUCT-READINESS-CHECKLIST.md) e o runbook de produção. Não executar comandos históricos de DDL sem rever o estado do projeto e o SQL exato.
 
 ## Estado técnico
 
