@@ -140,4 +140,46 @@ class EconomicDailyForecastTest {
         assertEquals(listOf("Prato"), report.unmappedMenuItems)
         assertFalse(report.days.last().expectedRevenue == null)
     }
+    @Test
+    fun menuPortionsAreForecastDirectlyFromSalesLinesWithoutRecipes() {
+        val report = EconomicDailyForecastCalculator.calculate(
+            orders = listOf(
+                order(today.minusDays(7), id = "bitoque", quantity = "14").copy(itemName = "Bitoque"),
+                order(today.minusDays(14), id = "bitoque", quantity = "18").copy(itemName = "Bitoque"),
+                order(today.minusDays(4), id = "soup", quantity = "4").copy(itemName = "Sopa"),
+                order(today.minusDays(11), id = "soup", quantity = "6").copy(itemName = "Sopa")
+            ),
+            recipes = emptyList(),
+            today = today,
+            daysAhead = 7,
+            zoneId = zone
+        )
+
+        assertTrue(report.ingredientAverages.isEmpty())
+        assertEquals(2, report.menuItemForecasts.size)
+        val bitoque = report.menuItemForecasts.single { it.menuItemId == "bitoque" }
+        val soup = report.menuItemForecasts.single { it.menuItemId == "soup" }
+        assertEquals(BigDecimal("16.00"), bitoque.expectedSevenDayPortions)
+        assertEquals(BigDecimal("5.00"), soup.expectedSevenDayPortions)
+        assertEquals(2, bitoque.comparableDays)
+        assertEquals(2, soup.comparableDays)
+    }
+
+    @Test
+    fun creditNotesReduceRevenueButDoNotReducePredictedDishPortions() {
+        val date = today.minusDays(7)
+        val report = EconomicDailyForecastCalculator.calculate(
+            orders = listOf(
+                order(date, id = "bitoque", quantity = "2", amount = "10.00").copy(itemName = "Bitoque"),
+                order(date, id = "bitoque", quantity = "-1", amount = "10.00").copy(itemName = "Bitoque")
+            ),
+            recipes = emptyList(),
+            today = today,
+            daysAhead = 7,
+            zoneId = zone
+        )
+
+        assertEquals(BigDecimal("2.00"), report.menuItemForecasts.single().expectedSevenDayPortions)
+    }
+
 }
