@@ -2365,6 +2365,94 @@ class MainActivity : ComponentActivity() {
         )
     }
 
+    private fun buildEconomicAssistantDataContext(): String {
+        val scope = assistantChatScope()
+        val salesInvoices = runCatching { saftSalesInvoiceStore.list(scope) }.getOrDefault(emptyList())
+        val supplierInvoices = runCatching { supplierInvoiceStore.list(scope) }.getOrDefault(emptyList())
+        val today = java.time.LocalDate.now()
+        val thirtyDaysAgo = today.minusDays(29)
+
+        val salesSource: String
+        val salesCount: Int
+        val totalNet: BigDecimal
+        val recentNet: BigDecimal
+        if (salesInvoices.isNotEmpty()) {
+            salesSource = "SAF-T (PT) importado. Inclui vendas válidas de clientes com ou sem cartão/pontos."
+            salesCount = salesInvoices.size
+            totalNet = salesInvoices.fold(BigDecimal.ZERO) { sum, invoice -> sum.add(invoice.netTotal) }
+            recentNet = salesInvoices.fold(BigDecimal.ZERO) { sum, invoice ->
+                val date = runCatching { java.time.LocalDate.parse(invoice.issueDate) }.getOrNull()
+                if (date != null && !date.isBefore(thirtyDaysAgo) && !date.isAfter(today)) {
+                    sum.add(invoice.netTotal)
+                } else sum
+            }
+        } else {
+            val history = assistantSalesHistory(hasRemoteRestaurant())
+            val completed = history.filter {
+                it.status == "Concluído" && it.createdAtMillis > 0L &&
+                    it.createdAtMillis <= System.currentTimeMillis() &&
+                    it.unitAmount.isFinite() && it.unitAmount >= 0.0 && it.quantity in 1..99
+            }
+            salesSource = if (hasRemoteRestaurant()) {
+                "Pedidos concluídos do StudioMesa. Não existe filtro de pontos de fidelização."
+            } else {
+                "Pedidos locais de demonstração. Não são vendas reais do restaurante."
+            }
+            salesCount = completed.size
+            totalNet = completed.fold(BigDecimal.ZERO) { sum, order ->
+                sum.add(BigDecimal.valueOf(order.unitAmount).multiply(BigDecimal(order.quantity)))
+            }
+            recentNet = completed.fold(BigDecimal.ZERO) { sum, order ->
+                val date = java.time.Instant.ofEpochMilli(order.createdAtMillis)
+                    .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                if (!date.isBefore(thirtyDaysAgo) && !date.isAfter(today)) {
+                    sum.add(BigDecimal.valueOf(order.unitAmount).multiply(BigDecimal(order.quantity)))
+                } else sum
+            }
+        }
+
+        val approved = supplierInvoices.filter { it.reviewStatus == "approved" }
+        val pending = supplierInvoices.filter { it.reviewStatus == "pending_review" }
+        val rejected = supplierInvoices.filter { it.reviewStatus == "rejected" }
+        fun invoiceTotal(rows: List<SupplierInvoiceRecord>): BigDecimal =
+            rows.fold(BigDecimal.ZERO) { sum, invoice ->
+                sum.add(invoice.totalAmount.toBigDecimalOrNull() ?: BigDecimal.ZERO)
+            }
+
+        return buildString {
+            appendLine("DADOS ECONÓMICOS DISPONÍVEIS — consulta estes valores antes de responder a perguntas sobre vendas, compras ou comida.")
+            appendLine("Origem das vendas: $salesSource")
+            appendLine("Documentos/linhas de venda considerados: $salesCount.")
+            appendLine("Vendas acumuladas sem IVA no arquivo carregado: ${salesEuro(totalNet)}.")
+            appendLine("Vendas sem IVA nos últimos 30 dias: ${salesEuro(recentNet)}.")
+            appendLine("Estes valores representam faturação/documentos concluídos, não lucro líquido nem dinheiro confirmado na conta.")
+            appendLine("Faturas de fornecedores arquivadas: ${supplierInvoices.size}; confirmadas: ${approved.size} (${formatInvoiceEuro(invoiceTotal(approved))}); pendentes: ${pending.size} (${formatInvoiceEuro(invoiceTotal(pending))}); rejeitadas: ${rejected.size}.")
+            appendLine("Faturas de fornecedores são compras/despesas documentadas; não são vendas nem prova de pagamento.")
+            val forecast = economicDailyForecast
+            if (forecast == null || !forecast.hasSalesHistory) {
+                appendLine("Previsão de vendas dos próximos sete dias: ainda não disponível; não inventes valores.")
+            } else {
+                appendLine("PREVISÃO DOS PRÓXIMOS SETE DIAS (estimativa, não garantia):")
+                forecast.days.forEach { day ->
+                    appendLine("- ${day.date} (${day.weekdayLabel}): ${day.expectedRevenue?.let(::salesEuro) ?: "sem dados"}; amostras comparáveis: ${day.comparableDays}.")
+                }
+                appendLine("Previsão alimentar, média por dia e necessidade total:")
+                if (forecast.ingredientAverages.isEmpty()) {
+                    appendLine("Ainda sem quantidades de ingredientes calculáveis. É necessário um artigo de venda associado a uma receita ativa e aprovada ligada ao stock.")
+                } else {
+                    forecast.ingredientAverages.forEach { item ->
+                        appendLine("- ${item.ingredientName}: média ${item.averageDailyQuantity.stripTrailingZeros().toPlainString()} ${item.unit}/dia; necessidade 7 dias ${item.expectedSevenDayQuantity.stripTrailingZeros().toPlainString()} ${item.unit}; stock ${item.currentStock?.stripTrailingZeros()?.toPlainString() ?: "não disponível"}; comprar ${item.suggestedPurchaseQuantity?.stripTrailingZeros()?.toPlainString() ?: "não calculável"} ${item.unit}.")
+                    }
+                }
+                if (forecast.unmappedMenuItems.isNotEmpty()) {
+                    appendLine("Artigos sem correspondência a receitas: ${forecast.unmappedMenuItems.take(20).joinToString(", ")}.")
+                }
+            }
+            appendLine("Limites: SAF-T tem de ser exportado do programa de faturação e importado; os dados SAF-T ficam cifrados neste dispositivo e não sincronizam para outros dispositivos. A previsão alimentar exige Premium, receitas aprovadas com nomes/artigos corretamente associados e stock atualizado.")
+            appendLine("Nunca trates previsão de faturação como lucro. Não recomendes compras para artigos sem receita/stock e não afirmes que as faturas provam pagamentos.")
+        }.trim().take(5_500)
+    }
+
     private fun buildLocalAssistantSystemInstruction(
         scope: String,
         economicAssistant: Boolean = activePage == "Assistente económico"
@@ -2393,6 +2481,10 @@ class MainActivity : ComponentActivity() {
             }
             appendLine("Restaurante: $restaurantName. Modo: ${if (snapshot.isDemo) "demonstração" else "conta autenticada"}.")
             appendLine("Estado: ${snapshot.menuItems.size} artigos; ${snapshot.activeOrderCount} pedidos ativos; stock ${if (snapshot.stockLoaded) "carregado" else "não carregado"}; reservas ${if (snapshot.reservationsLoaded) "carregadas" else "não carregadas"}.")
+            if (economicAssistant) {
+                appendLine()
+                appendLine(buildEconomicAssistantDataContext())
+            }
             if (promptMemory.isNotBlank()) {
                 appendLine("MEMÓRIA RELEVANTE:")
                 appendLine(promptMemory.take(if (economicAssistant) 300 else 600))
