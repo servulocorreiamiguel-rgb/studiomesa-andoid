@@ -8758,6 +8758,9 @@ class MainActivity : ComponentActivity() {
                     "A quantidade prevista considera as vendas por prato, as quantidades por dose, o desperdício configurado e o stock atual.",
                     10.5f, false, muted
                 ))
+                val maximumIngredientDaily = report.ingredientAverages
+                    .map { it.averageDailyQuantity }
+                    .maxOrNull() ?: BigDecimal.ZERO
                 report.ingredientAverages.forEach { item ->
                     addGap(card, 7)
                     val row = LinearLayout(this).apply {
@@ -8770,6 +8773,17 @@ class MainActivity : ComponentActivity() {
                         10.5f, true, forestSoft
                     ))
                     card.addView(row)
+                    val foodBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+                        max = 1000
+                        progress = if (maximumIngredientDaily.signum() > 0) {
+                            item.averageDailyQuantity.multiply(BigDecimal("1000"))
+                                .divide(maximumIngredientDaily, 0, java.math.RoundingMode.HALF_UP)
+                                .toInt().coerceIn(0, 1000)
+                        } else 0
+                        progressTintList = ColorStateList.valueOf(copper)
+                        progressBackgroundTintList = ColorStateList.valueOf(line)
+                    }
+                    card.addView(foodBar, LinearLayout.LayoutParams(-1, dp(9)))
                     card.addView(label(
                         "Necessário em 7 dias: ${item.expectedSevenDayQuantity.stripTrailingZeros().toPlainString()} ${item.unit}",
                         10f, false, muted
