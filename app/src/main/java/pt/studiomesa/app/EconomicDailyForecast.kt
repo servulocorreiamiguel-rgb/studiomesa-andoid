@@ -13,7 +13,8 @@ internal data class EconomicForecastOrderLine(
     val menuItemId: String,
     val itemName: String,
     val quantity: BigDecimal,
-    val unitAmount: BigDecimal
+    val unitAmount: BigDecimal,
+    val documentRevenueAmount: BigDecimal? = null
 )
 
 internal data class EconomicRecipeIngredient(
@@ -88,7 +89,7 @@ internal object EconomicDailyForecastCalculator {
                 Instant.ofEpochMilli(order.createdAtMillis).atZone(zoneId).toLocalDate()
             }.getOrNull() ?: return@forEach
             if (!date.isBefore(today) || date.isBefore(today.minusDays(maxHistoryDays))) return@forEach
-            val amount = order.unitAmount.multiply(order.quantity)
+            val amount = order.documentRevenueAmount ?: order.unitAmount.multiply(order.quantity)
             val bucket = daily.getOrPut(date) { MutableDaily() }
             bucket.revenue = bucket.revenue.add(amount)
             // A credit note reduces revenue, but it does not prove that food was
