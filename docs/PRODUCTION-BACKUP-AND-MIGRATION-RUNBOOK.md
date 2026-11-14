@@ -1,7 +1,7 @@
 # StudioMesa — backup e execução segura de migrações
 
 **Âmbito:** projeto Supabase `svwvkfsyevuyabelrtjk` (região `eu-west-1`).
-**Estado em 13/11/2026:** não executar migrações remotas. A `main` está no commit `319c68fe69d7047ba99e4595fe93146f1bf26877`; o Supabase Free tem 63 migrações aplicadas e oito pendentes. Não existe ainda um backup completo com restauro ensaiado.
+**Estado em 13/11/2026:** não executar migrações remotas. A `main` está no commit `c21fe4bfd80b46c15112cfeb19e279feb1843bb5`; o Supabase Free tem 63 migrações aplicadas e oito pendentes. Não existe ainda um backup completo com restauro ensaiado.
 
 ## 1. Porque é obrigatório parar antes de produção
 
