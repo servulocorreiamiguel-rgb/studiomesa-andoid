@@ -2,9 +2,9 @@ name: Build StudioMesa Android APK
 
 on:
   push:
-    branches: ["main", "feature/auth-verification-oauth", "feature/customer-guest-account-entry"]
+    branches: ["main", "feature/auth-verification-oauth", "feature/customer-guest-account-entry", "feature/customer-multiple-restaurant-cards"]
   pull_request:
-    branches: ["main", "integration/non-ai-core-2026-11-05", "feature/auth-verification-oauth"]
+    branches: ["main", "integration/non-ai-core-2026-11-05", "feature/auth-verification-oauth", "feature/customer-guest-account-entry"]
   workflow_dispatch:
 
 permissions:
@@ -344,7 +344,9 @@ jobs:
               OR to_regprocedure('public.set_restaurant_recipe_active(uuid,uuid,boolean)') IS NULL
               OR to_regprocedure('private.consume_recipe_stock_for_order()') IS NULL
               OR to_regprocedure('public.adjust_loyalty_points_idempotent(uuid,uuid,integer,text)') IS NULL
+              OR to_regprocedure('public.create_customer_reservation_request(uuid,uuid,text,text,integer,timestamp with time zone,integer,text)') IS NULL
               OR to_regprocedure('public.create_customer_reservation_request(uuid,text,text,integer,timestamp with time zone,integer,text)') IS NULL
+              OR to_regprocedure('public.get_my_restaurant_reservations(uuid)') IS NULL
               OR to_regprocedure('public.get_my_restaurant_reservations()') IS NULL
               OR to_regprocedure('public.cancel_my_restaurant_reservation(uuid)') IS NULL
               OR to_regprocedure('public.assign_restaurant_reservation_table(uuid,integer)') IS NULL
@@ -358,11 +360,14 @@ jobs:
             IF to_regprocedure('public.save_loyalty_reward(uuid,uuid,text,text,integer,integer,boolean)') IS NULL
               OR to_regprocedure('public.get_restaurant_loyalty_rewards(uuid)') IS NULL
               OR to_regprocedure('public.get_customer_loyalty_rewards(uuid)') IS NULL
+              OR to_regprocedure('public.create_loyalty_qr_token(uuid)') IS NULL
               OR to_regprocedure('public.create_loyalty_qr_token()') IS NULL
               OR to_regprocedure('public.award_loyalty_points_from_qr(uuid,integer,uuid,text)') IS NULL
+              OR to_regprocedure('public.redeem_loyalty_reward(uuid,uuid,uuid)') IS NULL
               OR to_regprocedure('public.redeem_loyalty_reward(uuid,uuid)') IS NULL
               OR to_regprocedure('public.get_restaurant_reward_redemptions(uuid)') IS NULL
               OR to_regprocedure('public.fulfill_loyalty_reward_redemption(uuid)') IS NULL
+              OR to_regprocedure('public.get_my_loyalty_reward_redemptions(uuid)') IS NULL
               OR to_regprocedure('public.get_my_loyalty_reward_redemptions()') IS NULL THEN
               RAISE EXCEPTION 'A loyalty shop or QR RPC is missing after clean migration replay.';
             END IF;
@@ -390,19 +395,25 @@ jobs:
             END IF;
 
             IF has_function_privilege('anon','public.save_loyalty_reward(uuid,uuid,text,text,integer,integer,boolean)','EXECUTE')
+              OR has_function_privilege('anon','public.create_loyalty_qr_token(uuid)','EXECUTE')
               OR has_function_privilege('anon','public.create_loyalty_qr_token()','EXECUTE')
               OR has_function_privilege('anon','public.award_loyalty_points_from_qr(uuid,integer,uuid,text)','EXECUTE')
-              OR NOT has_function_privilege('authenticated','public.save_loyalty_reward(uuid,uuid,text,text,integer,integer,boolean)','EXECUTE')
-              OR NOT has_function_privilege('authenticated','public.create_loyalty_qr_token()','EXECUTE')
-              OR NOT has_function_privilege('authenticated','public.award_loyalty_points_from_qr(uuid,integer,uuid,text)','EXECUTE')
+              OR has_function_privilege('anon','public.redeem_loyalty_reward(uuid,uuid)','EXECUTE')
               OR has_function_privilege('anon','public.get_my_loyalty_reward_redemptions()','EXECUTE')
+              OR NOT has_function_privilege('authenticated','public.save_loyalty_reward(uuid,uuid,text,text,integer,integer,boolean)','EXECUTE')
+              OR NOT has_function_privilege('authenticated','public.create_loyalty_qr_token(uuid)','EXECUTE')
+              OR NOT has_function_privilege('authenticated','public.create_loyalty_qr_token()','EXECUTE')
+              OR NOT has_function_privilege('authenticated','public.redeem_loyalty_reward(uuid,uuid)','EXECUTE')
               OR NOT has_function_privilege('authenticated','public.get_my_loyalty_reward_redemptions()','EXECUTE')
-              OR has_function_privilege('anon','public.create_customer_reservation_request(uuid,text,text,integer,timestamp with time zone,integer,text)','EXECUTE')
-              OR has_function_privilege('anon','public.get_my_restaurant_reservations()','EXECUTE')
+              OR NOT has_function_privilege('authenticated','public.award_loyalty_points_from_qr(uuid,integer,uuid,text)','EXECUTE')
+              OR has_function_privilege('anon','public.get_my_loyalty_reward_redemptions(uuid)','EXECUTE')
+              OR NOT has_function_privilege('authenticated','public.get_my_loyalty_reward_redemptions(uuid)','EXECUTE')
+              OR has_function_privilege('anon','public.create_customer_reservation_request(uuid,uuid,text,text,integer,timestamp with time zone,integer,text)','EXECUTE')
+              OR has_function_privilege('anon','public.get_my_restaurant_reservations(uuid)','EXECUTE')
               OR has_function_privilege('anon','public.cancel_my_restaurant_reservation(uuid)','EXECUTE')
               OR has_function_privilege('anon','public.assign_restaurant_reservation_table(uuid,integer)','EXECUTE')
-              OR NOT has_function_privilege('authenticated','public.create_customer_reservation_request(uuid,text,text,integer,timestamp with time zone,integer,text)','EXECUTE')
-              OR NOT has_function_privilege('authenticated','public.get_my_restaurant_reservations()','EXECUTE')
+              OR NOT has_function_privilege('authenticated','public.create_customer_reservation_request(uuid,uuid,text,text,integer,timestamp with time zone,integer,text)','EXECUTE')
+              OR NOT has_function_privilege('authenticated','public.get_my_restaurant_reservations(uuid)','EXECUTE')
               OR NOT has_function_privilege('authenticated','public.cancel_my_restaurant_reservation(uuid)','EXECUTE')
               OR NOT has_function_privilege('authenticated','public.assign_restaurant_reservation_table(uuid,integer)','EXECUTE')
               OR has_function_privilege('anon','public.update_restaurant_reservation_status(uuid,text)','EXECUTE')

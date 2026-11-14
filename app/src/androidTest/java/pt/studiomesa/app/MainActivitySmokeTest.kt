@@ -160,7 +160,7 @@ class MainActivitySmokeTest {
             onView(withText("Continuar sem conta")).perform(click())
             onView(withText(containsString("Cartão digital de cliente")))
                 .check(matches(isDisplayed()))
-            onView(withText("Cartão de fidelização do restaurante."))
+            onView(withText("Os teus cartões de fidelização."))
                 .check(matches(isDisplayed()))
         }
     }
@@ -171,7 +171,7 @@ class MainActivitySmokeTest {
             if (isCustomerVariant()) {
                 onView(withText(containsString("Cartão digital de cliente")))
                     .check(matches(isDisplayed()))
-                onView(withText("Cartão de fidelização do restaurante."))
+                onView(withText("Os teus cartões de fidelização."))
                     .check(matches(isDisplayed()))
             } else {
                 onView(withText("Painel de operação"))
@@ -522,7 +522,7 @@ class MainActivitySmokeTest {
             onView(withText("Criar conta / iniciar sessão")).check(matches(isDisplayed()))
 
             onView(withContentDescription("Abrir secção Cartão")).perform(click())
-            onView(withText("Cartão de fidelização do restaurante.")).check(matches(isDisplayed()))
+            onView(withText("Os teus cartões de fidelização.")).check(matches(isDisplayed()))
         }
     }
 

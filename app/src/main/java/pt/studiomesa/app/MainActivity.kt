@@ -160,6 +160,7 @@ class MainActivity : ComponentActivity() {
     private val pendingRequestIds by lazy { PendingRequestIds(this) }
     // Reservation contacts, reward history and staff permissions are memory-only.
     private var currentStaffPermissions: Set<String>? = null
+    private var customerMembershipsCache = JSONArray()
     private var customerReservationsCache = JSONArray()
     private var customerRedemptionHistory = JSONArray()
     private var reactivationMembersCache = JSONArray()
@@ -247,9 +248,9 @@ class MainActivity : ComponentActivity() {
         // Refresh shared data when an already-authenticated user opens the app,
         // but do not start a second request while processing an OAuth callback.
         if (intent?.data == null && backendToken().isNotBlank()) {
-            if (isCustomerApp && backendMemberId().isNotBlank()) {
+            if (isCustomerApp) {
                 refreshCustomerMembership()
-            } else if (!isCustomerApp && hasRemoteRestaurant()) {
+            } else if (hasRemoteRestaurant()) {
                 refreshRemoteOperations()
             }
         }
@@ -3763,50 +3764,112 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun restoreCustomerMembership(token: String) {
+    private fun loadSelectedCustomerMembership(
+        token: String,
+        memberships: JSONArray,
+        memberId: String
+    ) {
+        var selected: JSONObject? = null
+        for (index in 0 until memberships.length()) {
+            val item = memberships.optJSONObject(index) ?: continue
+            if (item.optString("member_id") == memberId) {
+                selected = item
+                break
+            }
+        }
+        val member = selected ?: throw IllegalStateException("O cartão selecionado já não está associado a esta conta.")
+        val menu = SupabaseApi.listCustomerMenu(token, memberId)
+        val rewards = SupabaseApi.listCustomerRewards(token, memberId)
+        val redemptions = SupabaseApi.listMyLoyaltyRewardRedemptions(token, memberId)
+        val reservations = SupabaseApi.listMyRestaurantReservations(token, memberId)
+        val marketingOptIn = SupabaseApi.getMyMarketingOptIn(token, memberId)
+        customerMembershipsCache = memberships
+        customerRedemptionHistory = redemptions
+        customerReservationsCache = reservations
+        marketingOptInPrefLoaded = true
+        backendPrefs.edit()
+            .putString("customer_memberships_json", memberships.toString())
+            .putString("member_id", memberId)
+            .putBoolean("marketing_opt_in", marketingOptIn)
+            .putString("member_code", member.optString("member_code"))
+            .putInt("member_points", member.optInt("points", 0))
+            .putString("member_restaurant_name", member.optString("restaurant_name"))
+            .putString("customer_menu_json", menu.toString())
+            .putString("customer_rewards_json", rewards.toString())
+            .apply()
+        val displayName = member.optString("display_name").trim()
+        if (displayName.isNotBlank()) store.saveCustomerProfileName(displayName)
+    }
+
+    private fun restoreCustomerMembership(token: String, preferredMemberId: String? = null) {
         if (!isCustomerApp || token.isBlank()) return
         try {
-            val member = SupabaseApi.getMyLoyaltyMembership(token)
-            if (member == null) {
+            val memberships = SupabaseApi.listMyLoyaltyMemberships(token)
+            if (memberships.length() == 0) {
+                customerMembershipsCache = JSONArray()
+                customerReservationsCache = JSONArray()
+                customerRedemptionHistory = JSONArray()
                 backendPrefs.edit()
                     .remove("member_id")
                     .remove("member_code")
                     .remove("member_points")
                     .remove("member_restaurant_name")
                     .remove("marketing_opt_in")
+                    .putString("customer_memberships_json", "[]")
                     .putString("customer_menu_json", "[]")
                     .putString("customer_rewards_json", "[]")
                     .apply()
                 marketingOptInPrefLoaded = false
-                customerMarketingNotificationsCache = JSONArray()
-                customerReservationsCache = JSONArray()
-                customerRedemptionHistory = JSONArray()
                 return
             }
 
-            val memberId = member.optString("member_id")
-            val menu = if (memberId.isNotBlank()) SupabaseApi.listCustomerMenu(token, memberId) else org.json.JSONArray()
-            val rewards = if (memberId.isNotBlank()) SupabaseApi.listCustomerRewards(token, memberId) else JSONArray()
-            val redemptions = if (memberId.isNotBlank()) SupabaseApi.listMyLoyaltyRewardRedemptions(token) else JSONArray()
-            val reservations = if (memberId.isNotBlank()) SupabaseApi.listMyRestaurantReservations(token) else JSONArray()
-            val marketingOptIn = if (memberId.isNotBlank()) SupabaseApi.getMyMarketingOptIn(token) else false
-            customerRedemptionHistory = redemptions
-            customerReservationsCache = reservations
-            marketingOptInPrefLoaded = memberId.isNotBlank()
-            backendPrefs.edit()
-                .putString("member_id", memberId)
-                .putBoolean("marketing_opt_in", marketingOptIn)
-                .putString("member_code", member.optString("member_code"))
-                .putInt("member_points", member.optInt("points", 0))
-                .putString("member_restaurant_name", member.optString("restaurant_name"))
-                .putString("customer_menu_json", menu.toString())
-                .putString("customer_rewards_json", rewards.toString())
-                .apply()
-            val displayName = member.optString("display_name").trim()
-            if (displayName.isNotBlank()) store.saveCustomerProfileName(displayName)
+            val savedId = preferredMemberId?.takeIf { it.isNotBlank() }
+                ?: backendPrefs.getString("member_id", "").orEmpty()
+            val memberIds = (0 until memberships.length()).mapNotNull { index ->
+                memberships.optJSONObject(index)?.optString("member_id")
+            }
+            val selectedId = CustomerMembershipSelectionPolicy
+                .selectMemberId(memberIds, savedId)
+                ?: throw IllegalStateException("O servidor devolveu cartões sem identificador.")
+            loadSelectedCustomerMembership(token, memberships, selectedId)
         } catch (_: Exception) {
-            // Do not discard a valid login if the membership is temporarily unavailable.
+            // Do not discard a valid login if membership data is temporarily unavailable.
         }
+    }
+
+    private fun showCustomerMembershipPicker() {
+        val memberships = if (customerMembershipsCache.length() > 0) {
+            customerMembershipsCache
+        } else {
+            runCatching {
+                JSONArray(backendPrefs.getString("customer_memberships_json", "[]") ?: "[]")
+            }.getOrDefault(JSONArray())
+        }
+        if (memberships.length() <= 1) {
+            showCustomerJoinDialog()
+            return
+        }
+        val labels = Array(memberships.length()) { index ->
+            val item = memberships.optJSONObject(index)
+            val name = item?.optString("restaurant_name").orEmpty().ifBlank { "Restaurante" }
+            val points = item?.optInt("points", 0) ?: 0
+            val selected = item?.optString("member_id") == backendMemberId()
+            (if (selected) "✓ " else "") + name + " · $points pontos"
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Os meus restaurantes")
+            .setItems(labels) { _, index ->
+                val targetId = memberships.optJSONObject(index)?.optString("member_id").orEmpty()
+                if (targetId.isNotBlank() && targetId != backendMemberId()) {
+                    runBackend({
+                        val allMemberships = SupabaseApi.listMyLoyaltyMemberships(backendToken())
+                        loadSelectedCustomerMembership(backendToken(), allMemberships, targetId)
+                        "OK"
+                    }) { renderCustomerApp() }
+                }
+            }
+            .setPositiveButton("Fechar", null)
+            .show()
     }
 
 
@@ -3834,6 +3897,7 @@ class MainActivity : ComponentActivity() {
             .remove("member_id").remove("member_code").remove("member_points")
             .remove("member_restaurant_name")
             .remove("marketing_opt_in")
+            .remove("customer_memberships_json")
             .remove("remote_members_json").remove("remote_tables_json")
             .remove("remote_menu_json").remove("remote_orders_json")
             .remove("customer_menu_json")
@@ -3843,6 +3907,7 @@ class MainActivity : ComponentActivity() {
             .apply()
 
         currentStaffPermissions = null
+        customerMembershipsCache = JSONArray()
         reservationCache = JSONArray()
         customerReservationsCache = JSONArray()
         customerRedemptionHistory = JSONArray()
@@ -4808,6 +4873,7 @@ class MainActivity : ComponentActivity() {
                 .putBoolean("local_demo_data_isolated_v1", true)
                 .apply()
             currentStaffPermissions = null
+            customerMembershipsCache = JSONArray()
             reservationCache = JSONArray()
             customerReservationsCache = JSONArray()
             customerRedemptionHistory = JSONArray()
@@ -5838,22 +5904,14 @@ class MainActivity : ComponentActivity() {
                             val token = backendToken()
                             val member = SupabaseApi.joinRestaurant(token, code, name)
                             val memberId = member.optString("member_id")
-                            val menu = SupabaseApi.listCustomerMenu(token, memberId)
-                            val rewards = SupabaseApi.listCustomerRewards(token, memberId)
-                            val marketingOptIn = SupabaseApi.getMyMarketingOptIn(token)
-                            marketingOptInPrefLoaded = true
+                            if (memberId.isBlank()) {
+                                throw IllegalStateException("O servidor não devolveu o cartão do restaurante.")
+                            }
+                            val memberships = SupabaseApi.listMyLoyaltyMemberships(token)
                             backendPrefs.edit()
                                 .putBoolean("customer_entry_choice_complete_v1", true)
-                                .putString("member_id", memberId)
-                                .putBoolean("marketing_opt_in", marketingOptIn)
-                                .putString("member_code", member.optString("member_code"))
-                                .putInt("member_points", member.optInt("points", 0))
-                                .putString("member_restaurant_name", member.optString("restaurant_name"))
-                                .putString("customer_menu_json", menu.toString())
-                                .putString("customer_rewards_json", rewards.toString())
                                 .apply()
-                            customerRedemptionHistory = SupabaseApi.listMyLoyaltyRewardRedemptions(token)
-                            customerReservationsCache = SupabaseApi.listMyRestaurantReservations(token)
+                            loadSelectedCustomerMembership(token, memberships, memberId)
                             store.saveCustomerProfileName(name)
                             "OK"
                         }) {
@@ -5986,68 +6044,84 @@ class MainActivity : ComponentActivity() {
         }
         runBackend({
             val token = backendToken()
-            val membership = SupabaseApi.getMyLoyaltyMembership(token)
-            if (membership != null) {
+            val memberships = SupabaseApi.listMyLoyaltyMemberships(token)
+            val requests = SupabaseApi.listMyRestaurantMembershipRequests(token)
+            if (memberships.length() > 0) {
                 restoreCustomerMembership(token)
-                "ASSOCIATED"
-            } else {
-                SupabaseApi.listMyRestaurantMembershipRequests(token).toString()
             }
+            JSONObject()
+                .put("memberships", memberships)
+                .put("requests", requests)
+                .toString()
         }) { raw ->
-            if (raw == "ASSOCIATED") {
-                renderCustomerApp()
-                AlertDialog.Builder(this)
-                    .setTitle("Cartão associado")
-                    .setMessage("O pedido foi aprovado. Já podes consultar os teus pontos e a carta do restaurante.")
-                    .setPositiveButton("OK", null)
-                    .show()
-            } else {
-                val requests = JSONArray(raw)
-                val messages = ArrayList<String>()
-                for (index in 0 until requests.length()) {
-                    val item = requests.optJSONObject(index) ?: continue
-                    val state = when (item.optString("request_status")) {
-                        "pending" -> "A aguardar aprovação"
-                        "approved" -> "Aprovado"
-                        "rejected" -> "Não aprovado"
-                        else -> "Estado desconhecido"
-                    }
-                    messages.add(item.optString("restaurant_name") + " — " + state)
-                }
-                AlertDialog.Builder(this)
-                    .setTitle("Pedidos de associação")
-                    .setMessage(
-                        if (messages.isEmpty()) "Ainda não tens pedidos de associação."
-                        else messages.joinToString("\n")
-                    )
-                    .setPositiveButton("OK", null)
-                    .show()
+            val data = JSONObject(raw)
+            val memberships = data.optJSONArray("memberships") ?: JSONArray()
+            val requests = data.optJSONArray("requests") ?: JSONArray()
+            val messages = ArrayList<String>()
+            for (index in 0 until memberships.length()) {
+                val item = memberships.optJSONObject(index) ?: continue
+                messages.add("Cartão ativo: " + item.optString("restaurant_name"))
             }
+            for (index in 0 until requests.length()) {
+                val item = requests.optJSONObject(index) ?: continue
+                val state = when (item.optString("request_status")) {
+                    "pending" -> "A aguardar aprovação"
+                    "approved" -> "Aprovado"
+                    "rejected" -> "Não aprovado"
+                    else -> "Estado desconhecido"
+                }
+                messages.add(item.optString("restaurant_name") + " — " + state)
+            }
+            renderCustomerApp()
+            AlertDialog.Builder(this)
+                .setTitle("Cartões e pedidos de associação")
+                .setMessage(
+                    if (messages.isEmpty()) "Ainda não tens cartões nem pedidos de associação."
+                    else messages.joinToString("\n")
+                )
+                .setPositiveButton("OK", null)
+                .show()
         }
     }
 
     private fun refreshCustomerMembership() {
-        val memberId = backendMemberId()
-        if (backendToken().isBlank() || memberId.isBlank()) { showCustomerJoinDialog(); return }
+        if (backendToken().isBlank()) {
+            showAuthChooser { renderCustomerApp() }
+            return
+        }
         runBackend({
             val token = backendToken()
-            val member = SupabaseApi.getMember(token, memberId)
-            val menu = SupabaseApi.listCustomerMenu(token, memberId)
-            val rewards = SupabaseApi.listCustomerRewards(token, memberId)
-            val redemptions = SupabaseApi.listMyLoyaltyRewardRedemptions(token)
-            val reservations = SupabaseApi.listMyRestaurantReservations(token)
-            val marketingOptIn = SupabaseApi.getMyMarketingOptIn(token)
-            customerRedemptionHistory = redemptions
-            customerReservationsCache = reservations
-            marketingOptInPrefLoaded = true
-            backendPrefs.edit().putInt("member_points", member.optInt("points", 0))
-                .putString("member_code", member.optString("member_code"))
-                .putString("customer_menu_json", menu.toString())
-                .putString("customer_rewards_json", rewards.toString())
-                .putBoolean("marketing_opt_in", marketingOptIn)
-                .apply()
-            "OK"
-        }) { renderCustomerApp() }
+            val memberships = SupabaseApi.listMyLoyaltyMemberships(token)
+            if (memberships.length() == 0) {
+                "NO_CARDS"
+            } else {
+                val savedId = backendMemberId()
+                val memberIds = (0 until memberships.length()).mapNotNull { index ->
+                    memberships.optJSONObject(index)?.optString("member_id")
+                }
+                val selectedId = CustomerMembershipSelectionPolicy
+                    .selectMemberId(memberIds, savedId)
+                    ?: throw IllegalStateException("O servidor devolveu cartões sem identificador.")
+                loadSelectedCustomerMembership(token, memberships, selectedId)
+                "OK"
+            }
+        }) { result ->
+            if (result == "NO_CARDS") {
+                customerMembershipsCache = JSONArray()
+                backendPrefs.edit()
+                    .remove("member_id")
+                    .remove("member_code")
+                    .remove("member_points")
+                    .remove("member_restaurant_name")
+                    .putString("customer_memberships_json", "[]")
+                    .putString("customer_menu_json", "[]")
+                    .putString("customer_rewards_json", "[]")
+                    .apply()
+                renderCustomerApp()
+            } else {
+                renderCustomerApp()
+            }
+        }
     }
 
     private fun renderCustomerEntryScreen() {
@@ -6231,8 +6305,25 @@ class MainActivity : ComponentActivity() {
         val savedName = store.getCustomerProfileName()
         container.addView(label(if (savedName.isBlank()) "Olá!" else "Olá, " + savedName + "!", 25f, true, forestDeep))
         addGap(container, 5)
-        container.addView(label("Cartão de fidelização do restaurante.", 13.5f, false, muted))
+        container.addView(label("Os teus cartões de fidelização.", 13.5f, false, muted))
         addGap(container, 12)
+        if (backendToken().isNotBlank() && backendMemberId().isNotBlank()) {
+            val selectedRestaurant = backendPrefs.getString("member_restaurant_name", "Restaurante") ?: "Restaurante"
+            container.addView(label("RESTAURANTE SELECIONADO", 10f, true, forestSoft))
+            addGap(container, 3)
+            container.addView(label(selectedRestaurant, 17f, true, forestDeep))
+            addGap(container, 8)
+            if (customerMembershipsCache.length() > 1) {
+                container.addView(secondaryButton("Trocar de restaurante") {
+                    showCustomerMembershipPicker()
+                }, LinearLayout.LayoutParams(-1, dp(46)))
+                addGap(container, 6)
+            }
+            container.addView(secondaryButton("Associar outro restaurante") {
+                showCustomerJoinDialog()
+            }, LinearLayout.LayoutParams(-1, dp(46)))
+            addGap(container, 6)
+        }
         when {
             backendToken().isBlank() -> container.addView(
                 primaryButton("Criar conta / iniciar sessão") { showAuthChooser { renderCustomerApp() } },
@@ -6250,7 +6341,7 @@ class MainActivity : ComponentActivity() {
                 )
             }
             else -> container.addView(
-                primaryButton("Atualizar saldo e recompensas") { refreshCustomerMembership() },
+                primaryButton("Atualizar cartão selecionado") { refreshCustomerMembership() },
                 LinearLayout.LayoutParams(-1, dp(48))
             )
         }
@@ -6366,8 +6457,9 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "Associa primeiro o teu cartão ao restaurante.", Toast.LENGTH_LONG).show()
             return
         }
+        val selectedMemberId = backendMemberId()
         runBackend({
-            SupabaseApi.createLoyaltyQrToken(backendToken()).optString("qr_token")
+            SupabaseApi.createLoyaltyQrToken(backendToken(), selectedMemberId).optString("qr_token")
         }) { qrToken ->
             try {
                 val hints = hashMapOf<EncodeHintType, Any>(EncodeHintType.MARGIN to 1)
@@ -6409,7 +6501,15 @@ class MainActivity : ComponentActivity() {
             .setMessage("Vais trocar " + pointsCost + " pontos por «" + rewardName + "». O desconto é confirmado pelo servidor.")
             .setNegativeButton("Cancelar", null)
             .setPositiveButton("Resgatar") { _, _ ->
-                val signature = JSONObject().put("reward_id", rewardId).toString()
+                val memberId = backendMemberId()
+                if (memberId.isBlank()) {
+                    Toast.makeText(this, "Seleciona primeiro um cartão de restaurante.", Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+                val signature = JSONObject()
+                    .put("member_id", memberId)
+                    .put("reward_id", rewardId)
+                    .toString()
                 val operation = "loyalty_reward_redeem"
                 val accountId = backendPrefs.getString("user_id", "").orEmpty()
                 val requestId = try {
@@ -6419,15 +6519,10 @@ class MainActivity : ComponentActivity() {
                     return@setPositiveButton
                 }
                 runBackend({
-                    val result = SupabaseApi.redeemLoyaltyReward(backendToken(), rewardId, requestId)
-                    val member = SupabaseApi.getMyLoyaltyMembership(backendToken())
-                    val rewards = SupabaseApi.listCustomerRewards(backendToken(), backendMemberId())
-                    val redemptions = SupabaseApi.listMyLoyaltyRewardRedemptions(backendToken())
-                    customerRedemptionHistory = redemptions
-                    backendPrefs.edit()
-                        .putInt("member_points", member?.optInt("points", result.optInt("points_remaining", 0)) ?: 0)
-                        .putString("customer_rewards_json", rewards.toString())
-                        .apply()
+                    val token = backendToken()
+                    val result = SupabaseApi.redeemLoyaltyReward(token, memberId, rewardId, requestId)
+                    val memberships = SupabaseApi.listMyLoyaltyMemberships(token)
+                    loadSelectedCustomerMembership(token, memberships, memberId)
                     result.optInt("points_remaining", -1).toString()
                 }) { remaining ->
                     pendingRequestIds.complete(operation, accountId, signature, requestId)
@@ -6607,7 +6702,9 @@ class MainActivity : ComponentActivity() {
             return
         }
         runBackend({
-            customerReservationsCache = SupabaseApi.listMyRestaurantReservations(backendToken())
+            customerReservationsCache = SupabaseApi.listMyRestaurantReservations(
+                backendToken(), backendMemberId()
+            )
             "OK"
         }) { renderCustomerApp() }
     }
@@ -6689,7 +6786,9 @@ class MainActivity : ComponentActivity() {
                         .setPositiveButton("Cancelar") { _, _ ->
                             runBackend({
                                 SupabaseApi.cancelMyRestaurantReservation(backendToken(), reservationId)
-                                customerReservationsCache = SupabaseApi.listMyRestaurantReservations(backendToken())
+                                customerReservationsCache = SupabaseApi.listMyRestaurantReservations(
+                                    backendToken(), backendMemberId()
+                                )
                                 "OK"
                             }) { renderCustomerApp() }
                         }
@@ -6763,7 +6862,13 @@ class MainActivity : ComponentActivity() {
                     notesText.length > 1000 -> notes.error = "Máximo de 1000 caracteres."
                     else -> {
                         val reservationAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).format(parsedDate)
+                        val memberId = backendMemberId()
+                        if (memberId.isBlank()) {
+                            notes.error = "Seleciona primeiro um cartão de restaurante."
+                            return@setOnClickListener
+                        }
                         val signature = JSONObject()
+                            .put("member_id", memberId)
                             .put("guest_name", name)
                             .put("guest_phone", phoneText)
                             .put("party_size", partySize)
@@ -6781,10 +6886,12 @@ class MainActivity : ComponentActivity() {
                         }
                         runBackend({
                             SupabaseApi.createCustomerReservationRequest(
-                                backendToken(), requestId, name, phoneText, partySize,
+                                backendToken(), memberId, requestId, name, phoneText, partySize,
                                 reservationAt, 90, notesText
                             )
-                            customerReservationsCache = SupabaseApi.listMyRestaurantReservations(backendToken())
+                            customerReservationsCache = SupabaseApi.listMyRestaurantReservations(
+                                backendToken(), memberId
+                            )
                             "OK"
                         }) {
                             dialog.dismiss()
@@ -6874,9 +6981,11 @@ class MainActivity : ComponentActivity() {
                     .remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
                     .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
                     .remove("marketing_opt_in")
+                    .remove("customer_memberships_json")
                     .remove("customer_menu_json")
                     .remove("customer_rewards_json")
                     .apply()
+                customerMembershipsCache = JSONArray()
                 customerMarketingNotificationsCache = JSONArray()
                 marketingOptInPrefLoaded = false
                 customerRedemptionHistory = JSONArray()
@@ -6904,7 +7013,9 @@ class MainActivity : ComponentActivity() {
             .setNegativeButton("Cancelar", null)
             .setPositiveButton(if (enable) "Autorizar" else "Retirar") { _, _ ->
                 runBackend({
-                    val confirmed = SupabaseApi.setMyMarketingOptIn(backendToken(), enable)
+                    val memberId = backendMemberId()
+                    if (memberId.isBlank()) throw IllegalStateException("Seleciona primeiro um cartão de restaurante.")
+                    val confirmed = SupabaseApi.setMyMarketingOptIn(backendToken(), memberId, enable)
                     marketingOptInPrefLoaded = true
                     backendPrefs.edit().putBoolean("marketing_opt_in", confirmed).apply()
                     "OK"
