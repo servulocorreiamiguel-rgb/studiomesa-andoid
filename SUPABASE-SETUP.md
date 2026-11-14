@@ -1,6 +1,6 @@
 # StudioMesa — configuração do backend e preparação para produção
 
-> **Fotografia verificada — 13/11/2026: NÃO FAZER DEPLOY EM PRODUÇÃO.** O projeto `svwvkfsyevuyabelrtjk` está activo e saudável (PostgreSQL 17.6.1.166, região `eu-west-1`). A `main` contém 71 ficheiros SQL de migração; o histórico Supabase tem 63 versões aplicadas. As 63 versões remotas têm correspondência exacta por versão/nome no repositório; existem oito migrações locais ainda não aplicadas:
+> **Fotografia verificada — 14/11/2026: NÃO FAZER DEPLOY EM PRODUÇÃO.** O projeto `svwvkfsyevuyabelrtjk` está activo e saudável (PostgreSQL 17.6.1.166, região `eu-west-1`). A `main` contém 71 ficheiros SQL de migração; o histórico Supabase tem 63 versões aplicadas. As 63 versões remotas têm correspondência exacta por versão/nome no repositório; existem oito migrações locais ainda não aplicadas. A recontagem read-only de 14/11 confirmou 71 ficheiros locais, 63 versões remotas e zero versões remotas órfãs:
 > 1. `20261030111815_restaurant_recipes_and_order_stock_consumption`
 > 2. `20261102103000_granular_restaurant_staff_permissions`
 > 3. `20261102120000_require_loyalty_permission_for_reward_fulfillment`
