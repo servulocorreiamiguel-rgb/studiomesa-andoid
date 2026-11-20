@@ -1271,9 +1271,65 @@ echo "PASS: purchase cost creation is idempotent, waste snapshots preserve each 
 # users for restaurants A/B. All records are created only in this disposable database.
 MEMBER_A="$(join_customer "$USER_E" "SMOKEAA001" "CI Customer A")"
 MEMBER_B="$(join_customer "$USER_F" "SMOKEBB001" "CI Customer B")"
+MEMBER_A_B="$(join_customer "$USER_E" "SMOKEBB001" "CI Customer A")"
 test -n "$MEMBER_A"
 test -n "$MEMBER_B"
+test -n "$MEMBER_A_B"
 test "$MEMBER_A" != "$MEMBER_B"
+test "$MEMBER_A" != "$MEMBER_A_B"
+test "$MEMBER_B" != "$MEMBER_A_B"
+
+customer_multi_card_count="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT count(*)::text FROM public.get_my_loyalty_membership();
+ROLLBACK;
+SQL
+)"
+if [ "$customer_multi_card_count" != "2" ]; then
+  echo "ERROR: one customer account could not retrieve both restaurant cards." >&2
+  exit 1
+fi
+echo "PASS: one customer account can hold separate loyalty cards at multiple restaurants."
+
+# Legacy client RPC overloads continue to target the oldest card only.
+legacy_marketing_default="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT public.get_my_marketing_opt_in()::text;
+ROLLBACK;
+SQL
+)"
+if [ "$legacy_marketing_default" != "false" ]; then
+  echo "ERROR: legacy marketing consent wrapper did not use the oldest customer card." >&2
+  exit 1
+fi
+
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT public.set_my_marketing_opt_in(true);
+SELECT public.set_my_marketing_opt_in('$MEMBER_A'::uuid, false);
+COMMIT;
+SQL
+
+legacy_qr_token="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT qr_token::text FROM public.create_loyalty_qr_token();
+COMMIT;
+SQL
+)"
+legacy_qr_member="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT member_id::text FROM private.loyalty_qr_tokens WHERE token='$legacy_qr_token'::uuid;")"
+if [ "$legacy_qr_member" != "$MEMBER_A" ]; then
+  echo "ERROR: legacy QR wrapper did not scope to the oldest membership." >&2
+  exit 1
+fi
 
 # Server-owned entitlements cannot be edited by an authenticated owner or staff member.
 if psql --no-psqlrc --quiet --set ON_ERROR_STOP=1 <<SQL >/dev/null 2>&1
@@ -2022,6 +2078,73 @@ if [ "$loyalty_balance_ok" != "t" ] || [ "$loyalty_transaction_ok" != "t" ] || [
   exit 1
 fi
 echo "PASS: QR replacement, restaurant authorization, one-use enforcement and safe retry."
+
+# The same customer can accrue and redeem points through a second restaurant card.
+LOYALTY_QR_B_REQUEST="88888888-8888-4888-8888-888888888889"
+LOYALTY_QR_B_TOKEN="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT qr_token::text
+FROM public.create_loyalty_qr_token('$MEMBER_A_B'::uuid);
+COMMIT;
+SQL
+)"
+test -n "$LOYALTY_QR_B_TOKEN"
+
+LOYALTY_B_POINTS="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
+SET LOCAL ROLE authenticated;
+SELECT points::text FROM public.award_loyalty_points_from_qr(
+  '$LOYALTY_QR_B_TOKEN'::uuid, 20, '$LOYALTY_QR_B_REQUEST'::uuid, 'CI second restaurant receipt'
+);
+COMMIT;
+SQL
+)"
+if [ "$LOYALTY_B_POINTS" != "20" ]; then
+  echo "ERROR: the second restaurant did not credit the selected customer card." >&2
+  exit 1
+fi
+
+LOYALTY_REWARD_B_ID="99999999-3333-4333-8333-333333333333"
+LOYALTY_REDEEM_B_REQUEST="99999999-4444-4444-8444-444444444444"
+psql --no-psqlrc --set ON_ERROR_STOP=1 <<SQL >/dev/null
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_B', true);
+SET LOCAL ROLE authenticated;
+SELECT public.save_loyalty_reward(
+  '$RESTAURANT_B'::uuid, '$LOYALTY_REWARD_B_ID'::uuid,
+  'CI Restaurant B Reward', 'Second restaurant reward', 10, 5, true
+);
+COMMIT;
+SQL
+
+LOYALTY_B_REDEMPTION="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 <<SQL | tail -n 1
+BEGIN;
+SELECT set_config('request.jwt.claim.sub', '$USER_E', true);
+SET LOCAL ROLE authenticated;
+SELECT points_remaining::text || '|' || status
+FROM public.redeem_loyalty_reward(
+  '$MEMBER_A_B'::uuid, '$LOYALTY_REWARD_B_ID'::uuid, '$LOYALTY_REDEEM_B_REQUEST'::uuid
+);
+COMMIT;
+SQL
+)"
+if [ "$LOYALTY_B_REDEMPTION" != "10|pending" ]; then
+  echo "ERROR: the selected second card could not redeem its own restaurant's reward." >&2
+  exit 1
+fi
+
+multi_card_balances="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT (SELECT points FROM public.loyalty_members WHERE id='$MEMBER_A'::uuid)::text || '|' || (SELECT points FROM public.loyalty_members WHERE id='$MEMBER_A_B'::uuid)::text;")"
+multi_card_ledger="$(psql --no-psqlrc --quiet --tuples-only --no-align --set ON_ERROR_STOP=1 \
+  -c "SELECT count(*)::text FROM public.loyalty_transactions WHERE member_id='$MEMBER_A_B'::uuid;")"
+if [ "$multi_card_balances" != "10|10" ] || [ "$multi_card_ledger" != "2" ]; then
+  echo "ERROR: points or ledger entries leaked between a customer's two restaurant cards." >&2
+  exit 1
+fi
+echo "PASS: one customer can earn and redeem points at a second restaurant without changing the first card."
 
 # Customer redeems the reward once. The same request key returns the original
 # redemption; points and stock are updated atomically.
