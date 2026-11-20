@@ -86,6 +86,26 @@ class StudioMesaNotificationSnapshotTest {
     }
 
     @Test
+    fun destinationIsPreservedWithNotificationEvent() {
+        val event = StudioMesaNotificationEvent(
+            key = "restaurant:order:42",
+            state = "aberto",
+            title = "Novo pedido",
+            message = "Foi recebido um novo pedido.",
+            destination = "Cozinha",
+            notifyOnNew = true
+        )
+
+        val result = StudioMesaNotificationSnapshot.compare(
+            emptyMap(),
+            listOf(event),
+            initialized = true
+        )
+
+        assertEquals("Cozinha", result.notifications.single().destination)
+    }
+
+    @Test
     fun snapshotIsBounded() {
         val events = (1..6).map {
             StudioMesaNotificationEvent(
