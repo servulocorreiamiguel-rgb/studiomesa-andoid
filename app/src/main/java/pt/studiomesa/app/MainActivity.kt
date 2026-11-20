@@ -4573,10 +4573,12 @@ class MainActivity : ComponentActivity() {
         val token = backendToken()
         val accountId = backendPrefs.getString("user_id", "").orEmpty()
         val restaurantId = backendRestaurantId()
+        val memberId = backendMemberId()
         val role = backendPrefs.getString("restaurant_role", "").orEmpty()
         val permissions = currentStaffPermissions.orEmpty()
 
         if (accountId.isBlank()) return
+        if (isCustomerApp && memberId.isBlank()) return
         if (!isCustomerApp && role == "staff" && currentStaffPermissions == null) return
 
         activityNotificationRefreshInFlight = true
@@ -4585,7 +4587,7 @@ class MainActivity : ComponentActivity() {
             try {
                 val events = mutableListOf<StudioMesaNotificationEvent>()
                 if (isCustomerApp) {
-                    val reservations = SupabaseApi.listMyRestaurantReservations(token)
+                    val reservations = SupabaseApi.listMyRestaurantReservations(token, memberId)
                     for (index in 0 until reservations.length()) {
                         val item = reservations.optJSONObject(index) ?: continue
                         val id = item.optString("reservation_id").trim()
@@ -4605,7 +4607,7 @@ class MainActivity : ComponentActivity() {
                         )
                     }
 
-                    val redemptions = SupabaseApi.listMyLoyaltyRewardRedemptions(token)
+                    val redemptions = SupabaseApi.listMyLoyaltyRewardRedemptions(token, memberId)
                     for (index in 0 until redemptions.length()) {
                         val item = redemptions.optJSONObject(index) ?: continue
                         val id = item.optString("redemption_id").trim()
