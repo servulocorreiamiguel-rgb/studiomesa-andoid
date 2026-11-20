@@ -18,6 +18,13 @@ val releaseKeystorePassword = providers.environmentVariable("ANDROID_KEYSTORE_PA
 val releaseKeyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").orNull
 val releaseKeyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").orNull
 
+// Optional device-specific APK build; normal and commercial builds remain multi-ABI.
+val targetAbi = providers.gradleProperty("studiomesaTargetAbi").orNull?.trim()?.takeIf { it.isNotEmpty() }
+val supportedTargetAbis = setOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+if (targetAbi != null && targetAbi !in supportedTargetAbis) {
+    throw GradleException("Unsupported -PstudiomesaTargetAbi value: $targetAbi")
+}
+
 if (commercialRelease) {
     val applicationIdPattern = Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+$")
     if (releaseApplicationId.isNullOrBlank() || !applicationIdPattern.matches(releaseApplicationId)) {
@@ -54,6 +61,11 @@ android {
         versionName = "1.5.0"
         buildConfigField("boolean", "ADVANCED_ASSISTANT_CLOUD_ENABLED", advancedAssistantCloudEnabled.toString())
         buildConfigField("boolean", "SOCIAL_LOGIN_BUTTONS_ENABLED", socialLoginButtonsEnabled.toString())
+        if (targetAbi != null) {
+            ndk {
+                abiFilters += targetAbi
+            }
+        }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
