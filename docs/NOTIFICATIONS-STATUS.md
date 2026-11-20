@@ -8,6 +8,7 @@
 - Cliente: alteração de estado das próprias reservas e confirmação de entrega de recompensas.
 - Restaurante: novos pedidos e novas reservas; o proprietário também recebe novos resgates na loja de pontos.
 - Snapshot por conta/aplicação, para evitar repetir notificações e não disparar alertas antigos no primeiro carregamento.
+- Ao tocar numa notificação, a app abre a secção correspondente: Cozinha, Reservas, Pontos ou Cartão. O destino é validado por lista permitida e, na Gestão, pela matriz de permissões carregada do servidor.
 
 Os textos das notificações são genéricos e não incluem nome, telefone, valor de fatura ou conteúdo privado. Os pedidos ao servidor usam a sessão autenticada existente.
 
