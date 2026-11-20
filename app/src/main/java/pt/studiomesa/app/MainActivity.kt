@@ -60,12 +60,14 @@ class MainActivity : ComponentActivity() {
         private const val REQUEST_EXPORT_ORDERS_CSV = 7812
         private const val REQUEST_IMPORT_SUPPLIER_INVOICE = 7813
         private const val REQUEST_IMPORT_SAFT_SALES = 7814
+        const val EXTRA_NOTIFICATION_DESTINATION = "pt.studiomesa.extra.NOTIFICATION_DESTINATION"
     }
 
     private lateinit var store: RestaurantStore
     private lateinit var appRoot: LinearLayout
     private var activePage = "Início"
     private var activeCustomerPage = "Cartão"
+    private var pendingNotificationDestination: String? = null
 
     private var activityResumed = false
     private var activityNotificationRefreshScheduled = false
@@ -276,6 +278,8 @@ class MainActivity : ComponentActivity() {
         }
         window.statusBarColor = forestDeep
         window.navigationBarColor = forestDeep
+        captureNotificationDestination(intent)
+        applyPendingNotificationDestination()
         if (isCustomerApp && backendToken().isBlank() &&
             !backendPrefs.getBoolean("customer_entry_choice_complete_v1", false)) {
             renderCustomerEntryScreen()
@@ -417,6 +421,61 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleAuthCallback(intent)
+        captureNotificationDestination(intent)
+        if (pendingNotificationDestination != null) {
+            if (isCustomerApp) {
+                applyPendingNotificationDestination()
+                renderCustomerApp()
+                if (activeCustomerPage == "Avisos") refreshCustomerNotifications()
+            } else if (backendToken().isNotBlank() && hasRemoteRestaurant()) {
+                if (
+                    backendPrefs.getString("restaurant_role", "").orEmpty() == "staff" &&
+                    currentStaffPermissions == null
+                ) {
+                    refreshRemoteOperations()
+                } else {
+                    applyPendingNotificationDestination()
+                    renderApp()
+                }
+            } else {
+                pendingNotificationDestination = null
+            }
+        }
+    }
+
+    private fun captureNotificationDestination(source: Intent?) {
+        val requested = source?.getStringExtra(EXTRA_NOTIFICATION_DESTINATION)?.trim()
+        source?.removeExtra(EXTRA_NOTIFICATION_DESTINATION)
+        if (!requested.isNullOrBlank()) pendingNotificationDestination = requested
+    }
+
+    /**
+     * Notification taps are treated like navigation requests, never as authority.
+     * A restaurant destination must still survive the current server permission filter.
+     */
+    private fun applyPendingNotificationDestination(): Boolean {
+        val requested = pendingNotificationDestination ?: return false
+        if (isCustomerApp) {
+            val customerPages = setOf("Cartão", "Carta", "Avisos", "Reservas", "Conta")
+            if (requested !in customerPages) {
+                pendingNotificationDestination = null
+                return false
+            }
+            activeCustomerPage = requested
+            pendingNotificationDestination = null
+            return true
+        }
+
+        if (
+            backendPrefs.getString("restaurant_role", "").orEmpty() == "staff" &&
+            currentStaffPermissions == null
+        ) return false
+
+        val restaurantPages = setOf("Início", "Mesas", "Pedidos", "Cozinha", "Carta", "Pontos", "Reservas")
+        val resolved = requested.takeIf { it in restaurantPages && it in availablePages() }
+        pendingNotificationDestination = null
+        activePage = resolved ?: "Início"
+        return resolved != null
     }
 
     private fun parseAuthParams(raw: String?): Map<String, String> =
@@ -4599,6 +4658,7 @@ class MainActivity : ComponentActivity() {
                                 state = state,
                                 title = "Atualização da reserva",
                                 message = "O estado da tua reserva foi atualizado.",
+                                destination = "Reservas",
                                 notifyWhenStateIs = setOf(
                                     "confirmada", "confirmed", "cancelada", "cancelled",
                                     "rejeitada", "rejected"
@@ -4619,6 +4679,7 @@ class MainActivity : ComponentActivity() {
                                 state = state,
                                 title = "A tua recompensa está pronta",
                                 message = "Podes levantar a recompensa no restaurante.",
+                                destination = "Cartão",
                                 notifyWhenStateIs = setOf("fulfilled", "entregue")
                             )
                         )
@@ -4638,6 +4699,7 @@ class MainActivity : ComponentActivity() {
                                     state = item.optString("status").ifBlank { "ativo" },
                                     title = "Novo pedido recebido",
                                     message = "Foi recebido um novo pedido para a cozinha.",
+                                    destination = "Cozinha",
                                     notifyOnNew = true
                                 )
                             )
@@ -4656,6 +4718,7 @@ class MainActivity : ComponentActivity() {
                                     state = item.optString("status").ifBlank { "pendente" },
                                     title = "Novo pedido de reserva",
                                     message = "Foi recebido um novo pedido de reserva.",
+                                    destination = "Reservas",
                                     notifyOnNew = true
                                 )
                             )
@@ -4677,6 +4740,7 @@ class MainActivity : ComponentActivity() {
                                     state = item.optString("status").ifBlank { "pending" },
                                     title = "Novo resgate na loja de pontos",
                                     message = "Um cliente reservou uma recompensa para levantar.",
+                                    destination = "Pontos",
                                     notifyOnNew = true
                                 )
                             )
@@ -4736,7 +4800,7 @@ class MainActivity : ComponentActivity() {
             .apply()
 
         result.notifications.forEach { event ->
-            StudioMesaNotificationCenter.show(this, event.key, event.title, event.message)
+            StudioMesaNotificationCenter.show(this, event.key, event.title, event.message, event.destination)
         }
     }
 
@@ -5348,6 +5412,7 @@ class MainActivity : ComponentActivity() {
             kitchenOrdersCache = null
             kitchenQueueUpdatedAtMillis = System.currentTimeMillis()
             kitchenQueueRefreshFailed = false
+            applyPendingNotificationDestination()
             renderApp()
         }
     }
