@@ -2,7 +2,7 @@ name: Build StudioMesa Android APK
 
 on:
   push:
-    branches: ["main", "feature/auth-verification-oauth", "feature/customer-guest-account-entry", "feature/customer-multiple-restaurant-cards"]
+    branches: ["main", "feature/auth-verification-oauth", "feature/customer-guest-account-entry", "feature/customer-multiple-restaurant-cards", "work/mobile-completion-2026-11-20"]
   pull_request:
     branches: ["main", "integration/non-ai-core-2026-11-05", "feature/auth-verification-oauth", "feature/customer-guest-account-entry"]
   workflow_dispatch:
