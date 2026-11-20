@@ -188,8 +188,17 @@ class MainActivity : ComponentActivity() {
     private val pendingRequestIds by lazy { PendingRequestIds(this) }
     // Reservation contacts, reward history and staff permissions are memory-only.
     private var currentStaffPermissions: Set<String>? = null
+    private var customerMembershipsCache = JSONArray()
     private var customerReservationsCache = JSONArray()
     private var customerRedemptionHistory = JSONArray()
+    private var reactivationMembersCache = JSONArray()
+    private var reactivationMembersLoaded = false
+    private var reactivationMembersRestaurantId: String? = null
+    private var reactivationDashboardCheckInFlight = false
+    private var reactivationDashboardCheckedAtMillis = 0L
+    private var reactivationDashboardLastAttemptAtMillis = 0L
+    private var customerMarketingNotificationsCache = JSONArray()
+    private var marketingOptInPrefLoaded = false
     // Reservation contacts are kept in memory only, not persisted to SharedPreferences.
     private var reservationCache = JSONArray()
     private var reservationsLoaded = false
@@ -256,15 +265,20 @@ class MainActivity : ComponentActivity() {
         }
         window.statusBarColor = forestDeep
         window.navigationBarColor = forestDeep
-        renderApp()
+        if (isCustomerApp && backendToken().isBlank() &&
+            !backendPrefs.getBoolean("customer_entry_choice_complete_v1", false)) {
+            renderCustomerEntryScreen()
+        } else {
+            renderApp()
+        }
         handleAuthCallback(intent)
 
         // Refresh shared data when an already-authenticated user opens the app,
         // but do not start a second request while processing an OAuth callback.
         if (intent?.data == null && backendToken().isNotBlank()) {
-            if (isCustomerApp && backendMemberId().isNotBlank()) {
+            if (isCustomerApp) {
                 refreshCustomerMembership()
-            } else if (!isCustomerApp && hasRemoteRestaurant()) {
+            } else if (hasRemoteRestaurant()) {
                 refreshRemoteOperations()
             }
         }
@@ -311,6 +325,13 @@ class MainActivity : ComponentActivity() {
             val contents = scanResult.contents
             if (contents.isNullOrBlank()) {
                 Toast.makeText(this, "Leitura do QR cancelada.", Toast.LENGTH_SHORT).show()
+            } else if (isCustomerApp && RestaurantJoinQrParser.hasPrefix(contents)) {
+                val inviteCode = RestaurantJoinQrParser.extractCode(contents)
+                if (inviteCode == null) {
+                    Toast.makeText(this, "O QR de adesão não contém um código válido.", Toast.LENGTH_LONG).show()
+                } else {
+                    showCustomerJoinCodeDialog(inviteCode)
+                }
             } else {
                 handleLoyaltyQrPayload(contents)
             }
@@ -429,6 +450,9 @@ class MainActivity : ComponentActivity() {
             else restoreOwnedRestaurant(session.accessToken)
             "SIGNED_IN"
         }, refreshSession = false) {
+            if (isCustomerApp) {
+                backendPrefs.edit().putBoolean("customer_entry_choice_complete_v1", true).apply()
+            }
             if (isPasswordRecovery) {
                 showSetNewPasswordDialog()
             } else {
@@ -445,6 +469,9 @@ class MainActivity : ComponentActivity() {
 
     private fun availablePages(): List<String> {
         val pages = mutableListOf("Início", "Mesas", "Pedidos", "Cozinha", "Carta", "Pontos", "IA", "Assistente económico", "Conta")
+        if (hasRemoteRestaurant() && backendPrefs.getString("restaurant_role", "") == "owner") {
+            pages.add("Marketing")
+        }
         if (hasCalculator) {
             pages.add("Reservas")
             pages.add("Preço Justo")
@@ -522,7 +549,7 @@ class MainActivity : ComponentActivity() {
         }
         val pageGroups = listOf(
             "OPERAÇÃO" to listOf("Início", "Mesas", "Pedidos", "Cozinha"),
-            "GESTÃO DO RESTAURANTE" to listOf("Carta", "Pontos", "Reservas", "Preço Justo", "Stock", "Análise"),
+            "GESTÃO DO RESTAURANTE" to listOf("Carta", "Pontos", "Marketing", "Reservas", "Preço Justo", "Stock", "Análise"),
             "ASSISTÊNCIA" to listOf("IA", "Assistente económico"),
             "CONTA" to listOf("Conta")
         )
@@ -598,6 +625,8 @@ class MainActivity : ComponentActivity() {
         "Cozinha" -> "◉"
         "Carta" -> "▤"
         "Pontos" -> "◎"
+        "Marketing" -> "✦"
+        "Avisos" -> "♢"
         "Conta" -> "⚙"
         "Reservas" -> "◷"
         "Preço Justo" -> "€"
@@ -1272,7 +1301,7 @@ class MainActivity : ComponentActivity() {
             if (assistantDeepThinkingEnabled && modelInstalled)
                 "Modo aprofundado: verifica dados e compara opções; não expõe raciocínio interno."
             else if (modelInstalled)
-                "As mensagens são processadas no dispositivo. Sem API ou custo por mensagem."
+                "O modelo gera respostas neste telemóvel, sem depender de um servidor de IA."
             else
                 "Sem modelo instalado, continuam disponíveis as respostas locais baseadas em regras.",
             9f, false, muted
@@ -3732,6 +3761,7 @@ class MainActivity : ComponentActivity() {
             "Cozinha" -> renderKitchen(container)
             "Carta" -> renderMenu(container)
             "Pontos" -> renderCustomers(container)
+            "Marketing" -> renderReactivationMarketing(container)
             "Conta" -> renderBackendAccount(container)
             "Preço Justo" -> renderPriceCalculator(container)
             "Reservas" -> renderReservations(container)
@@ -3746,6 +3776,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun renderHome(container: LinearLayout) {
+        checkInactiveMembersForDashboard()
         container.addView(label("Painel de operação", 10f, true, forestSoft))
         addGap(container, 5)
         container.addView(label("A sala, num relance.", 27f, true, forestDeep))
@@ -3775,6 +3806,36 @@ class MainActivity : ComponentActivity() {
         stats.addView(statCard("PEDIDOS ATIVOS", activeOrders.toString(), if (activeOrders > 0) copper else forestSoft),
             LinearLayout.LayoutParams(0, -2, 1f).apply { setMargins(dp(6), 0, 0, 0) })
         container.addView(stats)
+
+        if (hasRemoteRestaurant() && backendPrefs.getString("restaurant_role", "") == "owner" &&
+            reactivationMembersLoaded &&
+            reactivationMembersRestaurantId == backendRestaurantId() &&
+            reactivationMembersCache.length() > 0) {
+            var eligible = 0
+            for (i in 0 until reactivationMembersCache.length()) {
+                val member = reactivationMembersCache.optJSONObject(i) ?: continue
+                if (member.optBoolean("marketing_opt_in", false) && member.optBoolean("has_account", false)) eligible++
+            }
+            addGap(container, 12)
+            val alertCard = makeCard(14, copperPale)
+            alertCard.addView(label("CLIENTES A RECUPERAR", 10f, true, forest))
+            addGap(alertCard, 5)
+            alertCard.addView(label(
+                reactivationMembersCache.length().toString() + " clientes sem atividade de pontos registada há 30 ou mais dias.",
+                15f, true, forestDeep
+            ))
+            addGap(alertCard, 4)
+            alertCard.addView(label(
+                eligible.toString() + " autorizaram receber campanhas. Podes preparar uma mensagem e uma oferta.",
+                12f, false, ink
+            ))
+            addGap(alertCard, 8)
+            alertCard.addView(primaryButton("Ver clientes e criar campanha") {
+                activePage = "Marketing"
+                renderApp()
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+            container.addView(alertCard, cardParams())
+        }
 
         addGap(container, 21)
         sectionHeading(container, "Acesso rápido", "Escolhe uma área para continuar.")
@@ -5047,44 +5108,112 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun restoreCustomerMembership(token: String) {
+    private fun loadSelectedCustomerMembership(
+        token: String,
+        memberships: JSONArray,
+        memberId: String
+    ) {
+        var selected: JSONObject? = null
+        for (index in 0 until memberships.length()) {
+            val item = memberships.optJSONObject(index) ?: continue
+            if (item.optString("member_id") == memberId) {
+                selected = item
+                break
+            }
+        }
+        val member = selected ?: throw IllegalStateException("O cartão selecionado já não está associado a esta conta.")
+        val menu = SupabaseApi.listCustomerMenu(token, memberId)
+        val rewards = SupabaseApi.listCustomerRewards(token, memberId)
+        val redemptions = SupabaseApi.listMyLoyaltyRewardRedemptions(token, memberId)
+        val reservations = SupabaseApi.listMyRestaurantReservations(token, memberId)
+        val marketingOptIn = SupabaseApi.getMyMarketingOptIn(token, memberId)
+        customerMembershipsCache = memberships
+        customerRedemptionHistory = redemptions
+        customerReservationsCache = reservations
+        marketingOptInPrefLoaded = true
+        backendPrefs.edit()
+            .putString("customer_memberships_json", memberships.toString())
+            .putString("member_id", memberId)
+            .putBoolean("marketing_opt_in", marketingOptIn)
+            .putString("member_code", member.optString("member_code"))
+            .putInt("member_points", member.optInt("points", 0))
+            .putString("member_restaurant_name", member.optString("restaurant_name"))
+            .putString("customer_menu_json", menu.toString())
+            .putString("customer_rewards_json", rewards.toString())
+            .apply()
+        val displayName = member.optString("display_name").trim()
+        if (displayName.isNotBlank()) store.saveCustomerProfileName(displayName)
+    }
+
+    private fun restoreCustomerMembership(token: String, preferredMemberId: String? = null) {
         if (!isCustomerApp || token.isBlank()) return
         try {
-            val member = SupabaseApi.getMyLoyaltyMembership(token)
-            if (member == null) {
+            val memberships = SupabaseApi.listMyLoyaltyMemberships(token)
+            if (memberships.length() == 0) {
+                customerMembershipsCache = JSONArray()
+                customerReservationsCache = JSONArray()
+                customerRedemptionHistory = JSONArray()
                 backendPrefs.edit()
                     .remove("member_id")
                     .remove("member_code")
                     .remove("member_points")
                     .remove("member_restaurant_name")
+                    .remove("marketing_opt_in")
+                    .putString("customer_memberships_json", "[]")
                     .putString("customer_menu_json", "[]")
                     .putString("customer_rewards_json", "[]")
                     .apply()
-                customerReservationsCache = JSONArray()
-                customerRedemptionHistory = JSONArray()
+                marketingOptInPrefLoaded = false
                 return
             }
 
-            val memberId = member.optString("member_id")
-            val menu = if (memberId.isNotBlank()) SupabaseApi.listCustomerMenu(token, memberId) else org.json.JSONArray()
-            val rewards = if (memberId.isNotBlank()) SupabaseApi.listCustomerRewards(token, memberId) else JSONArray()
-            val redemptions = if (memberId.isNotBlank()) SupabaseApi.listMyLoyaltyRewardRedemptions(token) else JSONArray()
-            val reservations = if (memberId.isNotBlank()) SupabaseApi.listMyRestaurantReservations(token) else JSONArray()
-            customerRedemptionHistory = redemptions
-            customerReservationsCache = reservations
-            backendPrefs.edit()
-                .putString("member_id", memberId)
-                .putString("member_code", member.optString("member_code"))
-                .putInt("member_points", member.optInt("points", 0))
-                .putString("member_restaurant_name", member.optString("restaurant_name"))
-                .putString("customer_menu_json", menu.toString())
-                .putString("customer_rewards_json", rewards.toString())
-                .apply()
-            val displayName = member.optString("display_name").trim()
-            if (displayName.isNotBlank()) store.saveCustomerProfileName(displayName)
+            val savedId = preferredMemberId?.takeIf { it.isNotBlank() }
+                ?: backendPrefs.getString("member_id", "").orEmpty()
+            val memberIds = (0 until memberships.length()).mapNotNull { index ->
+                memberships.optJSONObject(index)?.optString("member_id")
+            }
+            val selectedId = CustomerMembershipSelectionPolicy
+                .selectMemberId(memberIds, savedId)
+                ?: throw IllegalStateException("O servidor devolveu cartões sem identificador.")
+            loadSelectedCustomerMembership(token, memberships, selectedId)
         } catch (_: Exception) {
-            // Do not discard a valid login if the membership is temporarily unavailable.
+            // Do not discard a valid login if membership data is temporarily unavailable.
         }
+    }
+
+    private fun showCustomerMembershipPicker() {
+        val memberships = if (customerMembershipsCache.length() > 0) {
+            customerMembershipsCache
+        } else {
+            runCatching {
+                JSONArray(backendPrefs.getString("customer_memberships_json", "[]") ?: "[]")
+            }.getOrDefault(JSONArray())
+        }
+        if (memberships.length() <= 1) {
+            showCustomerJoinDialog()
+            return
+        }
+        val labels = Array(memberships.length()) { index ->
+            val item = memberships.optJSONObject(index)
+            val name = item?.optString("restaurant_name").orEmpty().ifBlank { "Restaurante" }
+            val points = item?.optInt("points", 0) ?: 0
+            val selected = item?.optString("member_id") == backendMemberId()
+            (if (selected) "✓ " else "") + name + " · $points pontos"
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Os meus restaurantes")
+            .setItems(labels) { _, index ->
+                val targetId = memberships.optJSONObject(index)?.optString("member_id").orEmpty()
+                if (targetId.isNotBlank() && targetId != backendMemberId()) {
+                    runBackend({
+                        val allMemberships = SupabaseApi.listMyLoyaltyMemberships(backendToken())
+                        loadSelectedCustomerMembership(backendToken(), allMemberships, targetId)
+                        "OK"
+                    }) { renderCustomerApp() }
+                }
+            }
+            .setPositiveButton("Fechar", null)
+            .show()
     }
 
 
@@ -5111,6 +5240,8 @@ class MainActivity : ComponentActivity() {
             .remove("staff_join_code").remove("restaurant_role")
             .remove("member_id").remove("member_code").remove("member_points")
             .remove("member_restaurant_name")
+            .remove("marketing_opt_in")
+            .remove("customer_memberships_json")
             .remove("remote_members_json").remove("remote_tables_json")
             .remove("remote_menu_json").remove("remote_orders_json")
             .remove("customer_menu_json")
@@ -5120,9 +5251,16 @@ class MainActivity : ComponentActivity() {
             .apply()
 
         currentStaffPermissions = null
+        customerMembershipsCache = JSONArray()
         reservationCache = JSONArray()
         customerReservationsCache = JSONArray()
         customerRedemptionHistory = JSONArray()
+        customerMarketingNotificationsCache = JSONArray()
+        marketingOptInPrefLoaded = false
+        reactivationMembersCache = JSONArray()
+        reactivationMembersLoaded = false
+        reactivationMembersRestaurantId = null
+        reactivationDashboardCheckedAtMillis = 0L
         reservationsLoaded = false
     }
 
@@ -5192,6 +5330,52 @@ class MainActivity : ComponentActivity() {
         }.start()
     }
 
+    private fun showRecoveryOtpDialog(email: String) {
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(10), dp(22), dp(4))
+        }
+        val codeField = inputField("Código de 6 algarismos", InputType.TYPE_CLASS_NUMBER)
+        codeField.filters = arrayOf(InputFilter.LengthFilter(6))
+        form.addView(label("Código enviado para $email", 12f, false, muted))
+        addGap(form, 8)
+        form.addView(codeField, fieldParams())
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Confirmar recuperação")
+            .setMessage("Introduz o código recebido por email. O código só pode ser utilizado uma vez.")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Verificar código", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val otp = codeField.text.toString().trim()
+                if (!otp.matches(Regex("^\\d{6}$"))) {
+                    codeField.error = "Introduz os seis algarismos do email"
+                    return@setOnClickListener
+                }
+                runBackend({
+                    val session = SupabaseApi.verifyPasswordRecoveryOtp(email, otp)
+                    secureSession.save(session.accessToken, session.refreshToken)
+                    secureSession.clearPendingCodeVerifier()
+                    prepareForAuthenticatedUser(session.userId)
+                    backendPrefs.edit()
+                        .putString("user_id", session.userId)
+                        .putString("user_email", session.email)
+                        .apply()
+                    if (isCustomerApp) restoreCustomerMembership(session.accessToken)
+                    else restoreOwnedRestaurant(session.accessToken)
+                    "VERIFIED"
+                }, refreshSession = false) {
+                    dialog.dismiss()
+                    showSetNewPasswordDialog()
+                }
+            }
+        }
+        dialog.show()
+    }
+
     private fun showSetNewPasswordDialog() {
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -5253,14 +5437,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showAuthChooser(afterAuth: () -> Unit) {
-        // Use explicit buttons in a custom view. Combining setMessage and setItems
-        // can render inconsistently across Android dialog implementations.
+        // Keep email/password available immediately, even when the network is slow.
+        // Social buttons are added only after Supabase confirms each provider is enabled.
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(22), dp(12), dp(22), dp(6))
         }
         form.addView(label(
-            "Primeira utilização? Escolhe «Criar conta». Se já tens uma conta, escolhe «Iniciar sessão».",
+            "Primeira utilização? Escolhe «Criar conta». Se já tens uma conta, escolhe «Já tenho uma conta».",
             13f, false, muted
         ))
         addGap(form, 14)
@@ -5276,7 +5460,7 @@ class MainActivity : ComponentActivity() {
             showCredentialsDialog(true, afterAuth)
         }, LinearLayout.LayoutParams(-1, dp(48)))
         addGap(form, 8)
-        form.addView(secondaryButton("Iniciar sessão") {
+        form.addView(secondaryButton("Já tenho uma conta") {
             dialog.dismiss()
             showCredentialsDialog(false, afterAuth)
         }, LinearLayout.LayoutParams(-1, dp(48)))
@@ -5298,6 +5482,29 @@ class MainActivity : ComponentActivity() {
         }
 
         dialog.show()
+
+        Thread {
+            val enabledProviders = listOf("google", "azure").filter { provider ->
+                runCatching { SupabaseApi.isOAuthProviderEnabled(provider) }.getOrDefault(false)
+            }
+            runOnUiThread {
+                if (isFinishing || !dialog.isShowing) return@runOnUiThread
+                if ("google" in enabledProviders) {
+                    addGap(form, 8)
+                    form.addView(secondaryButton("Continuar com Google") {
+                        dialog.dismiss()
+                        startOAuth("google")
+                    }, LinearLayout.LayoutParams(-1, dp(48)))
+                }
+                if ("azure" in enabledProviders) {
+                    addGap(form, 8)
+                    form.addView(secondaryButton("Continuar com Microsoft (Outlook)") {
+                        dialog.dismiss()
+                        startOAuth("azure")
+                    }, LinearLayout.LayoutParams(-1, dp(48)))
+                }
+            }
+        }.start()
     }
 
     private fun createPkceVerifier(): String {
@@ -5392,8 +5599,11 @@ class MainActivity : ComponentActivity() {
                         dialog.dismiss()
                         AlertDialog.Builder(this)
                             .setTitle("Verifica o teu email")
-                            .setMessage("Se existir uma conta com este endereço, será enviado um email para recuperar o acesso. Abre a ligação no mesmo telemóvel para definires uma nova palavra-passe. Verifica também Spam.")
-                            .setPositiveButton("OK", null)
+                            .setMessage("Se existir uma conta com este endereço, será enviado um email de recuperação. Podes abrir a ligação recebida ou, quando o email estiver configurado para códigos, introduzir aqui o código de seis algarismos. Verifica também Spam.")
+                            .setNegativeButton("Fechar", null)
+                            .setPositiveButton("Introduzir código") { _, _ ->
+                                showRecoveryOtpDialog(email)
+                            }
                             .show()
                     }
                 }
@@ -6089,9 +6299,15 @@ class MainActivity : ComponentActivity() {
                 .putBoolean("local_demo_data_isolated_v1", true)
                 .apply()
             currentStaffPermissions = null
+            customerMembershipsCache = JSONArray()
             reservationCache = JSONArray()
             customerReservationsCache = JSONArray()
             customerRedemptionHistory = JSONArray()
+            customerMarketingNotificationsCache = JSONArray()
+            marketingOptInPrefLoaded = false
+            reactivationMembersCache = JSONArray()
+            reactivationMembersLoaded = false
+            reactivationMembersRestaurantId = null
             reservationsLoaded = false
 
             if (isCustomerApp) renderCustomerApp() else renderApp()
@@ -6158,13 +6374,473 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun createStudioMesaQrBitmap(payload: String, sizePx: Int): Bitmap {
+        val hints = hashMapOf<EncodeHintType, Any>(EncodeHintType.MARGIN to 1)
+        val matrix = MultiFormatWriter().encode(
+            payload, BarcodeFormat.QR_CODE, sizePx, sizePx, hints
+        )
+        val bitmap = Bitmap.createBitmap(matrix.width, matrix.height, Bitmap.Config.ARGB_8888)
+        for (y in 0 until matrix.height) {
+            for (x in 0 until matrix.width) {
+                bitmap.setPixel(x, y, if (matrix[x, y]) Color.BLACK else Color.WHITE)
+            }
+        }
+        return bitmap
+    }
+
     private fun showRestaurantJoinCode() {
-        val code = backendPrefs.getString("join_code", "") ?: ""
+        val code = backendPrefs.getString("join_code", "")?.trim()?.uppercase(Locale.ROOT).orEmpty()
+        if (!code.matches(Regex("^[A-Z0-9]{6,12}$"))) {
+            AlertDialog.Builder(this)
+                .setTitle("Código indisponível")
+                .setMessage("Não foi possível obter o código de adesão deste restaurante. Atualiza os dados da conta e tenta novamente.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(18), dp(8), dp(18), dp(8))
+        }
+        val qr = runCatching {
+            createStudioMesaQrBitmap("STUDIOMESA-JOIN:$code", dp(236))
+        }.getOrNull()
+        if (qr != null) {
+            content.addView(ImageView(this).apply {
+                setImageBitmap(qr)
+                contentDescription = "QR de adesão do restaurante"
+                adjustViewBounds = true
+            }, LinearLayout.LayoutParams(dp(236), dp(236)))
+        } else {
+            content.addView(emptyCard("Não foi possível gerar a imagem QR neste dispositivo."))
+        }
+        addGap(content, 8)
+        content.addView(label("CÓDIGO DE ADESÃO", 10f, true, forestSoft))
+        addGap(content, 3)
+        content.addView(label(code, 24f, true, forestDeep))
+        addGap(content, 7)
+        content.addView(label(
+            "O cliente pode pesquisar o restaurante pelo nome e pedir aprovação, ou ler este QR para aderir diretamente. Mantém este convite junto do restaurante.",
+            12f, false, muted
+        ))
         AlertDialog.Builder(this)
-            .setTitle("Código de adesão")
-            .setMessage("Código: $code\n\nO cliente deve abrir a aplicação «StudioMesa - Cliente», criar conta ou iniciar sessão e escolher «Associar ao restaurante».")
-            .setPositiveButton("OK", null)
+            .setTitle("Código e QR de adesão")
+            .setView(content)
+            .setPositiveButton("Fechar", null)
             .show()
+    }
+
+    private fun showRestaurantMembershipRequestsDialog() {
+        val restaurantId = backendRestaurantId()
+        if (backendToken().isBlank() || restaurantId.isBlank() ||
+            backendPrefs.getString("restaurant_role", "") != "owner") {
+            AlertDialog.Builder(this)
+                .setTitle("Acesso reservado")
+                .setMessage("Só o proprietário do restaurante pode aprovar pedidos de associação.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        runBackend({
+            SupabaseApi.listPendingRestaurantMembershipRequests(backendToken(), restaurantId).toString()
+        }) { raw ->
+            val requests = JSONArray(raw)
+            val content = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(18), dp(8), dp(18), dp(6))
+            }
+            if (requests.length() == 0) {
+                content.addView(emptyCard("Não existem pedidos de associação pendentes."))
+            } else {
+                for (index in 0 until requests.length()) {
+                    val item = requests.optJSONObject(index) ?: continue
+                    val requestId = item.optString("request_id")
+                    val customerName = item.optString("display_name")
+                    val requestedAt = item.optString("requested_at").replace("T", " ").take(16)
+                    val card = makeCard(13)
+                    card.addView(label(customerName, 16f, true, forestDeep))
+                    if (requestedAt.isNotBlank()) {
+                        addGap(card, 3)
+                        card.addView(label("Pedido recebido: $requestedAt", 10f, false, muted))
+                    }
+                    addGap(card, 8)
+                    val actions = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                    }
+                    actions.addView(primaryButton("Aprovar") {
+                        runBackend({
+                            SupabaseApi.reviewRestaurantMembershipRequest(
+                                backendToken(), requestId, true
+                            )
+                            SupabaseApi.listPendingRestaurantMembershipRequests(
+                                backendToken(), restaurantId
+                            ).toString()
+                        }) { updated ->
+                            AlertDialog.Builder(this)
+                                .setTitle("Pedido aprovado")
+                                .setMessage("O cartão de $customerName foi criado e associado à conta do cliente.")
+                                .setPositiveButton("OK") { _, _ ->
+                                    showRestaurantMembershipRequestsDialog()
+                                }
+                                .show()
+                        }
+                    }, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+                        setMargins(0, 0, dp(4), 0)
+                    })
+                    actions.addView(secondaryButton("Rejeitar") {
+                        AlertDialog.Builder(this)
+                            .setTitle("Rejeitar pedido?")
+                            .setMessage("O cliente não ficará associado ao programa de fidelização.")
+                            .setNegativeButton("Cancelar", null)
+                            .setPositiveButton("Rejeitar") { _, _ ->
+                                runBackend({
+                                    SupabaseApi.reviewRestaurantMembershipRequest(
+                                        backendToken(), requestId, false
+                                    )
+                                    "OK"
+                                }) {
+                                    showRestaurantMembershipRequestsDialog()
+                                }
+                            }
+                            .show()
+                    }, LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+                        setMargins(dp(4), 0, 0, 0)
+                    })
+                    card.addView(actions)
+                    content.addView(card, cardParams())
+                }
+            }
+            AlertDialog.Builder(this)
+                .setTitle("Pedidos de associação")
+                .setView(content)
+                .setPositiveButton("Fechar", null)
+                .show()
+        }
+    }
+
+    private fun checkInactiveMembersForDashboard() {
+        if (!hasRemoteRestaurant() ||
+            backendPrefs.getString("restaurant_role", "") != "owner" ||
+            backendToken().isBlank()) return
+
+        val now = System.currentTimeMillis()
+        if (reactivationDashboardCheckInFlight ||
+            (reactivationDashboardLastAttemptAtMillis > 0L &&
+             now - reactivationDashboardLastAttemptAtMillis < 5L * 60L * 1000L) ||
+            (reactivationDashboardCheckedAtMillis > 0L &&
+             now - reactivationDashboardCheckedAtMillis < 6L * 60L * 60L * 1000L)) return
+
+        reactivationDashboardCheckInFlight = true
+        reactivationDashboardLastAttemptAtMillis = now
+        Thread {
+            try {
+                refreshSessionIfNeeded()
+                val restaurantId = backendRestaurantId()
+                val members = SupabaseApi.listInactiveLoyaltyMembers(
+                    backendToken(),
+                    restaurantId,
+                    ReactivationCampaignPolicy.MIN_INACTIVITY_DAYS
+                )
+                runOnUiThread {
+                    if (!isFinishing) {
+                        reactivationMembersCache = members
+                        reactivationMembersRestaurantId = restaurantId
+                        reactivationMembersLoaded = true
+                        reactivationDashboardCheckedAtMillis = System.currentTimeMillis()
+                        reactivationDashboardCheckInFlight = false
+                        if (activePage == "Início" && !isCustomerApp) renderApp()
+                    }
+                }
+            } catch (_: Exception) {
+                runOnUiThread { reactivationDashboardCheckInFlight = false }
+            }
+        }.start()
+    }
+
+    private fun refreshReactivationMembers() {
+        if (backendToken().isBlank() || backendRestaurantId().isBlank() ||
+            backendPrefs.getString("restaurant_role", "") != "owner") {
+            AlertDialog.Builder(this)
+                .setMessage("Só o proprietário de um restaurante configurado pode consultar esta lista.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        runBackend({
+            val restaurantId = backendRestaurantId()
+            val members = SupabaseApi.listInactiveLoyaltyMembers(
+                backendToken(), restaurantId, ReactivationCampaignPolicy.MIN_INACTIVITY_DAYS
+            )
+            reactivationMembersCache = members
+            reactivationMembersRestaurantId = restaurantId
+            reactivationMembersLoaded = true
+            reactivationMembersCache.length().toString()
+        }) { count ->
+            renderApp()
+            Toast.makeText(this, count + " clientes com última atribuição positiva de pontos há 30 ou mais dias.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun renderReactivationMarketing(container: LinearLayout) {
+        pageIntro(
+            container,
+            "Recuperar clientes",
+            "Identifica clientes sem atividade de pontos registada há 30 ou mais dias e prepara uma mensagem de regresso."
+        )
+        addGap(container, 9)
+
+        if (!hasRemoteRestaurant() || backendToken().isBlank()) {
+            container.addView(emptyCard("Configura o restaurante e inicia sessão para consultar os clientes inativos."))
+            return
+        }
+        if (backendPrefs.getString("restaurant_role", "") != "owner") {
+            container.addView(emptyCard("A gestão de campanhas está reservada ao proprietário do restaurante."))
+            return
+        }
+
+        val explanation = makeCard(14, copperPale)
+        explanation.addView(label("ANÁLISE DE FIDELIZAÇÃO", 10f, true, forest))
+        addGap(explanation, 5)
+        explanation.addView(label(
+            "A última atividade é estimada pela última atribuição positiva de pontos através do sistema de fidelização. Cartões sem uma atribuição positiva registada não são classificados como inativos.",
+            12f, false, ink
+        ))
+        addGap(explanation, 5)
+        explanation.addView(label(
+            "Só recebem campanhas os clientes que ativaram a autorização de marketing na aplicação. Quem não autorizou continua visível na análise, mas fica excluído do envio.",
+            12f, true, forestDeep
+        ))
+        container.addView(explanation, cardParams())
+        addGap(container, 8)
+        container.addView(primaryButton("Atualizar clientes inativos") {
+            refreshReactivationMembers()
+        }, LinearLayout.LayoutParams(-1, dp(48)))
+
+        if (reactivationMembersRestaurantId != backendRestaurantId()) {
+            reactivationMembersCache = JSONArray()
+            reactivationMembersLoaded = false
+            reactivationMembersRestaurantId = null
+        }
+        if (!reactivationMembersLoaded) {
+            addGap(container, 8)
+            container.addView(emptyCard("Atualiza a análise para consultar os clientes que não regressam há pelo menos 30 dias."))
+            return
+        }
+
+        val total = reactivationMembersCache.length()
+        var eligible = 0
+        var excluded = 0
+        for (i in 0 until total) {
+            val item = reactivationMembersCache.optJSONObject(i) ?: continue
+            if (item.optBoolean("marketing_opt_in", false) && item.optBoolean("has_account", false)) eligible++ else excluded++
+        }
+
+        addGap(container, 12)
+        val summary = makeCard(14)
+        summary.addView(label("CLIENTES INATIVOS", 10f, true, forestSoft))
+        addGap(summary, 5)
+        summary.addView(label(total.toString(), 31f, true, forestDeep))
+        addGap(summary, 4)
+        summary.addView(label(
+            eligible.toString() + " podem receber campanhas · " + excluded + " sem autorização ou sem conta associada",
+            12f, false, muted
+        ))
+        container.addView(summary, cardParams())
+
+        if (eligible > 0) {
+            addGap(container, 8)
+            container.addView(primaryButton("Criar mensagem e promoção · " + eligible + " destinatários") {
+                showReactivationCampaignDialog(eligible)
+            }, LinearLayout.LayoutParams(-1, dp(48)))
+        } else {
+            addGap(container, 8)
+            container.addView(emptyCard("Não há destinatários autorizados. Os clientes podem ativar a receção de campanhas na secção Conta da aplicação StudioMesa · Cliente."))
+        }
+
+        addGap(container, 14)
+        container.addView(label("CLIENTES SEM ATIVIDADE RECENTE", 10f, true, forestSoft))
+        addGap(container, 5)
+        if (total == 0) {
+            container.addView(emptyCard("Não foram encontrados clientes com uma visita de fidelização registada há 30 ou mais dias."))
+            return
+        }
+
+        for (i in 0 until total) {
+            val item = reactivationMembersCache.optJSONObject(i) ?: continue
+            val name = item.optString("display_name").ifBlank { "Cliente sem nome" }
+            val code = item.optString("member_code")
+            val lastVisit = item.optString("last_visit_at").substringBefore("T")
+            val formattedDate = try {
+                val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).parse(lastVisit)
+                if (parsed != null) SimpleDateFormat("dd/MM/yyyy", Locale("pt", "PT")).format(parsed) else lastVisit
+            } catch (_: Exception) { lastVisit }
+            val contactable = item.optBoolean("marketing_opt_in", false) && item.optBoolean("has_account", false)
+            val card = makeCard(13)
+            card.addView(label(name, 15f, true, forestDeep))
+            addGap(card, 3)
+            card.addView(label("Cartão " + code + " · " + item.optInt("points", 0) + " pontos", 11f, false, muted))
+            addGap(card, 6)
+            card.addView(label("Última atribuição positiva de pontos: " + formattedDate, 12f, false, ink))
+            addGap(card, 4)
+            card.addView(label(
+                if (contactable) "AUTORIZOU receber campanhas"
+                else if (!item.optBoolean("has_account", false)) "SEM CONTA DE CLIENTE ASSOCIADA"
+                else "SEM AUTORIZAÇÃO — NÃO CONTACTAR",
+                10f, true, if (contactable) green else red
+            ))
+            container.addView(card, cardParams())
+        }
+    }
+
+    private fun showReactivationCampaignDialog(eligibleCount: Int) {
+        if (backendPrefs.getString("restaurant_role", "") != "owner" || eligibleCount <= 0) {
+            Toast.makeText(this, "Não existem destinatários autorizados para esta campanha.", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val titleField = inputField(
+            "Título da notificação",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        ).apply { setText("Temos saudades tuas!") }
+        val messageField = EditText(this).apply {
+            hint = "Escreve a mensagem que o restaurante quer enviar"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            minLines = 4
+            maxLines = 6
+            gravity = Gravity.TOP
+            filters = arrayOf(InputFilter.LengthFilter(ReactivationCampaignPolicy.MAX_MESSAGE_LENGTH))
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = rippleBackground(white, 10, line)
+            setText("Olá! Já não te vemos há algum tempo. Gostávamos de voltar a receber-te no nosso restaurante.")
+        }
+        val promotionOptions = listOf(
+            "Sem promoção" to "none",
+            "Desconto" to "discount",
+            "Cashback" to "cashback",
+            "Pontos extra" to "extra_points",
+            "Voucher / vale" to "voucher",
+            "Oferta (ex.: sobremesa)" to "free_item",
+            "Oferta personalizada" to "custom"
+        )
+        val promotionSpinner = Spinner(this).apply {
+            adapter = ArrayAdapter(
+                this@MainActivity,
+                android.R.layout.simple_spinner_item,
+                promotionOptions.map { it.first }
+            ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        }
+        val promotionTitleField = inputField(
+            "Nome da promoção",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        )
+        val promotionDetailsField = EditText(this).apply {
+            hint = "Condições ou detalhes da oferta"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            minLines = 2
+            maxLines = 4
+            filters = arrayOf(InputFilter.LengthFilter(ReactivationCampaignPolicy.MAX_PROMOTION_DETAILS_LENGTH))
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = rippleBackground(white, 10, line)
+        }
+
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(8))
+        }
+        form.addView(label("TÍTULO", 10f, true, forestSoft))
+        form.addView(titleField, fieldParams())
+        addGap(form, 6)
+        form.addView(label("MENSAGEM DO RESTAURANTE", 10f, true, forestSoft))
+        form.addView(messageField, fieldParams())
+        addGap(form, 6)
+        form.addView(label("PROMOÇÃO OPCIONAL", 10f, true, forestSoft))
+        form.addView(promotionSpinner, fieldParams())
+        addGap(form, 4)
+        form.addView(promotionTitleField, fieldParams())
+        addGap(form, 4)
+        form.addView(promotionDetailsField, fieldParams())
+        addGap(form, 7)
+        form.addView(label(
+            "A promoção é apresentada como informação na mensagem. Este envio não cria automaticamente um cupão, não aplica descontos no pagamento e não altera saldos de pontos ou cashback.",
+            11f, false, muted
+        ))
+
+        val scroll = ScrollView(this).apply {
+            isFillViewport = false
+            addView(form)
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Nova campanha de regresso")
+            .setMessage("A campanha será enviada para " + eligibleCount + " clientes que autorizaram receber marketing.")
+            .setView(scroll)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Enviar campanha", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val selectedType = promotionOptions[promotionSpinner.selectedItemPosition].second
+                val title = titleField.text.toString().trim()
+                val message = messageField.text.toString().trim()
+                val promotionTitle = promotionTitleField.text.toString().trim()
+                val promotionDetails = promotionDetailsField.text.toString().trim()
+                val validation = ReactivationCampaignPolicy.validateDraft(
+                    title, message, selectedType, promotionTitle, promotionDetails
+                )
+                if (validation != null) {
+                    AlertDialog.Builder(this)
+                        .setMessage(validation)
+                        .setPositiveButton("OK", null)
+                        .show()
+                    return@setOnClickListener
+                }
+
+                val campaignSignature = JSONObject()
+                    .put("restaurant_id", backendRestaurantId())
+                    .put("title", title)
+                    .put("message", message)
+                    .put("promotion_type", selectedType)
+                    .put("promotion_title", if (selectedType == "none") "" else promotionTitle)
+                    .put("promotion_details", if (selectedType == "none") "" else promotionDetails)
+                    .put("inactivity_days", ReactivationCampaignPolicy.MIN_INACTIVITY_DAYS)
+                    .toString()
+                val operation = "reactivation_campaign"
+                val accountId = backendPrefs.getString("user_id", "").orEmpty()
+                val requestId = try {
+                    pendingRequestIds.getOrCreate(operation, accountId, campaignSignature)
+                } catch (_: Exception) {
+                    Toast.makeText(this, "Não foi possível guardar a referência segura da campanha.", Toast.LENGTH_LONG).show()
+                    return@setOnClickListener
+                }
+
+                runBackend({
+                    val sent = SupabaseApi.sendReactivationCampaign(
+                        backendToken(),
+                        backendRestaurantId(),
+                        requestId,
+                        title,
+                        message,
+                        selectedType,
+                        if (selectedType == "none") null else promotionTitle,
+                        if (selectedType == "none") null else promotionDetails,
+                        ReactivationCampaignPolicy.MIN_INACTIVITY_DAYS
+                    )
+                    sent.optInt("recipient_count", 0).toString()
+                }) { sentCount ->
+                    pendingRequestIds.complete(operation, accountId, campaignSignature, requestId)
+                    dialog.dismiss()
+                    reactivationMembersLoaded = false
+                    renderApp()
+                    AlertDialog.Builder(this)
+                        .setTitle("Campanha enviada")
+                        .setMessage("A mensagem foi guardada na caixa de avisos de " + sentCount + " clientes autorizados.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            }
+        }
+        dialog.show()
+        dialog.window?.setLayout(-1, dp(640))
     }
 
     private fun renderCustomers(container: LinearLayout) {
@@ -6186,7 +6862,13 @@ class MainActivity : ComponentActivity() {
             addGap(container, 6)
             container.addView(secondaryButton("Atualizar cartões e loja") { refreshRemoteCustomers() }, LinearLayout.LayoutParams(-1, dp(48)))
             addGap(container, 6)
-            container.addView(secondaryButton("Ver código de adesão") { showRestaurantJoinCode() }, LinearLayout.LayoutParams(-1, dp(48)))
+            container.addView(secondaryButton("Ver código e QR de adesão") { showRestaurantJoinCode() }, LinearLayout.LayoutParams(-1, dp(48)))
+            if (isOwner) {
+                addGap(container, 6)
+                container.addView(secondaryButton("Pedidos de associação de clientes") {
+                    showRestaurantMembershipRequestsDialog()
+                }, LinearLayout.LayoutParams(-1, dp(48)))
+            }
         } else {
             container.addView(primaryButton("+  Adicionar cliente (local)") { showAddCustomerDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
         }
@@ -6588,39 +7270,79 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showCustomerJoinDialog() {
-        if (backendToken().isBlank()) { showAuthChooser { renderCustomerApp() }; return }
-        val form = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(22), dp(8), dp(22), dp(4)) }
-        val codeField = inputField("Código de adesão do restaurante", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS)
-        val nameField = inputField("O teu nome", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
-        nameField.setText(store.getCustomerProfileName())
-        form.addView(label("Código do restaurante", 10f, true, forestSoft)); form.addView(codeField, fieldParams())
-        addGap(form, 4); form.addView(label("Nome para o cartão", 10f, true, forestSoft)); form.addView(nameField, fieldParams())
-        val dialog = AlertDialog.Builder(this).setTitle("Associar ao restaurante")
-            .setMessage("Pede o código de adesão ao restaurante.").setView(form)
-            .setNegativeButton("Cancelar", null).setPositiveButton("Associar", null).create()
+        if (backendToken().isBlank()) {
+            showAuthChooser { renderCustomerApp() }
+            return
+        }
+        val options = arrayOf(
+            "Pesquisar pelo nome do restaurante",
+            "Introduzir código de adesão",
+            "Ler QR de adesão"
+        )
+        AlertDialog.Builder(this)
+            .setTitle("Associar ao restaurante")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> showCustomerRestaurantSearchDialog()
+                    1 -> showCustomerJoinCodeDialog()
+                    2 -> startCustomerJoinQrScan()
+                }
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    private fun showCustomerJoinCodeDialog(initialCode: String = "") {
+        if (backendToken().isBlank()) {
+            showAuthChooser { renderCustomerApp() }
+            return
+        }
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(8), dp(22), dp(4))
+        }
+        val codeField = inputField(
+            "Código de adesão do restaurante",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
+        ).apply { setText(initialCode.uppercase(Locale.ROOT)) }
+        val nameField = inputField(
+            "O teu nome",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        ).apply { setText(store.getCustomerProfileName()) }
+        form.addView(label("Código do restaurante", 10f, true, forestSoft))
+        form.addView(codeField, fieldParams())
+        addGap(form, 4)
+        form.addView(label("Nome para o cartão", 10f, true, forestSoft))
+        form.addView(nameField, fieldParams())
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Associar por código")
+            .setMessage("Podes escrever o código ou lê-lo no QR disponibilizado pelo restaurante.")
+            .setView(form)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Associar", null)
+            .create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val code = codeField.text.toString().trim().uppercase(Locale.ROOT)
                 val name = nameField.text.toString().trim()
                 when {
-                    code.length !in 6..12 -> codeField.error = "O código deve ter 6 a 12 caracteres"
-                    name.isBlank() || name.length > 100 -> nameField.error = "Introduz um nome válido"
+                    !code.matches(Regex("^[A-Z0-9]{6,12}$")) ->
+                        codeField.error = "Introduz um código válido de 6 a 12 caracteres"
+                    name.isBlank() || name.length > 100 ->
+                        nameField.error = "Introduz um nome válido"
                     else -> {
                         runBackend({
                             val token = backendToken()
                             val member = SupabaseApi.joinRestaurant(token, code, name)
                             val memberId = member.optString("member_id")
-                            val menu = SupabaseApi.listCustomerMenu(token, memberId)
-                            val rewards = SupabaseApi.listCustomerRewards(token, memberId)
-                            backendPrefs.edit().putString("member_id", memberId)
-                                .putString("member_code", member.optString("member_code"))
-                                .putInt("member_points", member.optInt("points", 0))
-                                .putString("member_restaurant_name", member.optString("restaurant_name"))
-                                .putString("customer_menu_json", menu.toString())
-                                .putString("customer_rewards_json", rewards.toString())
+                            if (memberId.isBlank()) {
+                                throw IllegalStateException("O servidor não devolveu o cartão do restaurante.")
+                            }
+                            val memberships = SupabaseApi.listMyLoyaltyMemberships(token)
+                            backendPrefs.edit()
+                                .putBoolean("customer_entry_choice_complete_v1", true)
                                 .apply()
-                            customerRedemptionHistory = SupabaseApi.listMyLoyaltyRewardRedemptions(token)
-                            customerReservationsCache = SupabaseApi.listMyRestaurantReservations(token)
+                            loadSelectedCustomerMembership(token, memberships, memberId)
                             store.saveCustomerProfileName(name)
                             "OK"
                         }) {
@@ -6634,29 +7356,291 @@ class MainActivity : ComponentActivity() {
         dialog.show()
     }
 
-    private fun refreshCustomerMembership() {
-        val memberId = backendMemberId()
-        if (backendToken().isBlank() || memberId.isBlank()) { showCustomerJoinDialog(); return }
+    private fun startCustomerJoinQrScan() {
+        if (backendToken().isBlank()) {
+            showAuthChooser { renderCustomerApp() }
+            return
+        }
+        IntentIntegrator(this)
+            .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
+            .setPrompt("Lê o QR de adesão apresentado pelo restaurante")
+            .setBeepEnabled(false)
+            .setOrientationLocked(false)
+            .initiateScan()
+    }
+
+    private fun showCustomerRestaurantSearchDialog() {
+        if (backendToken().isBlank()) {
+            showAuthChooser { renderCustomerApp() }
+            return
+        }
+        val form = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), dp(4))
+        }
+        val queryField = inputField(
+            "Nome do restaurante",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        )
+        val nameField = inputField(
+            "O teu nome para o cartão",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        ).apply { setText(store.getCustomerProfileName()) }
+        val results = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        form.addView(label("PROCURAR", 10f, true, forestSoft))
+        form.addView(queryField, fieldParams())
+        addGap(form, 7)
+        form.addView(label("NOME PARA O CARTÃO", 10f, true, forestSoft))
+        form.addView(nameField, fieldParams())
+        addGap(form, 8)
+        form.addView(results, LinearLayout.LayoutParams(-1, -2))
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Encontrar restaurante")
+            .setMessage("Escreve pelo menos 3 letras. O restaurante terá de aprovar o teu pedido.")
+            .setView(form)
+            .setNegativeButton("Fechar", null)
+            .setPositiveButton("Pesquisar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val query = queryField.text.toString().trim()
+                val displayName = nameField.text.toString().trim()
+                when {
+                    query.length !in 3..80 ->
+                        queryField.error = "Escreve pelo menos 3 caracteres"
+                    displayName.isBlank() || displayName.length > 100 ->
+                        nameField.error = "Introduz um nome válido"
+                    else -> runBackend({
+                        SupabaseApi.searchRestaurantsByName(backendToken(), query).toString()
+                    }) { raw ->
+                        val matches = JSONArray(raw)
+                        results.removeAllViews()
+                        if (matches.length() == 0) {
+                            results.addView(emptyCard("Não encontrámos restaurantes com esse nome. Confirma a escrita ou tenta outra parte do nome."))
+                        } else {
+                            for (index in 0 until matches.length()) {
+                                val restaurant = matches.optJSONObject(index) ?: continue
+                                val restaurantId = restaurant.optString("restaurant_id")
+                                val restaurantName = restaurant.optString("restaurant_name")
+                                if (restaurantId.isBlank() || restaurantName.isBlank()) continue
+                                val card = makeCard(12)
+                                card.addView(label(restaurantName, 15f, true, forestDeep))
+                                addGap(card, 7)
+                                card.addView(secondaryButton("Pedir associação") {
+                                    val chosenName = nameField.text.toString().trim()
+                                    if (chosenName.isBlank() || chosenName.length > 100) {
+                                        nameField.error = "Introduz um nome válido"
+                                        return@secondaryButton
+                                    }
+                                    runBackend({
+                                        val request = SupabaseApi.requestRestaurantMembership(
+                                            backendToken(), restaurantId, chosenName
+                                        )
+                                        request.optString("request_status")
+                                    }) { status ->
+                                        dialog.dismiss()
+                                        store.saveCustomerProfileName(chosenName)
+                                        AlertDialog.Builder(this)
+                                            .setTitle(if (status == "pending") "Pedido enviado" else "Pedido existente")
+                                            .setMessage(
+                                                if (status == "pending") {
+                                                    "O restaurante recebeu o teu pedido. Quando o proprietário o aprovar, o cartão ficará disponível nesta conta."
+                                                } else {
+                                                    "Já existe um pedido com este estado: $status. Consulta o estado na secção Cartão."
+                                                }
+                                            )
+                                            .setPositiveButton("OK", null)
+                                            .show()
+                                        renderCustomerApp()
+                                    }
+                                }, LinearLayout.LayoutParams(-1, dp(42)))
+                                results.addView(card, cardParams())
+                            }
+                        }
+                        dialog.getButton(AlertDialog.BUTTON_POSITIVE).text = "Pesquisar novamente"
+                    }
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showCustomerMembershipRequestStatus() {
+        if (backendToken().isBlank()) {
+            showAuthChooser { renderCustomerApp() }
+            return
+        }
         runBackend({
             val token = backendToken()
-            val member = SupabaseApi.getMember(token, memberId)
-            val menu = SupabaseApi.listCustomerMenu(token, memberId)
-            val rewards = SupabaseApi.listCustomerRewards(token, memberId)
-            val redemptions = SupabaseApi.listMyLoyaltyRewardRedemptions(token)
-            val reservations = SupabaseApi.listMyRestaurantReservations(token)
-            customerRedemptionHistory = redemptions
-            customerReservationsCache = reservations
-            backendPrefs.edit().putInt("member_points", member.optInt("points", 0))
-                .putString("member_code", member.optString("member_code"))
-                .putString("customer_menu_json", menu.toString())
-                .putString("customer_rewards_json", rewards.toString())
-                .apply()
-            "OK"
-        }) { renderCustomerApp() }
+            val memberships = SupabaseApi.listMyLoyaltyMemberships(token)
+            val requests = SupabaseApi.listMyRestaurantMembershipRequests(token)
+            if (memberships.length() > 0) {
+                restoreCustomerMembership(token)
+            }
+            JSONObject()
+                .put("memberships", memberships)
+                .put("requests", requests)
+                .toString()
+        }) { raw ->
+            val data = JSONObject(raw)
+            val memberships = data.optJSONArray("memberships") ?: JSONArray()
+            val requests = data.optJSONArray("requests") ?: JSONArray()
+            val messages = ArrayList<String>()
+            for (index in 0 until memberships.length()) {
+                val item = memberships.optJSONObject(index) ?: continue
+                messages.add("Cartão ativo: " + item.optString("restaurant_name"))
+            }
+            for (index in 0 until requests.length()) {
+                val item = requests.optJSONObject(index) ?: continue
+                val state = when (item.optString("request_status")) {
+                    "pending" -> "A aguardar aprovação"
+                    "approved" -> "Aprovado"
+                    "rejected" -> "Não aprovado"
+                    else -> "Estado desconhecido"
+                }
+                messages.add(item.optString("restaurant_name") + " — " + state)
+            }
+            renderCustomerApp()
+            AlertDialog.Builder(this)
+                .setTitle("Cartões e pedidos de associação")
+                .setMessage(
+                    if (messages.isEmpty()) "Ainda não tens cartões nem pedidos de associação."
+                    else messages.joinToString("\n")
+                )
+                .setPositiveButton("OK", null)
+                .show()
+        }
+    }
+
+    private fun refreshCustomerMembership() {
+        if (backendToken().isBlank()) {
+            showAuthChooser { renderCustomerApp() }
+            return
+        }
+        runBackend({
+            val token = backendToken()
+            val memberships = SupabaseApi.listMyLoyaltyMemberships(token)
+            if (memberships.length() == 0) {
+                "NO_CARDS"
+            } else {
+                val savedId = backendMemberId()
+                val memberIds = (0 until memberships.length()).mapNotNull { index ->
+                    memberships.optJSONObject(index)?.optString("member_id")
+                }
+                val selectedId = CustomerMembershipSelectionPolicy
+                    .selectMemberId(memberIds, savedId)
+                    ?: throw IllegalStateException("O servidor devolveu cartões sem identificador.")
+                loadSelectedCustomerMembership(token, memberships, selectedId)
+                "OK"
+            }
+        }) { result ->
+            if (result == "NO_CARDS") {
+                customerMembershipsCache = JSONArray()
+                backendPrefs.edit()
+                    .remove("member_id")
+                    .remove("member_code")
+                    .remove("member_points")
+                    .remove("member_restaurant_name")
+                    .putString("customer_memberships_json", "[]")
+                    .putString("customer_menu_json", "[]")
+                    .putString("customer_rewards_json", "[]")
+                    .apply()
+                renderCustomerApp()
+            } else {
+                renderCustomerApp()
+            }
+        }
+    }
+
+    private fun renderCustomerEntryScreen() {
+        appRoot = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(paper)
+        }
+        applySystemBarInsets(appRoot)
+
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_NEVER
+            isVerticalScrollBarEnabled = false
+        }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(24), dp(34), dp(24), dp(28))
+        }
+        val hero = makeCard(22, forestDeep)
+        hero.addView(label("STUDIOMESA CLIENTE", 10f, true, copperPale))
+        addGap(hero, 12)
+        hero.addView(label("Bem-vindo ao StudioMesa", 27f, true, white))
+        addGap(hero, 8)
+        hero.addView(label(
+            "Podes explorar a aplicação e ver uma carta de demonstração sem criar conta. Para aceder à carta real, aos pontos, às reservas e aos avisos do restaurante, associa uma conta.",
+            13f, false, Color.rgb(229, 235, 228)
+        ))
+        content.addView(hero, LinearLayout.LayoutParams(-1, -2))
+        addGap(content, 22)
+
+        content.addView(primaryButton("Continuar sem conta") {
+            backendPrefs.edit().putBoolean("customer_entry_choice_complete_v1", true).apply()
+            renderCustomerApp()
+        }, LinearLayout.LayoutParams(-1, dp(52)))
+        addGap(content, 10)
+        content.addView(secondaryButton("Já tenho uma conta") {
+            showCredentialsDialog(false) {
+                backendPrefs.edit().putBoolean("customer_entry_choice_complete_v1", true).apply()
+                renderCustomerApp()
+            }
+        }, LinearLayout.LayoutParams(-1, dp(50)))
+        addGap(content, 8)
+        content.addView(secondaryButton("Criar conta") {
+            showCredentialsDialog(true) {
+                backendPrefs.edit().putBoolean("customer_entry_choice_complete_v1", true).apply()
+                renderCustomerApp()
+            }
+        }, LinearLayout.LayoutParams(-1, dp(50)))
+
+        val socialOptions = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        content.addView(socialOptions, LinearLayout.LayoutParams(-1, -2))
+        addGap(content, 16)
+        content.addView(label(
+            "Podes consultar a carta como convidado. Para acumular pontos, pedir reservas e receber promoções personalizadas, precisas de uma conta e de associar o restaurante.",
+            12f, false, muted
+        ))
+        scroll.addView(content)
+        appRoot.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        setContentView(appRoot)
+
+        // Offer social sign-in only when the Supabase project confirms it is configured.
+        Thread {
+            val enabledProviders = listOf("google", "azure").filter { provider ->
+                runCatching { SupabaseApi.isOAuthProviderEnabled(provider) }.getOrDefault(false)
+            }
+            runOnUiThread {
+                if (isFinishing || appRoot.parent == null) return@runOnUiThread
+                if ("google" in enabledProviders) {
+                    addGap(socialOptions, 8)
+                    socialOptions.addView(secondaryButton("Continuar com Google") {
+                        startOAuth("google")
+                    }, LinearLayout.LayoutParams(-1, dp(48)))
+                }
+                if ("azure" in enabledProviders) {
+                    addGap(socialOptions, 8)
+                    socialOptions.addView(secondaryButton("Continuar com Microsoft (Outlook)") {
+                        startOAuth("azure")
+                    }, LinearLayout.LayoutParams(-1, dp(48)))
+                }
+            }
+        }.start()
     }
 
     private fun renderCustomerApp() {
-        if (activeCustomerPage !in setOf("Cartão", "Carta", "Reservas", "Conta")) activeCustomerPage = "Cartão"
+        if (activeCustomerPage !in setOf("Cartão", "Carta", "Avisos", "Reservas", "Conta")) activeCustomerPage = "Cartão"
         appRoot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(paper)
@@ -6700,6 +7684,7 @@ class MainActivity : ComponentActivity() {
         when (activeCustomerPage) {
             "Cartão" -> renderCustomerLoyaltyPage(content)
             "Carta" -> renderCustomerMenuPage(content)
+            "Avisos" -> renderCustomerNotificationsPage(content)
             "Reservas" -> renderCustomerReservationsPage(content)
             "Conta" -> renderCustomerAccountPage(content)
         }
@@ -6713,7 +7698,7 @@ class MainActivity : ComponentActivity() {
             setBackgroundColor(white)
             elevation = dp(6).toFloat()
         }
-        listOf("Cartão", "Carta", "Reservas", "Conta").forEach { page ->
+        listOf("Cartão", "Carta", "Avisos", "Reservas", "Conta").forEach { page ->
             val selected = activeCustomerPage == page
             val item = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
@@ -6726,6 +7711,7 @@ class MainActivity : ComponentActivity() {
                 setOnClickListener {
                     activeCustomerPage = page
                     renderCustomerApp()
+                    if (page == "Avisos") refreshCustomerNotifications()
                 }
             }
             item.addView(TextView(this).apply {
@@ -6750,12 +7736,45 @@ class MainActivity : ComponentActivity() {
         val savedName = store.getCustomerProfileName()
         container.addView(label(if (savedName.isBlank()) "Olá!" else "Olá, " + savedName + "!", 25f, true, forestDeep))
         addGap(container, 5)
-        container.addView(label("Cartão de fidelização do restaurante.", 13.5f, false, muted))
+        container.addView(label("Os teus cartões de fidelização.", 13.5f, false, muted))
         addGap(container, 12)
+        if (backendToken().isNotBlank() && backendMemberId().isNotBlank()) {
+            val selectedRestaurant = backendPrefs.getString("member_restaurant_name", "Restaurante") ?: "Restaurante"
+            container.addView(label("RESTAURANTE SELECIONADO", 10f, true, forestSoft))
+            addGap(container, 3)
+            container.addView(label(selectedRestaurant, 17f, true, forestDeep))
+            addGap(container, 8)
+            if (customerMembershipsCache.length() > 1) {
+                container.addView(secondaryButton("Trocar de restaurante") {
+                    showCustomerMembershipPicker()
+                }, LinearLayout.LayoutParams(-1, dp(46)))
+                addGap(container, 6)
+            }
+            container.addView(secondaryButton("Associar outro restaurante") {
+                showCustomerJoinDialog()
+            }, LinearLayout.LayoutParams(-1, dp(46)))
+            addGap(container, 6)
+        }
         when {
-            backendToken().isBlank() -> container.addView(primaryButton("Criar conta / iniciar sessão") { showAuthChooser { renderCustomerApp() } }, LinearLayout.LayoutParams(-1, dp(48)))
-            backendMemberId().isBlank() -> container.addView(primaryButton("Associar ao restaurante") { showCustomerJoinDialog() }, LinearLayout.LayoutParams(-1, dp(48)))
-            else -> container.addView(primaryButton("Atualizar saldo e recompensas") { refreshCustomerMembership() }, LinearLayout.LayoutParams(-1, dp(48)))
+            backendToken().isBlank() -> container.addView(
+                primaryButton("Criar conta / iniciar sessão") { showAuthChooser { renderCustomerApp() } },
+                LinearLayout.LayoutParams(-1, dp(48))
+            )
+            backendMemberId().isBlank() -> {
+                container.addView(
+                    primaryButton("Encontrar restaurante ou usar QR") { showCustomerJoinDialog() },
+                    LinearLayout.LayoutParams(-1, dp(48))
+                )
+                addGap(container, 6)
+                container.addView(
+                    secondaryButton("Consultar pedidos de associação") { showCustomerMembershipRequestStatus() },
+                    LinearLayout.LayoutParams(-1, dp(46))
+                )
+            }
+            else -> container.addView(
+                primaryButton("Atualizar cartão selecionado") { refreshCustomerMembership() },
+                LinearLayout.LayoutParams(-1, dp(48))
+            )
         }
         addGap(container, 15)
         val loyalty = makeCard(18, forest)
@@ -6770,7 +7789,7 @@ class MainActivity : ComponentActivity() {
         loyalty.addView(label(code, 20f, true, white))
         addGap(loyalty, 9)
         loyalty.addView(label(
-            if (backendMemberId().isBlank()) "Este é um cartão demonstrativo. Cria sessão e associa-o ao código do restaurante para consultar os pontos reais."
+            if (backendMemberId().isBlank()) "Este é um cartão de demonstração. Encontra o restaurante pelo nome, introduz o código ou lê o QR de adesão. A pesquisa por nome exige aprovação do proprietário."
             else "O saldo pertence à tua conta. O QR temporário só pode ser utilizado uma vez para creditar pontos.",
             12f, false, Color.rgb(229, 235, 228)
         ))
@@ -6869,8 +7888,9 @@ class MainActivity : ComponentActivity() {
             Toast.makeText(this, "Associa primeiro o teu cartão ao restaurante.", Toast.LENGTH_LONG).show()
             return
         }
+        val selectedMemberId = backendMemberId()
         runBackend({
-            SupabaseApi.createLoyaltyQrToken(backendToken()).optString("qr_token")
+            SupabaseApi.createLoyaltyQrToken(backendToken(), selectedMemberId).optString("qr_token")
         }) { qrToken ->
             try {
                 val hints = hashMapOf<EncodeHintType, Any>(EncodeHintType.MARGIN to 1)
@@ -6912,7 +7932,15 @@ class MainActivity : ComponentActivity() {
             .setMessage("Vais trocar " + pointsCost + " pontos por «" + rewardName + "». O desconto é confirmado pelo servidor.")
             .setNegativeButton("Cancelar", null)
             .setPositiveButton("Resgatar") { _, _ ->
-                val signature = JSONObject().put("reward_id", rewardId).toString()
+                val memberId = backendMemberId()
+                if (memberId.isBlank()) {
+                    Toast.makeText(this, "Seleciona primeiro um cartão de restaurante.", Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+                val signature = JSONObject()
+                    .put("member_id", memberId)
+                    .put("reward_id", rewardId)
+                    .toString()
                 val operation = "loyalty_reward_redeem"
                 val accountId = backendPrefs.getString("user_id", "").orEmpty()
                 val requestId = try {
@@ -6922,15 +7950,10 @@ class MainActivity : ComponentActivity() {
                     return@setPositiveButton
                 }
                 runBackend({
-                    val result = SupabaseApi.redeemLoyaltyReward(backendToken(), rewardId, requestId)
-                    val member = SupabaseApi.getMyLoyaltyMembership(backendToken())
-                    val rewards = SupabaseApi.listCustomerRewards(backendToken(), backendMemberId())
-                    val redemptions = SupabaseApi.listMyLoyaltyRewardRedemptions(backendToken())
-                    customerRedemptionHistory = redemptions
-                    backendPrefs.edit()
-                        .putInt("member_points", member?.optInt("points", result.optInt("points_remaining", 0)) ?: 0)
-                        .putString("customer_rewards_json", rewards.toString())
-                        .apply()
+                    val token = backendToken()
+                    val result = SupabaseApi.redeemLoyaltyReward(token, memberId, rewardId, requestId)
+                    val memberships = SupabaseApi.listMyLoyaltyMemberships(token)
+                    loadSelectedCustomerMembership(token, memberships, memberId)
                     result.optInt("points_remaining", -1).toString()
                 }) { remaining ->
                     pendingRequestIds.complete(operation, accountId, signature, requestId)
@@ -7025,13 +8048,94 @@ class MainActivity : ComponentActivity() {
         container.addView(menuCard, cardParams())
     }
 
+    private fun refreshCustomerNotifications() {
+        // Opening the inbox must not put a modal login/join dialog over the page.
+        // The page itself explains the next step and offers the appropriate action.
+        if (backendToken().isBlank() || backendMemberId().isBlank()) return
+        runBackend({
+            customerMarketingNotificationsCache = SupabaseApi.listMyMarketingNotifications(backendToken())
+            "OK"
+        }) { renderCustomerApp() }
+    }
+
+    private fun renderCustomerNotificationsPage(container: LinearLayout) {
+        pageIntro(container, "Avisos do restaurante", "Mensagens e promoções enviadas pelo restaurante.")
+        addGap(container, 9)
+        if (backendToken().isBlank()) {
+            container.addView(emptyCard("Inicia sessão para receber e consultar os avisos do restaurante."))
+            addGap(container, 7)
+            container.addView(primaryButton("Criar conta / iniciar sessão") {
+                showAuthChooser { renderCustomerApp() }
+            }, LinearLayout.LayoutParams(-1, dp(48)))
+            return
+        }
+        if (backendMemberId().isBlank()) {
+            container.addView(emptyCard("Associa primeiro a tua conta ao restaurante."))
+            addGap(container, 7)
+            container.addView(primaryButton("Associar ao restaurante") { showCustomerJoinDialog() },
+                LinearLayout.LayoutParams(-1, dp(48)))
+            return
+        }
+
+        container.addView(secondaryButton("Atualizar avisos") {
+            refreshCustomerNotifications()
+        }, LinearLayout.LayoutParams(-1, dp(46)))
+        addGap(container, 10)
+        if (customerMarketingNotificationsCache.length() == 0) {
+            container.addView(emptyCard("Ainda não recebeste mensagens ou promoções deste restaurante."))
+            return
+        }
+
+        for (i in 0 until customerMarketingNotificationsCache.length()) {
+            val item = customerMarketingNotificationsCache.optJSONObject(i) ?: continue
+            val card = makeCard(14)
+            val unread = item.isNull("read_at")
+            card.addView(label(
+                if (unread) "NOVA MENSAGEM" else item.optString("restaurant_name", "RESTAURANTE").uppercase(Locale("pt", "PT")),
+                10f, true, if (unread) forest else muted
+            ))
+            addGap(card, 4)
+            card.addView(label(item.optString("title"), 16f, true, forestDeep))
+            addGap(card, 6)
+            card.addView(label(item.optString("message"), 13f, false, ink))
+            val promotionType = item.optString("promotion_type", "none")
+            if (promotionType != "none" && item.optString("promotion_title").isNotBlank()) {
+                addGap(card, 9)
+                val promotion = makeCard(10, copperPale)
+                promotion.addView(label("OFERTA DO RESTAURANTE", 9.5f, true, forest))
+                addGap(promotion, 3)
+                promotion.addView(label(item.optString("promotion_title"), 14f, true, forestDeep))
+                addGap(promotion, 3)
+                promotion.addView(label(item.optString("promotion_details"), 12f, false, ink))
+                card.addView(promotion, cardParams())
+            }
+            val created = item.optString("created_at").substringBefore("T")
+            if (created.isNotBlank()) {
+                addGap(card, 7)
+                card.addView(label("Recebida em " + created, 10f, false, muted))
+            }
+            if (unread) {
+                addGap(card, 8)
+                card.addView(secondaryButton("Marcar como lida") {
+                    runBackend({
+                        SupabaseApi.markMyMarketingNotificationRead(backendToken(), item.optString("id"))
+                        "OK"
+                    }) { refreshCustomerNotifications() }
+                }, LinearLayout.LayoutParams(-1, dp(42)))
+            }
+            container.addView(card, cardParams())
+        }
+    }
+
     private fun refreshCustomerReservations() {
         if (backendToken().isBlank() || backendMemberId().isBlank()) {
             showCustomerJoinDialog()
             return
         }
         runBackend({
-            customerReservationsCache = SupabaseApi.listMyRestaurantReservations(backendToken())
+            customerReservationsCache = SupabaseApi.listMyRestaurantReservations(
+                backendToken(), backendMemberId()
+            )
             "OK"
         }) { renderCustomerApp() }
     }
@@ -7113,7 +8217,9 @@ class MainActivity : ComponentActivity() {
                         .setPositiveButton("Cancelar") { _, _ ->
                             runBackend({
                                 SupabaseApi.cancelMyRestaurantReservation(backendToken(), reservationId)
-                                customerReservationsCache = SupabaseApi.listMyRestaurantReservations(backendToken())
+                                customerReservationsCache = SupabaseApi.listMyRestaurantReservations(
+                                    backendToken(), backendMemberId()
+                                )
                                 "OK"
                             }) { renderCustomerApp() }
                         }
@@ -7187,7 +8293,13 @@ class MainActivity : ComponentActivity() {
                     notesText.length > 1000 -> notes.error = "Máximo de 1000 caracteres."
                     else -> {
                         val reservationAt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).format(parsedDate)
+                        val memberId = backendMemberId()
+                        if (memberId.isBlank()) {
+                            notes.error = "Seleciona primeiro um cartão de restaurante."
+                            return@setOnClickListener
+                        }
                         val signature = JSONObject()
+                            .put("member_id", memberId)
                             .put("guest_name", name)
                             .put("guest_phone", phoneText)
                             .put("party_size", partySize)
@@ -7205,10 +8317,12 @@ class MainActivity : ComponentActivity() {
                         }
                         runBackend({
                             SupabaseApi.createCustomerReservationRequest(
-                                backendToken(), requestId, name, phoneText, partySize,
+                                backendToken(), memberId, requestId, name, phoneText, partySize,
                                 reservationAt, 90, notesText
                             )
-                            customerReservationsCache = SupabaseApi.listMyRestaurantReservations(backendToken())
+                            customerReservationsCache = SupabaseApi.listMyRestaurantReservations(
+                                backendToken(), memberId
+                            )
                             "OK"
                         }) {
                             dialog.dismiss()
@@ -7251,6 +8365,32 @@ class MainActivity : ComponentActivity() {
         container.addView(secondaryButton("Definir o meu nome") { showCustomerProfileDialog() },
             LinearLayout.LayoutParams(-1, dp(48)))
         addGap(container, 12)
+        val marketingCard = makeCard(13)
+        marketingCard.addView(label("CAMPANHAS E OFERTAS", 10f, true, forestSoft))
+        addGap(marketingCard, 5)
+        marketingCard.addView(label(
+            "Escolhe se queres receber mensagens e promoções deste restaurante na caixa de avisos da aplicação. Podes retirar a autorização quando quiseres.",
+            12f, false, muted
+        ))
+        addGap(marketingCard, 8)
+        if (backendMemberId().isBlank()) {
+            marketingCard.addView(label("Associa a tua conta ao restaurante para gerir esta preferência.", 11.5f, false, muted))
+        } else {
+            val marketingEnabled = backendPrefs.getBoolean("marketing_opt_in", false)
+            marketingCard.addView(label(
+                if (marketingEnabled) "Autorização ativa" else "Não autorizaste campanhas",
+                11f, true, if (marketingEnabled) green else muted
+            ))
+            addGap(marketingCard, 6)
+            marketingCard.addView(secondaryButton(
+                if (marketingEnabled) "Retirar autorização" else "Autorizar campanhas e ofertas"
+            ) {
+                showCustomerMarketingConsentDialog(!marketingEnabled)
+            }, LinearLayout.LayoutParams(-1, dp(44)))
+        }
+        container.addView(marketingCard, cardParams())
+
+        addGap(container, 12)
         val syncNote = makeCard(13)
         syncNote.addView(label(if (backendMemberId().isBlank()) "CARTÃO AINDA NÃO ASSOCIADO" else "CONTA LIGADA", 10f, true, if (backendMemberId().isBlank()) red else green))
         addGap(syncNote, 5)
@@ -7271,9 +8411,14 @@ class MainActivity : ComponentActivity() {
                 backendPrefs.edit()
                     .remove("access_token").remove("refresh_token").remove("user_id").remove("user_email")
                     .remove("member_id").remove("member_code").remove("member_points").remove("member_restaurant_name")
+                    .remove("marketing_opt_in")
+                    .remove("customer_memberships_json")
                     .remove("customer_menu_json")
                     .remove("customer_rewards_json")
                     .apply()
+                customerMembershipsCache = JSONArray()
+                customerMarketingNotificationsCache = JSONArray()
+                marketingOptInPrefLoaded = false
                 customerRedemptionHistory = JSONArray()
                 customerReservationsCache = JSONArray()
                 activeCustomerPage = "Cartão"
@@ -7284,6 +8429,37 @@ class MainActivity : ComponentActivity() {
         container.addView(secondaryButton("Privacidade e dados") {
             showPrivacyInformation()
         }, LinearLayout.LayoutParams(-1, dp(48)))
+    }
+
+    private fun showCustomerMarketingConsentDialog(enable: Boolean) {
+        val title = if (enable) "Autorizar campanhas?" else "Retirar autorização?"
+        val message = if (enable) {
+            "Autorizas este restaurante a enviar mensagens e ofertas comerciais para a caixa de avisos da tua aplicação StudioMesa? Podes retirar esta autorização a qualquer momento."
+        } else {
+            "O restaurante deixará de poder incluir a tua conta em futuras campanhas. Os avisos que já recebeste continuam disponíveis."
+        }
+        AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton(if (enable) "Autorizar" else "Retirar") { _, _ ->
+                runBackend({
+                    val memberId = backendMemberId()
+                    if (memberId.isBlank()) throw IllegalStateException("Seleciona primeiro um cartão de restaurante.")
+                    val confirmed = SupabaseApi.setMyMarketingOptIn(backendToken(), memberId, enable)
+                    marketingOptInPrefLoaded = true
+                    backendPrefs.edit().putBoolean("marketing_opt_in", confirmed).apply()
+                    "OK"
+                }) {
+                    renderCustomerApp()
+                    Toast.makeText(
+                        this,
+                        if (enable) "Autorização de campanhas ativada." else "Autorização de campanhas retirada.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+            .show()
     }
 
     private fun showCustomerProfileDialog() {

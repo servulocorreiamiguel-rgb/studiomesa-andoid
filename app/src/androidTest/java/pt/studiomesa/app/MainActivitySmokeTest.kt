@@ -16,6 +16,7 @@ import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.platform.app.InstrumentationRegistry
 import org.hamcrest.Matchers.containsString
 import org.hamcrest.Matchers.not
+import org.junit.Before
 import org.junit.Assume.assumeFalse
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -56,6 +57,14 @@ class MainActivitySmokeTest {
         }
     }
 
+    @Before
+    fun prepareCustomerScreensForSmokeTests() {
+        if (isCustomerVariant()) {
+            InstrumentationRegistry.getInstrumentation().targetContext
+                .getSharedPreferences("studiomesa_backend", android.content.Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("customer_entry_choice_complete_v1", true)
+                .apply()
     private fun isCustomerVariant(): Boolean =
         InstrumentationRegistry.getInstrumentation()
             .targetContext.packageName.endsWith(".cliente")
@@ -164,12 +173,35 @@ onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
     }
 
     @Test
+    fun customerFirstLaunchOffersGuestCreateAndExistingAccountOptions() {
+        assumeTrue("Only the customer app has the customer entry screen.", isCustomerVariant())
+        InstrumentationRegistry.getInstrumentation().targetContext
+            .getSharedPreferences("studiomesa_backend", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .remove("customer_entry_choice_complete_v1")
+            .apply()
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withText("Bem-vindo ao StudioMesa")).check(matches(isDisplayed()))
+            onView(withText("Continuar sem conta")).check(matches(isDisplayed()))
+            onView(withText("Já tenho uma conta")).check(matches(isDisplayed()))
+            onView(withText("Criar conta")).check(matches(isDisplayed()))
+
+            onView(withText("Continuar sem conta")).perform(click())
+            onView(withText(containsString("Cartão digital de cliente")))
+                .check(matches(isDisplayed()))
+            onView(withText("Os teus cartões de fidelização."))
+                .check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
     fun appLaunchesIntoTheExpectedDemoExperience() {
         ActivityScenario.launch(MainActivity::class.java).use {
             if (isCustomerVariant()) {
                 onView(withText(containsString("Cartão digital de cliente")))
                     .check(matches(isDisplayed()))
-                onView(withText("Cartão de fidelização do restaurante."))
+                onView(withText("Os teus cartões de fidelização."))
                     .check(matches(isDisplayed()))
             } else {
                 onView(withText("Painel de operação"))
@@ -466,6 +498,7 @@ onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
             onView(withContentDescription("Abrir secção Assistente")).check(doesNotExist())
             onView(withContentDescription("Abrir secção Carta")).perform(scrollTo()).check(matches(isDisplayed()))
             onView(withContentDescription("Abrir secção Pontos")).perform(scrollTo()).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Marketing")).check(doesNotExist())
             onView(withContentDescription("Abrir secção Conta")).perform(scrollTo()).check(matches(isDisplayed()))
 
             if (isCalculatorAvailable()) {
@@ -504,6 +537,12 @@ onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
 
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir secção Cartão")).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Avisos")).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Avisos")).perform(click())
+            onView(withText("Avisos do restaurante")).check(matches(isDisplayed()))
+            onView(withText("Inicia sessão para receber e consultar os avisos do restaurante."))
+                .check(matches(isDisplayed()))
+
             onView(withContentDescription("Abrir secção Carta")).perform(click())
             onView(withText("Exemplos de artigos")).check(matches(isDisplayed()))
 
@@ -513,7 +552,7 @@ onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
             onView(withText("Criar conta / iniciar sessão")).check(matches(isDisplayed()))
 
             onView(withContentDescription("Abrir secção Cartão")).perform(click())
-            onView(withText("Cartão de fidelização do restaurante.")).check(matches(isDisplayed()))
+            onView(withText("Os teus cartões de fidelização.")).check(matches(isDisplayed()))
         }
     }
 
@@ -611,7 +650,7 @@ onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
                 .perform(scrollTo(), click())
             onView(withText("Conta StudioMesa"))
                 .check(matches(isDisplayed()))
-            onView(withText("Iniciar sessão"))
+            onView(withText("Já tenho uma conta"))
                 .check(matches(isDisplayed()))
             onView(withText("Continuar com Google")).check(doesNotExist())
             onView(withText("Continuar com Microsoft (Outlook)")).check(doesNotExist())
@@ -625,7 +664,7 @@ onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withText("Criar conta / iniciar sessão"))
                 .perform(scrollTo(), click())
-            onView(withText("Iniciar sessão"))
+            onView(withText("Já tenho uma conta"))
                 .perform(click())
 
             onView(withHint("Email")).check(matches(isDisplayed()))

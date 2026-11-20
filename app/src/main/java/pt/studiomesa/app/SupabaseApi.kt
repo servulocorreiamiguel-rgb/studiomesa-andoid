@@ -707,6 +707,43 @@ object SupabaseApi {
         )
     }
 
+    /**
+     * Verifies the six-digit recovery OTP sent by Supabase Auth.
+     * The recovery email template must use {{ .Token }} instead of a confirmation link.
+     */
+    fun verifyPasswordRecoveryOtp(email: String, otp: String): Session {
+        require(android.util.Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches()) {
+            "O email introduzido não é válido."
+        }
+        require(otp.matches(Regex("^\\d{6}$"))) {
+            "O código de recuperação tem de conter seis algarismos."
+        }
+        val result = jsonCall(
+            "POST",
+            "/auth/v1/verify",
+            JSONObject()
+                .put("type", "recovery")
+                .put("email", email.trim())
+                .put("token", otp)
+        )
+        val accessToken = result.optString("access_token")
+        val refreshToken = result.optString("refresh_token")
+        if (accessToken.isBlank() || refreshToken.isBlank()) {
+            throw IllegalStateException("O código não foi aceite ou já expirou. Pede um novo email de recuperação.")
+        }
+        val user = result.optJSONObject("user") ?: getUser(accessToken)
+        val userId = user.optString("id")
+        if (userId.isBlank()) {
+            throw IllegalStateException("O servidor não identificou a conta depois de validar o código.")
+        }
+        return Session(
+            accessToken,
+            userId,
+            user.optString("email", email.trim()),
+            refreshToken
+        )
+    }
+
     fun exchangeCodeForSession(authCode: String, codeVerifier: String): Session {
         require(authCode.isNotBlank()) { "A ligação de autenticação não contém um código válido." }
         require(codeVerifier.matches(Regex("^[A-Za-z0-9._~-]{43,128}$"))) {
@@ -806,6 +843,70 @@ object SupabaseApi {
         val array = JSONArray(response)
         if (array.length() == 0) throw IllegalStateException("Não foi devolvido um cartão de cliente.")
         return array.getJSONObject(0)
+    }
+
+    fun searchRestaurantsByName(token: String, query: String): JSONArray {
+        require(query.trim().length in 3..80) {
+            "Escreve pelo menos 3 caracteres do nome do restaurante."
+        }
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/search_restaurants_by_name",
+            JSONObject().put("p_query", query.trim()),
+            token
+        ))
+    }
+
+    fun requestRestaurantMembership(token: String, restaurantId: String, displayName: String): JSONObject {
+        val result = JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/request_restaurant_membership",
+            JSONObject()
+                .put("p_restaurant_id", restaurantId)
+                .put("p_display_name", displayName.trim()),
+            token
+        ))
+        if (result.length() == 0) {
+            throw IllegalStateException("O servidor não confirmou o pedido de associação.")
+        }
+        return result.getJSONObject(0)
+    }
+
+    fun listMyRestaurantMembershipRequests(token: String): JSONArray {
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/get_my_restaurant_membership_requests",
+            JSONObject(),
+            token
+        ))
+    }
+
+    fun listPendingRestaurantMembershipRequests(token: String, restaurantId: String): JSONArray {
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/get_pending_restaurant_membership_requests",
+            JSONObject().put("p_restaurant_id", restaurantId),
+            token
+        ))
+    }
+
+    fun reviewRestaurantMembershipRequest(
+        token: String,
+        requestId: String,
+        approve: Boolean
+    ): JSONObject {
+        val result = JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/review_restaurant_membership_request",
+            JSONObject()
+                .put("p_request_id", requestId)
+                .put("p_approve", approve),
+            token
+        ))
+        if (result.length() == 0) {
+            throw IllegalStateException("O servidor não confirmou a decisão sobre o pedido.")
+        }
+        return result.getJSONObject(0)
     }
 
     fun listTables(token: String, restaurantId: String): JSONArray {
@@ -1229,9 +1330,25 @@ object SupabaseApi {
         return result.getJSONObject(0)
     }
 
-    fun getMyLoyaltyMembership(token: String): JSONObject? {
+    fun listMyLoyaltyMemberships(token: String): JSONArray {
         val response = call("POST", "/rest/v1/rpc/get_my_loyalty_membership", JSONObject(), token)
-        val memberships = JSONArray(response)
+        return JSONArray(response)
+    }
+
+    fun getMyLoyaltyMembership(token: String, memberId: String): JSONObject? {
+        require(runCatching { java.util.UUID.fromString(memberId) }.isSuccess) {
+            "O identificador do cartão não é válido."
+        }
+        val memberships = listMyLoyaltyMemberships(token)
+        for (index in 0 until memberships.length()) {
+            val membership = memberships.optJSONObject(index) ?: continue
+            if (membership.optString("member_id") == memberId) return membership
+        }
+        return null
+    }
+
+    fun getMyLoyaltyMembership(token: String): JSONObject? {
+        val memberships = listMyLoyaltyMemberships(token)
         return if (memberships.length() == 0) null else memberships.getJSONObject(0)
     }
 
@@ -1255,11 +1372,14 @@ object SupabaseApi {
         return JSONArray(response)
     }
 
-    fun listMyLoyaltyRewardRedemptions(token: String): JSONArray {
+    fun listMyLoyaltyRewardRedemptions(token: String, memberId: String): JSONArray {
+        require(runCatching { java.util.UUID.fromString(memberId) }.isSuccess) {
+            "O identificador do cartão não é válido."
+        }
         val response = call(
             "POST",
             "/rest/v1/rpc/get_my_loyalty_reward_redemptions",
-            JSONObject(),
+            JSONObject().put("p_member_id", memberId),
             token
         )
         return JSONArray(response)
@@ -1302,8 +1422,16 @@ object SupabaseApi {
         return savedId
     }
 
-    fun createLoyaltyQrToken(token: String): JSONObject {
-        val response = call("POST", "/rest/v1/rpc/create_loyalty_qr_token", JSONObject(), token)
+    fun createLoyaltyQrToken(token: String, memberId: String): JSONObject {
+        require(runCatching { java.util.UUID.fromString(memberId) }.isSuccess) {
+            "O identificador do cartão não é válido."
+        }
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/create_loyalty_qr_token",
+            JSONObject().put("p_member_id", memberId),
+            token
+        )
         val rows = JSONArray(response)
         if (rows.length() == 0) throw IllegalStateException("O servidor não gerou um QR de fidelização.")
         val result = rows.getJSONObject(0)
@@ -1342,7 +1470,7 @@ object SupabaseApi {
         return result
     }
 
-    fun redeemLoyaltyReward(token: String, rewardId: String, requestId: String): JSONObject {
+    fun redeemLoyaltyReward(token: String, memberId: String, rewardId: String, requestId: String): JSONObject {
         require(runCatching { java.util.UUID.fromString(rewardId) }.isSuccess) {
             "A recompensa selecionada não é válida."
         }
@@ -1352,7 +1480,10 @@ object SupabaseApi {
         val response = call(
             "POST",
             "/rest/v1/rpc/redeem_loyalty_reward",
-            JSONObject().put("p_reward_id", rewardId).put("p_client_request_id", requestId),
+            JSONObject()
+                .put("p_member_id", memberId)
+                .put("p_reward_id", rewardId)
+                .put("p_client_request_id", requestId),
             token
         )
         val rows = JSONArray(response)
@@ -1391,6 +1522,110 @@ object SupabaseApi {
         return JSONArray(call("GET",
             "/rest/v1/loyalty_members?select=id,member_code,display_name,points&restaurant_id=eq.$encoded&order=created_at.desc",
             null, token))
+    }
+
+    fun getMyMarketingOptIn(token: String, memberId: String): Boolean {
+        require(runCatching { java.util.UUID.fromString(memberId) }.isSuccess) {
+            "O identificador do cartão não é válido."
+        }
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/get_my_marketing_opt_in",
+            JSONObject().put("p_member_id", memberId),
+            token
+        )
+        return response.trim().trim('"').equals("true", ignoreCase = true)
+    }
+
+    fun setMyMarketingOptIn(token: String, memberId: String, enabled: Boolean): Boolean {
+        require(runCatching { java.util.UUID.fromString(memberId) }.isSuccess) {
+            "O identificador do cartão não é válido."
+        }
+        val response = call(
+            "POST",
+            "/rest/v1/rpc/set_my_marketing_opt_in",
+            JSONObject().put("p_member_id", memberId).put("p_enabled", enabled),
+            token
+        )
+        val confirmed = response.trim().trim('"').equals(enabled.toString(), ignoreCase = true)
+        if (!confirmed) throw IllegalStateException("O servidor não confirmou a preferência de campanhas.")
+        return enabled
+    }
+
+    fun listInactiveLoyaltyMembers(
+        token: String,
+        restaurantId: String,
+        inactivityDays: Int = 30
+    ): JSONArray {
+        require(token.isNotBlank()) { "Inicia sessão para consultar os clientes inativos." }
+        require(runCatching { java.util.UUID.fromString(restaurantId) }.isSuccess) {
+            "O restaurante selecionado não é válido."
+        }
+        require(inactivityDays in 30..365) { "O período deve estar entre 30 e 365 dias." }
+        return JSONArray(call(
+            "POST",
+            "/rest/v1/rpc/get_restaurant_inactive_members",
+            JSONObject()
+                .put("p_restaurant_id", restaurantId)
+                .put("p_inactivity_days", inactivityDays),
+            token
+        ))
+    }
+
+    fun sendReactivationCampaign(
+        token: String,
+        restaurantId: String,
+        requestId: String,
+        title: String,
+        message: String,
+        promotionType: String,
+        promotionTitle: String?,
+        promotionDetails: String?,
+        inactivityDays: Int = 30
+    ): JSONObject {
+        require(token.isNotBlank()) { "Inicia sessão para enviar a campanha." }
+        require(runCatching { java.util.UUID.fromString(restaurantId) }.isSuccess) {
+            "O restaurante selecionado não é válido."
+        }
+        require(runCatching { java.util.UUID.fromString(requestId) }.isSuccess) {
+            "O identificador da campanha não é válido."
+        }
+        val body = JSONObject()
+            .put("p_restaurant_id", restaurantId)
+            .put("p_client_request_id", requestId)
+            .put("p_title", title.trim())
+            .put("p_message", message.trim())
+            .put("p_promotion_type", promotionType)
+            .put("p_promotion_title", promotionTitle?.trim()?.takeIf { it.isNotEmpty() } ?: JSONObject.NULL)
+            .put("p_promotion_details", promotionDetails?.trim()?.takeIf { it.isNotEmpty() } ?: JSONObject.NULL)
+            .put("p_inactivity_days", inactivityDays)
+        val rows = JSONArray(call("POST", "/rest/v1/rpc/send_reactivation_campaign", body, token))
+        if (rows.length() == 0) throw IllegalStateException("O servidor não confirmou o envio da campanha.")
+        val result = rows.getJSONObject(0)
+        require(runCatching { java.util.UUID.fromString(result.optString("campaign_id")) }.isSuccess) {
+            "O servidor devolveu uma confirmação de campanha inválida."
+        }
+        if (result.optInt("recipient_count", 0) <= 0) {
+            throw IllegalStateException("A campanha não tem destinatários com consentimento ativo.")
+        }
+        return result
+    }
+
+    fun listMyMarketingNotifications(token: String): JSONArray {
+        require(token.isNotBlank()) { "Inicia sessão para consultar os avisos." }
+        return JSONArray(call("POST", "/rest/v1/rpc/list_my_marketing_notifications", JSONObject(), token))
+    }
+
+    fun markMyMarketingNotificationRead(token: String, notificationId: String) {
+        require(runCatching { java.util.UUID.fromString(notificationId) }.isSuccess) {
+            "A notificação selecionada não é válida."
+        }
+        call(
+            "POST",
+            "/rest/v1/rpc/mark_my_marketing_notification_read",
+            JSONObject().put("p_notification_id", notificationId),
+            token
+        )
     }
 
     fun adjustPoints(
@@ -1828,6 +2063,7 @@ object SupabaseApi {
 
     fun createCustomerReservationRequest(
         token: String,
+        memberId: String,
         requestId: String,
         guestName: String,
         guestPhone: String,
@@ -1839,7 +2075,11 @@ object SupabaseApi {
         require(runCatching { java.util.UUID.fromString(requestId).toString() == requestId }.getOrDefault(false)) {
             "O identificador da tentativa de reserva não é válido."
         }
+        require(runCatching { java.util.UUID.fromString(memberId) }.isSuccess) {
+            "O identificador do cartão não é válido."
+        }
         val body = JSONObject()
+            .put("p_member_id", memberId)
             .put("p_client_request_id", requestId)
             .put("p_guest_name", guestName.trim())
             .put("p_guest_phone", guestPhone.trim())
@@ -1861,11 +2101,14 @@ object SupabaseApi {
         return result
     }
 
-    fun listMyRestaurantReservations(token: String): JSONArray {
+    fun listMyRestaurantReservations(token: String, memberId: String): JSONArray {
+        require(runCatching { java.util.UUID.fromString(memberId) }.isSuccess) {
+            "O identificador do cartão não é válido."
+        }
         return JSONArray(call(
             "POST",
             "/rest/v1/rpc/get_my_restaurant_reservations",
-            JSONObject(),
+            JSONObject().put("p_member_id", memberId),
             token
         ))
     }
