@@ -1,5 +1,6 @@
 package pt.studiomesa.app
 
+import android.content.Intent
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.click
@@ -171,6 +172,31 @@ onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
                 .check(matches(isCompletelyDisplayed()))
             onView(withText("Enviar"))
                 .check(matches(isCompletelyDisplayed()))
+        }
+    }
+
+    @Test
+    fun customerNotificationIntentOpensTheRequestedPage() {
+        assumeTrue("Only the customer app receives customer reservation notifications.", isCustomerVariant())
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val launchIntent = Intent(context, MainActivity::class.java)
+            .putExtra(MainActivity.EXTRA_NOTIFICATION_DESTINATION, "Avisos")
+
+        ActivityScenario.launch<MainActivity>(launchIntent).use {
+            onView(withText("Avisos do restaurante")).check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
+    fun restaurantNotificationIntentOpensKitchen() {
+        assumeFalse("Customer app has a separate navigation model.", isCustomerVariant())
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val launchIntent = Intent(context, MainActivity::class.java)
+            .putExtra(MainActivity.EXTRA_NOTIFICATION_DESTINATION, "Cozinha")
+
+        ActivityScenario.launch<MainActivity>(launchIntent).use {
+            onView(withText("Fila de preparação por estado e tempo de espera."))
+                .check(matches(isDisplayed()))
         }
     }
 
