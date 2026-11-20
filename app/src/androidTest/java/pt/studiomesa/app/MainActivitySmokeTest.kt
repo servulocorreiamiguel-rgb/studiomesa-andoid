@@ -19,7 +19,6 @@ import org.hamcrest.Matchers.not
 import org.junit.Before
 import org.junit.Assume.assumeFalse
 import org.junit.Assume.assumeTrue
-import org.junit.Before
 import org.junit.Test
 
 /**
@@ -65,6 +64,9 @@ class MainActivitySmokeTest {
                 .edit()
                 .putBoolean("customer_entry_choice_complete_v1", true)
                 .apply()
+        }
+    }
+
     private fun isCustomerVariant(): Boolean =
         InstrumentationRegistry.getInstrumentation()
             .targetContext.packageName.endsWith(".cliente")
