@@ -1,8 +1,29 @@
 # StudioMesa — lista de preparação para uso profissional
 
-**Ponto de situação verificado em 14/11/2026:** a `main` está pronta para demonstração com dados fictícios, mas **não está autorizada para operação com dados reais nem venda operacional**. A PR #128 integrou o código de sincronização SAF-T, previsões económicas, OCR local de faturas e receção de mercadoria; a PR #130 mantém a barreira de release comercial. As PRs #132, #133 e #134 foram integradas. A PR #134 foi o último merge; a sua CI passou os quatro jobs. A CI da PR #133 ([43508119493](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43508119493)), a CI pós-merge da `main` ([43512084404](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43512084404)) e a CI da PR #134 ([43512547155](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43512547155)) terminaram com sucesso nos quatro jobs: APK, PostgreSQL/autorização, Android 8 e Android 16. O Supabase continua com 71 migrações locais e 63 remotas: oito migrações locais por aplicar. A app **não está autorizada para dados reais, produção ou venda operacional**.
+**Ponto de situação verificado em 20/11/2026:** a aplicação continua em desenvolvimento e **não está autorizada para operação com dados reais nem venda operacional**.
 
-Auditoria histórica de 12/11: [docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-12.md](docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-12.md). O ponto de situação abaixo substitui as contagens e estados históricos que se seguem.
+- A PR [#135](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/135) contém a integração mais recente da aplicação Cliente, cartões multi-restaurante, campanhas e notificações locais. Continua em rascunho e não altera a `main`.
+- A CI da revisão anterior [44801026220](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44801026220) passou os quatro jobs: compilação Android, testes unitários, Android Lint, replay PostgreSQL/autorização e testes de interface nos emuladores Android 8 e Android 16. Uma correcção posterior para abrir a secção ao tocar numa notificação tem uma nova CI em execução; só deve ser considerada validada quando essa execução terminar com sucesso.
+- O artefacto ARM64 inclui cinco APKs de demonstração/debug, cerca de 42,6 MB cada. Não são releases assinadas comercialmente e não devem ser usados com dados reais.
+- O Supabase alojado tem 63 migrações; a branch actual contém 72 ficheiros de migração. **Nove migrações ainda não estão aplicadas** no projecto alojado.
+- A PR [#92](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/92), com alterações de stock, permissões e quotas da loja, está divergente da `main` (90 commits à frente e 97 atrás no momento da comparação). Não deve ser integrada directamente.
+- O utilizador confirmou testes físicos anteriores no OPPO A5m para funcionalidades gratuitas, reservas, sincronização Gestão/Cliente e isolamento entre restaurantes. Esses fluxos não são marcados como pendentes; a build nova e as alterações ainda não testadas continuam a precisar de validação física.
+
+## Bloqueios para lançamento comercial
+
+1. Rever as nove migrações e reconciliar o histórico. Antes de qualquer deployment, obter backup completo e provar o restauro da base de dados, Auth e Storage.
+2. Testar registo, confirmação de conta, recuperação de palavra-passe e SMTP com contas descartáveis.
+3. Rever política de privacidade, termos, tratamento de dados e licenças de modelos/serviços.
+4. Definir os identificadores finais das aplicações e configurar uma keystore comercial privada, fora do repositório.
+5. Concluir os testes físicos no OPPO A5m e os testes E2E no backend real, depois de um deployment controlado.
+6. Configurar, caso se pretenda, Firebase Cloud Messaging para notificações com a app fechada. A versão actual só consulta alterações em primeiro plano.
+7. Configurar fornecedor/segredos de pesquisa web ou IA cloud; estes serviços ficam desligados quando não estão configurados.
+
+**Regra de segurança:** não executar `db push`, reset ou deployment de migrations no Supabase alojado enquanto não existir um backup/restauro verificado e uma revisão das autorizações. Não criar uma release comercial com a chave temporária da CI.
+
+## Registos históricos
+
+A auditoria de [12/11/2026](docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-12.md) e as secções históricas abaixo registam estados antigos. As suas contagens de migrações, SHA e PRs não substituem o ponto de situação datado de 20/11/2026.
 
 ## Código e CI
 
