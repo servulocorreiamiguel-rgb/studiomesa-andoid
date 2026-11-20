@@ -7,6 +7,7 @@ data class StudioMesaNotificationEvent(
     val state: String,
     val title: String,
     val message: String,
+    val destination: String = "",
     val notifyOnNew: Boolean = false,
     val notifyWhenStateIs: Set<String> = emptySet()
 )
