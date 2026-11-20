@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.app.Notification
 import android.app.NotificationChannel
+import android.app.PendingIntent
 import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
@@ -45,7 +46,7 @@ object StudioMesaNotificationCenter {
         )
     }
 
-    fun show(context: Context, stableKey: String, title: String, message: String) {
+    fun show(context: Context, stableKey: String, title: String, message: String, destination: String) {
         ensureChannel(context)
         if (Build.VERSION.SDK_INT >= 33 &&
             context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
@@ -58,8 +59,23 @@ object StudioMesaNotificationCenter {
         } else {
             Notification.Builder(context)
         }
+        val notificationId = stableKey.hashCode() and 0x7fffffff
+        val tapIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(MainActivity.EXTRA_NOTIFICATION_DESTINATION, destination)
+        }
+        val pendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT or
+            (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+        val contentIntent = PendingIntent.getActivity(
+            context,
+            notificationId,
+            tapIntent,
+            pendingIntentFlags
+        )
+
         val notification = builder
             .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentIntent(contentIntent)
             .setContentTitle(title)
             .setContentText(message)
             .setStyle(Notification.BigTextStyle().bigText(message))
@@ -68,7 +84,6 @@ object StudioMesaNotificationCenter {
             .setCategory(Notification.CATEGORY_STATUS)
             .build()
 
-        val notificationId = stableKey.hashCode() and 0x7fffffff
         runCatching { manager.notify(notificationId, notification) }
     }
 }
