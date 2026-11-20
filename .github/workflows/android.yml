@@ -212,15 +212,24 @@ jobs:
       # Device-specific install packages avoid shipping native libraries for other CPU architectures.
       # Keep the universal demo artifact above unchanged for broad testing.
       - name: Build ARM64 preview APKs
-        run: gradle --no-daemon --rerun-tasks -PstudiomesaTargetAbi=arm64-v8a assemblePremiumRestauranteDebug assemblePremiumClienteDebug
+        run: |
+          gradle --no-daemon --rerun-tasks -PstudiomesaTargetAbi=arm64-v8a \
+            assembleEssencialRestauranteDebug \
+            assembleProfissionalRestauranteDebug \
+            assembleProfissionalClienteDebug \
+            assemblePremiumRestauranteDebug \
+            assemblePremiumClienteDebug
 
       - name: Verify ARM64 preview APK contents
         shell: bash
         run: |
           set -euo pipefail
-          for apk in \
-            app/build/outputs/apk/premiumRestaurante/debug/app-premium-restaurante-debug.apk \
-            app/build/outputs/apk/premiumCliente/debug/app-premium-cliente-debug.apk; do
+          mapfile -d '' apks < <(find app/build/outputs/apk -type f -path '*/debug/*.apk' -print0)
+          if [ "${#apks[@]}" -ne 5 ]; then
+            echo "Expected five ARM64 preview APKs, found ${#apks[@]}."
+            exit 1
+          fi
+          for apk in "${apks[@]}"; do
             test -s "$apk"
             native_entries="$(unzip -Z1 "$apk" | grep '^lib/' || true)"
             if [ -z "$native_entries" ]; then
@@ -237,9 +246,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: StudioMesa-1.5.0-ARM64-Preview-APKs
-          path: |
-            app/build/outputs/apk/premiumRestaurante/debug/app-premium-restaurante-debug.apk
-            app/build/outputs/apk/premiumCliente/debug/app-premium-cliente-debug.apk
+          path: app/build/outputs/apk/**/debug/*.apk
           if-no-files-found: error
           retention-days: 14
 
