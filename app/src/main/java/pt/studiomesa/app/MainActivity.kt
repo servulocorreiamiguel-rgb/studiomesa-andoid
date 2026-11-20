@@ -456,13 +456,10 @@ class MainActivity : ComponentActivity() {
     private fun applyPendingNotificationDestination(): Boolean {
         val requested = pendingNotificationDestination ?: return false
         if (isCustomerApp) {
-            val customerPages = setOf("Cartão", "Carta", "Avisos", "Reservas", "Conta")
-            if (requested !in customerPages) {
-                pendingNotificationDestination = null
-                return false
-            }
-            activeCustomerPage = requested
+            val resolved = StudioMesaNotificationDestinationPolicy.forCustomer(requested)
             pendingNotificationDestination = null
+            if (resolved == null) return false
+            activeCustomerPage = resolved
             return true
         }
 
@@ -471,8 +468,10 @@ class MainActivity : ComponentActivity() {
             currentStaffPermissions == null
         ) return false
 
-        val restaurantPages = setOf("Início", "Mesas", "Pedidos", "Cozinha", "Carta", "Pontos", "Reservas")
-        val resolved = requested.takeIf { it in restaurantPages && it in availablePages() }
+        val resolved = StudioMesaNotificationDestinationPolicy.forRestaurant(
+            requested,
+            availablePages()
+        )
         pendingNotificationDestination = null
         activePage = resolved ?: "Início"
         return resolved != null
