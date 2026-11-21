@@ -59,6 +59,8 @@ Os fluxos gratuitos, reservas, sincronização Gestão/Cliente e isolamento entr
 
 ## 4. Rever autenticação sem expor credenciais
 
+Seguir também o [estado e roteiro de testes Auth/SMTP](AUTH-TEST-STATUS-2026-11-21.md).
+
 Usar apenas contas descartáveis de teste. Confirmar registo, confirmação de email, login, recuperação de palavra-passe, refresh, logout e eliminação. Não colocar passwords, códigos, tokens, chaves API ou ficheiros de assinatura em conversas, issues, commits ou ficheiros do repositório.
 
 Google/Microsoft OAuth continua adiado por decisão do proprietário até depois da primeira venda; não activar nesta sessão.
