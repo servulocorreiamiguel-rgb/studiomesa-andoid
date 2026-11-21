@@ -1,28 +1,25 @@
 # Ensaio no OPPO A5m — pré-visualização StudioMesa 1.5.0
 
-**Build:** 20/11/2026 — commit `4b9242e51d3d914f24dbeafdbd2a750efb31effd`  
-**CI:** [workflow 44815698449](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44815698449) — os quatro jobs terminaram com sucesso.  
+**Build:** 21/11/2026 — commit `97c8d1653005040cd6a16055b314e310095da7c8`  
+**CI:** [workflow 44886406846](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44886406846) — os quatro jobs terminaram com sucesso.  
 **Dispositivo-alvo:** OPPO A5m / CPH2727 / Android 16 / ARM64  
 **Tipo:** APKs ARM64 de depuração para teste; não são releases comerciais.
 
 ## Artefacto desta revisão
 
 Artefacto GitHub Actions: `StudioMesa-1.5.0-ARM64-Preview-APKs`  
-ID: `14669494611`  
-SHA-256 do ZIP: `ce797eb3553da23c5e3a642b4a031d440d8a0db1126c883c2354d78911656e06`
+ID: `14700641398`  
+Execução: [CI 44886406846](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44886406846)
 
-Contém cinco APKs, todos com cerca de 42,6 MB:
-- Gestão Premium: `premiumRestaurante/debug/app-premium-restaurante-debug.apk`
-- Cliente Premium: `premiumCliente/debug/app-premium-cliente-debug.apk`
+Contém seis APKs ARM64 debug:
+- Gestão Essencial: `essencialRestaurante/debug/app-essencial-restaurante-debug.apk`
+- Cliente Essencial: `essencialCliente/debug/app-essencial-cliente-debug.apk`
 - Gestão Profissional: `profissionalRestaurante/debug/app-profissional-restaurante-debug.apk`
 - Cliente Profissional: `profissionalCliente/debug/app-profissional-cliente-debug.apk`
-- Gestão Essencial: `essencialRestaurante/debug/app-essencial-restaurante-debug.apk`
+- Gestão Premium: `premiumRestaurante/debug/app-premium-restaurante-debug.apk`
+- Cliente Premium: `premiumCliente/debug/app-premium-cliente-debug.apk`
 
-Para o ensaio no OPPO, usar primeiro **Gestão Premium** e **Cliente Premium** do mesmo artefacto. Não misturar APKs de execuções diferentes.
-
-- Gestão Premium: SHA-256 `2428ca337c248cb303752f042daabe9cc147f6cf96f19f18d01ce00735fb36a9` (42 628 543 bytes).
-- Cliente Premium: SHA-256 `814ec0ef20fd5ead8e68990040b56ddab6fe8bb077750c7299be078e81d178be` (42 628 535 bytes).
-- ZIP de teste Gestão + Cliente Premium preparado a partir deste artefacto: `StudioMesa-1.5.0-OPPO-A5m-Premium-TESTE-CI1925.zip`, SHA-256 `2dd216e7afd5f5cc5429a70dbe2ca9c7a7dda84930009c51ff9be46f6b6302a7`.
+Para o ensaio no OPPO, usar primeiro **Gestão Premium** e **Cliente Premium** do mesmo artefacto. Não misturar APKs de execuções diferentes. O artefacto é um ZIP com as seis variantes; não é necessário instalar todas.
 
 ## Antes de instalar
 
