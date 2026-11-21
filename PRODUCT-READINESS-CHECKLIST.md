@@ -1,11 +1,12 @@
 # StudioMesa — lista de preparação para uso profissional
 
-**Ponto de situação verificado em 20/11/2026 após a CI 44809660302:** a aplicação continua em desenvolvimento e **não está autorizada para operação com dados reais nem venda operacional**.
+**Ponto de situação verificado em 20/11/2026 após a CI 44815698449:** a aplicação continua em desenvolvimento e **não está autorizada para operação com dados reais nem venda operacional**.
 
 - A PR [#135](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/135) contém a integração mais recente da aplicação Cliente, cartões multi-restaurante, campanhas e notificações locais, incluindo a correcção para abrir o destino ao tocar num aviso. Continua em rascunho e não altera a `main`.
-- A CI [44809660302](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44809660302), no commit `b2c17ee85a31a0b8f00d6c22342b10176021af20`, terminou com **os quatro jobs aprovados**: compilação das cinco variantes e testes unitários; Android Lint e auditorias; replay PostgreSQL/autorização; testes de interface Android 8 e Android 16.
-- O artefacto ARM64 [14668750452](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44809660302) contém cinco APKs debug de pré-visualização, cada um com cerca de 42,6 MB. Não são releases comerciais assinadas nem devem ser usados com dados reais.
+- A CI [44815698449](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44815698449), no commit `4b9242e51d3d914f24dbeafdbd2a750efb31effd`, terminou com **os quatro jobs aprovados**: compilação das cinco variantes e testes unitários; Android Lint e auditorias; replay PostgreSQL/autorização; testes de interface Android 8 e Android 16.
+- O artefacto ARM64 [14669494611](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44815698449) contém cinco APKs debug de pré-visualização, cada um com cerca de 42,6 MB. Não são releases comerciais assinadas nem devem ser usados com dados reais.
 - O Supabase alojado tem 63 migrações remotas. A branch de desenvolvimento contém 72 ficheiros SQL; **nove migrações continuam por aplicar** no projecto alojado.
+- A implementação de email/palavra-passe, PKCE e recuperação por OTP existe no código; SMTP/Auth E2E continua por validar. Ver [estado dos testes de autenticação](docs/AUTH-TEST-STATUS-2026-11-21.md).
 - A PR [#92](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/92), com alterações de stock, permissões e quotas da loja, está divergente da `main` e não deve ser integrada directamente.
 - O proprietário confirmou testes físicos anteriores no OPPO A5m para funcionalidades gratuitas, reservas, sincronização Gestão/Cliente e isolamento entre restaurantes. Esses fluxos não são marcados como pendentes; a build nova e as alterações ainda não testadas continuam a precisar de validação física.
 - O roteiro para o OPPO foi actualizado e existe agora uma checklist da sessão no computador de 21/11/2026 às 09:00.
