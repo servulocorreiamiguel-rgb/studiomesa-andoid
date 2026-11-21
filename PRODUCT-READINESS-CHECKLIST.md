@@ -1,10 +1,10 @@
 # StudioMesa — lista de preparação para uso profissional
 
-**Ponto de situação verificado em 21/11/2026 após a CI 44883958535:** a aplicação continua em desenvolvimento e **não está autorizada para operação com dados reais nem venda operacional**.
+**Ponto de situação verificado em 21/11/2026 após a CI 44886406846:** a aplicação continua em desenvolvimento e **não está autorizada para operação com dados reais nem venda operacional**.
 
 - A PR [#135](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/135) contém a integração mais recente da aplicação Cliente, cartões multi-restaurante, campanhas e notificações locais, incluindo a correcção para abrir o destino ao tocar num aviso. Continua em rascunho e não altera a `main`.
-- A CI [44883958535](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44883958535), no commit `3f6a602101bf683912bc350b91f0ccb699fb5f21`, terminou com **os quatro jobs aprovados**: compilação das seis variantes, testes unitários, Android Lint e auditorias; replay das 72 migrações e testes de autorização; smoke tests Android 8 (API 26) e Android 16 (API 36).
-- O artefacto ARM64 [14699164286](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44883958535) contém seis APKs debug de pré-visualização, cada um com cerca de 42,6 MB. Não são releases comerciais assinadas nem devem ser usados com dados reais.
+- A CI [44886406846](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44886406846), no commit `97c8d1653005040cd6a16055b314e310095da7c8`, terminou com **os quatro jobs aprovados**: compilação e testes unitários das seis variantes, auditorias de segurança/Lint e configuração de release, replay das 72 migrações com testes de autorização/idempotência, e smoke tests Android 8 (API 26) e Android 16 (API 36).
+- O artefacto ARM64 `StudioMesa-1.5.0-ARM64-Preview-APKs` (ID `14700641398`, [CI 44886406846](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44886406846)) contém seis APKs debug de pré-visualização. Não são releases comerciais assinadas nem devem ser usados com dados reais.
 - O Supabase alojado tem 63 migrações remotas. A branch de desenvolvimento contém 72 ficheiros SQL; **nove migrações continuam por aplicar** no projecto alojado.
 - A implementação de email/palavra-passe, PKCE e recuperação por OTP existe no código; SMTP/Auth E2E continua por validar. Ver [estado dos testes de autenticação](docs/AUTH-TEST-STATUS-2026-11-21.md).
 - A PR [#92](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/92), com alterações de stock, permissões e quotas da loja, está divergente da `main` e não deve ser integrada directamente.
@@ -29,8 +29,8 @@ A auditoria de [12/11/2026](docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-12.md) e as s
 
 ## Código e CI
 
-- [x] A revisão da PR #135 no commit `3f6a602101bf683912bc350b91f0ccb699fb5f21` passou os quatro jobs da CI [44883958535](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44883958535): build e testes das seis variantes, replay das 72 migrações, autorização/isolation, Android 8 e Android 16.
-- [x] Foram produzidos seis APKs ARM64 de preview/debug no artefacto [14699164286](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44883958535). Não são releases comerciais; falta validação física no OPPO A5m.
+- [x] A revisão actual da PR #135, commit `97c8d1653005040cd6a16055b314e310095da7c8`, passou os quatro jobs da CI [44886406846](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44886406846): build e testes das seis variantes, replay das 72 migrações, autorização/isolation, Android 8 e Android 16.
+- [x] Foram produzidos seis APKs ARM64 de preview/debug no artefacto `14700641398` da CI [44886406846](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44886406846). Não são releases comerciais; falta validar fisicamente esta revisão no OPPO A5m.
 
 - [x] A PR #134 actualizou a fotografia de prontidão após a PR #133; foi integrada em `2b27ed6197d6ec5431c224ee69d277eaa2845c7c` após CI verde nos quatro jobs ([43512547155](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43512547155)).
 
