@@ -1,6 +1,6 @@
 # StudioMesa
 
-**Estado verificado — 21/11/2026:** a `main` continua a conter as PRs #133 e #134; a integração mais recente está na PR [#135](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/135), ainda em rascunho, na branch `work/mobile-completion-2026-11-20`. A CI mais recente desta branch, [44815698449](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44815698449), no commit `4b9242e51d3d914f24dbeafdbd2a750efb31effd`, passou os quatro jobs: compilação e testes unitários, auditorias/Lint, replay PostgreSQL/autorização e testes de interface Android 8 e Android 16. O artefacto ARM64 actual contém cinco APKs debug de pré-visualização com cerca de 42,6 MB cada. A app **não está autorizada para dados reais, produção ou venda operacional**. A main documentada tem oito migrações locais pendentes; a branch #135 tem uma nona migração adicional (`20261108170000_customer_multi_restaurant_cards.sql`). Ver [checklist de preparação](PRODUCT-READINESS-CHECKLIST.md), [runbook de backup/restauro e migrações](docs/PRODUCTION-BACKUP-AND-MIGRATION-RUNBOOK.md), [preparação de release](RELEASE-SETUP.md) e [plano da sessão no computador](docs/COMPUTER-SESSION-2026-11-21.md). A auditoria read-only mais recente do backend está em [LIVE-SUPABASE-AUDIT-2026-11-21.md](docs/LIVE-SUPABASE-AUDIT-2026-11-21.md). A implementação de autenticação estática foi revista; SMTP/Auth E2E continua pendente — ver [estado dos testes Auth](docs/AUTH-TEST-STATUS-2026-11-21.md).
+**Estado verificado — 21/11/2026:** a `main` continua a conter as PRs #133 e #134; a integração mais recente está na PR [#135](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/135), ainda em rascunho, na branch `work/mobile-completion-2026-11-20`. A revisão actual da branch é o commit `97c8d1653005040cd6a16055b314e310095da7c8`; a CI [44886406846](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44886406846) passou os quatro jobs: compilação, testes unitários, auditorias/Lint, replay PostgreSQL/autorização e smoke tests Android 8 e Android 16. O artefacto [ARM64 de pré-visualização](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44886406846) contém seis APKs debug; não são releases comerciais assinadas. A app **não está autorizada para dados reais, produção ou venda operacional**. A `main` tem oito migrações locais pendentes; a branch #135 tem uma nona migração adicional (`20261108170000_customer_multi_restaurant_cards.sql`), pelo que existem nove versões da branch por reconciliar com o Supabase alojado. Ver [checklist de preparação](PRODUCT-READINESS-CHECKLIST.md), [runbook de backup/restauro e migrações](docs/PRODUCTION-BACKUP-AND-MIGRATION-RUNBOOK.md), [preparação de release](RELEASE-SETUP.md), [guia de aceitação apenas com o telemóvel](docs/PHONE-ONLY-COMMERCIAL-ACCEPTANCE-2026-11-21.md) e [plano da sessão no computador](docs/COMPUTER-SESSION-2026-11-21.md). A auditoria read-only mais recente do backend está em [LIVE-SUPABASE-AUDIT-2026-11-21.md](docs/LIVE-SUPABASE-AUDIT-2026-11-21.md). A implementação de autenticação estática foi revista; SMTP/Auth E2E continua pendente — ver [estado dos testes Auth](docs/AUTH-TEST-STATUS-2026-11-21.md).
 
 **Entrada de clientes:** a `main` ainda não inclui o fluxo consolidado de convidado, pesquisa de restaurante por nome, adesão por QR, pedidos de adesão e cartões multi-restaurante. A PR #135 reúne esta implementação e os avisos de actividade; a CI passou, mas a migração de cartões ainda não está aplicada no Supabase alojado. Não usar essa funcionalidade com contas ou dados reais até à migração controlada e aos testes E2E.
 
@@ -39,7 +39,7 @@ A migração `20261113114000_supplier_invoice_lines_stock_receipts_and_saft_sync
 - Testes de privacidade, segurança e proteção de dados; revisão independente da configuração de produção. A proteção de palavras-passe comprometidas no Supabase ainda não está ativada.
 - Os botões Google e Microsoft ficam ocultos na primeira versão comercial e serão reativados apenas depois da primeira venda. A implementação OAuth/PKCE fica preservada no código, atrás da propriedade `studiomesaSocialLoginButtonsEnabled`; não é um requisito do primeiro lançamento. O login inicial será por email/palavra-passe e continua a exigir SMTP próprio, confirmação de email e testes ponta a ponta.
 - Release comercial assinada: o workflow manual já existe, mas exige o identificador definitivo, keystore privada e secrets/variables de assinatura. Também bloqueia enquanto não forem confirmados como `YES` os quatro controlos: migrações/backup/restauro do backend, autenticação SMTP, testes físicos e revisão legal/privacidade/licenças. Estes valores só devem ser marcados após validação real. O workflow não publica automaticamente na Google Play.
-- A configuração de compilação usa compileSdk/targetSdk 36, Android Gradle Plugin 8.13.2 e Gradle 8.13. O workflow compila os cinco APKs de demonstração/debug, executa testes unitários nas cinco variantes de distribuição, Android Lint, replay de migrações/autorização em PostgreSQL e smoke tests em emuladores Android 8 e Android 16. Isto não substitui os testes físicos; os APKs atuais não são releases comerciais assinadas.
+- A configuração de compilação usa compileSdk/targetSdk 36, Android Gradle Plugin 8.13.2 e Gradle 8.13. O workflow compila os seis APKs de demonstração/debug, executa testes unitários nas seis variantes de distribuição, valida a configuração de release sem usar a keystore comercial, executa Android Lint, replay de migrações/autorização em PostgreSQL e smoke tests em emuladores Android 8 e Android 16. Isto não substitui os testes físicos; os APKs atuais não são releases comerciais assinadas.
 
 ## Preparação comercial
 
@@ -54,11 +54,12 @@ A migração `20261113114000_supplier_invoice_lines_stock_receipts_and_saft_sync
 
 O backend usa Supabase Auth e PostgreSQL com Row Level Security. Os códigos de adesão dos clientes ficam num esquema privado, separados das tabelas expostas à aplicação. As tabelas de mesas, carta e pedidos usam políticas de segurança por restaurante. Algumas funções protegidas usam SECURITY DEFINER para executar operações verificadas do lado da base de dados; as regras devem continuar a ser auditadas.
 
-### Compilar os cinco APKs de demonstração
+### Compilar os seis APKs de demonstração
 
 O workflow **Actions → Build StudioMesa Android APK** gera:
 
 - `app-essencial-restaurante-debug.apk`
+- `app-essencial-cliente-debug.apk`
 - `app-profissional-restaurante-debug.apk`
 - `app-profissional-cliente-debug.apk`
 - `app-premium-restaurante-debug.apk`
@@ -67,7 +68,7 @@ O workflow **Actions → Build StudioMesa Android APK** gera:
 Com JDK 17, Android Gradle Plugin 8.13.2, Gradle 8.13 e Android SDK 36:
 
 ```bash
-gradle --no-daemon assembleEssencialRestauranteDebug assembleProfissionalRestauranteDebug assembleProfissionalClienteDebug assemblePremiumRestauranteDebug assemblePremiumClienteDebug
+gradle --no-daemon assembleEssencialRestauranteDebug assembleEssencialClienteDebug assembleProfissionalRestauranteDebug assembleProfissionalClienteDebug assemblePremiumRestauranteDebug assemblePremiumClienteDebug
 ```
 
-Os APKs de demonstração não devem ser tratados como versão comercial final nem apresentados como testados em produção. Para preparar bundles comerciais assinados, segue [`RELEASE-SETUP.md`](RELEASE-SETUP.md). O workflow manual cria cinco AABs assinados para a Google Play e cinco APKs assinados para instalação direta; não publica automaticamente na Google Play. Os identificadores de pacote finais têm de ser escolhidos antes da publicação.
+Os APKs de demonstração não devem ser tratados como versão comercial final nem apresentados como testados em produção. Para preparar bundles comerciais assinados, segue [`RELEASE-SETUP.md`](RELEASE-SETUP.md). O workflow manual cria seis AABs assinados para a Google Play e seis APKs assinados para instalação direta; não publica automaticamente na Google Play. Os identificadores de pacote finais têm de ser escolhidos antes da publicação.
