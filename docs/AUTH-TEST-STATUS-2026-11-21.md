@@ -41,3 +41,33 @@ O Supabase Advisor também assinala `auth_leaked_password_protection` como desac
 Google e Microsoft/Outlook continuam ocultos por decisão do proprietário e não fazem parte do gate da primeira versão.
 
 **Estado:** implementação de código presente; validação real SMTP/Auth E2E pendente. Não definir a variável de prontidão como `YES` antes de todos os cenários acima passarem.
+
+
+## Incidente observado no OPPO A5m — 21/11/2026
+
+Os logs Auth do projecto alojado confirmaram, sem expor o endereço de email:
+- 15:54:12 UTC — pedido `user_recovery_requested` recebido da aplicação Android 16.
+- 15:54:13 UTC — evento `mail.send`.
+- 15:54:41 UTC — redireccionamento HTTP 303 e evento Auth `login` num browser Firefox Android.
+- 15:55:12 UTC — repetição do pedido/link, seguida de `403: Email link is invalid or has expired`.
+
+Os logs demonstram que o email foi enviado e que houve uma primeira validação/entrada; a repetição do link foi recusada. O user-agent da própria requisição de verificação não foi registado, pelo que não é possível determinar se a primeira abertura foi feita pelo utilizador, pela pré-visualização do cliente de email ou por outro componente. A documentação Supabase alerta que mecanismos de pré-carregamento de links em emails podem consumir links de utilização única antes de o utilizador os abrir.
+
+## Correcção recomendada: template de recuperação com OTP
+
+A aplicação já implementa `POST /auth/v1/verify` com `type: recovery` e exige seis algarismos. Para alinhar o servidor com essa implementação, foi adicionado o ficheiro versionado [`supabase/templates/recovery.html`](../supabase/templates/recovery.html), que contém `{{ .Token }}` e não inclui uma ligação de verificação.
+
+No Dashboard do Supabase, em **Authentication → Email Templates → Reset Password**, substituir o corpo da mensagem pelo conteúdo desse ficheiro e usar o assunto:
+
+`Código para recuperar a palavra-passe StudioMesa`
+
+Importante:
+- Alterar o template **Reset Password / Recovery**, não o template **Magic Link**.
+- Não usar `{{ .ConfirmationURL }}` neste template OTP.
+- Guardar e enviar um novo pedido de recuperação. Emails antigos e links já enviados não são reutilizáveis.
+- O email novo deve apresentar um código de seis algarismos; introduzi-lo na caixa de recuperação da app e depois definir a nova palavra-passe.
+- Confirmar primeiro num endereço de teste/conta descartável. Só depois considerar o fluxo aceite.
+
+A documentação oficial confirma que `{{ .Token }}` é o OTP de seis algarismos e pode ser usado em vez de `{{ .ConfirmationURL }}`. Ver [Supabase — Email Templates](https://supabase.com/docs/guides/auth/auth-email-templates) e [Passwordless email / OTP](https://supabase.com/docs/guides/auth/auth-email-passwordless).
+
+**Estado:** o template correcto está agora versionado na branch da PR. Ainda não foi aplicado ao Dashboard alojado nem foi possível confirmar um email novo com OTP. Até essa alteração e o teste E2E passarem, a recuperação de palavra-passe continua bloqueada para uso comercial.
