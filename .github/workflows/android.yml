@@ -62,6 +62,9 @@ jobs:
       - name: Test account deletion Edge Function security audit
         run: python3 scripts/test_check_account_deletion_security.py
 
+      - name: Test Supabase password recovery OTP email template
+        run: python3 scripts/test_supabase_recovery_template.py
+
       - name: Audit account deletion Edge Function security
         run: python3 scripts/check_account_deletion_security.py
 
