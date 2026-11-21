@@ -16,6 +16,15 @@ class BackendSchemaFeatureGateTest {
     }
 
     @Test
+    fun customerMultiRestaurantFlowsStayHiddenUntilHostedRpcsAreProvisioned() {
+        assertFalse(BackendSchemaFeatureGate.CUSTOMER_MULTI_RESTAURANT_ENABLED)
+        assertEquals(
+            listOf(CustomerJoinMethod.ACCESS_CODE, CustomerJoinMethod.QR),
+            BackendSchemaFeatureGate.customerJoinMethods()
+        )
+    }
+
+    @Test
     fun legacySchemaPreservesThePreviousOperationalPermissionsForStaff() {
         assertEquals(
             StaffPermissionSet.all.toSet(),

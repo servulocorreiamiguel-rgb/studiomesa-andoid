@@ -6767,10 +6767,12 @@ class MainActivity : ComponentActivity() {
         addGap(content, 3)
         content.addView(label(code, 24f, true, forestDeep))
         addGap(content, 7)
-        content.addView(label(
-            "O cliente pode pesquisar o restaurante pelo nome e pedir aprovação, ou ler este QR para aderir diretamente. Mantém este convite junto do restaurante.",
-            12f, false, muted
-        ))
+        val joinInstructions = if (BackendSchemaFeatureGate.CUSTOMER_MULTI_RESTAURANT_ENABLED) {
+            "O cliente pode pesquisar o restaurante pelo nome e pedir aprovação, ou ler este QR para aderir. Mantém este convite junto do restaurante."
+        } else {
+            "O cliente pode introduzir este código ou ler este QR para criar o cartão de fidelização neste restaurante."
+        }
+        content.addView(label(joinInstructions, 12f, false, muted))
         AlertDialog.Builder(this)
             .setTitle("Código e QR de adesão")
             .setView(content)
@@ -6779,6 +6781,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showRestaurantMembershipRequestsDialog() {
+        if (!BackendSchemaFeatureGate.CUSTOMER_MULTI_RESTAURANT_ENABLED) {
+            showMultiRestaurantFeatureUnavailableMessage()
+            return
+        }
         val restaurantId = backendRestaurantId()
         if (backendToken().isBlank() || restaurantId.isBlank() ||
             backendPrefs.getString("restaurant_role", "") != "owner") {
@@ -7210,7 +7216,7 @@ class MainActivity : ComponentActivity() {
             container.addView(secondaryButton("Atualizar cartões e loja") { refreshRemoteCustomers() }, LinearLayout.LayoutParams(-1, dp(48)))
             addGap(container, 6)
             container.addView(secondaryButton("Ver código e QR de adesão") { showRestaurantJoinCode() }, LinearLayout.LayoutParams(-1, dp(48)))
-            if (isOwner) {
+            if (isOwner && BackendSchemaFeatureGate.CUSTOMER_MULTI_RESTAURANT_ENABLED) {
                 addGap(container, 6)
                 container.addView(secondaryButton("Pedidos de associação de clientes") {
                     showRestaurantMembershipRequestsDialog()
@@ -7621,18 +7627,22 @@ class MainActivity : ComponentActivity() {
             showAuthChooser { renderCustomerApp() }
             return
         }
-        val options = arrayOf(
-            "Pesquisar pelo nome do restaurante",
-            "Introduzir código de adesão",
-            "Ler QR de adesão"
-        )
+        val methods = BackendSchemaFeatureGate.customerJoinMethods()
+        val options = methods.map { method ->
+            when (method) {
+                CustomerJoinMethod.SEARCH_BY_NAME -> "Pesquisar pelo nome do restaurante"
+                CustomerJoinMethod.ACCESS_CODE -> "Introduzir código de adesão"
+                CustomerJoinMethod.QR -> "Ler QR de adesão"
+            }
+        }.toTypedArray()
         AlertDialog.Builder(this)
             .setTitle("Associar ao restaurante")
             .setItems(options) { _, which ->
-                when (which) {
-                    0 -> showCustomerRestaurantSearchDialog()
-                    1 -> showCustomerJoinCodeDialog()
-                    2 -> startCustomerJoinQrScan()
+                when (methods.getOrNull(which)) {
+                    CustomerJoinMethod.SEARCH_BY_NAME -> showCustomerRestaurantSearchDialog()
+                    CustomerJoinMethod.ACCESS_CODE -> showCustomerJoinCodeDialog()
+                    CustomerJoinMethod.QR -> startCustomerJoinQrScan()
+                    null -> Unit
                 }
             }
             .setNegativeButton("Cancelar", null)
@@ -7716,7 +7726,19 @@ class MainActivity : ComponentActivity() {
             .initiateScan()
     }
 
+    private fun showMultiRestaurantFeatureUnavailableMessage() {
+        AlertDialog.Builder(this)
+            .setTitle("Associação multi-restaurante indisponível")
+            .setMessage("A pesquisa por nome, os pedidos de aprovação e a associação a vários restaurantes ainda não estão ativos no servidor. Para aderir a este restaurante, usa o código ou o QR apresentado pelo restaurante.")
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
     private fun showCustomerRestaurantSearchDialog() {
+        if (!BackendSchemaFeatureGate.CUSTOMER_MULTI_RESTAURANT_ENABLED) {
+            showMultiRestaurantFeatureUnavailableMessage()
+            return
+        }
         if (backendToken().isBlank()) {
             showAuthChooser { renderCustomerApp() }
             return
@@ -7816,6 +7838,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showCustomerMembershipRequestStatus() {
+        if (!BackendSchemaFeatureGate.CUSTOMER_MULTI_RESTAURANT_ENABLED) {
+            showMultiRestaurantFeatureUnavailableMessage()
+            return
+        }
         if (backendToken().isBlank()) {
             showAuthChooser { renderCustomerApp() }
             return
@@ -8092,16 +8118,20 @@ class MainActivity : ComponentActivity() {
             addGap(container, 3)
             container.addView(label(selectedRestaurant, 17f, true, forestDeep))
             addGap(container, 8)
-            if (customerMembershipsCache.length() > 1) {
+            if (BackendSchemaFeatureGate.CUSTOMER_MULTI_RESTAURANT_ENABLED &&
+                customerMembershipsCache.length() > 1
+            ) {
                 container.addView(secondaryButton("Trocar de restaurante") {
                     showCustomerMembershipPicker()
                 }, LinearLayout.LayoutParams(-1, dp(46)))
                 addGap(container, 6)
             }
-            container.addView(secondaryButton("Associar outro restaurante") {
-                showCustomerJoinDialog()
-            }, LinearLayout.LayoutParams(-1, dp(46)))
-            addGap(container, 6)
+            if (BackendSchemaFeatureGate.CUSTOMER_MULTI_RESTAURANT_ENABLED) {
+                container.addView(secondaryButton("Associar outro restaurante") {
+                    showCustomerJoinDialog()
+                }, LinearLayout.LayoutParams(-1, dp(46)))
+                addGap(container, 6)
+            }
         }
         when {
             backendToken().isBlank() -> container.addView(
@@ -8109,15 +8139,22 @@ class MainActivity : ComponentActivity() {
                 LinearLayout.LayoutParams(-1, dp(48))
             )
             backendMemberId().isBlank() -> {
+                val joinLabel = if (BackendSchemaFeatureGate.CUSTOMER_MULTI_RESTAURANT_ENABLED) {
+                    "Encontrar restaurante ou usar QR"
+                } else {
+                    "Introduzir código ou ler QR"
+                }
                 container.addView(
-                    primaryButton("Encontrar restaurante ou usar QR") { showCustomerJoinDialog() },
+                    primaryButton(joinLabel) { showCustomerJoinDialog() },
                     LinearLayout.LayoutParams(-1, dp(48))
                 )
-                addGap(container, 6)
-                container.addView(
-                    secondaryButton("Consultar pedidos de associação") { showCustomerMembershipRequestStatus() },
-                    LinearLayout.LayoutParams(-1, dp(46))
-                )
+                if (BackendSchemaFeatureGate.CUSTOMER_MULTI_RESTAURANT_ENABLED) {
+                    addGap(container, 6)
+                    container.addView(
+                        secondaryButton("Consultar pedidos de associação") { showCustomerMembershipRequestStatus() },
+                        LinearLayout.LayoutParams(-1, dp(46))
+                    )
+                }
             }
             else -> container.addView(
                 primaryButton("Atualizar cartão selecionado") { refreshCustomerMembership() },
@@ -8137,8 +8174,13 @@ class MainActivity : ComponentActivity() {
         loyalty.addView(label(code, 20f, true, white))
         addGap(loyalty, 9)
         loyalty.addView(label(
-            if (backendMemberId().isBlank()) "Este é um cartão de demonstração. Encontra o restaurante pelo nome, introduz o código ou lê o QR de adesão. A pesquisa por nome exige aprovação do proprietário."
-            else "O saldo pertence à tua conta. O QR temporário só pode ser utilizado uma vez para creditar pontos.",
+            if (backendMemberId().isBlank()) {
+                if (BackendSchemaFeatureGate.CUSTOMER_MULTI_RESTAURANT_ENABLED) {
+                    "Este é um cartão de demonstração. Encontra o restaurante pelo nome, introduz o código ou lê o QR de adesão. A pesquisa por nome exige aprovação do proprietário."
+                } else {
+                    "Este é um cartão de demonstração. Pede ao restaurante o código de adesão ou lê o QR apresentado no local."
+                }
+            } else "O saldo pertence à tua conta. O QR temporário só pode ser utilizado uma vez para creditar pontos.",
             12f, false, Color.rgb(229, 235, 228)
         ))
         container.addView(loyalty, cardParams())
