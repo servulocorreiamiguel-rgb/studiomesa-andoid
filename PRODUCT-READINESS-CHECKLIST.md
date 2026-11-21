@@ -116,7 +116,7 @@ Consultas read-only e Supabase Advisors em 13/11/2026:
 - [x] Workflow manual de release assinado existe e bloqueia builds sem CI verde para o commit exato, confirmação manual, keystore e package ID.
 - [ ] Escolher os identificadores finais após decidir a estratégia de distribuição; ficam permanentes após publicação.
 - [ ] Criar keystore privada e backup sob controlo do proprietário; configurar GitHub Actions Secrets/Variables. Nunca enviar chaves ou passwords por chat ou Git.
-- [ ] Rever a estratégia Google Play: cinco variantes técnicas não significam cinco listagens permitidas. Considerar apps Gestão/Cliente e entitlements seguros por plano ou distribuição B2B privada.
+- [ ] Rever a estratégia Google Play: seis variantes técnicas não significam seis listagens permitidas. Considerar apps Gestão/Cliente e entitlements seguros por plano ou distribuição B2B privada.
 - [ ] Gerar AAB/APKs assinados com a chave comercial, verificar assinaturas/checksums e testar atualização em dispositivos reais. O workflow não publica automaticamente na Play Store.
 - [ ] Confirmar procedimento de backups/restauro antes de operar com dados de restaurantes.
 - [ ] Definir uma pessoa adulta/entidade com capacidade legal como titular dos contratos, faturação, responsabilidades de proteção de dados e conta Play Console. Não usar a identidade de terceiros como fachada; o Código Civil português regula a capacidade dos menores nos artigos 122.º–127.º e a Play Console exige titular com pelo menos 18 anos.
@@ -249,9 +249,9 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 ## Lançamento e suporte
 
 
-- [x] Workflow atual compila APKs de demonstração/debug e executa testes unitários nas cinco variantes de distribuição.
-- [x] Configuração usa compileSdk/targetSdk 36, AGP 8.10.0 e Gradle 8.11.1; a última execução verificada compilou e carregou os cinco APKs debug de demonstração.
-- [x] Adicionado workflow manual que prepara cinco AABs comerciais assinados, exige confirmação explícita, executa testes e Lint e verifica as assinaturas.
+- [x] Workflow atual compila APKs de demonstração/debug e executa testes unitários nas seis variantes de distribuição.
+- [x] Configuração usa compileSdk/targetSdk 36, AGP 8.13.2 e Gradle 8.13; a última execução verificada compilou e carregou os seis APKs debug de demonstração.
+- [x] Adicionado workflow manual que prepara seis AABs comerciais assinados, exige confirmação explícita, executa testes e Lint e verifica as assinaturas.
 - [ ] Escolher e validar o identificador base definitivo, criar o keystore privado, configurar os GitHub Actions Secrets/Variables e executar o workflow comercial com sucesso.
 - [ ] Terminar os testes ponta a ponta antes de instalar a versão comercial num restaurante real.
 - [ ] Automatizar testes e análise estática e guardar os resultados de cada release.
