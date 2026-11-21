@@ -71,10 +71,10 @@ jobs:
 
       - name: Build and verify signed APKs
         run: |
-          gradle assembleEssencialRestauranteRelease assembleProfissionalRestauranteRelease assembleProfissionalClienteRelease assemblePremiumRestauranteRelease assemblePremiumClienteRelease
+          gradle assembleEssencialRestauranteRelease assembleEssencialClienteRelease assembleProfissionalRestauranteRelease assembleProfissionalClienteRelease assemblePremiumRestauranteRelease assemblePremiumClienteRelease
           mapfile -d '' apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' -print0)
-          if [ "${#apks[@]}" -ne 5 ]; then
-            echo "Expected exactly five release APKs, found ${#apks[@]}."
+          if [ "${#apks[@]}" -ne 6 ]; then
+            echo "Expected exactly six release APKs, found ${#apks[@]}."
             exit 1
           fi
           APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
@@ -93,23 +93,25 @@ SAFE_ANDROID_WORKFLOW = """      - name: Validate commercial release configurati
           gradle --no-daemon \\
             -PstudiomesaCommercialRelease=true \\
             bundleEssencialRestauranteRelease \\
+            bundleEssencialClienteRelease \\
             bundleProfissionalRestauranteRelease \\
             bundleProfissionalClienteRelease \\
             bundlePremiumRestauranteRelease \\
             bundlePremiumClienteRelease \\
             assembleEssencialRestauranteRelease \\
+            assembleEssencialClienteRelease \\
             assembleProfissionalRestauranteRelease \\
             assembleProfissionalClienteRelease \\
             assemblePremiumRestauranteRelease \\
             assemblePremiumClienteRelease
           mapfile -d '' bundles < <(find app/build/outputs/bundle -type f -name '*.aab' -print0)
-          if [ "${#bundles[@]}" -ne 5 ]; then exit 1; fi
+          if [ "${#bundles[@]}" -ne 6 ]; then exit 1; fi
           for aab in "${bundles[@]}"; do
             verification_output="$(jarsigner -verify "$aab" 2>&1)" || exit 1
             if ! grep -Fq "jar verified." <<< "$verification_output"; then exit 1; fi
           done
           mapfile -d '' apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' -print0)
-          if [ "${#apks[@]}" -ne 5 ]; then exit 1; fi
+          if [ "${#apks[@]}" -ne 6 ]; then exit 1; fi
           for apk in "${apks[@]}"; do
             "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$apk"
           done
@@ -224,7 +226,7 @@ class CommercialReleaseWorkflowAuditTests(unittest.TestCase):
             any("exactly YES" in error for error in audit_workflow(changed))
         )
 
-    def test_android_ci_builds_and_verifies_all_five_release_variants(self) -> None:
+    def test_android_ci_builds_and_verifies_all_six_release_variants(self) -> None:
         self.assertEqual([], audit_ci_test_bundle(SAFE_ANDROID_WORKFLOW))
         changed = SAFE_ANDROID_WORKFLOW.replace(
             "path: app/build/outputs/apk/**/debug/*.apk",
@@ -241,7 +243,7 @@ class CommercialReleaseWorkflowAuditTests(unittest.TestCase):
             "bundleVariantRemoved",
         )
         self.assertTrue(
-            any("all five temporary signed AAB and APK variants" in error
+            any("all six temporary signed AAB and APK variants" in error
                 for error in audit_ci_test_bundle(changed))
         )
 
@@ -251,7 +253,7 @@ class CommercialReleaseWorkflowAuditTests(unittest.TestCase):
             'if [ "${#bundles[@]}" -ne 4 ]; then exit 1; fi',
         )
         self.assertTrue(
-            any("exactly five temporary commercial AABs" in error
+            any("exactly six temporary commercial AABs" in error
                 for error in audit_ci_test_bundle(changed))
         )
 
