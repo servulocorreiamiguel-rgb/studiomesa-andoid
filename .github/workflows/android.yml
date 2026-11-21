@@ -253,6 +253,46 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      # A compact pair lets the owner install the two Premium apps directly on the OPPO A5m.
+      # The universal six-variant artifact above remains available for broader testing.
+      - name: Package OPPO A5m Premium test pair
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_dir="$RUNNER_TEMP/studiomesa-oppo-a5m-premium"
+          mkdir -p "$package_dir/Gestao-Premium" "$package_dir/Cliente-Premium"
+          cp app/build/outputs/apk/premiumRestaurante/debug/app-premium-restaurante-debug.apk \
+            "$package_dir/Gestao-Premium/StudioMesa-Gestao-Premium.apk"
+          cp app/build/outputs/apk/premiumCliente/debug/app-premium-cliente-debug.apk \
+            "$package_dir/Cliente-Premium/StudioMesa-Cliente-Premium.apk"
+          (
+            cd "$package_dir"
+            sha256sum \
+              Gestao-Premium/StudioMesa-Gestao-Premium.apk \
+              Cliente-Premium/StudioMesa-Cliente-Premium.apk > SHA256SUMS.txt
+          )
+          cat > "$package_dir/LEIA-PRIMEIRO.txt" <<'EOF'
+          StudioMesa 1.5.0 — pacote de teste OPPO A5m
+          
+          Instalar primeiro Gestao-Premium/StudioMesa-Gestao-Premium.apk
+          e depois Cliente-Premium/StudioMesa-Cliente-Premium.apk.
+          
+          São APKs ARM64 de pré-visualização/debug, não versões comerciais.
+          Usar apenas dados fictícios ou modo convidado. Não usar contas ou dados reais.
+          Se surgir conflito de assinatura, parar e guardar a mensagem; não desinstalar
+          versões anteriores sem confirmar primeiro os dados locais.
+          EOF
+          (cd "$package_dir" && zip -qr "$RUNNER_TEMP/StudioMesa-1.5.0-OPPO-A5m-Premium-TESTE.zip" .)
+          test -s "$RUNNER_TEMP/StudioMesa-1.5.0-OPPO-A5m-Premium-TESTE.zip"
+
+      - name: Upload OPPO A5m Premium test pair
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: StudioMesa-1.5.0-OPPO-A5m-Premium-TESTE
+          path: ${{ runner.temp }}/StudioMesa-1.5.0-OPPO-A5m-Premium-TESTE.zip
+          if-no-files-found: error
+          retention-days: 14
+
   emulator-smoke-tests:
     name: UI smoke tests on Android 16 emulator
     needs: build
