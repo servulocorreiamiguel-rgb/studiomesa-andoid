@@ -62,6 +62,9 @@ jobs:
       - name: Test account deletion Edge Function security audit
         run: python3 scripts/test_check_account_deletion_security.py
 
+      - name: Test Supabase password recovery OTP email template
+        run: python3 scripts/test_supabase_recovery_template.py
+
       - name: Audit account deletion Edge Function security
         run: python3 scripts/check_account_deletion_security.py
 
@@ -125,10 +128,10 @@ jobs:
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Compile app
-        run: gradle --no-daemon assembleEssencialRestauranteDebug assembleProfissionalRestauranteDebug assembleProfissionalClienteDebug assemblePremiumRestauranteDebug assemblePremiumClienteDebug
+        run: gradle --no-daemon assembleEssencialRestauranteDebug assembleEssencialClienteDebug assembleProfissionalRestauranteDebug assembleProfissionalClienteDebug assemblePremiumRestauranteDebug assemblePremiumClienteDebug
 
       - name: Run unit tests for every distributed variant
-        run: gradle --no-daemon testEssencialRestauranteDebugUnitTest testProfissionalRestauranteDebugUnitTest testProfissionalClienteDebugUnitTest testPremiumRestauranteDebugUnitTest testPremiumClienteDebugUnitTest
+        run: gradle --no-daemon testEssencialRestauranteDebugUnitTest testEssencialClienteDebugUnitTest testProfissionalRestauranteDebugUnitTest testProfissionalClienteDebugUnitTest testPremiumRestauranteDebugUnitTest testPremiumClienteDebugUnitTest
 
       - name: Upload unit test reports, including failures
         if: always()
@@ -165,18 +168,20 @@ jobs:
             -PstudiomesaCommercialRelease=true \
             -PstudiomesaReleaseApplicationId=pt.studiomesa.ci \
             bundleEssencialRestauranteRelease \
+            bundleEssencialClienteRelease \
             bundleProfissionalRestauranteRelease \
             bundleProfissionalClienteRelease \
             bundlePremiumRestauranteRelease \
             bundlePremiumClienteRelease \
             assembleEssencialRestauranteRelease \
+            assembleEssencialClienteRelease \
             assembleProfissionalRestauranteRelease \
             assembleProfissionalClienteRelease \
             assemblePremiumRestauranteRelease \
             assemblePremiumClienteRelease
           mapfile -d '' bundles < <(find app/build/outputs/bundle -type f -name '*.aab' -print0)
-          if [ "${#bundles[@]}" -ne 5 ]; then
-            echo "Expected five signed commercial AABs, found ${#bundles[@]}."
+          if [ "${#bundles[@]}" -ne 6 ]; then
+            echo "Expected six signed commercial AABs, found ${#bundles[@]}."
             exit 1
           fi
           for aab in "${bundles[@]}"; do
@@ -192,8 +197,8 @@ jobs:
             fi
           done
           mapfile -d '' apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' -print0)
-          if [ "${#apks[@]}" -ne 5 ]; then
-            echo "Expected five signed commercial APKs, found ${#apks[@]}."
+          if [ "${#apks[@]}" -ne 6 ]; then
+            echo "Expected six signed commercial APKs, found ${#apks[@]}."
             exit 1
           fi
           for apk in "${apks[@]}"; do
@@ -206,6 +211,88 @@ jobs:
         with:
           name: StudioMesa-1.5.0-Demo-APKs
           path: app/build/outputs/apk/**/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      # Device-specific install packages avoid shipping native libraries for other CPU architectures.
+      # Keep the universal demo artifact above unchanged for broad testing.
+      - name: Build ARM64 preview APKs
+        run: |
+          gradle --no-daemon --rerun-tasks -PstudiomesaTargetAbi=arm64-v8a \
+            assembleEssencialRestauranteDebug \
+            assembleEssencialClienteDebug \
+            assembleProfissionalRestauranteDebug \
+            assembleProfissionalClienteDebug \
+            assemblePremiumRestauranteDebug \
+            assemblePremiumClienteDebug
+
+      - name: Verify ARM64 preview APK contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' apks < <(find app/build/outputs/apk -type f -path '*/debug/*.apk' -print0)
+          if [ "${#apks[@]}" -ne 6 ]; then
+            echo "Expected six ARM64 preview APKs, found ${#apks[@]}."
+            exit 1
+          fi
+          for apk in "${apks[@]}"; do
+            test -s "$apk"
+            native_entries="$(unzip -Z1 "$apk" | grep '^lib/' || true)"
+            if [ -z "$native_entries" ]; then
+              echo "No native libraries found in $apk"
+              exit 1
+            fi
+            if grep -Ev '^lib/arm64-v8a/' <<< "$native_entries"; then
+              echo "Unexpected non-ARM64 native libraries found in $apk"
+              exit 1
+            fi
+          done
+
+      - name: Upload ARM64 preview APKs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: StudioMesa-1.5.0-ARM64-Preview-APKs
+          path: app/build/outputs/apk/**/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      # A compact pair lets the owner install the two Premium apps directly on the OPPO A5m.
+      # The universal six-variant artifact above remains available for broader testing.
+      - name: Package OPPO A5m Premium test pair
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_dir="$RUNNER_TEMP/studiomesa-oppo-a5m-premium"
+          mkdir -p "$package_dir/Gestao-Premium" "$package_dir/Cliente-Premium"
+          cp app/build/outputs/apk/premiumRestaurante/debug/app-premium-restaurante-debug.apk \
+            "$package_dir/Gestao-Premium/StudioMesa-Gestao-Premium.apk"
+          cp app/build/outputs/apk/premiumCliente/debug/app-premium-cliente-debug.apk \
+            "$package_dir/Cliente-Premium/StudioMesa-Cliente-Premium.apk"
+          (
+            cd "$package_dir"
+            sha256sum \
+              Gestao-Premium/StudioMesa-Gestao-Premium.apk \
+              Cliente-Premium/StudioMesa-Cliente-Premium.apk > SHA256SUMS.txt
+          )
+          cat > "$package_dir/LEIA-PRIMEIRO.txt" <<'EOF'
+          StudioMesa 1.5.0 — pacote de teste OPPO A5m
+          
+          Instalar primeiro Gestao-Premium/StudioMesa-Gestao-Premium.apk
+          e depois Cliente-Premium/StudioMesa-Cliente-Premium.apk.
+          
+          São APKs ARM64 de pré-visualização/debug, não versões comerciais.
+          Usar apenas dados fictícios ou modo convidado. Não usar contas ou dados reais.
+          Se surgir conflito de assinatura, parar e guardar a mensagem; não desinstalar
+          versões anteriores sem confirmar primeiro os dados locais.
+          EOF
+          (cd "$package_dir" && zip -qr "$RUNNER_TEMP/StudioMesa-1.5.0-OPPO-A5m-Premium-TESTE.zip" .)
+          test -s "$RUNNER_TEMP/StudioMesa-1.5.0-OPPO-A5m-Premium-TESTE.zip"
+
+      - name: Upload OPPO A5m Premium test pair
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: StudioMesa-1.5.0-OPPO-A5m-Premium-TESTE
+          path: ${{ runner.temp }}/StudioMesa-1.5.0-OPPO-A5m-Premium-TESTE.zip
           if-no-files-found: error
           retention-days: 14
 
@@ -245,7 +332,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot
-          script: set -eu; for test_task in connectedEssencialRestauranteDebugAndroidTest connectedProfissionalRestauranteDebugAndroidTest connectedProfissionalClienteDebugAndroidTest connectedPremiumRestauranteDebugAndroidTest connectedPremiumClienteDebugAndroidTest; do echo "STARTING_ANDROID_SMOKE_TASK=$test_task"; timeout --signal=TERM --kill-after=30s 8m gradle --no-daemon --max-workers=1 "$test_task"; echo "PASSED_ANDROID_SMOKE_TASK=$test_task"; done
+          script: set -eu; for test_task in connectedEssencialRestauranteDebugAndroidTest connectedEssencialClienteDebugAndroidTest connectedProfissionalRestauranteDebugAndroidTest connectedProfissionalClienteDebugAndroidTest connectedPremiumRestauranteDebugAndroidTest connectedPremiumClienteDebugAndroidTest; do echo "STARTING_ANDROID_SMOKE_TASK=$test_task"; timeout --signal=TERM --kill-after=30s 8m gradle --no-daemon --max-workers=1 "$test_task"; echo "PASSED_ANDROID_SMOKE_TASK=$test_task"; done
 
       - name: Upload emulator test results
         if: always()
@@ -292,7 +379,7 @@ jobs:
           profile: Nexus 5X
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot
-          script: set -eu; for test_task in connectedEssencialRestauranteDebugAndroidTest connectedProfissionalRestauranteDebugAndroidTest connectedProfissionalClienteDebugAndroidTest connectedPremiumRestauranteDebugAndroidTest connectedPremiumClienteDebugAndroidTest; do echo "STARTING_ANDROID_SMOKE_TASK=$test_task"; timeout --signal=TERM --kill-after=30s 8m gradle --no-daemon --max-workers=1 "$test_task"; echo "PASSED_ANDROID_SMOKE_TASK=$test_task"; done
+          script: set -eu; for test_task in connectedEssencialRestauranteDebugAndroidTest connectedEssencialClienteDebugAndroidTest connectedProfissionalRestauranteDebugAndroidTest connectedProfissionalClienteDebugAndroidTest connectedPremiumRestauranteDebugAndroidTest connectedPremiumClienteDebugAndroidTest; do echo "STARTING_ANDROID_SMOKE_TASK=$test_task"; timeout --signal=TERM --kill-after=30s 8m gradle --no-daemon --max-workers=1 "$test_task"; echo "PASSED_ANDROID_SMOKE_TASK=$test_task"; done
 
       - name: Upload Android 8 test results
         if: always()

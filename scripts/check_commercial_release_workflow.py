@@ -111,13 +111,14 @@ def audit_workflow(text: str) -> list[str]:
         errors.append("The commercial workflow must explicitly reject AABs without the 'jar verified.' result.")
     release_apk_tasks = (
         "assembleEssencialRestauranteRelease",
+        "assembleEssencialClienteRelease",
         "assembleProfissionalRestauranteRelease",
         "assembleProfissionalClienteRelease",
         "assemblePremiumRestauranteRelease",
         "assemblePremiumClienteRelease",
     )
     if not all(task in text for task in release_apk_tasks):
-        errors.append("The commercial workflow must build all five signed release APK variants.")
+        errors.append("The commercial workflow must build all six signed release APK variants.")
     if "mapfile -d '' apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' -print0)" not in text:
         errors.append("The commercial workflow must enumerate the release APKs before uploading them.")
     if '"$APKSIGNER" verify --verbose "$apk"' not in text:
@@ -129,34 +130,36 @@ def audit_workflow(text: str) -> list[str]:
 
 
 def audit_ci_test_bundle(text: str) -> list[str]:
-    """Require CI to prove all five temporary commercial variants are signed."""
+    """Require CI to prove all six temporary commercial variants are signed."""
     errors: list[str] = []
     if "mapfile -d '' bundles < <(find app/build/outputs/bundle -type f -name '*.aab' -print0)" not in text:
         errors.append("Android CI must enumerate all temporary commercial AABs.")
-    if 'if [ "${#bundles[@]}" -ne 5 ]; then' not in text:
-        errors.append("Android CI must require exactly five temporary commercial AABs.")
+    if 'if [ "${#bundles[@]}" -ne 6 ]; then' not in text:
+        errors.append("Android CI must require exactly six temporary commercial AABs.")
     if 'verification_output="$(jarsigner -verify "$aab" 2>&1)"' not in text:
         errors.append("Android CI must run jarsigner verification against every temporary release AAB.")
     if 'grep -Fq "jar verified."' not in text:
         errors.append("Android CI must require the explicit 'jar verified.' result for its test AABs.")
     release_tasks = (
         "bundleEssencialRestauranteRelease",
+        "bundleEssencialClienteRelease",
         "bundleProfissionalRestauranteRelease",
         "bundleProfissionalClienteRelease",
         "bundlePremiumRestauranteRelease",
         "bundlePremiumClienteRelease",
         "assembleEssencialRestauranteRelease",
+        "assembleEssencialClienteRelease",
         "assembleProfissionalRestauranteRelease",
         "assembleProfissionalClienteRelease",
         "assemblePremiumRestauranteRelease",
         "assemblePremiumClienteRelease",
     )
     if not all(task in text for task in release_tasks):
-        errors.append("Android CI must build all five temporary signed AAB and APK variants.")
+        errors.append("Android CI must build all six temporary signed AAB and APK variants.")
     if "mapfile -d '' apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' -print0)" not in text:
         errors.append("Android CI must enumerate all temporary commercial APKs.")
-    if 'if [ "${#apks[@]}" -ne 5 ]; then' not in text:
-        errors.append("Android CI must require exactly five temporary commercial APKs.")
+    if 'if [ "${#apks[@]}" -ne 6 ]; then' not in text:
+        errors.append("Android CI must require exactly six temporary commercial APKs.")
     if 'for apk in "${apks[@]}"; do' not in text:
         errors.append("Android CI must verify every temporary commercial APK.")
     if '"$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$apk"' not in text:

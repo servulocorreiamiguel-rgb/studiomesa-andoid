@@ -1,5 +1,6 @@
 package pt.studiomesa.app
 
+import android.content.Intent
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.action.ViewActions.click
@@ -16,9 +17,9 @@ import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.platform.app.InstrumentationRegistry
 import org.hamcrest.Matchers.containsString
 import org.hamcrest.Matchers.not
+import org.junit.Before
 import org.junit.Assume.assumeFalse
 import org.junit.Assume.assumeTrue
-import org.junit.Before
 import org.junit.Test
 
 /**
@@ -26,6 +27,15 @@ import org.junit.Test
  * Keep these independent of production credentials: all actions use fresh local demo data.
  */
 class MainActivitySmokeTest {
+    @Before
+    fun resetLocalDemoOrdersForEachTest() {
+        val preferences = InstrumentationRegistry.getInstrumentation().targetContext
+            .getSharedPreferences("studiomesa_data", android.content.Context.MODE_PRIVATE)
+        check(preferences.edit().putString("orders_json", "[]").commit()) {
+            "Could not reset local demonstration orders before the UI test."
+        }
+    }
+
     @Before
     fun resetEconomicAssistantOptInForEachTest() {
         val preferences = InstrumentationRegistry.getInstrumentation().targetContext
@@ -53,6 +63,17 @@ class MainActivitySmokeTest {
             onView(withText("Queres ativar o Assistente económico?")).check(matches(isDisplayed()))
             onView(withText("Sim, ativar o Assistente económico")).perform(scrollTo(), click())
             onView(withContentDescription("Abrir ferramentas económicas")).check(matches(isDisplayed()))
+        }
+    }
+
+    @Before
+    fun prepareCustomerScreensForSmokeTests() {
+        if (isCustomerVariant()) {
+            InstrumentationRegistry.getInstrumentation().targetContext
+                .getSharedPreferences("studiomesa_backend", android.content.Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean("customer_entry_choice_complete_v1", true)
+                .apply()
         }
     }
 
@@ -164,12 +185,60 @@ onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
     }
 
     @Test
+    fun customerNotificationIntentOpensTheRequestedPage() {
+        assumeTrue("Only the customer app receives customer reservation notifications.", isCustomerVariant())
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val launchIntent = Intent(context, MainActivity::class.java)
+            .putExtra(MainActivity.EXTRA_NOTIFICATION_DESTINATION, "Avisos")
+
+        ActivityScenario.launch<MainActivity>(launchIntent).use {
+            onView(withText("Avisos do restaurante")).check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
+    fun restaurantNotificationIntentOpensKitchen() {
+        assumeFalse("Customer app has a separate navigation model.", isCustomerVariant())
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val launchIntent = Intent(context, MainActivity::class.java)
+            .putExtra(MainActivity.EXTRA_NOTIFICATION_DESTINATION, "Cozinha")
+
+        ActivityScenario.launch<MainActivity>(launchIntent).use {
+            onView(withText("Fila de preparação por estado e tempo de espera."))
+                .check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
+    fun customerFirstLaunchOffersGuestCreateAndExistingAccountOptions() {
+        assumeTrue("Only the customer app has the customer entry screen.", isCustomerVariant())
+        InstrumentationRegistry.getInstrumentation().targetContext
+            .getSharedPreferences("studiomesa_backend", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .remove("customer_entry_choice_complete_v1")
+            .apply()
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withText("Bem-vindo ao StudioMesa")).check(matches(isDisplayed()))
+            onView(withText("Continuar sem conta")).check(matches(isDisplayed()))
+            onView(withText("Já tenho uma conta")).check(matches(isDisplayed()))
+            onView(withText("Criar conta")).check(matches(isDisplayed()))
+
+            onView(withText("Continuar sem conta")).perform(click())
+            onView(withText(containsString("Cartão digital de cliente")))
+                .check(matches(isDisplayed()))
+            onView(withText("Os teus cartões de fidelização."))
+                .check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
     fun appLaunchesIntoTheExpectedDemoExperience() {
         ActivityScenario.launch(MainActivity::class.java).use {
             if (isCustomerVariant()) {
                 onView(withText(containsString("Cartão digital de cliente")))
                     .check(matches(isDisplayed()))
-                onView(withText("Cartão de fidelização do restaurante."))
+                onView(withText("Os teus cartões de fidelização."))
                     .check(matches(isDisplayed()))
             } else {
                 onView(withText("Painel de operação"))
@@ -466,6 +535,7 @@ onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
             onView(withContentDescription("Abrir secção Assistente")).check(doesNotExist())
             onView(withContentDescription("Abrir secção Carta")).perform(scrollTo()).check(matches(isDisplayed()))
             onView(withContentDescription("Abrir secção Pontos")).perform(scrollTo()).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Marketing")).check(doesNotExist())
             onView(withContentDescription("Abrir secção Conta")).perform(scrollTo()).check(matches(isDisplayed()))
 
             if (isCalculatorAvailable()) {
@@ -504,6 +574,12 @@ onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
 
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withContentDescription("Abrir secção Cartão")).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Avisos")).check(matches(isDisplayed()))
+            onView(withContentDescription("Abrir secção Avisos")).perform(click())
+            onView(withText("Avisos do restaurante")).check(matches(isDisplayed()))
+            onView(withText("Inicia sessão para receber e consultar os avisos do restaurante."))
+                .check(matches(isDisplayed()))
+
             onView(withContentDescription("Abrir secção Carta")).perform(click())
             onView(withText("Exemplos de artigos")).check(matches(isDisplayed()))
 
@@ -513,7 +589,7 @@ onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
             onView(withText("Criar conta / iniciar sessão")).check(matches(isDisplayed()))
 
             onView(withContentDescription("Abrir secção Cartão")).perform(click())
-            onView(withText("Cartão de fidelização do restaurante.")).check(matches(isDisplayed()))
+            onView(withText("Os teus cartões de fidelização.")).check(matches(isDisplayed()))
         }
     }
 
@@ -611,7 +687,7 @@ onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
                 .perform(scrollTo(), click())
             onView(withText("Conta StudioMesa"))
                 .check(matches(isDisplayed()))
-            onView(withText("Iniciar sessão"))
+            onView(withText("Já tenho uma conta"))
                 .check(matches(isDisplayed()))
             onView(withText("Continuar com Google")).check(doesNotExist())
             onView(withText("Continuar com Microsoft (Outlook)")).check(doesNotExist())
@@ -625,7 +701,7 @@ onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
         ActivityScenario.launch(MainActivity::class.java).use {
             onView(withText("Criar conta / iniciar sessão"))
                 .perform(scrollTo(), click())
-            onView(withText("Iniciar sessão"))
+            onView(withText("Já tenho uma conta"))
                 .perform(click())
 
             onView(withHint("Email")).check(matches(isDisplayed()))
@@ -833,6 +909,70 @@ onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
             onView(withText(containsString("Feriado/evento: Evento de teste")))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
+        }
+    }
+
+
+
+    @Test
+    fun restaurantCanCreateOrderAndMoveItThroughTheKitchenLifecycle() {
+        assumeFalse("Customer variant has its own customer navigation.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withText("ABRIR PEDIDOS")).perform(scrollTo(), click())
+            onView(withText("+  Novo pedido")).perform(scrollTo(), click())
+            onView(withText("Criar pedido")).perform(click())
+
+            onView(withText("Entrada da casa · exemplo")).check(matches(isDisplayed()))
+            onView(withText("EM ABERTO")).check(matches(isDisplayed()))
+            onView(withText("Marcar como concluído")).check(matches(isDisplayed()))
+
+            // Confirm that the order list can close and reopen a local demo order.
+            onView(withText("Marcar como concluído")).perform(scrollTo(), click())
+            onView(withText("CONCLUÍDO")).check(matches(isDisplayed()))
+            onView(withText("Reabrir pedido")).check(matches(isDisplayed()))
+            onView(withText("Reabrir pedido")).perform(scrollTo(), click())
+            onView(withText("EM ABERTO")).check(matches(isDisplayed()))
+
+            // The kitchen queue must show the same local order and advance its state.
+            onView(withContentDescription("Abrir menu de navegação")).perform(click())
+            onView(withContentDescription("Abrir secção Cozinha")).perform(scrollTo(), click())
+            onView(withText("Entrada da casa · exemplo")).check(matches(isDisplayed()))
+            onView(withText("ABERTO")).check(matches(isDisplayed()))
+
+            onView(withText("Iniciar preparação")).perform(scrollTo(), click())
+            onView(withText("EM PREPARAÇÃO")).check(matches(isDisplayed()))
+            onView(withText("Marcar como pronto")).perform(scrollTo(), click())
+            onView(withText("PRONTO")).check(matches(isDisplayed()))
+            onView(withText("Concluir pedido")).perform(scrollTo(), click())
+
+            onView(withText("A fila está vazia. Cria um pedido para testar o fluxo da cozinha."))
+                .check(matches(isDisplayed()))
+
+            // The completed state must remain visible in the order history.
+            onView(withContentDescription("Abrir secção Pedidos")).perform(click())
+            onView(withText("CONCLUÍDO")).check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
+    fun restaurantRejectsInvalidOrderQuantityAndKeepsTheFormEditable() {
+        assumeFalse("Customer variant has its own customer navigation.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withText("ABRIR PEDIDOS")).perform(scrollTo(), click())
+            onView(withText("+  Novo pedido")).perform(scrollTo(), click())
+
+            onView(withHint("1–99 unidades")).perform(replaceText("0"))
+            onView(withText("Criar pedido")).perform(click())
+            onView(withHint("1–99 unidades"))
+                .check(matches(hasErrorText("Usa uma quantidade entre 1 e 99")))
+
+            // Correcting the invalid quantity must allow the same form to be submitted.
+            onView(withHint("1–99 unidades")).perform(replaceText("3"))
+            onView(withText("Criar pedido")).perform(click())
+            onView(withText("3 × Entrada da casa · exemplo")).check(matches(isDisplayed()))
+            onView(withText("EM ABERTO")).check(matches(isDisplayed()))
         }
     }
 

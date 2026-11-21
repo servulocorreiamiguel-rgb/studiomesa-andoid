@@ -1,15 +1,14 @@
 # StudioMesa — preparação para lançamento comercial
 
-> **Estado verificado em 14/11/2026: NÃO LIBERADO PARA OPERAÇÃO COM DADOS REAIS OU VENDA OPERACIONAL.** As PRs #133 e #134 estão integradas. A CI pós-merge da `main` [43512084404](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43512084404) e a CI da PR #134 [43512547155](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43512547155) passaram compilação APK, replay PostgreSQL/autorização, Android 8 e Android 16.
+> **Estado global verificado em 21/11/2026: NÃO LIBERADO PARA OPERAÇÃO COM DADOS REAIS OU VENDA OPERACIONAL.** A PR #135 tem a revisão mais recente do Cliente, cartões multi-restaurante, campanhas e notificações locais. A CI [44886406846](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44886406846), no commit `97c8d1653005040cd6a16055b314e310095da7c8`, passou os quatro jobs, incluindo emuladores Android 8 e Android 16. A PR continua em rascunho; os testes automáticos não substituem ensaio no OPPO nem validação no Supabase alojado.
 >
-> **Backend:** o Supabase está activo e saudável, com 63 migrações remotas e oito migrações locais pendentes. As estruturas de receitas/consumo de stock, permissões granulares e entitlements por plano continuam ausentes. A migração de linhas de faturas, recepção de mercadoria e sincronização SAF-T também não foi aplicada. Não executar `db push` em produção antes de backup/restauro comprovados, validação isolada e aprovação.
+> **Backend:** o Supabase tem 63 migrações remotas aplicadas. A `main` documentada abaixo tem oito migrações locais pendentes; a branch actual da PR #135 contém 72 ficheiros e nove versões pendentes, incluindo `20261108170000_customer_multi_restaurant_cards.sql`. Não executar `db push` antes de reconciliar os históricos, obter backup recuperável de PostgreSQL/Auth/Storage e provar um restauro isolado.
 >
-> **Backups e custo:** a organização está no plano Free, sem backups automáticos diários nem Point-in-Time Recovery. Não existe ainda um backup integral com restauro ensaiado. O runbook exige exportação e ensaio separados de PostgreSQL, Auth e Storage antes de qualquer migração remota.
+> **Backups e custo:** o projecto está no plano Free, sem backups automáticos diários nem Point-in-Time Recovery. Ainda não existe backup integral com restauro ensaiado. Não criar uma branch paga nem activar serviços com custo sem aprovação.
 >
-> **Auth e segurança:** SMTP próprio, confirmação de email, recuperação e eliminação de conta ainda precisam de testes ponta a ponta com contas descartáveis. A protecção contra palavras-passe comprometidas está desactivada. Os avisos de funções `SECURITY DEFINER`, tabelas com RLS sem políticas e índices devem ser avaliados individualmente; não aplicar revogações ou políticas genéricas em massa.
+> **Auth e segurança:** Os fluxos Android de email/palavra-passe, PKCE e recuperação por OTP existem no código, mas SMTP, confirmação de email, recuperação e eliminação de conta ainda precisam de testes ponta a ponta com contas descartáveis. Ver [estado dos testes de autenticação](docs/AUTH-TEST-STATUS-2026-11-21.md). A protecção contra palavras-passe comprometidas está desactivada. Os avisos de funções `SECURITY DEFINER`, tabelas com RLS sem políticas e índices têm de ser avaliados individualmente; não aplicar revogações ou políticas genéricas em massa.
 >
-> **Release:** continuam por definir o identificador final da aplicação, a keystore comercial e os secrets/variables de assinatura. O workflow comercial exige quatro variáveis de prontidão exactamente iguais a `YES`: migrações/backup/restauro do backend, autenticação SMTP, testes físicos e aprovação legal/privacidade/licenças. Estes valores só devem ser definidos após os controlos serem efectivamente concluídos. Política de privacidade, Data Safety, termos, DPA e revisão de licenças continuam por aprovar.
-
+> **Release:** continuam por definir o identificador final das aplicações, a keystore comercial e os secrets/variables de assinatura. A CI normal produz APKs debug de pré-visualização. A chave temporária da CI serve apenas para validar a configuração de assinatura e não é a chave comercial. Política de privacidade, Data Safety, termos, DPA e revisão de licenças continuam por aprovar. Ver também a [auditoria read-only do Supabase](docs/LIVE-SUPABASE-AUDIT-2026-11-21.md).
 
 ## Toolchain Android
 
@@ -19,7 +18,7 @@ Referências: [compatibilidade Kotlin/AGP/D8/R8](https://developer.android.com/b
 
 ## Estado real
 
-O workflow `.github/workflows/commercial-release.yml` foi preparado para criar cinco Android App Bundles (AAB) e cinco APKs assinados para instalação direta. **Não publica automaticamente na Google Play**. Antes de correr esse workflow, é necessário definir o identificador de aplicação final e guardar a chave de assinatura nos GitHub Actions Secrets.
+O workflow `.github/workflows/commercial-release.yml` foi preparado para criar seis Android App Bundles (AAB) e seis APKs assinados para instalação direta. **Não publica automaticamente na Google Play**. Antes de correr esse workflow, é necessário definir o identificador de aplicação final e guardar a chave de assinatura nos GitHub Actions Secrets.
 
 Os APKs do workflow normal continuam a usar os identificadores `pt.studiomesa.preview.*`. A configuração comercial é opt-in e não altera a identidade dos APKs de demonstração.
 
@@ -37,7 +36,7 @@ Não ativar esta propriedade na primeira release. O valor por defeito é `false`
 
 ## Decisão obrigatória: identificadores das aplicações
 
-A configuração Gradle atual gera cinco variantes técnicas de demonstração/release, separadas por plano e tipo de app. Isso não significa que devam existir cinco listagens Play. O código dos entitlements Essencial/Profissional/Premium está implementado e coberto por CI, mas a migração que o ativa ainda está pendente no Supabase alojado.
+A configuração Gradle atual gera seis variantes técnicas de demonstração/release, separadas por plano e tipo de app. Isso não significa que devam existir cinco listagens Play. O código dos entitlements Essencial/Profissional/Premium está implementado e coberto por CI, mas a migração que o ativa ainda está pendente no Supabase alojado.
 
 **Política de conteúdo repetitivo:** a Google Play não permite várias apps com funcionalidade, conteúdo e experiência altamente semelhantes e recomenda agregar apps pouco diferenciadas. A estratégia preferível a avaliar é uma app de Gestão e uma app de Cliente, com os planos aplicados por entitlement seguro no servidor, ou distribuição B2B privada. A app Cliente ainda só suporta um cartão de restaurante por conta na `main`; a PR #97 propõe múltiplos cartões, mas a CI [42505026254](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42505026254) terminou com falha. O novo fluxo de convidado, pesquisa por nome e associação por QR com aprovação do proprietário está na PR #96, encadeada sobre as PRs #95 e #94, e não foi ainda consolidada na `main`. Não prometer carteira multi-restaurante nem a nova entrada por pesquisa/QR até integrar e validar estas funcionalidades. Fontes: https://support.google.com/googleplay/android-developer/answer/18265346 e https://support.google.com/googleplay/android-developer/answer/15884185.
 
@@ -82,7 +81,7 @@ No separador **Variables**, cria a variável `STUDIOMESA_RELEASE_APPLICATION_ID`
 
 1. Abre **Actions → Build signed StudioMesa commercial AABs → Run workflow**.
 2. No campo de confirmação, escreve exatamente `BUILD`.
-3. O workflow verifica os segredos, valida o keystore, executa os testes unitários para as cinco variantes de distribuição e Android Lint, compila cinco AABs e cinco APKs com assinatura, verifica ambos os formatos e gera checksums.
+3. O workflow verifica os segredos, valida o keystore, executa os testes unitários para as seis variantes de distribuição e Android Lint, compila seis AABs e seis APKs com assinatura, verifica ambos os formatos e gera checksums.
 4. Descarrega o artefacto `StudioMesa-Commercial-AABs-and-APKs` e guarda o ficheiro de checksums.
 
 Se a variável de identificador ou qualquer segredo estiver em falta, a execução falha com uma mensagem explícita. O workflow **não** envia os AAB para a Google Play nem publica a aplicação. Os APKs assinados destinam-se a instalações diretas autorizadas; distribui-os apenas por canais controlados.
@@ -100,7 +99,7 @@ Verifica sempre a documentação oficial antes da submissão, porque os requisit
 - **Privacidade:** cada aplicação precisa de política de privacidade pública, não editável e acessível globalmente, além de ligação/texto dentro da app. A secção Data safety tem de ser respondida para cada app e corresponder ao binário, aos SDKs e à configuração cloud efetivamente publicada. Fontes: https://support.google.com/googleplay/android-developer/answer/10144311 e https://support.google.com/googleplay/android-developer/answer/10144311?hl=pt
 - **Eliminação de conta:** como o StudioMesa permite criar conta, tem de haver um caminho facilmente acessível dentro da app e um recurso web externo para solicitar a eliminação da conta e dos dados associados. A retenção excecional tem de ter fundamento legítimo e ser claramente explicada. O fluxo atual está implementado, mas ainda precisa de teste E2E com contas descartáveis. Fonte: https://support.google.com/googleplay/android-developer/answer/13327111
 
-**Situação do projeto:** os cinco AAB/APKs comerciais ainda não foram gerados com uma chave definitiva; não existe ficha Play Console aprovada; a política pública e Data safety continuam em rascunho. A versão atual não está liberada para submissão.
+**Situação do projeto:** os seis AAB/APKs comerciais ainda não foram gerados com uma chave definitiva; não existe ficha Play Console aprovada; a política pública e Data safety continuam em rascunho. A versão atual não está liberada para submissão.
 
 Não publiques ainda: permanecem pendentes a reconciliação e deployment seguro do Supabase, autenticação/SMTP, E2E com contas descartáveis, política de privacidade, Data safety, licença do modelo, assinatura comercial, package IDs e testes de aceitação.
 ## Recurso web externo para eliminação de conta

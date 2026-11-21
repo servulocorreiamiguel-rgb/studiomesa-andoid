@@ -1,7 +1,7 @@
 # StudioMesa — backup e execução segura de migrações
 
-**Âmbito:** projeto Supabase `svwvkfsyevuyabelrtjk` (região `eu-west-1`).
-**Estado em 14/11/2026:** não executar migrações remotas. As PRs #133 e #134 estão integradas; o Supabase Free tem 63 migrações aplicadas e oito pendentes. Não existe ainda um backup completo com restauro ensaiado.
+**Âmbito:** projeto Supabase `svwvkfsyevuyabelrtjk` (região `eu-west-1`).  
+**Estado em 20/11/2026:** não executar migrações remotas. O Supabase Free tem 63 migrações aplicadas e não existe ainda um backup completo com restauro ensaiado. A `main` tem oito migrações locais pendentes; a branch da PR #135 tem uma nona migração adicional, `20261108170000_customer_multi_restaurant_cards.sql`. Reconciliar a branch exacta antes de qualquer dry-run ou deployment.
 
 ## 1. Porque é obrigatório parar antes de produção
 

@@ -1,10 +1,37 @@
 # StudioMesa — lista de preparação para uso profissional
 
-**Ponto de situação verificado em 14/11/2026:** a `main` está pronta para demonstração com dados fictícios, mas **não está autorizada para operação com dados reais nem venda operacional**. A PR #128 integrou o código de sincronização SAF-T, previsões económicas, OCR local de faturas e receção de mercadoria; a PR #130 mantém a barreira de release comercial. As PRs #132, #133 e #134 foram integradas. A PR #134 foi o último merge; a sua CI passou os quatro jobs. A CI da PR #133 ([43508119493](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43508119493)), a CI pós-merge da `main` ([43512084404](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43512084404)) e a CI da PR #134 ([43512547155](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43512547155)) terminaram com sucesso nos quatro jobs: APK, PostgreSQL/autorização, Android 8 e Android 16. O Supabase continua com 71 migrações locais e 63 remotas: oito migrações locais por aplicar. A app **não está autorizada para dados reais, produção ou venda operacional**.
+**Ponto de situação verificado em 21/11/2026 após a CI 44915012048, no commit `174f1a765a0aa9c1b8074b73663c480c64aa23b1`:** a aplicação continua em desenvolvimento e **não está autorizada para operação com dados reais nem venda operacional**.
 
-Auditoria histórica de 12/11: [docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-12.md](docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-12.md). O ponto de situação abaixo substitui as contagens e estados históricos que se seguem.
+- A PR [#135](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/135), na branch `work/mobile-completion-2026-11-20`, continua aberta, em rascunho e não integrada na `main`. Inclui o novo fluxo de entrada de clientes, pesquisa/adesão por código ou QR, campanhas de reactivação, centro de notificações e políticas de navegação. A carteira multi-restaurante permanece desligada porque o Supabase alojado ainda impõe um cartão por conta.
+- A CI [44915012048](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44915012048), no commit `174f1a765a0aa9c1b8074b73663c480c64aa23b1`, terminou com **os quatro jobs aprovados**. As seis variantes compilaram; 2 136 testes unitários passaram, sem falhas, erros ou ignorados; Android Lint passou. Nos emuladores Android 8/API 26 e Android 16/API 36, foram executados 251 testes por plataforma, com zero falhas e 115 testes ignorados pelas condições dos próprios testes. As 72 migrações da branch foram reproduzidas numa base PostgreSQL descartável, com verificações de RLS, autorização entre restaurantes e idempotência aprovadas.
+- O artefacto [`StudioMesa-1.5.0-ARM64-Preview-APKs`](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44915012048) (ID `14711882392`) contém seis APKs ARM64 de pré-visualização/debug. O par específico para o OPPO A5m, [`StudioMesa-1.5.0-OPPO-A5m-Premium-TESTE`](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44915012048) (ID `14712102068`), contém Gestão Premium e Cliente Premium. Ambos são builds de teste, não releases comerciais; não usar com dados reais.
+- A CI também criou seis AABs e seis APKs de release de ensaio, assinados com uma chave temporária. Isto valida o processo técnico de compilação, mas **não** a keystore comercial, os identificadores finais nem a assinatura de distribuição.
+- O Supabase alojado tem 63 migrações remotas. A branch #135 contém 72 ficheiros SQL; **nove migrações continuam por aplicar** no projecto alojado. A auditoria de produção foi apenas de leitura e não alterou o backend.
+- A implementação de email/palavra-passe, PKCE e recuperação por OTP existe no código. Foi identificado no Auth um link de recuperação de utilização única repetido e recusado (`403 invalid/expired`); o template OTP com `{{ .Token }}` está versionado em `supabase/templates/recovery.html`, mas ainda tem de ser aplicado no Dashboard Supabase e testado com email novo. SMTP/Auth E2E continua por validar. Ver [estado dos testes de autenticação](docs/AUTH-TEST-STATUS-2026-11-21.md).
+- O proprietário confirmou testes físicos anteriores no OPPO A5m para funcionalidades gratuitas, reservas, sincronização Gestão/Cliente e isolamento entre restaurantes. Esses fluxos não são marcados como pendentes; a build 1.5.0 e as alterações novas ainda precisam de ensaio físico.
+- A branch inclui perfis predefinidos de permissões na interface, mas o gate de permissões granulares continua desligado até à integração/deployment seguro das migrações correspondentes.
+- A IA local, os fluxos Auth/SMTP reais e as notificações com a aplicação fechada ainda precisam de validação/configuração próprias. As notificações desta build usam polling em primeiro plano; não há FCM confirmado.
+
+## Bloqueios para lançamento comercial
+
+1. Rever e reconciliar as nove migrações pendentes da branch. Antes de qualquer deployment, obter backup recuperável da base de dados, Auth e Storage e provar o restauro numa instância isolada.
+2. Testar registo, confirmação de conta, recuperação de palavra-passe e SMTP com contas descartáveis.
+3. Rever política de privacidade, termos, tratamento e conservação de dados e licenças de modelos/serviços.
+4. Definir os identificadores finais das aplicações e configurar uma keystore comercial privada, fora do repositório.
+5. Concluir o ensaio físico da build 1.5.0 no OPPO A5m e os testes E2E no backend real, depois de um deployment controlado.
+6. Configurar, caso se pretenda, Firebase Cloud Messaging para notificações com a app fechada. A versão actual só consulta alterações em primeiro plano.
+7. Configurar fornecedor/segredos de pesquisa Web ou IA cloud e validar a privacidade; estes serviços ficam desligados quando não estão configurados.
+
+**Regra de segurança:** não executar `db push`, reset ou deployment de migrations no Supabase alojado enquanto não existir backup/restauro verificado e revisão das autorizações. Não criar uma release comercial com a chave temporária da CI.
+
+## Registos históricos
+
+A auditoria de [12/11/2026](docs/COMMERCIAL-CLOSEOUT-AUDIT-2026-11-12.md) e as secções históricas abaixo registam estados antigos. As suas contagens de migrações, SHA e PRs não substituem o ponto de situação datado de 21/11/2026.
 
 ## Código e CI
+
+- [x] A revisão actual da PR #135, commit `174f1a765a0aa9c1b8074b73663c480c64aa23b1`, passou os quatro jobs da CI [44915012048](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44915012048): seis variantes, 2 136 testes unitários, Lint, replay das 72 migrações, autorização/idempotência e emuladores Android 8 e Android 16.
+- [x] Foram produzidos seis APKs ARM64 de preview/debug no artefacto `14711882392` da CI [44915012048](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44915012048), além do par Gestão Premium/Cliente Premium para OPPO A5m no artefacto `14712102068`. Não são releases comerciais; falta validar fisicamente esta revisão no OPPO A5m.
 
 - [x] A PR #134 actualizou a fotografia de prontidão após a PR #133; foi integrada em `2b27ed6197d6ec5431c224ee69d277eaa2845c7c` após CI verde nos quatro jobs ([43512547155](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/43512547155)).
 
@@ -68,12 +95,12 @@ Consultas read-only e Supabase Advisors em 13/11/2026:
 
 ## Funcionalidades comerciais ainda não integradas na aplicação
 
-- [ ] **Campanhas de reactivação:** as tabelas `public.restaurant_reactivation_campaigns` e `public.restaurant_customer_notifications` existem no Supabase, mas a `main` ainda não contém o editor/envio Android para o proprietário. A implementação está na [PR #94](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/94), que precisa de rebase, revisão de conflitos e CI antes de ser integrada.
-- [ ] **Centro de notificações e push:** a `main` ainda não contém o centro de notificações de actividade nem a integração FCM/push. As propostas [PR #91](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/91) e [PR #92](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/92) sobrepõem-se; é necessário consolidar uma implementação, rever permissões Android e configuração do servidor, e testar notificações reais.
-- [ ] **Perfis pré-configurados da equipa:** existe `StaffPermissionSet.kt` no cliente, mas a tabela privada `private.restaurant_staff_permissions` ainda não existe no Supabase alojado e a implementação de perfis pré-configurados proposta na PR #92 não está na `main`. Até à migração e aos testes, não anunciar a matriz granular como activa.
+- [ ] **Campanhas de reactivação:** as tabelas `public.restaurant_reactivation_campaigns` e `public.restaurant_customer_notifications` existem no Supabase. A `main` ainda não contém o editor/envio Android; a PR #135 já inclui essa implementação na branch de rascunho, mas continua por integrar e exige aceitação física/E2E antes de ser anunciada como funcional.
+- [ ] **Centro de notificações e push:** a `main` ainda não contém o centro de notificações; a PR #135 inclui notificações locais por polling em primeiro plano, mas não FCM. A integração push continua por configurar e testar; não prometer alertas com a aplicação fechada.
+- [ ] **Perfis pré-configurados da equipa:** a PR #135 inclui os perfis na interface, mas a tabela privada `private.restaurant_staff_permissions` ainda não existe no Supabase alojado. O gate de permissões granulares continua desligado; não anunciar a matriz como activa.
 - [ ] A geração de ideias de conteúdo pelo assistente não equivale a campanhas automáticas, envio de ofertas a clientes inactivos ou notificações push. Estas capacidades só devem ser vendidas depois de integradas e testadas.
 
-- [ ] **Entrada inicial e associação por pesquisa/QR:** a `main` ainda não contém o novo ecrã de entrada de cliente/convidado, pesquisa de restaurantes por nome, convite QR com prefixo próprio, aprovação pelo proprietário e consulta do estado do pedido. Essa implementação está na PR #96. A PR #96 está encadeada sobre a PR #95, que por sua vez está baseada na PR #94; não é uma alteração isolada pronta para integrar. A CI da PR #96 ([42501702554](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42501702554)) passou quatro jobs no commit então testado, mas a cadeia precisa de ser rebaseada/revista e novamente validada contra a `main` actual. O login Google/Microsoft continua adiado conforme a decisão para a primeira venda.
+- [ ] **Entrada inicial e associação por pesquisa/QR:** a `main` ainda não contém o novo fluxo; a PR #135 inclui e testa por CI o ecrã de convidado, a pesquisa e a associação por código/QR. A PR continua em rascunho. O login Google/Microsoft permanece adiado conforme a decisão para a primeira venda.
 - [ ] **Carteira multi-restaurante:** a `main` continua a suportar apenas um cartão de fidelização por conta de cliente. A proposta está na PR #97; a CI [42505026254](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/42505026254) terminou com falha, pelo que não deve ser integrada nem anunciada como funcional até corrigir e repetir os testes.
 
 ## Produto, segurança e testes de aceitação
@@ -90,7 +117,7 @@ Consultas read-only e Supabase Advisors em 13/11/2026:
 - [x] Workflow manual de release assinado existe e bloqueia builds sem CI verde para o commit exato, confirmação manual, keystore e package ID.
 - [ ] Escolher os identificadores finais após decidir a estratégia de distribuição; ficam permanentes após publicação.
 - [ ] Criar keystore privada e backup sob controlo do proprietário; configurar GitHub Actions Secrets/Variables. Nunca enviar chaves ou passwords por chat ou Git.
-- [ ] Rever a estratégia Google Play: cinco variantes técnicas não significam cinco listagens permitidas. Considerar apps Gestão/Cliente e entitlements seguros por plano ou distribuição B2B privada.
+- [ ] Rever a estratégia Google Play: seis variantes técnicas não significam seis listagens permitidas. Considerar apps Gestão/Cliente e entitlements seguros por plano ou distribuição B2B privada.
 - [ ] Gerar AAB/APKs assinados com a chave comercial, verificar assinaturas/checksums e testar atualização em dispositivos reais. O workflow não publica automaticamente na Play Store.
 - [ ] Confirmar procedimento de backups/restauro antes de operar com dados de restaurantes.
 - [ ] Definir uma pessoa adulta/entidade com capacidade legal como titular dos contratos, faturação, responsabilidades de proteção de dados e conta Play Console. Não usar a identidade de terceiros como fachada; o Código Civil português regula a capacidade dos menores nos artigos 122.º–127.º e a Play Console exige titular com pelo menos 18 anos.
@@ -223,9 +250,9 @@ Usar esta lista para decidir o que pode ser demonstrado e o que ainda exige dese
 ## Lançamento e suporte
 
 
-- [x] Workflow atual compila APKs de demonstração/debug e executa testes unitários nas cinco variantes de distribuição.
-- [x] Configuração usa compileSdk/targetSdk 36, AGP 8.10.0 e Gradle 8.11.1; a última execução verificada compilou e carregou os cinco APKs debug de demonstração.
-- [x] Adicionado workflow manual que prepara cinco AABs comerciais assinados, exige confirmação explícita, executa testes e Lint e verifica as assinaturas.
+- [x] Workflow atual compila APKs de demonstração/debug e executa testes unitários nas seis variantes de distribuição.
+- [x] Configuração usa compileSdk/targetSdk 36, AGP 8.13.2 e Gradle 8.13; a última execução verificada compilou e carregou os seis APKs debug de demonstração.
+- [x] Adicionado workflow manual que prepara seis AABs comerciais assinados, exige confirmação explícita, executa testes e Lint e verifica as assinaturas.
 - [ ] Escolher e validar o identificador base definitivo, criar o keystore privado, configurar os GitHub Actions Secrets/Variables e executar o workflow comercial com sucesso.
 - [ ] Terminar os testes ponta a ponta antes de instalar a versão comercial num restaurante real.
 - [ ] Automatizar testes e análise estática e guardar os resultados de cada release.
