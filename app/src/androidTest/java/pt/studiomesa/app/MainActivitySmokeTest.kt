@@ -28,6 +28,15 @@ import org.junit.Test
  */
 class MainActivitySmokeTest {
     @Before
+    fun resetLocalDemoOrdersForEachTest() {
+        val preferences = InstrumentationRegistry.getInstrumentation().targetContext
+            .getSharedPreferences("studiomesa_data", android.content.Context.MODE_PRIVATE)
+        check(preferences.edit().putString("orders_json", "[]").commit()) {
+            "Could not reset local demonstration orders before the UI test."
+        }
+    }
+
+    @Before
     fun resetEconomicAssistantOptInForEachTest() {
         val preferences = InstrumentationRegistry.getInstrumentation().targetContext
             .getSharedPreferences("studiomesa_backend", android.content.Context.MODE_PRIVATE)
@@ -900,6 +909,70 @@ onView(withContentDescription("Abrir ferramentas económicas")).perform(click())
             onView(withText(containsString("Feriado/evento: Evento de teste")))
                 .perform(scrollTo())
                 .check(matches(isDisplayed()))
+        }
+    }
+
+
+
+    @Test
+    fun restaurantCanCreateOrderAndMoveItThroughTheKitchenLifecycle() {
+        assumeFalse("Customer variant has its own customer navigation.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withText("ABRIR PEDIDOS")).perform(scrollTo(), click())
+            onView(withText("+  Novo pedido")).perform(scrollTo(), click())
+            onView(withText("Criar pedido")).perform(click())
+
+            onView(withText("Entrada da casa · exemplo")).check(matches(isDisplayed()))
+            onView(withText("EM ABERTO")).check(matches(isDisplayed()))
+            onView(withText("Marcar como concluído")).check(matches(isDisplayed()))
+
+            // Confirm that the order list can close and reopen a local demo order.
+            onView(withText("Marcar como concluído")).perform(scrollTo(), click())
+            onView(withText("CONCLUÍDO")).check(matches(isDisplayed()))
+            onView(withText("Reabrir pedido")).check(matches(isDisplayed()))
+            onView(withText("Reabrir pedido")).perform(scrollTo(), click())
+            onView(withText("EM ABERTO")).check(matches(isDisplayed()))
+
+            // The kitchen queue must show the same local order and advance its state.
+            onView(withContentDescription("Abrir menu de navegação")).perform(click())
+            onView(withContentDescription("Abrir secção Cozinha")).perform(scrollTo(), click())
+            onView(withText("Entrada da casa · exemplo")).check(matches(isDisplayed()))
+            onView(withText("ABERTO")).check(matches(isDisplayed()))
+
+            onView(withText("Iniciar preparação")).perform(scrollTo(), click())
+            onView(withText("EM PREPARAÇÃO")).check(matches(isDisplayed()))
+            onView(withText("Marcar como pronto")).perform(scrollTo(), click())
+            onView(withText("PRONTO")).check(matches(isDisplayed()))
+            onView(withText("Concluir pedido")).perform(scrollTo(), click())
+
+            onView(withText("A fila está vazia. Cria um pedido para testar o fluxo da cozinha."))
+                .check(matches(isDisplayed()))
+
+            // The completed state must remain visible in the order history.
+            onView(withContentDescription("Abrir secção Pedidos")).perform(click())
+            onView(withText("CONCLUÍDO")).check(matches(isDisplayed()))
+        }
+    }
+
+    @Test
+    fun restaurantRejectsInvalidOrderQuantityAndKeepsTheFormEditable() {
+        assumeFalse("Customer variant has its own customer navigation.", isCustomerVariant())
+
+        ActivityScenario.launch(MainActivity::class.java).use {
+            onView(withText("ABRIR PEDIDOS")).perform(scrollTo(), click())
+            onView(withText("+  Novo pedido")).perform(scrollTo(), click())
+
+            onView(withHint("1–99 unidades")).perform(replaceText("0"))
+            onView(withText("Criar pedido")).perform(click())
+            onView(withHint("1–99 unidades"))
+                .check(matches(hasErrorText("Usa uma quantidade entre 1 e 99")))
+
+            // Correcting the invalid quantity must allow the same form to be submitted.
+            onView(withHint("1–99 unidades")).perform(replaceText("3"))
+            onView(withText("Criar pedido")).perform(click())
+            onView(withText("3 × Entrada da casa · exemplo")).check(matches(isDisplayed()))
+            onView(withText("EM ABERTO")).check(matches(isDisplayed()))
         }
     }
 
