@@ -249,11 +249,21 @@ class CommercialReleaseWorkflowAuditTests(unittest.TestCase):
 
     def test_android_ci_rejects_incomplete_aab_count_check(self) -> None:
         changed = SAFE_ANDROID_WORKFLOW.replace(
+            'if [ "${#bundles[@]}" -ne 6 ]; then exit 1; fi',
             'if [ "${#bundles[@]}" -ne 5 ]; then exit 1; fi',
-            'if [ "${#bundles[@]}" -ne 4 ]; then exit 1; fi',
         )
         self.assertTrue(
             any("exactly six temporary commercial AABs" in error
+                for error in audit_ci_test_bundle(changed))
+        )
+
+    def test_android_ci_rejects_incomplete_apk_count_check(self) -> None:
+        changed = SAFE_ANDROID_WORKFLOW.replace(
+            'if [ "${#apks[@]}" -ne 6 ]; then exit 1; fi',
+            'if [ "${#apks[@]}" -ne 5 ]; then exit 1; fi',
+        )
+        self.assertTrue(
+            any("exactly six temporary commercial APKs" in error
                 for error in audit_ci_test_bundle(changed))
         )
 
