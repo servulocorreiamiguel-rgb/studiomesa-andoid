@@ -2,7 +2,7 @@
 **Data planeada:** sábado, 21/11/2026, a partir das 09:00 (hora de Portugal)  
 **Branch de trabalho:** `work/mobile-completion-2026-11-20`  
 **PR de integração:** [#135](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/135)  
-**Commit validado:** `b2c17ee85a31a0b8f00d6c22342b10176021af20`
+**Commit validado:** `4b9242e51d3d914f24dbeafdbd2a750efb31effd`
 
 ## Objectivo da sessão
 Preparar a build validada para ensaio físico, confirmar o ambiente Windows, recolher resultados do OPPO A5m e avançar nos bloqueios de lançamento sem alterar a produção de forma arriscada.
@@ -35,7 +35,7 @@ git pull --ff-only
 git rev-parse HEAD
 ```
 
-O último comando deve devolver o commit validado acima, excepto se tiver sido criada uma revisão mais recente. Confirmar sempre o SHA e o estado da CI da revisão exacta antes de usar qualquer APK.
+O último comando deve devolver o commit validado acima, excepto se houver uma revisão mais recente. Confirmar sempre o SHA e o estado da CI da revisão exacta antes de usar qualquer APK. Nesta revisão, os quatro jobs da CI `44815698449` terminaram com sucesso.
 
 Se o repositório ainda não existir no computador:
 
@@ -51,7 +51,7 @@ Não fazer commits directamente em `main`. Não forçar pushes, resets nem reesc
 
 ## 3. Ensaiar os APKs mais recentes no OPPO A5m
 
-Usar o artefacto GitHub Actions `StudioMesa-1.5.0-ARM64-Preview-APKs`, ID `14668750452`, gerado pela CI `44809660302`. Para o primeiro ensaio, usar Gestão Premium e Cliente Premium do mesmo ZIP. O roteiro de aceitação está em [OPPO-A5M-TEST-CURRENT-1.5.0.md](OPPO-A5M-TEST-CURRENT-1.5.0.md).
+Usar o artefacto GitHub Actions `StudioMesa-1.5.0-ARM64-Preview-APKs`, ID `14669494611`, gerado pela CI `44815698449`. Para o primeiro ensaio, usar Gestão Premium e Cliente Premium do mesmo ZIP. O roteiro de aceitação está em [OPPO-A5M-TEST-CURRENT-1.5.0.md](OPPO-A5M-TEST-CURRENT-1.5.0.md).
 
 Não usar dados, contas, reservas, clientes ou faturas reais. Não desinstalar uma versão antiga para contornar conflitos sem perceber primeiro se existem dados locais de teste. Registar o texto exacto de qualquer erro.
 
