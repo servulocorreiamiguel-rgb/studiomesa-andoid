@@ -67,7 +67,7 @@ Google/Microsoft OAuth continua adiado por decisão do proprietário até depois
 
 ## 5. Supabase: primeiro backup e restauro, sem deployment
 
-Ler integralmente [PRODUCTION-BACKUP-AND-MIGRATION-RUNBOOK.md](PRODUCTION-BACKUP-AND-MIGRATION-RUNBOOK.md).
+Ler [auditoria read-only actual do Supabase](LIVE-SUPABASE-AUDIT-2026-11-21.md) e integralmente [PRODUCTION-BACKUP-AND-MIGRATION-RUNBOOK.md](PRODUCTION-BACKUP-AND-MIGRATION-RUNBOOK.md).
 
 O Supabase alojado tem 63 migrações aplicadas e a branch actual tem nove pendentes. O plano Free não fornece backups automáticos diários nem PITR. Um dump PostgreSQL isolado não inclui automaticamente utilizadores Auth nem objectos Storage.
 
