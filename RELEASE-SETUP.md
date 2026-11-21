@@ -8,7 +8,7 @@
 >
 > **Auth e segurança:** Os fluxos Android de email/palavra-passe, PKCE e recuperação por OTP existem no código, mas SMTP, confirmação de email, recuperação e eliminação de conta ainda precisam de testes ponta a ponta com contas descartáveis. Ver [estado dos testes de autenticação](docs/AUTH-TEST-STATUS-2026-11-21.md). A protecção contra palavras-passe comprometidas está desactivada. Os avisos de funções `SECURITY DEFINER`, tabelas com RLS sem políticas e índices têm de ser avaliados individualmente; não aplicar revogações ou políticas genéricas em massa.
 >
-> **Release:** continuam por definir o identificador final das aplicações, a keystore comercial e os secrets/variables de assinatura. A CI normal produz APKs debug de pré-visualização. A chave temporária da CI serve apenas para validar a configuração de assinatura e não é a chave comercial. Política de privacidade, Data Safety, termos, DPA e revisão de licenças continuam por aprovar.
+> **Release:** continuam por definir o identificador final das aplicações, a keystore comercial e os secrets/variables de assinatura. A CI normal produz APKs debug de pré-visualização. A chave temporária da CI serve apenas para validar a configuração de assinatura e não é a chave comercial. Política de privacidade, Data Safety, termos, DPA e revisão de licenças continuam por aprovar. Ver também a [auditoria read-only do Supabase](docs/LIVE-SUPABASE-AUDIT-2026-11-21.md).
 
 ## Toolchain Android
 
