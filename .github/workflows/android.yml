@@ -125,10 +125,10 @@ jobs:
           "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Compile app
-        run: gradle --no-daemon assembleEssencialRestauranteDebug assembleProfissionalRestauranteDebug assembleProfissionalClienteDebug assemblePremiumRestauranteDebug assemblePremiumClienteDebug
+        run: gradle --no-daemon assembleEssencialRestauranteDebug assembleEssencialClienteDebug assembleProfissionalRestauranteDebug assembleProfissionalClienteDebug assemblePremiumRestauranteDebug assemblePremiumClienteDebug
 
       - name: Run unit tests for every distributed variant
-        run: gradle --no-daemon testEssencialRestauranteDebugUnitTest testProfissionalRestauranteDebugUnitTest testProfissionalClienteDebugUnitTest testPremiumRestauranteDebugUnitTest testPremiumClienteDebugUnitTest
+        run: gradle --no-daemon testEssencialRestauranteDebugUnitTest testEssencialClienteDebugUnitTest testProfissionalRestauranteDebugUnitTest testProfissionalClienteDebugUnitTest testPremiumRestauranteDebugUnitTest testPremiumClienteDebugUnitTest
 
       - name: Upload unit test reports, including failures
         if: always()
@@ -165,18 +165,20 @@ jobs:
             -PstudiomesaCommercialRelease=true \
             -PstudiomesaReleaseApplicationId=pt.studiomesa.ci \
             bundleEssencialRestauranteRelease \
+            bundleEssencialClienteRelease \
             bundleProfissionalRestauranteRelease \
             bundleProfissionalClienteRelease \
             bundlePremiumRestauranteRelease \
             bundlePremiumClienteRelease \
             assembleEssencialRestauranteRelease \
+            assembleEssencialClienteRelease \
             assembleProfissionalRestauranteRelease \
             assembleProfissionalClienteRelease \
             assemblePremiumRestauranteRelease \
             assemblePremiumClienteRelease
           mapfile -d '' bundles < <(find app/build/outputs/bundle -type f -name '*.aab' -print0)
-          if [ "${#bundles[@]}" -ne 5 ]; then
-            echo "Expected five signed commercial AABs, found ${#bundles[@]}."
+          if [ "${#bundles[@]}" -ne 6 ]; then
+            echo "Expected six signed commercial AABs, found ${#bundles[@]}."
             exit 1
           fi
           for aab in "${bundles[@]}"; do
@@ -192,8 +194,8 @@ jobs:
             fi
           done
           mapfile -d '' apks < <(find app/build/outputs/apk -type f -path '*/release/*.apk' -print0)
-          if [ "${#apks[@]}" -ne 5 ]; then
-            echo "Expected five signed commercial APKs, found ${#apks[@]}."
+          if [ "${#apks[@]}" -ne 6 ]; then
+            echo "Expected six signed commercial APKs, found ${#apks[@]}."
             exit 1
           fi
           for apk in "${apks[@]}"; do
@@ -215,6 +217,7 @@ jobs:
         run: |
           gradle --no-daemon --rerun-tasks -PstudiomesaTargetAbi=arm64-v8a \
             assembleEssencialRestauranteDebug \
+            assembleEssencialClienteDebug \
             assembleProfissionalRestauranteDebug \
             assembleProfissionalClienteDebug \
             assemblePremiumRestauranteDebug \
@@ -225,8 +228,8 @@ jobs:
         run: |
           set -euo pipefail
           mapfile -d '' apks < <(find app/build/outputs/apk -type f -path '*/debug/*.apk' -print0)
-          if [ "${#apks[@]}" -ne 5 ]; then
-            echo "Expected five ARM64 preview APKs, found ${#apks[@]}."
+          if [ "${#apks[@]}" -ne 6 ]; then
+            echo "Expected six ARM64 preview APKs, found ${#apks[@]}."
             exit 1
           fi
           for apk in "${apks[@]}"; do
@@ -286,7 +289,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot
-          script: set -eu; for test_task in connectedEssencialRestauranteDebugAndroidTest connectedProfissionalRestauranteDebugAndroidTest connectedProfissionalClienteDebugAndroidTest connectedPremiumRestauranteDebugAndroidTest connectedPremiumClienteDebugAndroidTest; do echo "STARTING_ANDROID_SMOKE_TASK=$test_task"; timeout --signal=TERM --kill-after=30s 8m gradle --no-daemon --max-workers=1 "$test_task"; echo "PASSED_ANDROID_SMOKE_TASK=$test_task"; done
+          script: set -eu; for test_task in connectedEssencialRestauranteDebugAndroidTest connectedEssencialClienteDebugAndroidTest connectedProfissionalRestauranteDebugAndroidTest connectedProfissionalClienteDebugAndroidTest connectedPremiumRestauranteDebugAndroidTest connectedPremiumClienteDebugAndroidTest; do echo "STARTING_ANDROID_SMOKE_TASK=$test_task"; timeout --signal=TERM --kill-after=30s 8m gradle --no-daemon --max-workers=1 "$test_task"; echo "PASSED_ANDROID_SMOKE_TASK=$test_task"; done
 
       - name: Upload emulator test results
         if: always()
@@ -333,7 +336,7 @@ jobs:
           profile: Nexus 5X
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot
-          script: set -eu; for test_task in connectedEssencialRestauranteDebugAndroidTest connectedProfissionalRestauranteDebugAndroidTest connectedProfissionalClienteDebugAndroidTest connectedPremiumRestauranteDebugAndroidTest connectedPremiumClienteDebugAndroidTest; do echo "STARTING_ANDROID_SMOKE_TASK=$test_task"; timeout --signal=TERM --kill-after=30s 8m gradle --no-daemon --max-workers=1 "$test_task"; echo "PASSED_ANDROID_SMOKE_TASK=$test_task"; done
+          script: set -eu; for test_task in connectedEssencialRestauranteDebugAndroidTest connectedEssencialClienteDebugAndroidTest connectedProfissionalRestauranteDebugAndroidTest connectedProfissionalClienteDebugAndroidTest connectedPremiumRestauranteDebugAndroidTest connectedPremiumClienteDebugAndroidTest; do echo "STARTING_ANDROID_SMOKE_TASK=$test_task"; timeout --signal=TERM --kill-after=30s 8m gradle --no-daemon --max-workers=1 "$test_task"; echo "PASSED_ANDROID_SMOKE_TASK=$test_task"; done
 
       - name: Upload Android 8 test results
         if: always()
