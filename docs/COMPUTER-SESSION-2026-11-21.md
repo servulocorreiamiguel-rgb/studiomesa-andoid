@@ -2,7 +2,7 @@
 **Data planeada:** sábado, 21/11/2026, a partir das 09:00 (hora de Portugal)  
 **Branch de trabalho:** `work/mobile-completion-2026-11-20`  
 **PR de integração:** [#135](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/pull/135)  
-**Commit validado:** `4b9242e51d3d914f24dbeafdbd2a750efb31effd`
+**Commit validado:** `97c8d1653005040cd6a16055b314e310095da7c8`
 
 ## Objectivo da sessão
 Preparar a build validada para ensaio físico, confirmar o ambiente Windows, recolher resultados do OPPO A5m e avançar nos bloqueios de lançamento sem alterar a produção de forma arriscada.
@@ -18,7 +18,7 @@ docker --version
 adb version
 ```
 
-Na última verificação registada, Git funcionava; Java e Docker não eram reconhecidos pelo PowerShell. Voltar a confirmar porque o ambiente pode ter mudado. Docker só é necessário para executar serviços locais/ensaios Supabase; não é necessário para descarregar APKs nem acompanhar GitHub Actions.
+Git já funcionava na última verificação. O Docker Desktop foi entretanto instalado; confirmar que está iniciado e que `docker --version` e `docker info` funcionam. Java local ainda deve ser confirmado com `java -version`. Docker só é necessário para executar serviços locais/ensaios Supabase; não é necessário para descarregar APKs nem acompanhar GitHub Actions.
 
 O portátil tem 4 GB de RAM. Preferir GitHub Actions para compilar e executar emuladores; evitar executar Android Emulator localmente. Não instalar várias ferramentas pesadas ao mesmo tempo nem apagar ficheiros para libertar espaço sem verificar primeiro o que contêm.
 
@@ -35,7 +35,7 @@ git pull --ff-only
 git rev-parse HEAD
 ```
 
-O último comando deve devolver o commit validado acima, excepto se houver uma revisão mais recente. Confirmar sempre o SHA e o estado da CI da revisão exacta antes de usar qualquer APK. Nesta revisão, os quatro jobs da CI `44815698449` terminaram com sucesso.
+O último comando deve devolver o commit validado acima, excepto se houver uma revisão mais recente. Confirmar sempre o SHA e o estado da CI da revisão exacta antes de usar qualquer APK. Na revisão actual, os quatro jobs da CI [`44886406846`](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44886406846) terminaram com sucesso.
 
 Se o repositório ainda não existir no computador:
 
@@ -51,7 +51,7 @@ Não fazer commits directamente em `main`. Não forçar pushes, resets nem reesc
 
 ## 3. Ensaiar os APKs mais recentes no OPPO A5m
 
-Usar o artefacto GitHub Actions `StudioMesa-1.5.0-ARM64-Preview-APKs`, ID `14669494611`, gerado pela CI `44815698449`. Para o primeiro ensaio, usar Gestão Premium e Cliente Premium do mesmo ZIP. O roteiro de aceitação está em [OPPO-A5M-TEST-CURRENT-1.5.0.md](OPPO-A5M-TEST-CURRENT-1.5.0.md).
+Usar o artefacto GitHub Actions `StudioMesa-1.5.0-ARM64-Preview-APKs`, ID `14700641398`, gerado pela CI [`44886406846`](https://github.com/servulocorreiamiguel-rgb/studiomesa-andoid/actions/runs/44886406846). Para o primeiro ensaio, usar Gestão Premium e Cliente Premium do mesmo ZIP. O roteiro de aceitação está em [OPPO-A5M-TEST-CURRENT-1.5.0.md](OPPO-A5M-TEST-CURRENT-1.5.0.md).
 
 Não usar dados, contas, reservas, clientes ou faturas reais. Não desinstalar uma versão antiga para contornar conflitos sem perceber primeiro se existem dados locais de teste. Registar o texto exacto de qualquer erro.
 
